@@ -1,7 +1,8 @@
 "use client";
 
-import type { CSSProperties } from "react";
-import type { Node, TextStyle, Theme } from "@/lib/doc/types";
+import { useEffect, useRef, type CSSProperties } from "react";
+import type { Node, TextNode, TextStyle, Theme } from "@/lib/doc/types";
+import { useEditor } from "@/lib/doc/store";
 
 // Resolves a font token against the current theme.
 function resolveFont(style: TextStyle, theme: Theme): string {
@@ -69,12 +70,19 @@ export function NodeView({
     onSelect(node.id, e.shiftKey || e.metaKey);
   };
 
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    if (node.type !== "text") return;
+    e.stopPropagation();
+    useEditor.getState().startEdit(node.id);
+  };
+
   return (
     <div
       data-node-id={node.id}
       className={className}
       style={containerStyle}
       onMouseDown={handleMouseDown}
+      onDoubleClick={handleDoubleClick}
       onMouseEnter={() => onHoverChange(node.id)}
       onMouseLeave={() => onHoverChange(null)}
     >
@@ -85,21 +93,10 @@ export function NodeView({
 
 function NodeBody({ node, theme }: { node: Node; theme: Theme }) {
   if (node.type === "text") {
-    return (
-      <div
-        style={{
-          ...textStyleToCss(node.style, theme),
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          height: "100%",
-          width: "100%",
-        }}
-      >
-        {node.content}
-      </div>
-    );
+    return <TextBody node={node} theme={theme} />;
   }
 
+  // Shared with TextBody below.
   if (node.type === "image") {
     return node.src ? (
       // eslint-disable-next-line @next/next/no-img-element
@@ -161,4 +158,65 @@ function NodeBody({ node, theme }: { node: Node; theme: Theme }) {
   }
 
   return null;
+}
+
+// Text body — renders either a static read-only view, or (when editingId
+// matches this node) a textarea overlaid with the exact same typography so the
+// user types in place and sees reflow live.
+function TextBody({ node, theme }: { node: TextNode; theme: Theme }) {
+  const editingId = useEditor((s) => s.editingId);
+  const updateNode = useEditor((s) => s.updateNode);
+  const stopEdit = useEditor((s) => s.stopEdit);
+  const isEditing = editingId === node.id;
+
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    if (!isEditing) return;
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.focus();
+    ta.select();
+  }, [isEditing]);
+
+  const style: CSSProperties = {
+    ...textStyleToCss(node.style, theme),
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    height: "100%",
+    width: "100%",
+    margin: 0,
+    padding: 0,
+    border: "none",
+    outline: "none",
+    background: "transparent",
+    resize: "none",
+    boxSizing: "border-box",
+  };
+
+  if (!isEditing) {
+    return <div style={style}>{node.content}</div>;
+  }
+
+  return (
+    <textarea
+      ref={textareaRef}
+      value={node.content}
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onChange={(e) => updateNode(node.id, { content: e.target.value })}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          stopEdit();
+        }
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+          e.preventDefault();
+          stopEdit();
+        }
+      }}
+      onBlur={stopEdit}
+      style={style}
+    />
+  );
 }

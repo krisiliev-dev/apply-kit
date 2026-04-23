@@ -23,6 +23,7 @@ type DocState = {
   doc: CvDocument;
   selectedIds: string[];
   activePageId: string;
+  editingId: string | null; // text node being edited inline
 };
 
 type UiState = {
@@ -41,6 +42,10 @@ type Actions = {
   select: (ids: string[] | string | null) => void;
   toggleSelect: (id: string) => void;
   deselect: () => void;
+
+  // inline text edit
+  startEdit: (id: string) => void;
+  stopEdit: () => void;
 
   // nodes
   addNode: (node: NodeInput) => string;
@@ -115,6 +120,7 @@ const creator: StateCreator<Store> = (set, get) => {
     doc: initial,
     activePageId: initial.pages[0].id,
     selectedIds: [],
+    editingId: null,
 
     zoom: 1,
     showGrid: false,
@@ -155,6 +161,9 @@ const creator: StateCreator<Store> = (set, get) => {
       })),
 
     deselect: () => set({ selectedIds: [] }),
+
+    startEdit: (id) => set({ editingId: id, selectedIds: [id] }),
+    stopEdit: () => set({ editingId: null }),
 
     addNode: (partial) => {
       const id = (partial as { id?: string }).id ?? nanoid(8);

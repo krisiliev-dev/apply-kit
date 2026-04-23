@@ -27,6 +27,7 @@ export function SelectionOverlay({
 }) {
   const selectedIds = useEditor((s) => s.selectedIds);
   const showGuides = useEditor((s) => s.showGuides);
+  const editingId = useEditor((s) => s.editingId);
   const updateNode = useEditor((s) => s.updateNode);
 
   const [targets, setTargets] = useState<HTMLElement[]>([]);
@@ -65,6 +66,7 @@ export function SelectionOverlay({
   }, [selectedIds, page.nodes, pageRef]);
 
   if (targets.length === 0) return null;
+  if (editingId) return null; // hide handles during inline text editing
 
   const commitDrag = (target: HTMLElement, beforeTranslate: [number, number]) => {
     const id = target.dataset.nodeId;

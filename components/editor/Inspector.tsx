@@ -2,6 +2,7 @@
 
 import { useEditor, isTextNode, isImageNode, isShapeNode } from "@/lib/doc/store";
 import type { Node, TextNode, ImageNode, ShapeNode, FontToken } from "@/lib/doc/types";
+import { FONT_OPTIONS, findFontByCssVar } from "@/lib/fonts";
 
 // Inspector — edits the currently selected node(s).
 // When multiple nodes are selected, only fields that apply to all types are shown.
@@ -129,11 +130,22 @@ function TransformBlock({
   );
 }
 
-const FONT_TOKENS: { value: FontToken; label: string }[] = [
-  { value: "display", label: "Display" },
-  { value: "sans", label: "Sans" },
-  { value: "mono", label: "Mono" },
+const THEME_FONT_OPTIONS: { value: `theme:${FontToken}`; label: string }[] = [
+  { value: "theme:display", label: "Theme · Display" },
+  { value: "theme:sans", label: "Theme · Sans" },
+  { value: "theme:mono", label: "Theme · Mono" },
 ];
+
+// Serialise the current font choice to a select-friendly value.
+// If fontFamily is set, it wins — we show the font id.
+// Otherwise we show the theme token.
+function fontSelectValue(style: TextNode["style"]): string {
+  if (style.fontFamily) {
+    const f = findFontByCssVar(style.fontFamily);
+    return f ? `font:${f.id}` : `font:${style.fontFamily}`;
+  }
+  return `theme:${style.fontToken ?? "sans"}`;
+}
 
 function TextBlock({
   node,
@@ -144,6 +156,19 @@ function TextBlock({
   updateNode: (id: string, patch: Partial<Node>) => void;
   updateTextStyle: (id: string, patch: Partial<TextNode["style"]>) => void;
 }) {
+  const handleFontChange = (value: string) => {
+    if (value.startsWith("theme:")) {
+      const token = value.slice("theme:".length) as FontToken;
+      updateTextStyle(node.id, { fontToken: token, fontFamily: undefined });
+      return;
+    }
+    if (value.startsWith("font:")) {
+      const id = value.slice("font:".length);
+      const opt = FONT_OPTIONS.find((f) => f.id === id);
+      if (opt) updateTextStyle(node.id, { fontFamily: opt.cssVar });
+    }
+  };
+
   return (
     <>
       <SectionHead>Text</SectionHead>
@@ -158,19 +183,29 @@ function TextBlock({
       <Row label="Font">
         <select
           className="editor-input"
-          value={node.style.fontToken ?? "sans"}
-          onChange={(e) =>
-            updateTextStyle(node.id, {
-              fontToken: e.target.value as FontToken,
-              fontFamily: undefined,
-            })
-          }
+          value={fontSelectValue(node.style)}
+          onChange={(e) => handleFontChange(e.target.value)}
         >
-          {FONT_TOKENS.map((f) => (
-            <option key={f.value} value={f.value}>
-              {f.label}
-            </option>
-          ))}
+          <optgroup label="Theme">
+            {THEME_FONT_OPTIONS.map((f) => (
+              <option key={f.value} value={f.value}>
+                {f.label}
+              </option>
+            ))}
+          </optgroup>
+          {(["display", "serif", "sans", "mono"] as const).map((cat) => {
+            const fonts = FONT_OPTIONS.filter((f) => f.category === cat);
+            if (fonts.length === 0) return null;
+            return (
+              <optgroup key={cat} label={cat[0].toUpperCase() + cat.slice(1)}>
+                {fonts.map((f) => (
+                  <option key={f.id} value={`font:${f.id}`}>
+                    {f.label}
+                  </option>
+                ))}
+              </optgroup>
+            );
+          })}
         </select>
       </Row>
       <Grid2>
@@ -367,37 +402,65 @@ function ThemeInspector({
 
       <SectionHead>Theme · Fonts</SectionHead>
       <p className="text-[11px] text-[var(--color-editor-text-dim)] leading-relaxed">
-        Default tokens are wired up in <code>app/layout.tsx</code>. To add a new
-        font, register it via <code>next/font</code> and expose a CSS variable.
+        Pick which font fills each slot. Text blocks that use a theme token pick up the change automatically.
       </p>
       <Row label="Display">
-        <input
-          className="editor-input"
+        <ThemeFontSelect
           value={doc.theme.fonts.display}
-          onChange={(e) =>
-            setTheme({ fonts: { ...doc.theme.fonts, display: e.target.value } })
+          onChange={(v) =>
+            setTheme({ fonts: { ...doc.theme.fonts, display: v } })
           }
         />
       </Row>
       <Row label="Sans">
-        <input
-          className="editor-input"
+        <ThemeFontSelect
           value={doc.theme.fonts.sans}
-          onChange={(e) =>
-            setTheme({ fonts: { ...doc.theme.fonts, sans: e.target.value } })
-          }
+          onChange={(v) => setTheme({ fonts: { ...doc.theme.fonts, sans: v } })}
         />
       </Row>
       <Row label="Mono">
-        <input
-          className="editor-input"
+        <ThemeFontSelect
           value={doc.theme.fonts.mono}
-          onChange={(e) =>
-            setTheme({ fonts: { ...doc.theme.fonts, mono: e.target.value } })
-          }
+          onChange={(v) => setTheme({ fonts: { ...doc.theme.fonts, mono: v } })}
         />
       </Row>
     </div>
+  );
+}
+
+function ThemeFontSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const match = findFontByCssVar(value);
+  return (
+    <select
+      className="editor-input"
+      value={match ? match.id : "__custom"}
+      onChange={(e) => {
+        const id = e.target.value;
+        const f = FONT_OPTIONS.find((x) => x.id === id);
+        if (f) onChange(f.cssVar);
+      }}
+    >
+      {(["display", "serif", "sans", "mono"] as const).map((cat) => {
+        const fonts = FONT_OPTIONS.filter((f) => f.category === cat);
+        if (fonts.length === 0) return null;
+        return (
+          <optgroup key={cat} label={cat[0].toUpperCase() + cat.slice(1)}>
+            {fonts.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </optgroup>
+        );
+      })}
+      {!match && <option value="__custom">Custom ({value})</option>}
+    </select>
   );
 }
 
