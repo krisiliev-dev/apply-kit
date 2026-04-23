@@ -10,6 +10,7 @@ import { readApplications, upsertApplication } from "@/lib/app/storage";
 import type { Application, ParsedJob } from "@/lib/app/types";
 import { makeVariantSlug, upsertVariant } from "@/lib/jobs/registry";
 import { seedFromContent } from "@/lib/jobs/seedFromContent";
+import { saveDraftEval, type DraftEvalResult } from "@/lib/jobs/draftEval";
 import type { CVContent } from "@/lib/types";
 
 type Stage = "idle" | "parsing" | "drafting" | "error";
@@ -66,6 +67,7 @@ export default function JobsPage() {
     setStatusMsg(`Tailoring a CV for ${job.company} — ${job.title}…`);
 
     let tailored: CVContent & { tailoringNotes?: string[] };
+    let draftEval: DraftEvalResult | undefined;
     try {
       const res = await fetch("/api/jobs/draft", {
         method: "POST",
@@ -79,6 +81,7 @@ export default function JobsPage() {
         return;
       }
       tailored = data.cv;
+      draftEval = data.eval as DraftEvalResult | undefined;
     } catch (err) {
       setStage("error");
       setErrorMsg(err instanceof Error ? err.message : "Network error.");
@@ -126,6 +129,7 @@ export default function JobsPage() {
       ],
     };
     upsertApplication(application);
+    if (draftEval) saveDraftEval(appId, draftEval);
 
     // Go to the editor for quick polish, but also expose /jobs/[appId]
     // for the prefilled-form flow later.
