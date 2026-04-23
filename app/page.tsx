@@ -12,9 +12,9 @@ export default function Home() {
           Your CVs, <em>tailored per role.</em>
         </h1>
         <p className="mt-4 text-ink/70 max-w-prose">
-          Each CV is its own React component under{" "}
-          <code className="font-mono text-sm">app/cv/[slug]</code>. Full layout
-          freedom — copy an existing one and remix for a new application.
+          Each CV variant opens in a visual editor with an AI copilot. Click
+          anything on the page to edit it, drag to move, resize from the
+          handles. Ask the copilot to make bigger changes in plain English.
         </p>
       </header>
 
@@ -30,19 +30,29 @@ export default function Home() {
                 className="flex items-baseline justify-between py-4 hover:opacity-70"
               >
                 <span className="font-display text-2xl">{cv.targetRole}</span>
-                <span className="font-mono text-xs text-ink/60">
-                  /cv/{cv.slug}
-                </span>
+                <span className="font-mono text-xs text-ink/60">/cv/{cv.slug}</span>
               </Link>
             </li>
           ))}
+          <li>
+            <Link
+              href="/cv/new"
+              className="flex items-baseline justify-between py-4 hover:opacity-70 text-ink/50"
+            >
+              <span className="font-display text-2xl italic">+ blank variant</span>
+              <span className="font-mono text-xs">/cv/new</span>
+            </Link>
+          </li>
         </ul>
       </section>
 
       <footer className="mt-16 font-mono text-[11px] text-ink/50 space-y-1">
-        <p>⌘G — toggle design grid</p>
-        <p>print button — export PDF</p>
-        <p>see README.md for how to request changes</p>
+        <p>⌘Z undo · ⌘⇧Z redo · ⌘D duplicate · Del delete · Esc deselect</p>
+        <p>⌘/Ctrl + scroll = zoom</p>
+        <p>
+          For AI chat: add <code>ANTHROPIC_API_KEY</code> to{" "}
+          <code>.env.local</code>
+        </p>
       </footer>
     </main>
   );

@@ -8,6 +8,12 @@
   --color-ink: #111111;
   --color-paper: #fafaf7;
   --color-accent: #d64933;
+  --color-editor-bg: #2a2a2a;
+  --color-editor-panel: #1f1f1f;
+  --color-editor-border: #3a3a3a;
+  --color-editor-text: #e8e8e8;
+  --color-editor-text-dim: #9a9a9a;
+  --color-editor-select: #4f8cff;
 }
 
 html,
@@ -19,52 +25,157 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* ---------- A4 page + print ---------- */
-/* Screen: show CV pages as cards on a neutral background.
-   Print: one CV page per sheet, no browser chrome. */
+/* ———————————————————————————————————————
+   Editor chrome
+   ——————————————————————————————————————— */
+
+.editor-root {
+  background: var(--color-editor-bg);
+  color: var(--color-editor-text);
+  height: 100vh;
+  overflow: hidden;
+}
+
+.editor-panel {
+  background: var(--color-editor-panel);
+  border-color: var(--color-editor-border);
+  color: var(--color-editor-text);
+}
+
+.editor-input {
+  background: #2a2a2a;
+  border: 1px solid var(--color-editor-border);
+  color: var(--color-editor-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  width: 100%;
+}
+
+.editor-input:focus {
+  outline: none;
+  border-color: var(--color-editor-select);
+}
+
+.editor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #2a2a2a;
+  border: 1px solid var(--color-editor-border);
+  color: var(--color-editor-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.editor-btn:hover {
+  background: #333;
+}
+
+.editor-btn[data-active="true"] {
+  background: var(--color-editor-select);
+  border-color: var(--color-editor-select);
+}
+
+.editor-btn-ghost {
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.editor-btn-ghost:hover {
+  background: #2a2a2a;
+}
+
+.editor-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-editor-text-dim);
+}
+
+/* ———————————————————————————————————————
+   Canvas + page
+   ——————————————————————————————————————— */
 
 .cv-page {
-  width: 210mm;
-  min-height: 297mm;
-  padding: 18mm;
   background: var(--color-paper);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 16px 48px rgba(0, 0, 0, 0.4);
   position: relative;
+  overflow: hidden;
+  color: var(--color-ink);
 }
 
-@media print {
-  html,
-  body {
-    background: white;
-  }
-  .no-print {
-    display: none !important;
-  }
-  .cv-page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0;
-    padding: 18mm;
-    box-shadow: none;
-    page-break-after: always;
-  }
-  @page {
-    size: A4;
-    margin: 0;
-  }
-}
-
-/* ---------- Dev grid overlay ---------- */
-/* Toggle with the button in the dev toolbar (bottom-right).
-   Helps us talk precisely about placement: "move X to column 3". */
 .cv-page[data-grid="true"]::before {
   content: "";
   position: absolute;
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(to right, rgba(214, 73, 51, 0.12) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(214, 73, 51, 0.08) 1px, transparent 1px);
-  background-size: 8.75mm 8.75mm; /* 24 cols x 34 rows on A4 */
-  z-index: 50;
+    linear-gradient(to right, rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 4mm 4mm;
+  z-index: 1;
+}
+
+.node-selectable {
+  cursor: pointer;
+}
+
+.node-selected {
+  outline: 1.5px solid var(--color-editor-select);
+  outline-offset: 0;
+}
+
+.node-hover:not(.node-selected) {
+  outline: 1px solid rgba(79, 140, 255, 0.5);
+  outline-offset: 0;
+}
+
+/* ———————————————————————————————————————
+   Print
+   ——————————————————————————————————————— */
+
+@media print {
+  html,
+  body {
+    background: white;
+  }
+  .no-print,
+  .editor-panel,
+  .editor-toolbar,
+  [data-editor-chrome] {
+    display: none !important;
+  }
+  .editor-root {
+    background: white;
+    height: auto;
+    overflow: visible;
+  }
+  .editor-canvas {
+    transform: none !important;
+    padding: 0 !important;
+    background: white !important;
+  }
+  .cv-page {
+    box-shadow: none;
+    margin: 0;
+    page-break-after: always;
+  }
+  .cv-page[data-grid="true"]::before {
+    display: none;
+  }
+  .node-selected,
+  .node-hover {
+    outline: none !important;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
 }
