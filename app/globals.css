@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink: #111111;
+  --color-paper: #fafaf7;
+  --color-accent: #d64933;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ---------- A4 page + print ---------- */
+/* Screen: show CV pages as cards on a neutral background.
+   Print: one CV page per sheet, no browser chrome. */
+
+.cv-page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 18mm;
+  background: var(--color-paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 32px rgba(0, 0, 0, 0.08);
+  position: relative;
+}
+
+@media print {
+  html,
+  body {
+    background: white;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .cv-page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 18mm;
+    box-shadow: none;
+    page-break-after: always;
+  }
+  @page {
+    size: A4;
+    margin: 0;
+  }
+}
+
+/* ---------- Dev grid overlay ---------- */
+/* Toggle with the button in the dev toolbar (bottom-right).
+   Helps us talk precisely about placement: "move X to column 3". */
+.cv-page[data-grid="true"]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(214, 73, 51, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(214, 73, 51, 0.08) 1px, transparent 1px);
+  background-size: 8.75mm 8.75mm; /* 24 cols x 34 rows on A4 */
+  z-index: 50;
+}

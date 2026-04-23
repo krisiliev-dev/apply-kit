@@ -1,0 +1,49 @@
+import Link from "next/link";
+import { cvList } from "@/content/cvs";
+
+export default function Home() {
+  return (
+    <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+      <header className="mb-12">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+          CV Workshop
+        </p>
+        <h1 className="font-display text-5xl mt-2">
+          Your CVs, <em>tailored per role.</em>
+        </h1>
+        <p className="mt-4 text-ink/70 max-w-prose">
+          Each CV is its own React component under{" "}
+          <code className="font-mono text-sm">app/cv/[slug]</code>. Full layout
+          freedom — copy an existing one and remix for a new application.
+        </p>
+      </header>
+
+      <section>
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-4">
+          CV variants
+        </h2>
+        <ul className="divide-y divide-ink/10 border-y border-ink/10">
+          {cvList.map((cv) => (
+            <li key={cv.slug}>
+              <Link
+                href={`/cv/${cv.slug}`}
+                className="flex items-baseline justify-between py-4 hover:opacity-70"
+              >
+                <span className="font-display text-2xl">{cv.targetRole}</span>
+                <span className="font-mono text-xs text-ink/60">
+                  /cv/{cv.slug}
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <footer className="mt-16 font-mono text-[11px] text-ink/50 space-y-1">
+        <p>⌘G — toggle design grid</p>
+        <p>print button — export PDF</p>
+        <p>see README.md for how to request changes</p>
+      </footer>
+    </main>
+  );
+}
