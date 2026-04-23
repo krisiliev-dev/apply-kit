@@ -3,16 +3,25 @@ import type {
   AnswerRecord,
   BgRequest,
   BgResponse,
+  CapturedJob,
   HistoricalAnswer,
 } from "../shared/types";
 import {
+  allJobs,
   allRecords,
   deleteById,
+  deleteJob,
   getById,
   getByQuestion,
+  getJob,
+  getJobByUrl,
+  putJob,
   putRecord,
 } from "../store/db";
 import { findBestMatch } from "../store/match";
+import { getConfig, setBaseUrl } from "../shared/config";
+import { syncAll, syncOne } from "./discoverySync";
+import { paraphrase } from "../paraphrase";
 
 // Service worker. Owns the IndexedDB connection.
 // All DB access from content scripts / popup goes through this message bus so
@@ -133,8 +142,88 @@ async function handle(req: BgRequest): Promise<BgResponse> {
     }
 
     case "embedQuestion": {
-      // TODO: call CV-maker paraphrase/embedding API when wired.
+      // TODO: call CV-maker embedding API when wired. Paraphrase is already
+      // live — embeddings are a separate, heavier endpoint.
       return { kind: "embedQuestion", vector: null };
+    }
+
+    case "captureJob": {
+      // De-dupe by URL — if the user clicked the pill twice on the same
+      // posting we update the existing record instead of spawning a second.
+      const existing = await getJobByUrl(req.job.url);
+      const record: CapturedJob = existing
+        ? {
+            ...existing,
+            title: req.job.title || existing.title,
+            company: req.job.company || existing.company,
+            location: req.job.location ?? existing.location,
+            salary: req.job.salary ?? existing.salary,
+            description: req.job.description ?? existing.description,
+            postedAt: req.job.postedAt ?? existing.postedAt,
+            // A re-capture means the data may have changed — reset sync.
+            syncedToWebApp: false,
+            capturedAt: Date.now(),
+          }
+        : {
+            id: nanoid(),
+            source: req.job.source,
+            url: req.job.url,
+            title: req.job.title,
+            company: req.job.company,
+            location: req.job.location,
+            salary: req.job.salary,
+            description: req.job.description,
+            postedAt: req.job.postedAt,
+            capturedAt: Date.now(),
+            syncedToWebApp: false,
+          };
+      await putJob(record);
+
+      // Best-effort immediate sync — if it fails, syncAll() will catch up later.
+      const outcome = await syncOne(record);
+      const final = outcome.synced
+        ? { ...record, syncedToWebApp: true }
+        : record;
+      return { kind: "captureJob", job: final, synced: outcome.synced };
+    }
+
+    case "listJobs": {
+      const jobs = await allJobs();
+      jobs.sort((a, b) => b.capturedAt - a.capturedAt);
+      return { kind: "listJobs", jobs };
+    }
+
+    case "deleteJob": {
+      await deleteJob(req.id);
+      return { kind: "deleteJob", ok: true };
+    }
+
+    case "syncDiscoveryQueue": {
+      const result = await syncAll();
+      return { kind: "syncDiscoveryQueue", result };
+    }
+
+    case "syncJob": {
+      const job = await getJob(req.id);
+      if (!job) throw new Error(`job ${req.id} not found`);
+      const outcome = await syncOne(job);
+      const final = outcome.synced ? { ...job, syncedToWebApp: true } : job;
+      return { kind: "syncJob", job: final, synced: outcome.synced };
+    }
+
+    case "getConfig": {
+      const cfg = await getConfig();
+      return { kind: "getConfig", cvMakerBaseUrl: cfg.cvMakerBaseUrl };
+    }
+
+    case "setConfig": {
+      const value = await setBaseUrl(req.cvMakerBaseUrl);
+      return { kind: "setConfig", cvMakerBaseUrl: value };
+    }
+
+    case "paraphrase": {
+      const next = await paraphrase(req.text, req.context);
+      return { kind: "paraphrase", text: next, changed: next !== req.text };
     }
   }
 }

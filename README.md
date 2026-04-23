@@ -63,7 +63,9 @@ notices new nodes (SPA re-renders like Greenhouse, Lever, Ashby, Workday).
 
 ## Popup
 
-Click the toolbar icon:
+Click the toolbar icon. The popup has two tabs:
+
+### Q&A tab
 
 - Total entry count.
 - Search / filter across questions and answers.
@@ -72,7 +74,35 @@ Click the toolbar icon:
 - **Export JSON** / **Import JSON** (merge mode) — for backup or moving between
   browsers.
 
-## Paraphrase (TODO)
+### Discovery tab
+
+- Count of captured jobs (total / synced / pending).
+- List of captured postings (title, company, location, salary, source, date).
+- Per row: *Open URL*, *Sync now* (while pending), *Delete*.
+- Footer: **Web app URL** config + **Sync all now** button.
+
+## Discovery queue (LinkedIn / Indeed / Glassdoor)
+
+A second content script (`src/content/jobCapture.ts`) runs **only** on the
+three job boards. When the current URL is a job-detail page, it pulls the
+posting's title, company, location, salary, description, and posted-at from
+the DOM already rendered in your tab, and drops a small pill into the
+bottom-right of the viewport: *"Save to discovery queue"*.
+
+- **No scraping.** The extension only reads the DOM of pages you're already
+  viewing. It never makes background HTTP requests to LinkedIn / Indeed /
+  Glassdoor, never follows links, never paginates.
+- **No auto-capture.** Nothing is saved until you click the pill.
+- Captured jobs are written to a second IndexedDB object store
+  (`discoveryQueue`) before any network attempt — works fully offline.
+- After a successful local save, the background worker POSTs the record to
+  `${cvMakerBaseUrl}/api/discover/ingest`. 2xx marks it synced; anything
+  else (404, network error, 5xx) leaves it pending and the next sync retries.
+- Configure `cvMakerBaseUrl` from the popup's Discovery tab. Default
+  `http://localhost:3000`. Stored in `chrome.storage.sync` under
+  `cvMakerBaseUrl`.
+
+## Paraphrase
 
 `src/paraphrase/index.ts` exposes:
 
@@ -80,11 +110,12 @@ Click the toolbar icon:
 paraphrase(text: string, ctx: ParaphraseContext): Promise<string>
 ```
 
-Currently a stub that returns the input unchanged. The next iteration will
-wire it to the CV-maker paraphrase API so repeated long-form answers get
-rephrased per-application (same facts, different wording). The
-`embedQuestion` background handler is similarly stubbed; it returns `null`
-so callers can feature-detect.
+It POSTs `{ text, context }` to `${cvMakerBaseUrl}/api/paraphrase`. If the
+endpoint is absent (404), unreachable, or slow (>8s timeout), it falls back
+to returning the input unchanged — so the autofill pipeline keeps working
+even before the web app ships its paraphrase endpoint. The
+`embedQuestion` background handler is still stubbed (heavier endpoint,
+deferred); it returns `null` so callers can feature-detect.
 
 ## Out of scope right now
 
@@ -102,26 +133,32 @@ Each of these is flagged in `src/content/observer.ts` as a `// TODO`:
 
 ```
 src/
-  manifest.ts           MV3 manifest (defineManifest from @crxjs/vite-plugin)
+  manifest.ts                MV3 manifest (defineManifest from @crxjs/vite-plugin)
   background/
-    index.ts            service worker — owns IndexedDB, message bus
+    index.ts                 service worker — owns IndexedDB, message bus
+    discoverySync.ts         POSTs captured jobs to CV-maker /api/discover/ingest
   content/
-    observer.ts         content script entry — DOM walk + MutationObserver
-    fieldContext.ts     label derivation, field-kind enum, page heuristic
-    suggest.ts          shadow-DOM tooltip (Accept / Edit / Skip)
-    capture.ts          blur capture + framework-safe value writing
+    observer.ts              autofill content script — DOM walk + MutationObserver
+    fieldContext.ts          label derivation, field-kind enum, page heuristic
+    suggest.ts               shadow-DOM tooltip (Accept / Edit / Skip)
+    capture.ts               blur capture + framework-safe value writing
+    jobCapture.ts            LinkedIn/Indeed/Glassdoor capture pill (DOM-only)
   store/
-    db.ts               idb wrapper — single typed AutofillDB
-    match.ts            exact + Jaccard fuzzy match (vector TODO)
+    db.ts                    idb wrapper — answers + discoveryQueue stores
+    match.ts                 exact + Jaccard fuzzy match (vector TODO)
   paraphrase/
-    index.ts            stub (TODO: CV-maker API)
+    index.ts                 POST ${cvMakerBaseUrl}/api/paraphrase (defensive)
   popup/
     index.html
     main.tsx
-    App.tsx             React popup — list / search / edit / import / export
-    styles.css          Tailwind v4 entry + ink/paper theme
+    App.tsx                  shell + Q&A/Discovery tab switch
+    panels/
+      QAPanel.tsx            list / search / edit / import / export
+      DiscoveryPanel.tsx     captured jobs + sync controls + base-URL config
+    styles.css               Tailwind v4 entry + ink/paper theme
   shared/
-    types.ts            message contract + AnswerRecord shape
-    message.ts          typed chrome.runtime.sendMessage wrapper
-    normalize.ts        text normalization + Jaccard
+    types.ts                 message contract + AnswerRecord + CapturedJob
+    message.ts               typed chrome.runtime.sendMessage wrapper
+    normalize.ts             text normalization + Jaccard
+    config.ts                chrome.storage.sync wrapper (cvMakerBaseUrl)
 ```

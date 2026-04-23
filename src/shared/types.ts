@@ -44,6 +44,32 @@ export interface MatchResult {
   suggestion: string;
 }
 
+// Discovery queue: job postings the user actively viewed on LinkedIn / Indeed / Glassdoor
+// and explicitly saved via the capture pill. No scraping; only DOM the user has open.
+export type JobSource = "linkedin" | "indeed" | "glassdoor";
+
+export interface CapturedJob {
+  id: string;
+  source: JobSource;
+  url: string;
+  title: string;
+  company: string;
+  location?: string;
+  salary?: string;
+  description?: string;
+  postedAt?: string;
+  capturedAt: number;
+  syncedToWebApp?: boolean;
+}
+
+export interface JobSyncResult {
+  total: number;
+  synced: number;
+  failed: number;
+  /** Set if the whole sync attempt was aborted (bad URL, endpoint unreachable). */
+  error?: string;
+}
+
 // Message contract between content <-> background.
 // Using a discriminated union keeps `any` out of the channel.
 
@@ -60,7 +86,22 @@ export type BgRequest =
   | { kind: "updateAnswer"; id: string; value: string }
   | { kind: "exportAll" }
   | { kind: "importAll"; records: AnswerRecord[]; mode: "merge" | "replace" }
-  | { kind: "embedQuestion"; text: string };
+  | { kind: "embedQuestion"; text: string }
+  | {
+      kind: "captureJob";
+      job: Omit<CapturedJob, "id" | "capturedAt" | "syncedToWebApp">;
+    }
+  | { kind: "listJobs" }
+  | { kind: "deleteJob"; id: string }
+  | { kind: "syncDiscoveryQueue" }
+  | { kind: "syncJob"; id: string }
+  | { kind: "getConfig" }
+  | { kind: "setConfig"; cvMakerBaseUrl: string }
+  | {
+      kind: "paraphrase";
+      text: string;
+      context: { jobTitle?: string; companyName?: string; fieldLabel: string };
+    };
 
 export type BgResponse =
   | { kind: "queryByQuestion"; match: MatchResult | null }
@@ -71,4 +112,12 @@ export type BgResponse =
   | { kind: "exportAll"; records: AnswerRecord[] }
   | { kind: "importAll"; imported: number }
   | { kind: "embedQuestion"; vector: number[] | null }
+  | { kind: "captureJob"; job: CapturedJob; synced: boolean }
+  | { kind: "listJobs"; jobs: CapturedJob[] }
+  | { kind: "deleteJob"; ok: true }
+  | { kind: "syncDiscoveryQueue"; result: JobSyncResult }
+  | { kind: "syncJob"; job: CapturedJob; synced: boolean }
+  | { kind: "getConfig"; cvMakerBaseUrl: string }
+  | { kind: "setConfig"; cvMakerBaseUrl: string }
+  | { kind: "paraphrase"; text: string; changed: boolean }
   | { kind: "error"; message: string };

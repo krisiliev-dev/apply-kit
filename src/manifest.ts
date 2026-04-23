@@ -34,9 +34,30 @@ export default defineManifest({
       run_at: "document_idle",
       all_frames: false,
     },
+    {
+      // Job-posting capture: LinkedIn / Indeed / Glassdoor only. Narrowly scoped
+      // so the capture pill never appears on unrelated pages. We only read the
+      // DOM the user is already viewing — no network calls to these hosts.
+      matches: [
+        "*://*.linkedin.com/*",
+        "*://*.indeed.com/*",
+        "*://*.glassdoor.com/*",
+      ],
+      js: ["src/content/jobCapture.ts"],
+      run_at: "document_idle",
+      all_frames: false,
+    },
   ],
   permissions: ["storage", "activeTab", "scripting"],
-  host_permissions: ["<all_urls>"],
+  // <all_urls> covers the autofill observer on arbitrary application pages.
+  // The three job-board patterns are listed explicitly so the intent is
+  // obvious on review; they are already a subset of <all_urls>.
+  host_permissions: [
+    "<all_urls>",
+    "*://*.linkedin.com/*",
+    "*://*.indeed.com/*",
+    "*://*.glassdoor.com/*",
+  ],
   web_accessible_resources: [
     {
       resources: ["src/content/*", "assets/*"],

@@ -1,9 +1,14 @@
-// Paraphrase interface. Stubbed for now.
+import { getConfig } from "../shared/config";
+
+// Paraphrase interface — calls the CV-maker web app's /api/paraphrase endpoint.
+// The endpoint may not exist yet (a parallel agent is responsible for it); on
+// 404, network error, or malformed response we fall back to the original text
+// so callers (e.g. the suggest tooltip) keep working unchanged.
 //
-// TODO: wire to CV-maker paraphrase API. Expected behavior: given an answer
-// the user previously gave plus the new field's context (the surrounding
-// job/company/role), return a varied phrasing so the same bullet point doesn't
-// appear verbatim across N applications. Must preserve factual content.
+// Contract with the web app:
+//   POST /api/paraphrase  { text: string, context: ParaphraseContext }
+//   200 { text: string }  — the rewritten answer; same facts, new phrasing
+//   any other status      — treat as "no paraphrase available", return input
 
 export interface ParaphraseContext {
   jobTitle?: string;
@@ -11,11 +16,59 @@ export interface ParaphraseContext {
   fieldLabel: string;
 }
 
+const PARAPHRASE_PATH = "/api/paraphrase";
+// Keep the call short: if the web app is slow or wedged, we don't want to
+// block the autofill path for seconds. Better to just use the original text.
+const TIMEOUT_MS = 8000;
+
 export async function paraphrase(
   text: string,
-  _context: ParaphraseContext,
+  context: ParaphraseContext,
 ): Promise<string> {
-  // Stub: return input unchanged. Keeps the pipeline shape stable so
-  // callers don't have to change when we swap in the real implementation.
+  const trimmed = text.trim();
+  if (!trimmed) return text;
+
+  const { cvMakerBaseUrl } = await getConfig();
+  const url = `${cvMakerBaseUrl.replace(/\/+$/, "")}${PARAPHRASE_PATH}`;
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text, context }),
+      signal: ctrl.signal,
+    });
+  } catch {
+    // Network error, CORS block, or abort — silently fall back.
+    clearTimeout(timer);
+    return text;
+  }
+  clearTimeout(timer);
+
+  if (!res.ok) {
+    // 404 (endpoint not shipped yet), 5xx, etc. — fall back.
+    return text;
+  }
+
+  let payload: unknown;
+  try {
+    payload = await res.json();
+  } catch {
+    return text;
+  }
+
+  if (
+    payload &&
+    typeof payload === "object" &&
+    "text" in payload &&
+    typeof (payload as { text: unknown }).text === "string"
+  ) {
+    const paraphrased = (payload as { text: string }).text.trim();
+    return paraphrased.length > 0 ? paraphrased : text;
+  }
   return text;
 }
