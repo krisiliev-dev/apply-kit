@@ -11,6 +11,9 @@ export default function Home() {
             CV Workshop
           </p>
           <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+            <Link href="/discover" className="hover:text-ink">
+              Discover
+            </Link>
             <Link href="/applications" className="hover:text-ink">
               Applications
             </Link>
