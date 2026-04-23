@@ -2,22 +2,36 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCompletion } from "@ai-sdk/react";
 import { useApplications } from "@/lib/app/store";
 import {
   APPLICATION_STATUSES,
+  type Application,
   type ApplicationStatus,
   type ApplicationEvent,
+  type CoverLetter,
+  type CoverLetterTone,
 } from "@/lib/app/types";
 import { STATUS_CLASS, STATUS_LABEL, formatDateTime } from "@/lib/app/ui";
+import { exportApplicationBundle } from "@/lib/app/coverLetterExport";
+import { defaultCV } from "@/content/cvs/default";
+import { cvs } from "@/content/cvs";
 
 export default function ApplicationDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const id = params?.id ?? "";
 
-  const { applications, loaded, load, setField, updateStatus, remove } =
-    useApplications();
+  const {
+    applications,
+    loaded,
+    load,
+    setField,
+    updateStatus,
+    remove,
+    setCoverLetter,
+  } = useApplications();
 
   useEffect(() => {
     load();
@@ -62,12 +76,15 @@ export default function ApplicationDetailPage() {
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
       <header className="mb-10">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
-          <Link href="/applications" className="hover:text-ink">
-            Applications
-          </Link>{" "}
-          / {app.id}
-        </p>
+        <div className="flex items-start justify-between gap-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+            <Link href="/applications" className="hover:text-ink">
+              Applications
+            </Link>{" "}
+            / {app.id}
+          </p>
+          <ExportAllButton app={app} />
+        </div>
 
         <InlineText
           value={app.company}
@@ -141,6 +158,12 @@ export default function ApplicationDetailPage() {
           placeholder="Notes, context, links…"
         />
       </section>
+
+      <CoverLetterSection
+        app={app}
+        onSave={(cl) => setCoverLetter(app.id, cl)}
+        onClear={() => setCoverLetter(app.id, undefined)}
+      />
 
       <section className="mb-12">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-4">
@@ -257,6 +280,327 @@ function InlineTextArea({
       rows={4}
       className="w-full bg-transparent border border-ink/10 hover:border-ink/20 focus:border-ink/60 focus:outline-none px-3 py-2 text-sm leading-relaxed placeholder:text-ink/30 resize-y"
     />
+  );
+}
+
+// ———————————————————————————————————————————————
+// Cover letter
+// ———————————————————————————————————————————————
+
+const TONES: { value: CoverLetterTone; label: string; hint: string }[] = [
+  { value: "neutral", label: "Neutral", hint: "Baseline" },
+  { value: "warm", label: "Warm", hint: "Personal" },
+  { value: "direct", label: "Direct", hint: "Declarative" },
+  { value: "witty", label: "Witty", hint: "Light touch" },
+];
+
+function resolveBaseCV(cvSlug?: string) {
+  if (cvSlug && cvs[cvSlug]) return cvs[cvSlug];
+  return defaultCV;
+}
+
+function CoverLetterSection({
+  app,
+  onSave,
+  onClear,
+}: {
+  app: Application;
+  onSave: (cl: CoverLetter) => void;
+  onClear: () => void;
+}) {
+  const existing = app.coverLetter;
+  const [showForm, setShowForm] = useState(!existing);
+  const [tone, setTone] = useState<CoverLetterTone>(existing?.tone ?? "direct");
+  const [wordTarget, setWordTarget] = useState<number>(220);
+  const [editBody, setEditBody] = useState<string>(existing?.body ?? "");
+  const [copied, setCopied] = useState(false);
+  const toneRef = useRef<CoverLetterTone>(tone);
+  toneRef.current = tone;
+
+  useEffect(() => {
+    setEditBody(existing?.body ?? "");
+  }, [existing?.body]);
+
+  const { completion, complete, isLoading, stop, error } = useCompletion({
+    api: "/api/cover-letter",
+    streamProtocol: "text",
+    onFinish: (_prompt, final) => {
+      const body = (final ?? "").trim();
+      if (!body) return;
+      onSave({
+        body,
+        tone: toneRef.current,
+        generatedAt: Date.now(),
+      });
+      setShowForm(false);
+    },
+  });
+
+  const onGenerate = useCallback(() => {
+    const baseCV = resolveBaseCV(app.cvSlug);
+    void complete("", {
+      body: {
+        applicationId: app.id,
+        parsedJob: app.jobData,
+        baseCV,
+        tone,
+        wordTarget,
+      },
+    });
+  }, [app.id, app.cvSlug, app.jobData, complete, tone, wordTarget]);
+
+  const onCopy = useCallback(async () => {
+    const text = existing?.body ?? editBody;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // ignore — clipboard may be unavailable (insecure context, etc.)
+    }
+  }, [existing?.body, editBody]);
+
+  const onSaveEdits = useCallback(() => {
+    const body = editBody.trim();
+    if (!body) return;
+    onSave({
+      body,
+      tone: existing?.tone ?? tone,
+      generatedAt: Date.now(),
+    });
+  }, [editBody, existing?.tone, tone, onSave]);
+
+  const streaming = isLoading && completion.length > 0;
+
+  return (
+    <section className="mb-12">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+          Cover letter
+        </h2>
+        {existing && !showForm && (
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={onCopy}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink"
+            >
+              Regenerate
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  typeof window !== "undefined" &&
+                  window.confirm("Discard this cover letter?")
+                ) {
+                  onClear();
+                  setEditBody("");
+                }
+              }}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/40 hover:text-accent"
+            >
+              Discard
+            </button>
+          </div>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="border border-ink/10 p-5 mb-4">
+          <div className="grid grid-cols-[120px_1fr] gap-y-5 gap-x-6 items-start">
+            <Label>Tone</Label>
+            <div
+              role="radiogroup"
+              aria-label="Cover letter tone"
+              className="flex flex-wrap gap-2"
+            >
+              {TONES.map((t) => {
+                const active = t.value === tone;
+                return (
+                  <button
+                    key={t.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setTone(t.value)}
+                    className={`font-mono text-[11px] uppercase tracking-[0.2em] px-2.5 py-1.5 border transition-colors ${
+                      active
+                        ? "bg-ink text-paper border-ink"
+                        : "bg-transparent text-ink/70 border-ink/15 hover:border-ink/40"
+                    }`}
+                  >
+                    {t.label}
+                    <span
+                      className={`ml-2 normal-case tracking-normal text-[10px] ${
+                        active ? "text-paper/70" : "text-ink/40"
+                      }`}
+                    >
+                      {t.hint}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <Label>Length</Label>
+            <div>
+              <input
+                type="range"
+                min={150}
+                max={350}
+                step={10}
+                value={wordTarget}
+                onChange={(e) => setWordTarget(Number(e.target.value))}
+                className="w-full max-w-xs accent-ink"
+                aria-label="Target word count"
+              />
+              <div className="font-mono text-[11px] text-ink/60 mt-1">
+                ~{wordTarget} words
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 mt-6">
+            <button
+              type="button"
+              onClick={onGenerate}
+              disabled={isLoading}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] px-4 py-2 bg-ink text-paper hover:bg-ink/80 disabled:bg-ink/30 disabled:cursor-not-allowed"
+            >
+              {isLoading ? "Generating…" : existing ? "Regenerate" : "Generate"}
+            </button>
+            {isLoading && (
+              <button
+                type="button"
+                onClick={stop}
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink"
+              >
+                Stop
+              </button>
+            )}
+            {existing && !isLoading && (
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink"
+              >
+                Cancel
+              </button>
+            )}
+            {!app.jobData && (
+              <span className="font-mono text-[11px] text-ink/40">
+                No parsed job — generating from CV only.
+              </span>
+            )}
+          </div>
+
+          {error && (
+            <p className="mt-4 font-mono text-[11px] text-accent">
+              {error.message}
+            </p>
+          )}
+
+          {streaming && (
+            <pre className="mt-6 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-ink/80 border-t border-ink/10 pt-4">
+              {completion}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {existing && !showForm && (
+        <div>
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            onBlur={onSaveEdits}
+            rows={Math.min(
+              24,
+              Math.max(10, editBody.split("\n").length + 2),
+            )}
+            className="w-full bg-paper/40 border border-ink/10 hover:border-ink/20 focus:border-ink/60 focus:outline-none px-4 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap resize-y"
+          />
+          <div className="flex items-center justify-between mt-2">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/40">
+              {existing.tone ? `${existing.tone} · ` : ""}
+              generated {formatDateTime(existing.generatedAt)}
+            </p>
+            {editBody.trim() !== existing.body.trim() && (
+              <button
+                type="button"
+                onClick={onSaveEdits}
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/70 hover:text-ink"
+              >
+                Save edits
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!existing && !showForm && (
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="font-mono text-[11px] uppercase tracking-[0.2em] px-4 py-2 border border-ink/20 text-ink/70 hover:border-ink hover:text-ink"
+        >
+          Generate cover letter
+        </button>
+      )}
+    </section>
+  );
+}
+
+// ———————————————————————————————————————————————
+// Export all (zip)
+// ———————————————————————————————————————————————
+
+function ExportAllButton({ app }: { app: Application }) {
+  const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
+
+  const onExport = useCallback(async () => {
+    setBusy(true);
+    setStatus(null);
+    try {
+      const res = await exportApplicationBundle(app);
+      const bits: string[] = [];
+      if (res.included.coverLetter) bits.push("cover letter");
+      if (res.included.cv) bits.push("CV");
+      setStatus(bits.length ? `Exported ${bits.join(" + ")}` : "Exported readme");
+    } catch {
+      setStatus("Export failed");
+    } finally {
+      setBusy(false);
+      setTimeout(() => setStatus(null), 2500);
+    }
+  }, [app]);
+
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <button
+        type="button"
+        onClick={onExport}
+        disabled={busy}
+        className="font-mono text-[11px] uppercase tracking-[0.2em] px-3 py-1.5 border border-ink/20 text-ink/70 hover:border-ink hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {busy ? "Zipping…" : "Export all"}
+      </button>
+      {status && (
+        <span className="font-mono text-[10px] tracking-[0.15em] text-ink/50">
+          {status}
+        </span>
+      )}
+    </div>
   );
 }
 

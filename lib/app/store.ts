@@ -1,7 +1,12 @@
 "use client";
 
 import { create, type StateCreator } from "zustand";
-import type { Application, ApplicationEvent, ApplicationStatus } from "./types";
+import type {
+  Application,
+  ApplicationEvent,
+  ApplicationStatus,
+  CoverLetter,
+} from "./types";
 import { loadAllFromStorage, saveAllToStorage } from "./persist";
 
 // ———————————————————————————————————————————————
@@ -26,6 +31,8 @@ type Actions = {
   setNotes: (id: string, notes: string) => void;
   /** Generic partial update — excludes id/dateCreated which are stable. */
   setField: (id: string, patch: Partial<Omit<Application, "id" | "dateCreated">>) => void;
+  /** Set (or clear) the per-application cover letter. */
+  setCoverLetter: (id: string, cl: CoverLetter | undefined) => void;
 };
 
 export type AppStore = AppState & Actions;
@@ -109,6 +116,14 @@ const creator: StateCreator<AppStore> = (set, get) => ({
   setField: (id, patch) => {
     const next = get().applications.map((a) =>
       a.id === id ? applyPatch(a, patch) : a,
+    );
+    persist(next);
+    set({ applications: next });
+  },
+
+  setCoverLetter: (id, cl) => {
+    const next = get().applications.map((a) =>
+      a.id === id ? { ...a, coverLetter: cl } : a,
     );
     persist(next);
     set({ applications: next });

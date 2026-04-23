@@ -45,6 +45,14 @@ export type ApplicationEvent = {
   to?: ApplicationStatus;
 };
 
+export type CoverLetterTone = "neutral" | "warm" | "direct" | "witty";
+
+export type CoverLetter = {
+  body: string; // plain text or simple markdown
+  tone?: CoverLetterTone;
+  generatedAt: number;
+};
+
 export type Application = {
   id: string;
   company: string;
@@ -57,6 +65,7 @@ export type Application = {
   status: ApplicationStatus;
   notes?: string;
   events?: ApplicationEvent[];
+  coverLetter?: CoverLetter;
 };
 
 // Persistence key used by both the reader (lib/app/persist.ts) and the
