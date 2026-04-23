@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cvList } from "@/content/cvs";
+import { DemoControls, DemoHint } from "@/components/home/DemoControls";
 
 export default function Home() {
   return (
@@ -29,9 +30,12 @@ export default function Home() {
       </header>
 
       <section>
-        <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-4">
-          CV variants
-        </h2>
+        <div className="flex items-baseline justify-between mb-4 gap-4">
+          <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+            CV variants
+          </h2>
+        </div>
+        <DemoHint />
         <ul className="divide-y divide-ink/10 border-y border-ink/10">
           {cvList.map((cv) => (
             <li key={cv.slug}>
@@ -71,13 +75,16 @@ export default function Home() {
         </Link>
       </section>
 
-      <footer className="mt-16 font-mono text-[11px] text-ink/50 space-y-1">
-        <p>⌘Z undo · ⌘⇧Z redo · ⌘D duplicate · Del delete · Esc deselect</p>
-        <p>⌘/Ctrl + scroll = zoom</p>
-        <p>
-          For AI chat: add <code>ANTHROPIC_API_KEY</code> to{" "}
-          <code>.env.local</code>
-        </p>
+      <footer className="mt-16 space-y-6">
+        <DemoControls />
+        <div className="font-mono text-[11px] text-ink/50 space-y-1">
+          <p>⌘Z undo · ⌘⇧Z redo · ⌘D duplicate · Del delete · Esc deselect</p>
+          <p>⌘/Ctrl + scroll = zoom</p>
+          <p>
+            For AI chat: add <code>ANTHROPIC_API_KEY</code> to{" "}
+            <code>.env.local</code>
+          </p>
+        </div>
       </footer>
     </main>
   );
