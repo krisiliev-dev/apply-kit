@@ -17,6 +17,8 @@ import { STATUS_CLASS, STATUS_LABEL, formatDateTime } from "@/lib/app/ui";
 import { exportApplicationBundle } from "@/lib/app/coverLetterExport";
 import { defaultCV } from "@/content/cvs/default";
 import { cvs } from "@/content/cvs";
+import { InterviewPrepSection } from "@/components/applications/InterviewPrepSection";
+import { PreScreenSection } from "@/components/applications/PreScreenSection";
 
 export default function ApplicationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -164,6 +166,12 @@ export default function ApplicationDetailPage() {
         onSave={(cl) => setCoverLetter(app.id, cl)}
         onClear={() => setCoverLetter(app.id, undefined)}
       />
+
+      <PreScreenSection app={app} />
+
+      {(app.status === "screen" ||
+        app.status === "interview" ||
+        app.status === "offer") && <InterviewPrepSection app={app} />}
 
       <section className="mb-12">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-4">
