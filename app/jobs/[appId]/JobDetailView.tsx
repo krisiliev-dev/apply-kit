@@ -198,7 +198,7 @@ export function JobDetailView({ appId }: { appId: string }) {
         {ats.kind === "none" && (
           <p className="font-mono text-xs text-ink/50">
             No supported ATS detected in the job URL. Prefill is available for
-            Greenhouse, Lever, and Ashby.
+            Greenhouse, Lever, Ashby, Workday, SmartRecruiters, and Teamtailor.
           </p>
         )}
         {ats.kind === "loading" && (
@@ -313,6 +313,18 @@ function PrefilledForm({
           </a>
         )}
       </div>
+
+      {schema.isStub && (
+        <div className="mb-4 border border-ink/20 bg-ink/[0.03] px-3 py-2 font-mono text-[11px] text-ink/70">
+          <span className="uppercase tracking-[0.18em] text-ink/50">
+            {schema.stubLabel ?? "Standard fields"}
+          </span>
+          <span className="block mt-1 text-ink/60">
+            Standard fields only — this ATS doesn&apos;t expose form defs
+            publicly. Copy these values into the real form.
+          </span>
+        </div>
+      )}
 
       {schema.fields.length === 0 && (
         <p className="font-mono text-xs text-ink/50">
