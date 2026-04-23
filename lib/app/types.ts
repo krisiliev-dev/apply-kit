@@ -12,7 +12,9 @@ export type ApplicationStatus =
   | "interview"
   | "offer"
   | "rejected"
-  | "withdrawn";
+  | "withdrawn"
+  | "ghosted-short"
+  | "ghosted-long";
 
 export const APPLICATION_STATUSES: ApplicationStatus[] = [
   "draft",
@@ -22,6 +24,17 @@ export const APPLICATION_STATUSES: ApplicationStatus[] = [
   "offer",
   "rejected",
   "withdrawn",
+  "ghosted-short",
+  "ghosted-long",
+];
+
+// Statuses that are terminal/unfavourable — the UI surfaces the rejection
+// learning section for any of these.
+export const CLOSED_UNFAVOURABLE_STATUSES: ApplicationStatus[] = [
+  "rejected",
+  "withdrawn",
+  "ghosted-short",
+  "ghosted-long",
 ];
 
 export type ParsedJob = {
@@ -53,6 +66,70 @@ export type CoverLetter = {
   generatedAt: number;
 };
 
+// ———————————————————————————————————————————————
+// Rejection learning
+// ———————————————————————————————————————————————
+
+export type RejectionReasonKind =
+  | "auto-rejection" // pipeline told you no
+  | "post-screen" // made it past screen then lost
+  | "post-interview" // lost after at least one interview
+  | "post-final" // last round loss
+  | "ghosted-short" // ≤2 weeks, no response
+  | "ghosted-long" // >2 weeks, no response
+  | "self-withdrawn"
+  | "offer-declined-by-me";
+
+export const REJECTION_REASON_KINDS: RejectionReasonKind[] = [
+  "auto-rejection",
+  "post-screen",
+  "post-interview",
+  "post-final",
+  "ghosted-short",
+  "ghosted-long",
+  "self-withdrawn",
+  "offer-declined-by-me",
+];
+
+export const REJECTION_REASON_LABEL: Record<RejectionReasonKind, string> = {
+  "auto-rejection": "Auto-rejection",
+  "post-screen": "Post-screen loss",
+  "post-interview": "Post-interview loss",
+  "post-final": "Final-round loss",
+  "ghosted-short": "Ghosted ≤2 weeks",
+  "ghosted-long": "Ghosted >2 weeks",
+  "self-withdrawn": "Self-withdrawn",
+  "offer-declined-by-me": "Declined offer",
+};
+
+export type RejectionPoliteness = "curt" | "standard" | "warm" | "template";
+export type RejectionSeniorityFeedback = "under" | "over" | "fit";
+export type RejectionStageLost =
+  | "resume"
+  | "screen"
+  | "interview"
+  | "final"
+  | "offer";
+
+export type RejectionExtractedSignals = {
+  citedReasons: string[]; // exact phrases if visible
+  inferredReasons: string[]; // AI inferences
+  politeness: RejectionPoliteness;
+  seniorityFeedback?: RejectionSeniorityFeedback;
+  salaryMismatch?: boolean;
+  compensationHint?: string;
+  stageLost: RejectionStageLost;
+};
+
+export type RejectionSignal = {
+  kind: RejectionReasonKind;
+  rawInputText?: string; // pasted email / note
+  closedAt: number; // when the outcome was recorded
+  extractedSignals: RejectionExtractedSignals;
+  aiSummary: string; // one sentence
+  lessonsForFuture: string[]; // 1-3 concrete, non-generic
+};
+
 export type Application = {
   id: string;
   company: string;
@@ -66,6 +143,7 @@ export type Application = {
   notes?: string;
   events?: ApplicationEvent[];
   coverLetter?: CoverLetter;
+  rejection?: RejectionSignal;
 };
 
 // Persistence key used by both the reader (lib/app/persist.ts) and the

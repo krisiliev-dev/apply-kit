@@ -6,6 +6,7 @@ import type {
   ApplicationEvent,
   ApplicationStatus,
   CoverLetter,
+  RejectionSignal,
 } from "./types";
 import { loadAllFromStorage, saveAllToStorage } from "./persist";
 
@@ -33,6 +34,10 @@ type Actions = {
   setField: (id: string, patch: Partial<Omit<Application, "id" | "dateCreated">>) => void;
   /** Set (or clear) the per-application cover letter. */
   setCoverLetter: (id: string, cl: CoverLetter | undefined) => void;
+  /** Attach (or replace) the rejection-learning signal for an application. */
+  setRejectionSignal: (id: string, signal: RejectionSignal) => void;
+  /** Remove any rejection-learning signal from an application. */
+  clearRejectionSignal: (id: string) => void;
 };
 
 export type AppStore = AppState & Actions;
@@ -125,6 +130,25 @@ const creator: StateCreator<AppStore> = (set, get) => ({
     const next = get().applications.map((a) =>
       a.id === id ? { ...a, coverLetter: cl } : a,
     );
+    persist(next);
+    set({ applications: next });
+  },
+
+  setRejectionSignal: (id, signal) => {
+    const next = get().applications.map((a) =>
+      a.id === id ? { ...a, rejection: signal } : a,
+    );
+    persist(next);
+    set({ applications: next });
+  },
+
+  clearRejectionSignal: (id) => {
+    const next = get().applications.map((a) => {
+      if (a.id !== id) return a;
+      const copy = { ...a };
+      delete copy.rejection;
+      return copy;
+    });
     persist(next);
     set({ applications: next });
   },

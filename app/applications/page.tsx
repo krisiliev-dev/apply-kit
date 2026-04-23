@@ -48,6 +48,9 @@ export default function ApplicationsPage() {
             <Link href="/jobs" className="hover:text-ink">
               Jobs
             </Link>
+            <Link href="/applications/review" className="hover:text-ink">
+              Review
+            </Link>
           </nav>
         </div>
         <div className="flex items-end justify-between gap-4 mt-2">

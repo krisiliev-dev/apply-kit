@@ -9,6 +9,8 @@ export const STATUS_LABEL: Record<ApplicationStatus, string> = {
   offer: "Offer",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
+  "ghosted-short": "Ghosted ≤2w",
+  "ghosted-long": "Ghosted >2w",
 };
 
 export const STATUS_CLASS: Record<ApplicationStatus, string> = {
@@ -19,6 +21,8 @@ export const STATUS_CLASS: Record<ApplicationStatus, string> = {
   offer: "bg-ink text-paper border-ink",
   rejected: "bg-ink/5 text-ink/40 border-ink/10 line-through",
   withdrawn: "bg-ink/5 text-ink/40 border-ink/10",
+  "ghosted-short": "bg-ink/5 text-ink/50 border-ink/10 italic",
+  "ghosted-long": "bg-ink/5 text-ink/40 border-ink/10 italic",
 };
 
 export function formatDate(ts: number): string {
