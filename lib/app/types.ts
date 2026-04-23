@@ -1,6 +1,10 @@
-// Shared types for the "apply" workflow + the application tracker.
-// Agent B owns the /applications UI. If they change this file in breaking ways,
-// prefer their Application shape — we only WRITE records; they READ them.
+// Domain model for the applications tracker.
+// Kept deliberately simple and JSON-serializable so the entire state can live in
+// localStorage. `events` is future-proofing — today only `updateStatus` writes to it.
+//
+// NOTE: This shape is owned by Agent B's /applications tracker. The /jobs
+// "apply" flow only writes Application records — read this file as the source
+// of truth.
 
 export type ApplicationStatus =
   | "draft"
@@ -10,6 +14,16 @@ export type ApplicationStatus =
   | "offer"
   | "rejected"
   | "withdrawn";
+
+export const APPLICATION_STATUSES: ApplicationStatus[] = [
+  "draft",
+  "applied",
+  "screen",
+  "interview",
+  "offer",
+  "rejected",
+  "withdrawn",
+];
 
 export type ParsedJob = {
   title: string;
@@ -26,8 +40,10 @@ export type ParsedJob = {
 
 export type ApplicationEvent = {
   at: number;
-  kind: string;
+  kind: "status-change" | "note" | "reminder" | string;
   note?: string;
+  from?: ApplicationStatus;
+  to?: ApplicationStatus;
 };
 
 export type Application = {
