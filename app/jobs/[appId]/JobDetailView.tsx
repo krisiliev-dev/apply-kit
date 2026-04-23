@@ -7,6 +7,7 @@ import { getApplication, patchApplication } from "@/lib/app/storage";
 import { profile as baseProfile } from "@/content/profile";
 import type { AtsJobSchema } from "@/lib/jobs/ats";
 import { detectAts } from "@/lib/jobs/ats";
+import { loadDraftEval, type DraftEvalResult } from "@/lib/jobs/draftEval";
 
 type AtsState =
   | { kind: "none" }
@@ -18,10 +19,12 @@ export function JobDetailView({ appId }: { appId: string }) {
   const [app, setApp] = useState<Application | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [ats, setAts] = useState<AtsState>({ kind: "none" });
+  const [draftEval, setDraftEval] = useState<DraftEvalResult | null>(null);
 
   useEffect(() => {
     const found = getApplication(appId);
     setApp(found ?? null);
+    setDraftEval(loadDraftEval(appId));
     setLoaded(true);
   }, [appId]);
 
@@ -184,6 +187,10 @@ export function JobDetailView({ appId }: { appId: string }) {
         )}
       </section>
 
+      {draftEval && (
+        <DraftEvalPanel result={draftEval} />
+      )}
+
       {job && (
         <section className="grid md:grid-cols-2 gap-8 mb-12">
           <Bullets title="Requirements" items={job.requirements} />
@@ -247,6 +254,54 @@ function Row({
       </dt>
       <dd className="text-ink">{children}</dd>
     </div>
+  );
+}
+
+function DraftEvalPanel({ result }: { result: DraftEvalResult }) {
+  const pct = Math.round(result.score * 100);
+  const coverage = Math.round(result.keywordCoverage * 100);
+  const hasWarnings = result.warnings.length > 0;
+  return (
+    <section className="mb-12 border border-ink/10 p-4">
+      <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+          Draft quality
+        </h2>
+        <div className="flex items-center gap-4 font-mono text-[11px] text-ink/60">
+          <span>
+            Score <span className="text-ink">{pct}%</span>
+          </span>
+          <span>
+            Keywords <span className="text-ink">{coverage}%</span>
+          </span>
+          <span>
+            Flags{" "}
+            <span className={hasWarnings ? "text-accent" : "text-ink"}>
+              {result.warnings.length}
+            </span>
+          </span>
+        </div>
+      </div>
+      {hasWarnings ? (
+        <ul className="space-y-1 font-mono text-[11px]">
+          {result.warnings.map((w, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="text-accent shrink-0">!</span>
+              <span className="text-ink/80">
+                <span className="uppercase tracking-[0.15em] text-ink/50 mr-2">
+                  {w.kind.replace(/-/g, " ")}
+                </span>
+                {w.message}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="font-mono text-[11px] text-ink/60">
+          No flags — truthful, on-length, and keyword-aligned.
+        </p>
+      )}
+    </section>
   );
 }
 
