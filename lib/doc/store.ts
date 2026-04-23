@@ -56,6 +56,8 @@ type Actions = {
   nudgeNodes: (dx: number, dy: number, ids?: string[]) => void;
   bringForward: (id: string) => void;
   sendBackward: (id: string) => void;
+  alignNodes: (kind: AlignKind) => void;
+  distributeNodes: (axis: "h" | "v") => void;
 
   // ui
   setZoom: (z: number) => void;
@@ -64,6 +66,14 @@ type Actions = {
 };
 
 export type Store = DocState & UiState & Actions;
+
+export type AlignKind =
+  | "left"
+  | "center-h"
+  | "right"
+  | "top"
+  | "middle-v"
+  | "bottom";
 
 // Distributive Omit so discriminated-union members keep their own shapes.
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown
@@ -272,6 +282,86 @@ const creator: StateCreator<Store> = (set, get) => {
           };
         }),
       })),
+
+    alignNodes: (kind) => {
+      const { selectedIds, doc, activePageId } = get();
+      if (selectedIds.length === 0) return;
+      const page = doc.pages.find((p) => p.id === activePageId)!;
+      const selected = page.nodes.filter((n) => selectedIds.includes(n.id));
+      if (selected.length === 0) return;
+
+      // With one node selected, align against the page itself.
+      const bounds =
+        selected.length === 1
+          ? { minX: 0, minY: 0, maxX: page.width, maxY: page.height }
+          : {
+              minX: Math.min(...selected.map((n) => n.x)),
+              minY: Math.min(...selected.map((n) => n.y)),
+              maxX: Math.max(...selected.map((n) => n.x + n.w)),
+              maxY: Math.max(...selected.map((n) => n.y + n.h)),
+            };
+
+      set((s) => ({
+        doc: updatePages(s.doc, s.activePageId, (p) => ({
+          ...p,
+          nodes: p.nodes.map((n) => {
+            if (!selectedIds.includes(n.id)) return n;
+            switch (kind) {
+              case "left":
+                return { ...n, x: bounds.minX };
+              case "right":
+                return { ...n, x: bounds.maxX - n.w };
+              case "center-h":
+                return { ...n, x: (bounds.minX + bounds.maxX) / 2 - n.w / 2 };
+              case "top":
+                return { ...n, y: bounds.minY };
+              case "bottom":
+                return { ...n, y: bounds.maxY - n.h };
+              case "middle-v":
+                return { ...n, y: (bounds.minY + bounds.maxY) / 2 - n.h / 2 };
+            }
+          }),
+        })),
+      }));
+    },
+
+    distributeNodes: (axis) => {
+      const { selectedIds, doc, activePageId } = get();
+      if (selectedIds.length < 3) return;
+      const page = doc.pages.find((p) => p.id === activePageId)!;
+      const selected = page.nodes
+        .filter((n) => selectedIds.includes(n.id))
+        .sort((a, b) => (axis === "h" ? a.x - b.x : a.y - b.y));
+      if (selected.length < 3) return;
+
+      const first = selected[0];
+      const last = selected[selected.length - 1];
+      const totalSize = selected.reduce(
+        (s, n) => s + (axis === "h" ? n.w : n.h),
+        0,
+      );
+      const span =
+        axis === "h" ? last.x + last.w - first.x : last.y + last.h - first.y;
+      const gap = (span - totalSize) / (selected.length - 1);
+
+      const moves = new Map<string, number>();
+      let cursor = axis === "h" ? first.x : first.y;
+      for (const n of selected) {
+        moves.set(n.id, cursor);
+        cursor += (axis === "h" ? n.w : n.h) + gap;
+      }
+
+      set((s) => ({
+        doc: updatePages(s.doc, s.activePageId, (p) => ({
+          ...p,
+          nodes: p.nodes.map((n) => {
+            const pos = moves.get(n.id);
+            if (pos === undefined) return n;
+            return axis === "h" ? { ...n, x: pos } : { ...n, y: pos };
+          }),
+        })),
+      }));
+    },
 
     setZoom: (zoom) => set({ zoom: Math.max(0.2, Math.min(3, zoom)) }),
     setShowGrid: (v) => set({ showGrid: v }),

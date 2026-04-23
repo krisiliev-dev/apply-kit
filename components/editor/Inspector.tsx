@@ -3,6 +3,7 @@
 import { useEditor, isTextNode, isImageNode, isShapeNode } from "@/lib/doc/store";
 import type { Node, TextNode, ImageNode, ShapeNode, FontToken } from "@/lib/doc/types";
 import { FONT_OPTIONS, findFontByCssVar } from "@/lib/fonts";
+import { PALETTES, matchPaletteId, type Palette } from "@/lib/palettes";
 
 // Inspector — edits the currently selected node(s).
 // When multiple nodes are selected, only fields that apply to all types are shown.
@@ -372,8 +373,49 @@ function ThemeInspector({
   doc: { theme: import("@/lib/doc/types").Theme };
   setTheme: (patch: Partial<import("@/lib/doc/types").Theme>) => void;
 }) {
+  const activePaletteId = matchPaletteId(doc.theme.colors);
+
+  const applyPalette = (p: Palette) =>
+    setTheme({
+      colors: { ink: p.ink, paper: p.paper, accent: p.accent },
+    });
+
   return (
     <div className="p-3 space-y-3 overflow-auto">
+      <SectionHead>Theme · Palettes</SectionHead>
+      <div className="grid grid-cols-3 gap-2">
+        {PALETTES.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => applyPalette(p)}
+            className="rounded overflow-hidden"
+            style={{
+              border:
+                activePaletteId === p.id
+                  ? "2px solid var(--color-editor-select)"
+                  : "1px solid var(--color-editor-border)",
+              padding: 0,
+            }}
+            title={p.name}
+          >
+            <div className="flex h-8">
+              <div style={{ flex: 1, background: p.paper }} />
+              <div style={{ flex: 1, background: p.ink }} />
+              <div style={{ flex: 1, background: p.accent }} />
+            </div>
+            <div
+              className="font-mono text-[9px] uppercase tracking-wider text-center py-1"
+              style={{
+                background: "#2a2a2a",
+                color: "var(--color-editor-text-dim)",
+              }}
+            >
+              {p.name}
+            </div>
+          </button>
+        ))}
+      </div>
+
       <SectionHead>Theme · Colors</SectionHead>
       <Row label="Ink">
         <ColorField

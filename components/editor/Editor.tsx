@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Toolbar } from "./Toolbar";
 import { LayersPanel } from "./LayersPanel";
 import { Canvas } from "./Canvas";
+import { AlignBar } from "./AlignBar";
 import { Inspector } from "./Inspector";
 import { ChatPanel } from "./ChatPanel";
 import { useEditorShortcuts } from "./useEditorShortcuts";
@@ -31,6 +32,7 @@ export function Editor({ slug }: { slug: string }) {
         <LayersPanel />
         <div className="flex-1 min-w-0 min-h-0 relative">
           <Canvas />
+          <AlignBar />
         </div>
         <div
           className="editor-panel flex flex-col border-l"

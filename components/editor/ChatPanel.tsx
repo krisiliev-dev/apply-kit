@@ -6,8 +6,10 @@ import {
   DefaultChatTransport,
   lastAssistantMessageIsCompleteWithToolCalls,
   isToolUIPart,
+  isFileUIPart,
   getToolName,
   type UIMessage,
+  type FileUIPart,
 } from "ai";
 import { useEditor } from "@/lib/doc/store";
 import { applyTool } from "@/lib/ai/applyTool";
@@ -17,7 +19,10 @@ import { applyTool } from "@/lib/ai/applyTool";
 
 export function ChatPanel() {
   const [input, setInput] = useState("");
+  const [pending, setPending] = useState<FileUIPart[]>([]);
+  const [dragOver, setDragOver] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // DefaultChatTransport reads fresh doc state on every send via
   // prepareSendMessagesRequest, so the model always sees what's on screen.
@@ -58,12 +63,47 @@ export function ChatPanel() {
     });
   }, [messages]);
 
+  const addFiles = async (files: FileList | File[]) => {
+    const items = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (items.length === 0) return;
+    const parts = await Promise.all(
+      items.map(
+        (f) =>
+          new Promise<FileUIPart>((resolve) => {
+            const reader = new FileReader();
+            reader.onload = () =>
+              resolve({
+                type: "file",
+                mediaType: f.type,
+                filename: f.name,
+                url: typeof reader.result === "string" ? reader.result : "",
+              });
+            reader.readAsDataURL(f);
+          }),
+      ),
+    );
+    setPending((p) => [...p, ...parts]);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = input.trim();
-    if (!text) return;
-    sendMessage({ text });
+    if (!text && pending.length === 0) return;
+    if (pending.length > 0) {
+      sendMessage({ text: text || "(see attached)", files: pending });
+    } else {
+      sendMessage({ text });
+    }
     setInput("");
+    setPending([]);
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent) => {
+    const files = Array.from(e.clipboardData.files);
+    if (files.length > 0) {
+      e.preventDefault();
+      await addFiles(files);
+    }
   };
 
   const busy = status === "submitted" || status === "streaming";
@@ -137,31 +177,108 @@ export function ChatPanel() {
         onSubmit={handleSubmit}
         className="p-2 border-t"
         style={{ borderColor: "var(--color-editor-border)" }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={async (e) => {
+          e.preventDefault();
+          setDragOver(false);
+          await addFiles(e.dataTransfer.files);
+        }}
       >
+        {pending.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {pending.map((p, i) => (
+              <div key={i} className="relative group">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt={p.filename ?? ""}
+                  className="rounded object-cover"
+                  style={{
+                    width: 48,
+                    height: 48,
+                    border: "1px solid var(--color-editor-border)",
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setPending((list) => list.filter((_, j) => j !== i))}
+                  className="absolute -top-1 -right-1 rounded-full"
+                  style={{
+                    background: "#111",
+                    color: "#fff",
+                    width: 16,
+                    height: 16,
+                    fontSize: 10,
+                    lineHeight: "16px",
+                  }}
+                  aria-label="Remove attachment"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="relative">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
+            onPaste={handlePaste}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit(e);
               }
             }}
-            placeholder="Describe a change…"
+            placeholder={
+              dragOver
+                ? "drop image to attach…"
+                : "describe a change — ⌘V or drop to add reference images"
+            }
             className="editor-input"
             style={{
               minHeight: 68,
               resize: "none",
               paddingRight: 64,
+              paddingLeft: 32,
               fontFamily: "var(--font-sans)",
               fontSize: 12,
+              borderColor: dragOver
+                ? "var(--color-editor-select)"
+                : "var(--color-editor-border)",
             }}
             disabled={busy}
           />
+
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute bottom-2 left-2 editor-btn editor-btn-ghost"
+            title="Attach image"
+            disabled={busy}
+          >
+            +
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) void addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+
           <button
             type="submit"
-            disabled={busy || input.trim().length === 0}
+            disabled={busy || (input.trim().length === 0 && pending.length === 0)}
             className="editor-btn absolute bottom-2 right-2"
           >
             send
@@ -209,6 +326,22 @@ function Message({ message }: { message: UIMessage }) {
               >
                 <div className="opacity-70">tool · {name} · {part.state}</div>
               </div>
+            );
+          }
+          if (isFileUIPart(part) && part.mediaType.startsWith("image/")) {
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={part.url}
+                alt={part.filename ?? ""}
+                className="rounded"
+                style={{
+                  maxWidth: "100%",
+                  maxHeight: 200,
+                  border: "1px solid var(--color-editor-border)",
+                }}
+              />
             );
           }
           return null;

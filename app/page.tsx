@@ -46,6 +46,21 @@ export default function Home() {
         </ul>
       </section>
 
+      <section className="mt-12">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-4">
+          Apply to a role
+        </h2>
+        <Link
+          href="/jobs"
+          className="flex items-baseline justify-between py-4 border-y border-ink/10 hover:opacity-70"
+        >
+          <span className="font-display text-2xl italic">
+            Paste a job → tailored CV
+          </span>
+          <span className="font-mono text-xs text-ink/60">/jobs</span>
+        </Link>
+      </section>
+
       <footer className="mt-16 font-mono text-[11px] text-ink/50 space-y-1">
         <p>⌘Z undo · ⌘⇧Z redo · ⌘D duplicate · Del delete · Esc deselect</p>
         <p>⌘/Ctrl + scroll = zoom</p>
