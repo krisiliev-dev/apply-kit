@@ -5,9 +5,19 @@ export default function Home() {
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
       <header className="mb-12">
-        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
-          CV Workshop
-        </p>
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+            CV Workshop
+          </p>
+          <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+            <Link href="/applications" className="hover:text-ink">
+              Applications
+            </Link>
+            <Link href="/jobs" className="hover:text-ink">
+              Jobs
+            </Link>
+          </nav>
+        </div>
         <h1 className="font-display text-5xl mt-2">
           Your CVs, <em>tailored per role.</em>
         </h1>
