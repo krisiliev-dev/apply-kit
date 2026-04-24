@@ -147,5 +147,34 @@ export function applyTool(name: string, rawInput: unknown): ApplyResult {
       });
       return { ok: true, message: "Updated theme" };
     }
+
+    case "resolveComment": {
+      const { commentId } = input as z.infer<typeof toolSchemas.resolveComment>;
+      const existing = (store.doc.comments ?? []).find(
+        (c) => c.id === commentId,
+      );
+      if (!existing) {
+        return { ok: false, error: `No comment with id ${commentId}` };
+      }
+      if (existing.resolvedAt) {
+        return { ok: true, id: commentId, message: "Comment already resolved" };
+      }
+      store.resolveComment(commentId);
+      return { ok: true, id: commentId, message: "Resolved comment" };
+    }
+
+    case "addComment": {
+      const { nodeId, body, range } = input as z.infer<
+        typeof toolSchemas.addComment
+      >;
+      const nodeExists = store.doc.pages.some((p) =>
+        p.nodes.some((n) => n.id === nodeId),
+      );
+      if (!nodeExists) {
+        return { ok: false, error: `No node with id ${nodeId}` };
+      }
+      const id = store.addComment({ nodeId, body, range, author: "ai" });
+      return { ok: true, id, message: "Added comment" };
+    }
   }
 }

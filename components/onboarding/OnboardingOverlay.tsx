@@ -78,6 +78,18 @@ export function OnboardingOverlay() {
     setUi({ showOnboarding: false });
   }, [setUi]);
 
+  // Escape closes the wizard — matches native dialog behaviour. We attach
+  // at the document level so focus doesn't need to be inside a specific
+  // element for the keypress to register.
+  useEffect(() => {
+    if (!visible) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [visible, close]);
+
   const pickHosted = useCallback(() => {
     setModelFeature("default", {
       provider: "anthropic",
@@ -149,6 +161,7 @@ export function OnboardingOverlay() {
       className="fixed inset-0 bg-paper z-40 flex items-center justify-center p-6 overflow-y-auto"
       role="dialog"
       aria-modal="true"
+      aria-label="Welcome — CV Workshop setup"
     >
       <div className="max-w-xl w-full">
         {step === "welcome" ? (
@@ -175,7 +188,7 @@ export function OnboardingOverlay() {
               <button
                 type="button"
                 onClick={close}
-                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 px-4 py-2 hover:text-ink"
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 px-4 py-2 hover:text-ink"
               >
                 Skip for now
               </button>
@@ -188,9 +201,9 @@ export function OnboardingOverlay() {
             <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-2">
               Step 2 of 3 — Pick your AI
             </p>
-            <h1 className="font-display text-4xl mb-6">
+            <h2 className="font-display text-4xl mb-6">
               Hosted or <em>local?</em>
-            </h1>
+            </h2>
             <div className="space-y-4">
               <button
                 type="button"
@@ -213,7 +226,11 @@ export function OnboardingOverlay() {
                   Ollama or an OpenAI-compatible server running.
                 </div>
                 <div className="flex gap-2">
+                  <label htmlFor="onboarding-ollama-base" className="sr-only">
+                    Ollama base URL
+                  </label>
                   <input
+                    id="onboarding-ollama-base"
                     type="text"
                     value={ollamaBase}
                     onChange={(e) => setOllamaBase(e.target.value)}
@@ -254,14 +271,14 @@ export function OnboardingOverlay() {
               <button
                 type="button"
                 onClick={() => setStep("welcome")}
-                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 px-4 py-2 hover:text-ink"
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 px-4 py-2 hover:text-ink"
               >
                 ← back
               </button>
               <button
                 type="button"
                 onClick={() => setStep("start")}
-                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 px-4 py-2 hover:text-ink"
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 px-4 py-2 hover:text-ink"
               >
                 Skip →
               </button>
@@ -274,9 +291,9 @@ export function OnboardingOverlay() {
             <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-2">
               Step 3 of 3 — Pick your start
             </p>
-            <h1 className="font-display text-4xl mb-6">
+            <h2 className="font-display text-4xl mb-6">
               How do you want to <em>begin?</em>
-            </h1>
+            </h2>
             <div className="space-y-4">
               <button
                 type="button"
@@ -337,7 +354,7 @@ export function OnboardingOverlay() {
               <button
                 type="button"
                 onClick={() => setStep("ai")}
-                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 px-4 py-2 hover:text-ink"
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 px-4 py-2 hover:text-ink"
               >
                 ← back
               </button>
@@ -350,9 +367,9 @@ export function OnboardingOverlay() {
             <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-2">
               You're set
             </p>
-            <h1 className="font-display text-5xl mb-4">
+            <h2 className="font-display text-5xl mb-4">
               Three main <em>routes.</em>
-            </h1>
+            </h2>
             <ul className="space-y-3 text-ink/80 mb-6">
               <li>
                 <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60">

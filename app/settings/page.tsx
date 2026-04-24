@@ -158,7 +158,7 @@ export default function SettingsPage() {
           </p>
           <Link
             href="/"
-            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 hover:text-ink"
+            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 hover:text-ink"
           >
             ← back
           </Link>
@@ -172,23 +172,29 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      <nav className="flex gap-6 border-b border-ink/10 mb-8">
+      <div
+        role="tablist"
+        aria-label="Settings sections"
+        className="flex gap-6 border-b border-ink/10 mb-8"
+      >
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
+            role="tab"
+            aria-selected={tab === t.id}
             onClick={() => setTab(t.id)}
             className={
               "font-mono text-[11px] uppercase tracking-[0.25em] pb-3 -mb-px border-b-2 transition-colors " +
               (tab === t.id
                 ? "text-ink border-ink"
-                : "text-ink/50 border-transparent hover:text-ink/80")
+                : "text-ink/60 border-transparent hover:text-ink")
             }
           >
             {t.label}
           </button>
         ))}
-      </nav>
+      </div>
 
       {!loaded ? (
         <p className="font-mono text-[11px] text-ink/40">Loading…</p>

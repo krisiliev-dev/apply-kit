@@ -122,11 +122,20 @@ export function Toolbar() {
         borderColor: "var(--color-editor-border)",
       }}
     >
-      <Link href="/" className="editor-btn editor-btn-ghost" title="Back to variants">
-        ←
+      <Link
+        href="/"
+        aria-label="Back to variants"
+        className="editor-btn editor-btn-ghost"
+        title="Back to variants"
+      >
+        <span aria-hidden="true">←</span>
       </Link>
 
+      <label htmlFor="toolbar-target-role" className="sr-only">
+        Target role
+      </label>
       <input
+        id="toolbar-target-role"
         value={targetRole}
         onChange={(e) => setTargetRole(e.target.value)}
         className="editor-input"
@@ -134,12 +143,13 @@ export function Toolbar() {
         placeholder="Target role"
       />
 
-      <div className="h-5 w-px bg-[var(--color-editor-border)]" />
+      <div className="h-5 w-px bg-[var(--color-editor-border)]" aria-hidden="true" />
 
-      <button className="editor-btn" onClick={addText} title="Add text">
+      <button type="button" className="editor-btn" onClick={addText} title="Add text">
         + text
       </button>
       <button
+        type="button"
         className="editor-btn"
         onClick={() => fileInputRef.current?.click()}
         title="Add image"
@@ -151,49 +161,58 @@ export function Toolbar() {
         type="file"
         accept="image/*"
         onChange={handleFile}
+        aria-label="Upload image"
         className="hidden"
       />
-      <button className="editor-btn" onClick={addLine} title="Add line">
+      <button type="button" className="editor-btn" onClick={addLine} title="Add line">
         + line
       </button>
-      <button className="editor-btn" onClick={addRect} title="Add rectangle">
+      <button type="button" className="editor-btn" onClick={addRect} title="Add rectangle">
         + rect
       </button>
 
-      <div className="h-5 w-px bg-[var(--color-editor-border)]" />
+      <div className="h-5 w-px bg-[var(--color-editor-border)]" aria-hidden="true" />
 
       <button
+        type="button"
         className="editor-btn"
         onClick={() => undo()}
         disabled={!canUndo}
         title="Undo (⌘Z)"
+        aria-label="Undo"
         style={{ opacity: canUndo ? 1 : 0.4 }}
       >
-        ↶
+        <span aria-hidden="true">↶</span>
       </button>
       <button
+        type="button"
         className="editor-btn"
         onClick={() => redo()}
         disabled={!canRedo}
         title="Redo (⌘⇧Z)"
+        aria-label="Redo"
         style={{ opacity: canRedo ? 1 : 0.4 }}
       >
-        ↷
+        <span aria-hidden="true">↷</span>
       </button>
 
-      <div className="h-5 w-px bg-[var(--color-editor-border)]" />
+      <div className="h-5 w-px bg-[var(--color-editor-border)]" aria-hidden="true" />
 
       <button
+        type="button"
         className="editor-btn"
         data-active={showGuides}
+        aria-pressed={showGuides}
         onClick={() => setShowGuides(!showGuides)}
         title="Toggle snap guides"
       >
         guides
       </button>
       <button
+        type="button"
         className="editor-btn"
         data-active={showGrid}
+        aria-pressed={showGrid}
         onClick={() => setShowGrid(!showGrid)}
         title="Toggle design grid"
       >
@@ -204,26 +223,32 @@ export function Toolbar() {
 
       <div className="flex items-center gap-1">
         <button
+          type="button"
           className="editor-btn editor-btn-ghost"
           onClick={() => setZoom(zoom - 0.1)}
           title="Zoom out"
+          aria-label="Zoom out"
         >
-          −
+          <span aria-hidden="true">−</span>
         </button>
-        <span className="editor-label w-12 text-center">
+        <span className="editor-label w-12 text-center" aria-live="polite">
           {Math.round(zoom * 100)}%
         </span>
         <button
+          type="button"
           className="editor-btn editor-btn-ghost"
           onClick={() => setZoom(zoom + 0.1)}
           title="Zoom in"
+          aria-label="Zoom in"
         >
-          +
+          <span aria-hidden="true">+</span>
         </button>
         <button
+          type="button"
           className="editor-btn editor-btn-ghost"
           onClick={() => setZoom(1)}
           title="Reset zoom"
+          aria-label="Reset zoom"
         >
           1:1
         </button>

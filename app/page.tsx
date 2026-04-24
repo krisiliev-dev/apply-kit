@@ -6,7 +6,13 @@ import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 
 export default function Home() {
   return (
-    <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+    <main
+      id="main-content"
+      className="min-h-screen max-w-3xl mx-auto px-6 py-16"
+    >
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <OnboardingOverlay />
       <header className="mb-12">
         <div className="flex items-baseline justify-between gap-4">
@@ -17,7 +23,10 @@ export default function Home() {
             {/* Pill only renders when the pair inbox has captures; hidden
                 otherwise so it doesn't clutter the header. */}
             <CapturedPill />
-            <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+            <nav
+              aria-label="Primary"
+              className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4"
+            >
               <Link href="/discover" className="hover:text-ink">
                 Discover
               </Link>
@@ -100,9 +109,9 @@ export default function Home() {
 
       <footer className="mt-16 space-y-6">
         <DemoControls />
-        <div className="font-mono text-[11px] text-ink/50 space-y-1">
+        <div className="font-mono text-[11px] text-ink/60 space-y-1">
           <p>⌘Z undo · ⌘⇧Z redo · ⌘D duplicate · Del delete · Esc deselect</p>
-          <p>⌘/Ctrl + scroll = zoom</p>
+          <p>⌘/Ctrl + scroll = zoom · C comment on selection</p>
           <p>
             For AI chat: add <code>ANTHROPIC_API_KEY</code> to{" "}
             <code>.env.local</code>

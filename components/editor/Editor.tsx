@@ -8,10 +8,12 @@ import { AlignBar } from "./AlignBar";
 import { Inspector } from "./Inspector";
 import { ChatPanel } from "./ChatPanel";
 import { EvalPanel } from "./EvalPanel";
+import { CommentsPanel } from "./CommentsPanel";
 import { useEditorShortcuts } from "./useEditorShortcuts";
 import { usePersist } from "./usePersist";
+import { unresolvedCommentCount, useEditor } from "@/lib/doc/store";
 
-type RightTab = "inspector" | "chat" | "eval";
+type RightTab = "inspector" | "chat" | "eval" | "comments";
 
 // Editor root. Four-region layout:
 //   ┌───────────────────────────────┐
@@ -19,9 +21,12 @@ type RightTab = "inspector" | "chat" | "eval";
 //   ├───────┬───────────────┬───────┤
 //   │Layers │   Canvas      │Right  │
 //   └───────┴───────────────┴───────┘
-// The right pane tabs between "Inspector" (properties) and "Chat" (AI).
+// The right pane tabs between Inspector / Chat / Eval / Comments. Comments
+// is the newest tab and shows a badge with the unresolved count so the user
+// sees open threads without opening the tab.
 export function Editor({ slug }: { slug: string }) {
   const [tab, setTab] = useState<RightTab>("inspector");
+  const unresolved = useEditor((s) => unresolvedCommentCount(s.doc));
 
   usePersist(slug);
   useEditorShortcuts();
@@ -41,6 +46,8 @@ export function Editor({ slug }: { slug: string }) {
           style={{ width: 340, borderColor: "var(--color-editor-border)" }}
         >
           <div
+            role="tablist"
+            aria-label="Editor panels"
             className="flex border-b"
             style={{ borderColor: "var(--color-editor-border)" }}
           >
@@ -53,14 +60,41 @@ export function Editor({ slug }: { slug: string }) {
             <TabBtn active={tab === "eval"} onClick={() => setTab("eval")}>
               Eval
             </TabBtn>
+            <TabBtn active={tab === "comments"} onClick={() => setTab("comments")}>
+              <span className="inline-flex items-center gap-1.5">
+                Comments
+                {unresolved > 0 && (
+                  <span
+                    aria-label={`${unresolved} unresolved`}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      minWidth: 14,
+                      height: 14,
+                      padding: "0 3px",
+                      borderRadius: 9999,
+                      background: "#d64933",
+                      color: "#fff",
+                      fontSize: 9,
+                      lineHeight: 1,
+                    }}
+                  >
+                    {unresolved}
+                  </span>
+                )}
+              </span>
+            </TabBtn>
           </div>
           <div className="flex-1 min-h-0">
             {tab === "inspector" ? (
               <Inspector />
             ) : tab === "chat" ? (
               <ChatPanel />
-            ) : (
+            ) : tab === "eval" ? (
               <EvalPanel slug={slug} />
+            ) : (
+              <CommentsPanel />
             )}
           </div>
         </div>
@@ -80,6 +114,9 @@ function TabBtn({
 }) {
   return (
     <button
+      type="button"
+      role="tab"
+      aria-selected={active}
       onClick={onClick}
       className="flex-1 py-2 font-mono text-[11px] uppercase tracking-[0.15em]"
       style={{

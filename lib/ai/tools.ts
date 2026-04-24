@@ -85,6 +85,32 @@ export const duplicateNodeInput = z.object({
   ids: z.array(z.string()).min(1),
 });
 
+// —————————————————————————————————————————————
+// Inline doc-comment tools. The model sees a list of active (unresolved)
+// comments in the system prompt on every turn. It can resolve one after
+// making the requested change, or leave its own note addressed to the user
+// (author = "ai") — e.g. "bumped size to 24px, but the headline now
+// overlaps; worth reflowing?".
+// —————————————————————————————————————————————
+
+export const resolveCommentInput = z.object({
+  commentId: z.string().describe("The id of the comment to mark resolved."),
+});
+
+export const addCommentInput = z.object({
+  nodeId: z
+    .string()
+    .describe("The node this comment anchors to. Use getDocumentState to list IDs."),
+  body: z.string().min(1),
+  range: z
+    .object({
+      start: z.number().int().nonnegative(),
+      end: z.number().int().nonnegative(),
+    })
+    .optional()
+    .describe("Optional character offset range inside a text node."),
+});
+
 export const setThemeInput = z.object({
   colors: z
     .object({
@@ -112,6 +138,8 @@ export const toolSchemas = {
   deleteNode: deleteNodeInput,
   duplicateNode: duplicateNodeInput,
   setTheme: setThemeInput,
+  resolveComment: resolveCommentInput,
+  addComment: addCommentInput,
 } as const;
 
 export type ToolName = keyof typeof toolSchemas;
