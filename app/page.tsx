@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { cvList } from "@/content/cvs";
 import { DemoControls, DemoHint } from "@/components/home/DemoControls";
+import { CapturedPill } from "@/components/pair/CapturedPill";
 
 export default function Home() {
   return (
@@ -10,17 +11,25 @@ export default function Home() {
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             CV Workshop
           </p>
-          <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
-            <Link href="/discover" className="hover:text-ink">
-              Discover
-            </Link>
-            <Link href="/applications" className="hover:text-ink">
-              Applications
-            </Link>
-            <Link href="/jobs" className="hover:text-ink">
-              Jobs
-            </Link>
-          </nav>
+          <div className="flex items-center gap-3">
+            {/* Pill only renders when the pair inbox has captures; hidden
+                otherwise so it doesn't clutter the header. */}
+            <CapturedPill />
+            <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+              <Link href="/discover" className="hover:text-ink">
+                Discover
+              </Link>
+              <Link href="/applications" className="hover:text-ink">
+                Applications
+              </Link>
+              <Link href="/jobs" className="hover:text-ink">
+                Jobs
+              </Link>
+              <Link href="/pair" className="hover:text-ink">
+                Pair
+              </Link>
+            </nav>
+          </div>
         </div>
         <h1 className="font-display text-5xl mt-2">
           Your CVs, <em>tailored per role.</em>

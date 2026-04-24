@@ -21,6 +21,8 @@ import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
 import { FitCheckCard } from "@/components/applications/FitCheckCard";
 import { profile as baseProfile } from "@/content/profile";
+import { pullInbox, pendingCount } from "@/lib/pairing/client";
+import { CapturedPill } from "@/components/pair/CapturedPill";
 
 // Discovery-side fit cache — keep results per posting id to avoid respending
 // tokens on re-opens. SSR-safe.
@@ -129,6 +131,63 @@ export default function DiscoverPage() {
     // Run once per reload to adopt the latest CV content for scoring.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
+
+  // Pair-inbox pull. On mount, and when the captured-pill is clicked, drain
+  // the server-side pair inbox (paired extensions) + the legacy buffer
+  // (unpaired extensions) and merge into the local DiscoveryState. This
+  // replaces the old mount-time buffer flush.
+  const drainPairInbox = useCallback(async () => {
+    if (!loaded) return;
+    try {
+      const postings = await pullInbox();
+      if (postings.length > 0) {
+        ingest(postings, cvList);
+        setFetchInfo(
+          `Pulled ${postings.length} capture${postings.length === 1 ? "" : "s"} from the extension.`,
+        );
+      }
+    } catch {
+      // transient — the pill will retry
+    }
+  }, [loaded, ingest]);
+
+  useEffect(() => {
+    if (loaded) void drainPairInbox();
+  }, [loaded, drainPairInbox]);
+
+  // Hash-triggered pull: the CapturedPill in the header navigates to
+  // "#pull"; treat that as a manual drain request.
+  useEffect(() => {
+    function onHash() {
+      if (typeof window !== "undefined" && window.location.hash === "#pull") {
+        void drainPairInbox();
+        // Clear the hash so repeat clicks still fire.
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      }
+    }
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [drainPairInbox]);
+
+  // Opportunistic background refresh: if the count goes positive while the
+  // user is sitting on /discover, pull automatically so captures appear
+  // without a manual click.
+  useEffect(() => {
+    if (!loaded) return;
+    let cancelled = false;
+    const id = setInterval(async () => {
+      try {
+        const n = await pendingCount();
+        if (!cancelled && n > 0) await drainPairInbox();
+      } catch {
+        // ignore
+      }
+    }, 15_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [loaded, drainPairInbox]);
 
   const postings = useMemo(() => {
     if (!loaded) return [];
@@ -325,20 +384,28 @@ export default function DiscoverPage() {
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             Discover
           </p>
-          <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
-            <Link href="/" className="hover:text-ink">
-              Home
-            </Link>
-            <Link href="/applications" className="hover:text-ink">
-              Applications
-            </Link>
-            <Link href="/jobs" className="hover:text-ink">
-              Jobs
-            </Link>
-            <Link href="/discover/preferences" className="hover:text-ink">
-              Preferences
-            </Link>
-          </nav>
+          <div className="flex items-center gap-3">
+            {/* On /discover the pill routes clicks to a local pull rather
+                than navigating, so the user stays on the page. */}
+            <CapturedPill href="#pull" />
+            <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+              <Link href="/" className="hover:text-ink">
+                Home
+              </Link>
+              <Link href="/applications" className="hover:text-ink">
+                Applications
+              </Link>
+              <Link href="/jobs" className="hover:text-ink">
+                Jobs
+              </Link>
+              <Link href="/pair" className="hover:text-ink">
+                Pair
+              </Link>
+              <Link href="/discover/preferences" className="hover:text-ink">
+                Preferences
+              </Link>
+            </nav>
+          </div>
         </div>
         <h1 className="font-display text-5xl mt-2">
           Roles worth <em>your time.</em>

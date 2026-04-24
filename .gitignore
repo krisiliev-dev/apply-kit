@@ -45,3 +45,8 @@ next-env.d.ts
 
 # iCloud cruft
 .icloud
+
+# Dev-only: persisted list of paired extension devices (SHA-256 hashed tokens
+# + labels + public keys). See lib/pairing/server.ts — file-backed so
+# pairings survive `npm run dev` restarts without a DB. Never commit.
+.pairing-devices.json
