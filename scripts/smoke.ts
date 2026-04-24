@@ -101,9 +101,10 @@ const PROBES: Probe[] = [
       patterns: [],
     },
     expectedWhenKeyPresent: { kind: "ok" },
-    // With no patterns we short-circuit before model call, so key-missing
-    // still succeeds. That's a correct behavior, not a gap.
-    expectedWhenKeyMissing: { kind: "ok" },
+    // The route validates the Anthropic key before the short-circuit, so a
+    // missing key surfaces as the canonical 400 even when the body is fine.
+    expectedWhenKeyMissing: { kind: "status", code: 400 },
+    assertErrorContains: "ANTHROPIC_API_KEY",
   },
   {
     name: "POST /api/paraphrase",
@@ -230,7 +231,7 @@ const PROBES: Probe[] = [
         events: [],
       },
       rawText: "We've decided to move forward with other candidates.",
-      kind: "resume",
+      kind: "auto-rejection",
     },
     expectedWhenKeyPresent: { kind: "ok" },
     expectedWhenKeyMissing: { kind: "status", code: 400 },
