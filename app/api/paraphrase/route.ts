@@ -1,5 +1,11 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
+import { USAGE_HEADER } from "@/lib/ai/tokenTracker";
 
 // POST /api/paraphrase
 // Body: { text: string, context?: string }
@@ -14,24 +20,24 @@ export const maxDuration = 30;
 
 const MAX_INPUT = 6000;
 
-type Body = { text?: unknown; context?: unknown };
+type Body = { text?: unknown; context?: unknown; settings?: Settings };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
     return json({ error: "Invalid JSON body." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("paraphrase", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "paraphrase",
+      settings: body.settings,
+    });
   }
 
   const raw = typeof body.text === "string" ? body.text.trim() : "";
@@ -48,23 +54,28 @@ export async function POST(req: Request) {
       : undefined;
 
   try {
-    const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-6"),
+    const { text, usage } = await generateText({
+      model: resolved.model,
       system:
         "Paraphrase the input preserving meaning and tone, adapting slightly to the context. Output plain text only — no preamble, no quotes, no markdown.",
       prompt: context
         ? `Context:\n${context}\n\nParaphrase this:\n${raw}`
         : `Paraphrase this:\n${raw}`,
     });
-    return json({ text: text.trim() });
-  } catch (e) {
-    return json(
+    return jsonWithUsage(
+      { text: text.trim() },
       {
-        error:
-          e instanceof Error ? e.message : "Model failed to produce a paraphrase.",
+        feature: resolved.feature,
+        choice: resolved.choice,
+        usage,
+        extraHeaders: { "access-control-allow-origin": "*", "access-control-expose-headers": USAGE_HEADER },
       },
-      500,
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

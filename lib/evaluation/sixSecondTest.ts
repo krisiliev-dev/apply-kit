@@ -1,9 +1,10 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { CvDocument } from "@/lib/doc/types";
+import type { Settings } from "@/lib/settings/types";
 import type { AffindaExtracted, SixSecondReport } from "./types";
 import { extractPlainText } from "./extractText";
+import { ProviderConfigError, resolveModel } from "@/lib/ai/provider";
 
 // ————————————————————————————————————————————————
 // Six-second test simulator.
@@ -90,20 +91,26 @@ export type SixSecondInput = {
   pdf: Buffer;
   /** When available, used to sanity-check whether the model read things right. */
   extracted?: AffindaExtracted | null;
+  settings?: Settings;
 };
 
 export async function runSixSecondTest(
   input: SixSecondInput,
 ): Promise<SixSecondReport> {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return unavailable(
-      "ANTHROPIC_API_KEY not set — six-second test skipped.",
-    );
+  let model;
+  try {
+    model = resolveModel("evaluator", input.settings);
+  } catch (err) {
+    const reason =
+      err instanceof ProviderConfigError
+        ? err.message
+        : "AI provider not configured — six-second test skipped.";
+    return unavailable(reason);
   }
 
   try {
     const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model,
       schema: reportSchema,
       schemaName: "SixSecondReport",
       schemaDescription:

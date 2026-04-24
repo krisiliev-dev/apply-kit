@@ -24,6 +24,7 @@ import {
 import type { Application } from "@/lib/app/types";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 import { CvSlugStatus } from "@/components/applications/CvSlugStatus";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 export default function ReviewPage() {
   const { applications, loaded, load } = useApplications();
@@ -226,7 +227,7 @@ function AISummarySection({ snapshot }: { snapshot: ReviewSnapshot }) {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/review/summarize", {
+      const res = await trackedFetch("/api/review/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

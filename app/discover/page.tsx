@@ -23,6 +23,7 @@ import { FitCheckCard } from "@/components/applications/FitCheckCard";
 import { profile as baseProfile } from "@/content/profile";
 import { pullInbox, pendingCount } from "@/lib/pairing/client";
 import { CapturedPill } from "@/components/pair/CapturedPill";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // Discovery-side fit cache — keep results per posting id to avoid respending
@@ -108,7 +109,7 @@ export default function DiscoverPage() {
           ? { text: p.description, url: p.url }
           : { url: p.url };
       try {
-        const res = await fetch("/api/jobs/parse", {
+        const res = await trackedFetch("/api/jobs/parse", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
@@ -232,7 +233,7 @@ export default function DiscoverPage() {
     setFetchError(null);
     setFetchInfo(null);
     try {
-      const res = await fetch("/api/discover/fetch", {
+      const res = await trackedFetch("/api/discover/fetch", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ prefs }),
@@ -284,7 +285,7 @@ export default function DiscoverPage() {
         return;
       }
       setDraftStage("drafting");
-      const res = await fetch("/api/jobs/draft", {
+      const res = await trackedFetch("/api/jobs/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ job: parsed, baseCv: defaultCV }),
@@ -362,7 +363,7 @@ export default function DiscoverPage() {
         ? { text: p.description, url: p.url }
         : { url: p.url };
     try {
-      const res = await fetch("/api/jobs/parse", {
+      const res = await trackedFetch("/api/jobs/parse", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),

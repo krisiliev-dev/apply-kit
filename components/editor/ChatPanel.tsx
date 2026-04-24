@@ -14,6 +14,7 @@ import {
 import { useEditor } from "@/lib/doc/store";
 import { applyTool } from "@/lib/ai/applyTool";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { makeTrackedFetch } from "@/lib/ai/tokenLedger";
 
 // Docked AI chat. Streams responses, executes tool calls client-side against
 // the editor store, and re-submits automatically once results are in.
@@ -31,6 +32,7 @@ export function ChatPanel() {
     () =>
       new DefaultChatTransport({
         api: "/api/chat",
+        fetch: makeTrackedFetch(),
         prepareSendMessagesRequest: ({ messages }) => ({
           body: {
             messages,

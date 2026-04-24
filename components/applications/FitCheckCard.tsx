@@ -9,6 +9,7 @@ import type {
 } from "@/lib/app/types";
 import type { CVContent, Profile } from "@/lib/types";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // FitCheckCard — brutally honest pre-application read.
 // Used in two surfaces:
@@ -63,7 +64,7 @@ export function FitCheckCard({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/apply-fit/check", {
+      const res = await trackedFetch("/api/apply-fit/check", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(inputs),

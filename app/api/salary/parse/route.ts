@@ -1,7 +1,12 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { OfferRecord } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/salary/parse
 // Body: { rawOfferText: string }
@@ -58,19 +63,9 @@ const offerSchema = z.object({
     ),
 });
 
-type Body = { rawOfferText?: string };
+type Body = { rawOfferText?: string; settings?: Settings };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -86,6 +81,16 @@ export async function POST(req: Request) {
     return json({ error: "Offer text too long (>8000 chars)." }, 400);
   }
 
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
+  }
+
   const system = `You parse job-offer text into structured fields. You never invent amounts the text doesn't state — if a number is missing, leave the field out.
 
 Normalisation:
@@ -98,8 +103,8 @@ Normalisation:
   const prompt = `Offer text:\n"""\n${raw}\n"""\n\nExtract the structured offer now.`;
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: offerSchema,
       schemaName: "OfferRecord",
       schemaDescription: "Structured extraction of a job offer's key components.",
@@ -114,15 +119,15 @@ Normalisation:
       receivedAt: Date.now(),
     };
 
-    return json({ offer });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error ? e.message : "Model failed to parse the offer.",
-      },
-      500,
+    return jsonWithUsage(
+      { offer },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

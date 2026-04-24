@@ -13,6 +13,7 @@ import { seedFromContent } from "@/lib/jobs/seedFromContent";
 import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 type Stage = "idle" | "parsing" | "drafting" | "error";
 
@@ -46,7 +47,7 @@ export default function JobsPage() {
 
     let job: ParsedJob;
     try {
-      const res = await fetch("/api/jobs/parse", {
+      const res = await trackedFetch("/api/jobs/parse", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ url: url.trim(), text: text.trim() }),
@@ -70,7 +71,7 @@ export default function JobsPage() {
     let tailored: CVContent & { tailoringNotes?: string[] };
     let draftEval: DraftEvalResult | undefined;
     try {
-      const res = await fetch("/api/jobs/draft", {
+      const res = await trackedFetch("/api/jobs/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ job, baseCv: defaultCV }),

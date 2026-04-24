@@ -1,10 +1,11 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { CvDocument, Node, TextNode } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
 import type { CvEvaluation, EvalWarning } from "./types";
 import { evaluateCv, type ProgressUpdate } from "./evaluate";
+import { resolveModel } from "@/lib/ai/provider";
 
 // ————————————————————————————————————————————————
 // Iterative refinement.
@@ -51,6 +52,7 @@ export type RefineOptions = {
   job: ParsedJob | null;
   maxIterations?: number;
   targetScore?: number;
+  settings?: Settings;
 };
 
 export type RefineProgressUpdate =
@@ -84,7 +86,7 @@ export async function refineCv(
 
   for (let i = 0; i < maxIter; i++) {
     const evaluation = await evaluateCv(
-      { doc: currentDoc, job: opts.job },
+      { doc: currentDoc, job: opts.job, settings: opts.settings },
       (p) => emit({ kind: "stage", iteration: i, stage: p.stage, message: p.message }),
     );
 
@@ -122,6 +124,7 @@ export async function refineCv(
       doc: currentDoc,
       evaluation,
       job: opts.job,
+      settings: opts.settings,
     });
 
     if (edits.length === 0) {
@@ -173,16 +176,26 @@ type FixInput = {
   doc: CvDocument;
   evaluation: CvEvaluation;
   job: ParsedJob | null;
+  settings?: Settings;
 };
 
 async function proposeFixes(input: FixInput): Promise<TextEdit[]> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  let model;
+  try {
+    // `draft` is the feature class for the refine loop — same prose-polish
+    // work as the original drafting call. This keeps the refine loop honest
+    // about inheriting the user's drafting-quality/speed choice.
+    model = resolveModel("draft", input.settings);
+  } catch {
+    // No configured provider (e.g. Anthropic key missing and Anthropic
+    // selected). Skip refinement rather than blowing up the whole evaluate
+    // path.
     return [];
   }
 
   try {
     const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model,
       schema: editSchema,
       schemaName: "CvFixProposal",
       schemaDescription:

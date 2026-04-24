@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type {
@@ -7,6 +6,12 @@ import type {
   SalaryAnalysis,
 } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/salary/analyze
 // Body: { offer: OfferRecord; parsedJob?: ParsedJob; baseCV: CVContent; locationContext?: string }
@@ -75,19 +80,10 @@ type Body = {
   parsedJob?: ParsedJob;
   baseCV: CVContent;
   locationContext?: string;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -97,6 +93,16 @@ export async function POST(req: Request) {
 
   if (!body?.offer || !body?.baseCV) {
     return json({ error: "Missing offer or baseCV." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const system = `You are a seasoned compensation coach. You help candidates evaluate an offer and draft a counter.
@@ -118,8 +124,8 @@ HARD RULES:
   const prompt = `Offer details:\n${offerBlock}\n\n---\n\nRole:\n${jobBlock}\n\n---\n\nLocation context (optional): ${body.locationContext ?? "(none provided)"}\n\n---\n\nCandidate's base CV (everything you can draw leverage from — do not invent beyond this):\n${JSON.stringify(body.baseCV, null, 2)}\n\nProduce the structured SalaryAnalysis now.`;
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: analysisSchema,
       schemaName: "SalaryAnalysis",
       schemaDescription:
@@ -146,15 +152,15 @@ HARD RULES:
       generatedAt: Date.now(),
     };
 
-    return json({ analysis });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error ? e.message : "Model failed to analyse the offer.",
-      },
-      500,
+    return jsonWithUsage(
+      { analysis },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

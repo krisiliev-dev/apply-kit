@@ -29,6 +29,7 @@ import { SalaryNegotiationSection } from "@/components/applications/SalaryNegoti
 import { FollowUpsSection } from "@/components/applications/FollowUpsSection";
 import { CvSlugStatus } from "@/components/applications/CvSlugStatus";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { makeTrackedFetch, trackedFetch } from "@/lib/ai/tokenLedger";
 
 export default function ApplicationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -361,6 +362,7 @@ function CoverLetterSection({
   const { completion, complete, isLoading, stop, error } = useCompletion({
     api: "/api/cover-letter",
     streamProtocol: "text",
+    fetch: makeTrackedFetch(),
     onFinish: (_prompt, final) => {
       const body = (final ?? "").trim();
       if (!body) return;
@@ -681,7 +683,7 @@ function RejectionLearningSection({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/rejection/extract", {
+      const res = await trackedFetch("/api/rejection/extract", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

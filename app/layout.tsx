@@ -10,6 +10,7 @@ import {
   Space_Mono,
 } from "next/font/google";
 import "./globals.css";
+import { CostPill } from "@/components/ai/CostPill";
 
 // Curated font set. Adding new ones: register here, then add an entry to
 // lib/fonts.ts. Keep the list small — every font is a network cost and a
@@ -70,7 +71,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={fontVars}>{children}</body>
+      <body className={fontVars}>
+        {children}
+        <CostPill />
+      </body>
     </html>
   );
 }

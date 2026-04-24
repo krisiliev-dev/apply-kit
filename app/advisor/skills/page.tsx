@@ -8,6 +8,7 @@ import type { SkillGapAnalysis, SkillDemand } from "@/lib/advisor/types";
 import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // /advisor/skills — detailed. Shows the latest skill-gap analysis as a table
 // with demand counts, adjacency notes, and concrete acquisition paths. Needs
@@ -47,7 +48,7 @@ export default function SkillsPage() {
     setError(null);
     try {
       const recentPostings = loadRecentPostingsFromStorage();
-      const res = await fetch("/api/advisor/skills", {
+      const res = await trackedFetch("/api/advisor/skills", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ profile, cvVariants: cvList, recentPostings }),

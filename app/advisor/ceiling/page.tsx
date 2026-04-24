@@ -9,6 +9,7 @@ import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
 import { useApplications } from "@/lib/app/store";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // /advisor/ceiling — detailed. Classifications grouped by tier with a subtle
 // color tint per tier. readyForStretch flag shown prominently. Roles come
@@ -79,7 +80,7 @@ export default function CeilingPage() {
           .sort((a, b) => b.dateCreated - a.dateCreated)
           .map((a) => ({ role: a.role, company: a.company, url: a.url })),
       );
-      const res = await fetch("/api/advisor/ceiling", {
+      const res = await trackedFetch("/api/advisor/ceiling", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ profile, cvVariants: cvList, roles }),

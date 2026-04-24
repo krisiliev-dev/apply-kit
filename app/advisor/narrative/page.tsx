@@ -9,6 +9,7 @@ import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
 import { useApplications } from "@/lib/app/store";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // /advisor/narrative — detailed.
 // Shows currentStoryDetected, then each framing as a card with evidence +
@@ -31,7 +32,7 @@ export default function NarrativePage() {
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/advisor/narrative", {
+      const res = await trackedFetch("/api/advisor/narrative", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

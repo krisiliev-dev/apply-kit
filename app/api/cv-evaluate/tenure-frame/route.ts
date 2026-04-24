@@ -1,10 +1,15 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { z } from "zod";
 import type {
   TenureExperienceSummary,
   TenurePatternWarning,
 } from "@/lib/evaluation/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/cv-evaluate/tenure-frame
 //
@@ -44,6 +49,7 @@ const patternSchema = z.object({
 const bodySchema = z.object({
   experiences: z.array(experienceSchema).max(20),
   patterns: z.array(patternSchema).max(10),
+  settings: z.unknown().optional(),
 });
 
 // In-memory cache — Map<hash, { framings, ts }>. Trimmed implicitly by TTL
@@ -54,16 +60,6 @@ const CACHE = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let raw: unknown;
   try {
     raw = await req.json();
@@ -82,6 +78,17 @@ export async function POST(req: Request) {
     );
   }
 
+  const settings = (raw && typeof raw === "object"
+    ? ((raw as { settings?: Settings }).settings)
+    : undefined);
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("evaluator", { settings });
+  } catch (err) {
+    return respondProviderError(err, { feature: "evaluator", settings });
+  }
+
   const { experiences, patterns } = parsed.data;
   if (patterns.length === 0) {
     return json({ framings: [] });
@@ -96,24 +103,26 @@ export async function POST(req: Request) {
   const prompt = buildPrompt(experiences, patterns);
 
   try {
-    const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-6"),
+    const { text, usage } = await generateText({
+      model: resolved.model,
       system: SYSTEM,
       prompt,
     });
     const framings = splitFramings(text);
     CACHE.set(cacheKey, { framings, ts: Date.now() });
-    return json({ framings });
-  } catch (err) {
-    return json(
+    return jsonWithUsage(
+      { framings },
       {
-        error:
-          err instanceof Error
-            ? err.message
-            : "Model failed to produce a framing.",
+        feature: resolved.feature,
+        choice: resolved.choice,
+        usage,
       },
-      500,
     );
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

@@ -1,5 +1,10 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/interview/research
 // Light-touch "public signals" endpoint. Given a company name and any URLs / notes
@@ -21,24 +26,25 @@ type Body = {
   company?: unknown;
   role?: unknown;
   notes?: unknown;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
   } catch {
     return json({ error: "Invalid JSON body." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const company = typeof body.company === "string" ? body.company.trim() : "";
@@ -83,22 +89,20 @@ A short bulleted list (3–6 bullets). Each bullet is a short statement prefixed
   }
 
   try {
-    const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-6"),
+    const { text, usage } = await generateText({
+      model: resolved.model,
       system,
       prompt: promptParts.join("\n"),
     });
-    return json({ research: text.trim() });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Model failed to produce company research.",
-      },
-      500,
+    return jsonWithUsage(
+      { research: text.trim() },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

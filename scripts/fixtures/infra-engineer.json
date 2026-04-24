@@ -1,0 +1,15 @@
+{
+  "id": "infra-engineer",
+  "description": "Infrastructure Engineer at Salterton Networks\n\nSalterton runs a CDN for small and mid-size ecommerce brands. 80 POPs across 34 countries. Fully remote team of 18 engineers.\n\nWe're hiring for our platform team. You'll\n- Own the provisioning layer for new edge nodes. End-to-end: hardware orders, network config, TLS bootstrap, health checks.\n- Migrate our fleet from our old config-management setup (a custom Go thing) to Terraform + Ansible.\n- Be second on-call for core CDN incidents. About 6 hours per week on average, fewer once the runbooks stabilize.\n- Write runbooks. We expect them to be good enough that junior engineers can execute them at 3 AM.\n\nHard requirements\n- 5+ years of infra experience, ideally at an edge/CDN/hosting company.\n- Strong with Terraform and Ansible (or strong signal you could be within a month).\n- Linux internals, Netfilter, BGP basics. You don't need to be a network engineer but you should know what a routing table is.\n- Go for anything custom. Bash when it's simpler. Python for scripts.\n\nWhat would make you stand out\n- Experience running a multi-region fleet at >1k nodes.\n- Prior on-call at an infrastructure company.",
+  "expectedKeywords": [
+    "Terraform",
+    "Ansible",
+    "Linux",
+    "Go",
+    "CDN",
+    "on-call",
+    "runbooks",
+    "BGP",
+    "edge"
+  ]
+}
