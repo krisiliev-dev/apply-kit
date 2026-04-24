@@ -98,6 +98,16 @@ export async function POST(req: Request) {
           "Update global theme colors or font family variables. Use CSS custom property strings for fonts (e.g. 'var(--font-inter)').",
         inputSchema: toolSchemas.setTheme,
       }),
+      resolveComment: tool({
+        description:
+          "Mark an inline doc comment as resolved. Call this after you've made the change the comment asked for.",
+        inputSchema: toolSchemas.resolveComment,
+      }),
+      addComment: tool({
+        description:
+          "Leave your own inline comment on a node (author is recorded as 'ai'). Use sparingly — only when you want to flag a tradeoff or ask the user a question that blocks a change.",
+        inputSchema: toolSchemas.addComment,
+      }),
     },
   });
 

@@ -50,78 +50,86 @@ export function LayersPanel() {
             Empty. Add a block from the toolbar.
           </p>
         )}
-        {sorted.map((n) => {
-          const isSelected = selectedIds.includes(n.id);
-          return (
-            <div
-              key={n.id}
-              className="group flex items-center gap-2 px-2 py-1.5 cursor-pointer text-[12px]"
-              style={{
-                background: isSelected
-                  ? "rgba(79, 140, 255, 0.18)"
-                  : "transparent",
-                color: n.hidden
-                  ? "var(--color-editor-text-dim)"
-                  : "var(--color-editor-text)",
-              }}
-              onClick={(e) => {
-                if (e.shiftKey || e.metaKey) toggleSelect(n.id);
-                else select(n.id);
-              }}
-            >
-              <span
-                className="w-4 text-center font-mono text-[11px]"
-                style={{ color: "var(--color-editor-text-dim)" }}
+        <ul role="list">
+          {sorted.map((n) => {
+            const isSelected = selectedIds.includes(n.id);
+            const label = renderLabel(n);
+            return (
+              <li
+                key={n.id}
+                className="group flex items-center gap-2 px-2 py-1.5 text-[12px]"
+                style={{
+                  background: isSelected
+                    ? "rgba(79, 140, 255, 0.18)"
+                    : "transparent",
+                  color: n.hidden
+                    ? "var(--color-editor-text-dim)"
+                    : "var(--color-editor-text)",
+                }}
               >
-                {typeIcon[n.type]}
-              </span>
-              <span className="flex-1 truncate">{renderLabel(n)}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    if (e.shiftKey || e.metaKey) toggleSelect(n.id);
+                    else select(n.id);
+                  }}
+                  aria-pressed={isSelected}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-left cursor-pointer bg-transparent"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="w-4 text-center font-mono text-[11px]"
+                    style={{ color: "var(--color-editor-text-dim)" }}
+                  >
+                    {typeIcon[n.type]}
+                  </span>
+                  <span className="flex-1 truncate">{label}</span>
+                </button>
 
-              <div className="hidden group-hover:flex items-center gap-1">
-                <button
-                  className="editor-btn-ghost editor-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    bringForward(n.id);
-                  }}
-                  title="Bring forward"
-                >
-                  ↑
-                </button>
-                <button
-                  className="editor-btn-ghost editor-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    sendBackward(n.id);
-                  }}
-                  title="Send backward"
-                >
-                  ↓
-                </button>
-                <button
-                  className="editor-btn-ghost editor-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    updateNode(n.id, { hidden: !n.hidden });
-                  }}
-                  title={n.hidden ? "Show" : "Hide"}
-                >
-                  {n.hidden ? "○" : "●"}
-                </button>
-                <button
-                  className="editor-btn-ghost editor-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    updateNode(n.id, { locked: !n.locked });
-                  }}
-                  title={n.locked ? "Unlock" : "Lock"}
-                >
-                  {n.locked ? "🔒" : "🔓"}
-                </button>
-              </div>
-            </div>
-          );
-        })}
+                <div className="hidden group-hover:flex group-focus-within:flex items-center gap-1">
+                  <button
+                    type="button"
+                    className="editor-btn-ghost editor-btn"
+                    onClick={() => bringForward(n.id)}
+                    title="Bring forward"
+                    aria-label={`Bring "${label}" forward`}
+                  >
+                    <span aria-hidden="true">↑</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="editor-btn-ghost editor-btn"
+                    onClick={() => sendBackward(n.id)}
+                    title="Send backward"
+                    aria-label={`Send "${label}" backward`}
+                  >
+                    <span aria-hidden="true">↓</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="editor-btn-ghost editor-btn"
+                    onClick={() => updateNode(n.id, { hidden: !n.hidden })}
+                    title={n.hidden ? "Show" : "Hide"}
+                    aria-label={n.hidden ? `Show "${label}"` : `Hide "${label}"`}
+                    aria-pressed={!!n.hidden}
+                  >
+                    <span aria-hidden="true">{n.hidden ? "○" : "●"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="editor-btn-ghost editor-btn"
+                    onClick={() => updateNode(n.id, { locked: !n.locked })}
+                    title={n.locked ? "Unlock" : "Lock"}
+                    aria-label={n.locked ? `Unlock "${label}"` : `Lock "${label}"`}
+                    aria-pressed={!!n.locked}
+                  >
+                    <span aria-hidden="true">{n.locked ? "🔒" : "🔓"}</span>
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );

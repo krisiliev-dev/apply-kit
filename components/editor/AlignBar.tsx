@@ -42,11 +42,13 @@ export function AlignBar() {
       {BUTTONS.map((b) => (
         <button
           key={b.kind}
+          type="button"
           className="editor-btn"
           onClick={() => align(b.kind)}
           title={b.title}
+          aria-label={b.title}
         >
-          {b.label}
+          <span aria-hidden="true">{b.label}</span>
         </button>
       ))}
       {count >= 3 && (
@@ -54,20 +56,25 @@ export function AlignBar() {
           <div
             className="h-5 w-px mx-1"
             style={{ background: "var(--color-editor-border)" }}
+            aria-hidden="true"
           />
           <button
+            type="button"
             className="editor-btn"
             onClick={() => distribute("h")}
             title="Distribute horizontally"
+            aria-label="Distribute horizontally"
           >
-            ⇔ dist
+            <span aria-hidden="true">⇔</span> dist
           </button>
           <button
+            type="button"
             className="editor-btn"
             onClick={() => distribute("v")}
             title="Distribute vertically"
+            aria-label="Distribute vertically"
           >
-            ⇕ dist
+            <span aria-hidden="true">⇕</span> dist
           </button>
         </>
       )}

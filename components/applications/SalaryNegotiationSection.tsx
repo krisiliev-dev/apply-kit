@@ -217,12 +217,14 @@ function OfferEditGrid({
       <div className="flex items-center gap-2">
         <input
           type="number"
+          aria-label="Base salary"
           value={offer.baseSalary}
           onChange={(e) => set("baseSalary", Number(e.target.value) || 0)}
           className="font-mono bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 w-40"
         />
         <input
           type="text"
+          aria-label="Currency code"
           value={offer.currency}
           onChange={(e) => set("currency", e.target.value.toUpperCase().slice(0, 3))}
           className="font-mono bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 w-16 uppercase"
@@ -232,41 +234,45 @@ function OfferEditGrid({
       <Label>Equity</Label>
       <input
         type="text"
+        aria-label="Equity"
         value={offer.equity ?? ""}
         onChange={(e) => set("equity", e.target.value || undefined)}
         placeholder="0.25% vesting 4yr, 1yr cliff"
-        className="bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 placeholder:text-ink/30"
+        className="bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 placeholder:text-ink/40"
       />
 
       <Label>Bonus</Label>
       <input
         type="text"
+        aria-label="Bonus"
         value={offer.bonus ?? ""}
         onChange={(e) => set("bonus", e.target.value || undefined)}
         placeholder="15% target"
-        className="bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 placeholder:text-ink/30"
+        className="bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 placeholder:text-ink/40"
       />
 
       <Label>Sign-on</Label>
       <input
         type="number"
+        aria-label="Sign-on bonus"
         value={offer.signOn ?? ""}
         onChange={(e) =>
           set("signOn", e.target.value ? Number(e.target.value) : undefined)
         }
         placeholder="0"
-        className="font-mono bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 w-40 placeholder:text-ink/30"
+        className="font-mono bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 w-40 placeholder:text-ink/40"
       />
 
       <Label>PTO</Label>
       <input
         type="number"
+        aria-label="PTO days"
         value={offer.ptoDays ?? ""}
         onChange={(e) =>
           set("ptoDays", e.target.value ? Number(e.target.value) : undefined)
         }
         placeholder="days"
-        className="font-mono bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 w-24 placeholder:text-ink/30"
+        className="font-mono bg-transparent border border-ink/10 focus:border-ink/60 focus:outline-none px-2 py-1 w-24 placeholder:text-ink/40"
       />
 
       <Label>Remote</Label>
@@ -656,7 +662,7 @@ function BandTile({ label, value }: { label: string; value?: number }) {
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50">
+    <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/60">
       {children}
     </div>
   );

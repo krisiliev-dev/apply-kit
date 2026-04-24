@@ -37,6 +37,28 @@ export function buildSystemPrompt(
     })
     .join("\n");
 
+  // Surface active (unresolved) comments so the model can act on them on
+  // its own initiative: tighten a bullet, fix a label, or leave a reply as
+  // author:"ai" if it disagrees. `user` comments are user requests; `ai`
+  // comments are the model's own prior notes.
+  const activeComments = (doc.comments ?? []).filter((c) => !c.resolvedAt);
+  const commentsSummary = activeComments
+    .map((c) => {
+      const node = page.nodes.find((n) => n.id === c.nodeId);
+      const anchor = node
+        ? node.type === "text"
+          ? `${node.type} "${(node.name ?? node.content.slice(0, 40)).replace(/\n/g, " ")}"`
+          : `${node.type}${node.name ? ` "${node.name}"` : ""}`
+        : "(deleted node)";
+      const body = c.body.replace(/\n/g, " ").slice(0, 200);
+      return `- ${c.id} (by ${c.author}) on node ${c.nodeId} — ${anchor}: "${body}"`;
+    })
+    .join("\n");
+
+  const commentsSection = activeComments.length
+    ? `\n\nActive comments (resolve by making the suggested change, then call resolveComment with the comment id):\n${commentsSummary}`
+    : "";
+
   return `${BASE_SYSTEM}
 
 Current document:
@@ -47,5 +69,5 @@ Current document:
 - selectedIds: ${selectedIds.length ? selectedIds.join(", ") : "(none)"}
 
 Nodes on page:
-${nodesSummary || "(page is empty)"}`;
+${nodesSummary || "(page is empty)"}${commentsSection}`;
 }

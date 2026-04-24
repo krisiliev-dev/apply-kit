@@ -199,7 +199,7 @@ function CompareBoard({
           </Link>{" "}
           / Compare
         </p>
-        <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+        <nav aria-label="Primary" className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4">
           <Link href="/" className="hover:text-ink">
             Home
           </Link>

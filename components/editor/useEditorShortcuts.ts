@@ -49,6 +49,24 @@ export function useEditorShortcuts() {
         return;
       }
 
+      // Open/add a comment on the selected node. Only when exactly one
+      // node is selected — with multi-select the target is ambiguous.
+      if (
+        !mod &&
+        !e.shiftKey &&
+        !e.altKey &&
+        e.key.toLowerCase() === "c" &&
+        selectedIds.length === 1
+      ) {
+        e.preventDefault();
+        window.dispatchEvent(
+          new CustomEvent("cv:open-comment-thread", {
+            detail: { nodeId: selectedIds[0] },
+          }),
+        );
+        return;
+      }
+
       // Arrow nudge
       if (e.key.startsWith("Arrow") && selectedIds.length > 0) {
         const step = e.shiftKey ? 10 : 1; // mm

@@ -92,12 +92,42 @@ export type Theme = {
   };
 };
 
+// ————————————————————————————————————————————
+// Inline document comments. Google-Docs-style side notes anchored to a node.
+// Humans leave them. The AI copilot reads active (unresolved) comments on
+// each turn and can act on them — including resolving one after a fix or
+// leaving its own response comment.
+//
+// `comments` is optional on existing persisted documents; absence is treated
+// as an empty array — no migration step required.
+// ————————————————————————————————————————————
+
+export type DocComment = {
+  id: string;
+  /** The node this comment is anchored to. */
+  nodeId: string;
+  /** The comment body. */
+  body: string;
+  /** Optional selected text range inside the node, as a character offset. */
+  range?: { start: number; end: number };
+  createdAt: number;
+  resolvedAt?: number;
+  /** Who left it — distinguishes user vs. AI-left notes. */
+  author: "user" | "ai";
+};
+
 export type CvDocument = {
   slug: string;
   targetRole: string;
   pages: Page[];
   theme: Theme;
   updatedAt: number;
+  /**
+   * Inline doc comments. Absent on older persisted docs — callers should
+   * treat undefined as `[]`. Mutations flow through the store so they're
+   * included in undo/redo.
+   */
+  comments?: DocComment[];
 };
 
 export const defaultTheme: Theme = {

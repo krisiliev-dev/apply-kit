@@ -390,7 +390,7 @@ export default function DiscoverPage() {
             {/* On /discover the pill routes clicks to a local pull rather
                 than navigating, so the user stays on the page. */}
             <CapturedPill href="#pull" />
-            <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+            <nav aria-label="Primary" className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4">
               <Link href="/" className="hover:text-ink">
                 Home
               </Link>

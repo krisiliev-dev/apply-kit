@@ -76,7 +76,10 @@ export default function ApplicationsPage() {
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             Applications
           </p>
-          <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+          <nav
+            aria-label="Primary"
+            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4"
+          >
             <Link href="/" className="hover:text-ink">
               CV Workshop
             </Link>
@@ -138,12 +141,16 @@ export default function ApplicationsPage() {
             </button>
           );
         })}
+        <label htmlFor="applications-search" className="sr-only">
+          Search company or role
+        </label>
         <input
+          id="applications-search"
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search company or role"
-          className="ml-auto font-mono text-[11px] uppercase tracking-[0.15em] bg-transparent border-b border-ink/15 focus:border-ink/60 focus:outline-none px-1 py-1.5 placeholder:text-ink/30 min-w-[220px]"
+          className="ml-auto font-mono text-[11px] uppercase tracking-[0.15em] bg-transparent border-b border-ink/15 focus:border-ink/60 focus:outline-none px-1 py-1.5 placeholder:text-ink/40 min-w-[220px]"
         />
       </section>
 

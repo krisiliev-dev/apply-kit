@@ -5,6 +5,7 @@ import { temporal } from "zundo";
 import { nanoid } from "nanoid";
 import type {
   CvDocument,
+  DocComment,
   Node,
   Page,
   TextNode,
@@ -66,6 +67,16 @@ type Actions = {
   setShowGrid: (v: boolean) => void;
   setShowGuides: (v: boolean) => void;
   setShowParserOverlay: (v: boolean) => void;
+
+  // comments — inline doc comments anchored to nodes
+  addComment: (
+    comment: Omit<DocComment, "id" | "createdAt"> &
+      Partial<Pick<DocComment, "id" | "createdAt">>,
+  ) => string;
+  updateComment: (id: string, patch: Partial<DocComment>) => void;
+  resolveComment: (id: string) => void;
+  reopenComment: (id: string) => void;
+  deleteComment: (id: string) => void;
 };
 
 export type Store = DocState & UiState & Actions;
@@ -121,6 +132,20 @@ function updatePages(
 
 function nextZ(nodes: Node[]): number {
   return nodes.reduce((m, n) => Math.max(m, n.z), 0) + 1;
+}
+
+// Apply a mutation to the document's comments array (treating undefined as
+// []). Routes through the same updatedAt bump as page mutations so zundo
+// treats comment edits as an undoable step.
+function updateComments(
+  doc: CvDocument,
+  fn: (list: DocComment[]) => DocComment[],
+): CvDocument {
+  return {
+    ...doc,
+    comments: fn(doc.comments ?? []),
+    updatedAt: Date.now(),
+  };
 }
 
 // ———————————————————————————————————————————————
@@ -371,6 +396,58 @@ const creator: StateCreator<Store> = (set, get) => {
     setShowGrid: (v) => set({ showGrid: v }),
     setShowGuides: (v) => set({ showGuides: v }),
     setShowParserOverlay: (v) => set({ showParserOverlay: v }),
+
+    // Comments —————————————————————————————————————————
+    addComment: (partial) => {
+      const id = partial.id ?? nanoid(8);
+      const createdAt = partial.createdAt ?? Date.now();
+      const comment: DocComment = {
+        id,
+        nodeId: partial.nodeId,
+        body: partial.body,
+        range: partial.range,
+        createdAt,
+        resolvedAt: partial.resolvedAt,
+        author: partial.author,
+      };
+      set((s) => ({ doc: updateComments(s.doc, (list) => [...list, comment]) }));
+      return id;
+    },
+
+    updateComment: (id, patch) =>
+      set((s) => ({
+        doc: updateComments(s.doc, (list) =>
+          list.map((c) => (c.id === id ? { ...c, ...patch } : c)),
+        ),
+      })),
+
+    resolveComment: (id) =>
+      set((s) => ({
+        doc: updateComments(s.doc, (list) =>
+          list.map((c) =>
+            c.id === id ? { ...c, resolvedAt: Date.now() } : c,
+          ),
+        ),
+      })),
+
+    reopenComment: (id) =>
+      set((s) => ({
+        doc: updateComments(s.doc, (list) =>
+          list.map((c) => {
+            if (c.id !== id) return c;
+            // Drop resolvedAt rather than setting it to undefined so the JSON
+            // payload stays tidy.
+            const { resolvedAt: _drop, ...rest } = c;
+            void _drop;
+            return rest;
+          }),
+        ),
+      })),
+
+    deleteComment: (id) =>
+      set((s) => ({
+        doc: updateComments(s.doc, (list) => list.filter((c) => c.id !== id)),
+      })),
   };
 };
 
@@ -387,3 +464,21 @@ export const useEditor = create<Store>()(
 export const isTextNode = (n: Node): n is TextNode => n.type === "text";
 export const isImageNode = (n: Node): n is ImageNode => n.type === "image";
 export const isShapeNode = (n: Node): n is ShapeNode => n.type === "shape";
+
+// Comment selectors —————————————————————————————————————————
+// Plain functions so callers can use them inside selectors or one-off reads.
+// Prefer passing the comments list from a useEditor selector when possible.
+
+export const allComments = (doc: CvDocument): DocComment[] =>
+  doc.comments ?? [];
+
+export const commentsByNodeId = (
+  doc: CvDocument,
+  nodeId: string,
+): DocComment[] => (doc.comments ?? []).filter((c) => c.nodeId === nodeId);
+
+export const unresolvedComments = (doc: CvDocument): DocComment[] =>
+  (doc.comments ?? []).filter((c) => c.resolvedAt === undefined);
+
+export const unresolvedCommentCount = (doc: CvDocument): number =>
+  (doc.comments ?? []).reduce((n, c) => n + (c.resolvedAt ? 0 : 1), 0);

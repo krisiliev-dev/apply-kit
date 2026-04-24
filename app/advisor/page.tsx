@@ -52,7 +52,7 @@ export default function AdvisorIndexPage() {
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             Advisor
           </p>
-          <nav className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/50 flex gap-4">
+          <nav aria-label="Primary" className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4">
             <Link href="/" className="hover:text-ink">
               CV Workshop
             </Link>

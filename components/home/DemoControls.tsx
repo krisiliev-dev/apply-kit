@@ -166,12 +166,12 @@ export function DemoControls() {
           type="button"
           onClick={onClear}
           disabled={busy}
-          className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 border border-ink/15 px-3 py-2 hover:text-ink/80 hover:border-ink/30 disabled:opacity-40 disabled:cursor-not-allowed"
+          className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/70 border border-ink/20 px-3 py-2 hover:text-ink hover:border-ink/40 disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {busy ? "Clearing…" : "Clear demo"}
         </button>
       )}
-      <span className="font-mono text-[10px] text-ink/40">
+      <span className="font-mono text-[10px] text-ink/60">
         {mode === "empty"
           ? "seeds 3 CV variants + 8 sample applications"
           : "wipes every cv-maker:* localStorage key"}

@@ -6,6 +6,7 @@ import { NodeView } from "./NodeView";
 import { useEditor } from "@/lib/doc/store";
 import { SelectionOverlay } from "./SelectionOverlay";
 import { ParserOverlay } from "./ParserOverlay";
+import { CommentLayer } from "./CommentLayer";
 
 export function PageView({
   page,
@@ -37,6 +38,8 @@ export function PageView({
     <div
       ref={pageRef}
       className="cv-page"
+      role="region"
+      aria-label="CV page canvas"
       data-grid={showGrid ? "true" : "false"}
       style={{
         width: `${page.width}mm`,
@@ -62,6 +65,7 @@ export function PageView({
 
       <SelectionOverlay page={page} pageRef={pageRef} />
       <ParserOverlay page={page} />
+      <CommentLayer page={page} />
     </div>
   );
 }
