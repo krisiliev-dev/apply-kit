@@ -9,6 +9,7 @@ import type { AtsJobSchema } from "@/lib/jobs/ats";
 import { detectAts } from "@/lib/jobs/ats";
 import { loadDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import { FitCheckCard } from "@/components/applications/FitCheckCard";
+import { CvSlugStatus } from "@/components/applications/CvSlugStatus";
 import { defaultCV } from "@/content/cvs/default";
 import { cvs } from "@/content/cvs";
 
@@ -176,10 +177,11 @@ export function JobDetailView({ appId }: { appId: string }) {
             Tailored CV
           </h2>
           {app.cvSlug ? (
-            <div className="border border-ink/10 p-4">
-              <p className="font-mono text-xs text-ink/60 mb-2">
+            <div className="border border-ink/10 p-4 space-y-2">
+              <p className="font-mono text-xs text-ink/60">
                 /cv/{app.cvSlug}
               </p>
+              <CvSlugStatus slug={app.cvSlug} />
               <Link
                 href={`/cv/${app.cvSlug}`}
                 className="inline-block border border-ink bg-ink text-paper px-4 py-2 font-mono text-xs uppercase tracking-[0.2em] hover:bg-transparent hover:text-ink transition-colors"

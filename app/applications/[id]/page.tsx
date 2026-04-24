@@ -27,7 +27,7 @@ import { InterviewPrepSection } from "@/components/applications/InterviewPrepSec
 import { PreScreenSection } from "@/components/applications/PreScreenSection";
 import { SalaryNegotiationSection } from "@/components/applications/SalaryNegotiationSection";
 import { FollowUpsSection } from "@/components/applications/FollowUpsSection";
-import { loadFromStorage } from "@/lib/doc/persist";
+import { CvSlugStatus } from "@/components/applications/CvSlugStatus";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 export default function ApplicationDetailPage() {
@@ -247,62 +247,6 @@ export default function ApplicationDetailPage() {
       </footer>
     </main>
   );
-}
-
-// ———————————————————————————————————————————————
-// CV slug status — explains when a referenced slug has no saved doc yet
-// ———————————————————————————————————————————————
-
-function CvSlugStatus({ slug }: { slug: string | undefined }) {
-  const [state, setState] = useState<"loading" | "saved" | "typed" | "unknown">(
-    "loading",
-  );
-
-  useEffect(() => {
-    if (!slug) {
-      setState("loading");
-      return;
-    }
-    const saved = loadFromStorage(slug);
-    if (saved) {
-      setState("saved");
-      return;
-    }
-    if (cvs[slug]) {
-      setState("typed");
-      return;
-    }
-    setState("unknown");
-  }, [slug]);
-
-  if (!slug) return null;
-
-  if (state === "saved") return null;
-
-  if (state === "typed") {
-    return (
-      <p className="font-mono text-[10px] text-ink/50">
-        Typed seed available — click &ldquo;Open CV&rdquo; to materialise it in
-        the editor.
-      </p>
-    );
-  }
-
-  if (state === "unknown") {
-    return (
-      <p className="font-mono text-[10px] text-ink/50">
-        This variant was never opened.{" "}
-        <Link
-          href={`/cv/${slug}`}
-          className="underline decoration-ink/30 underline-offset-4 hover:text-ink"
-        >
-          Seed it now?
-        </Link>
-      </p>
-    );
-  }
-
-  return null;
 }
 
 // ———————————————————————————————————————————————

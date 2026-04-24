@@ -23,6 +23,7 @@ import {
 } from "@/lib/app/effortBudget";
 import type { Application } from "@/lib/app/types";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { CvSlugStatus } from "@/components/applications/CvSlugStatus";
 
 export default function ReviewPage() {
   const { applications, loaded, load } = useApplications();
@@ -571,7 +572,10 @@ function VariantSection({ variants }: { variants: VariantPerformance[] }) {
             key={v.cvSlug}
             className="grid grid-cols-[1.4fr_repeat(6,1fr)] gap-2 py-2 font-mono text-[12px] text-ink/80 border-b border-ink/5 last:border-b-0"
           >
-            <div className="truncate">{v.cvSlug}</div>
+            <div className="truncate">
+              <div>{v.cvSlug}</div>
+              <CvSlugStatus slug={v.cvSlug} />
+            </div>
             <div className="text-right">{v.applied}</div>
             <div className="text-right">{v.screen}</div>
             <div className="text-right">{v.interview}</div>

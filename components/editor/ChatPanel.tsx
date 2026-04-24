@@ -13,6 +13,7 @@ import {
 } from "ai";
 import { useEditor } from "@/lib/doc/store";
 import { applyTool } from "@/lib/ai/applyTool";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // Docked AI chat. Streams responses, executes tool calls client-side against
 // the editor store, and re-submits automatically once results are in.
@@ -151,26 +152,7 @@ export function ChatPanel() {
           <Message key={m.id} message={m} />
         ))}
 
-        {error && (
-          <div
-            className="text-[11px] px-3 py-2 rounded"
-            style={{
-              background: "rgba(255,107,107,0.15)",
-              color: "#ff9a9a",
-              border: "1px solid rgba(255,107,107,0.3)",
-            }}
-          >
-            {error.message.includes("ANTHROPIC_API_KEY") ||
-            error.message.includes("400") ? (
-              <>
-                Add <code>ANTHROPIC_API_KEY=sk-ant-…</code> to{" "}
-                <code>.env.local</code> and restart the dev server.
-              </>
-            ) : (
-              error.message
-            )}
-          </div>
-        )}
+        {error && <ApiKeyHint error={error.message} />}
       </div>
 
       <form

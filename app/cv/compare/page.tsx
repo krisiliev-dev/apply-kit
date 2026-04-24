@@ -21,7 +21,9 @@ import type { CvDocument, Node, TextNode, TextStyle, Theme } from "@/lib/doc/typ
 // `ReadOnlyPage` that just draws nodes.
 // ————————————————————————————————————————————————
 
-const PREVIEW_ZOOM = 0.4;
+const DEFAULT_PREVIEW_ZOOM = 0.4;
+const MIN_PREVIEW_ZOOM = 0.2;
+const MAX_PREVIEW_ZOOM = 1;
 
 function ComparePageInner() {
   const sp = useSearchParams();
@@ -170,6 +172,7 @@ function CompareBoard({
   const [loaded, setLoaded] = useState(false);
   const [docA, setDocA] = useState<CvDocument | null>(null);
   const [docB, setDocB] = useState<CvDocument | null>(null);
+  const [zoom, setZoom] = useState(DEFAULT_PREVIEW_ZOOM);
 
   // Resolve each slug the same way the editor does on first load:
   // localStorage first, then typed seed, finally blank.
@@ -228,8 +231,34 @@ function CompareBoard({
         </div>
       </section>
 
-      <section className="grid grid-cols-[1fr_280px_1fr] gap-6">
-        <PreviewColumn slug={aSlug} doc={docA} stats={statsA} loaded={loaded} />
+      <section className="flex items-center gap-4 mb-4">
+        <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50">
+          Zoom
+        </span>
+        <input
+          type="range"
+          min={MIN_PREVIEW_ZOOM * 100}
+          max={MAX_PREVIEW_ZOOM * 100}
+          step={5}
+          value={Math.round(zoom * 100)}
+          onChange={(e) => setZoom(Number(e.target.value) / 100)}
+          className="flex-1 max-w-xs"
+          aria-label="Preview zoom"
+        />
+        <span className="font-mono text-[11px] tabular-nums text-ink/70 w-10">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          type="button"
+          onClick={() => setZoom(DEFAULT_PREVIEW_ZOOM)}
+          className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50 hover:text-ink"
+        >
+          reset
+        </button>
+      </section>
+
+      <section className="grid grid-cols-[1fr_280px_1fr] gap-6 items-start">
+        <PreviewColumn slug={aSlug} doc={docA} stats={statsA} loaded={loaded} zoom={zoom} />
 
         <div className="min-w-0">
           {summary ? (
@@ -241,7 +270,7 @@ function CompareBoard({
           )}
         </div>
 
-        <PreviewColumn slug={bSlug} doc={docB} stats={statsB} loaded={loaded} />
+        <PreviewColumn slug={bSlug} doc={docB} stats={statsB} loaded={loaded} zoom={zoom} />
       </section>
 
       <footer className="mt-16 font-mono text-[11px] text-ink/50">
@@ -268,11 +297,13 @@ function PreviewColumn({
   doc,
   stats,
   loaded,
+  zoom,
 }: {
   slug: string;
   doc: CvDocument | null;
   stats: DocStats | null;
   loaded: boolean;
+  zoom: number;
 }) {
   // Latest score for this slug from history.
   const [lastScore, setLastScore] = useState<number | null>(null);
@@ -321,10 +352,10 @@ function PreviewColumn({
         </Link>
       </div>
       <div
-        className="border border-ink/10 overflow-hidden mx-auto"
-        style={{ background: doc.theme.colors.paper }}
+        className="border border-ink/10 mx-auto overflow-auto"
+        style={{ background: doc.theme.colors.paper, maxHeight: "80vh" }}
       >
-        <ReadOnlyPage doc={doc} />
+        <ReadOnlyPage doc={doc} zoom={zoom} />
       </div>
       {stats && (
         <dl className="mt-3 grid grid-cols-3 gap-3 font-mono text-[10px] uppercase tracking-[0.15em] text-ink/60">
@@ -427,21 +458,21 @@ function DiffGroup({
 // Read-only page renderer (no store coupling)
 // ————————————————————————————————————————————————
 
-function ReadOnlyPage({ doc }: { doc: CvDocument }) {
+function ReadOnlyPage({ doc, zoom }: { doc: CvDocument; zoom: number }) {
   const page = doc.pages[0];
   if (!page) return null;
   return (
     <div
       style={{
-        width: `${page.width * PREVIEW_ZOOM}mm`,
-        height: `${page.height * PREVIEW_ZOOM}mm`,
+        width: `${page.width * zoom}mm`,
+        height: `${page.height * zoom}mm`,
         position: "relative",
         overflow: "hidden",
-        transform: `scale(${PREVIEW_ZOOM})`,
+        transform: `scale(${zoom})`,
         transformOrigin: "top left",
         // Shrink the outer box back so layout doesn't leak.
-        marginBottom: `-${page.height * (1 - PREVIEW_ZOOM)}mm`,
-        marginRight: `-${page.width * (1 - PREVIEW_ZOOM)}mm`,
+        marginBottom: `-${page.height * (1 - zoom)}mm`,
+        marginRight: `-${page.width * (1 - zoom)}mm`,
       }}
     >
       <div

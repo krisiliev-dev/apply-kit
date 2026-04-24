@@ -24,7 +24,7 @@ import { inspectProof } from "@/lib/evaluation/proofInspector";
 import { detectArchetypes } from "@/lib/evaluation/archetypeDetector";
 import { inspectTenure } from "@/lib/evaluation/tenureInspector";
 import { ARCHETYPE_BY_CATEGORY_LABEL } from "@/lib/evaluation/archetypes";
-import { isApiKeyMissing } from "@/components/errors/ApiKeyHint";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // ————————————————————————————————————————————————
 // Eval panel — right-pane tab for CV evaluation.
@@ -291,25 +291,7 @@ export function EvalPanel({ slug }: { slug: string }) {
           <RunningState progress={progress} iterations={iterationSummaries} />
         )}
 
-        {error && (
-          <div
-            className="font-mono text-[11px] px-2 py-2 border"
-            style={{
-              borderColor: "var(--color-editor-border)",
-              color: "var(--color-accent, #d64933)",
-            }}
-          >
-            {isApiKeyMissing(error) ? (
-              <>
-                Add <code>ANTHROPIC_API_KEY</code> (and optionally{" "}
-                <code>AFFINDA_API_KEY</code>) to <code>.env.local</code> and
-                restart the dev server.
-              </>
-            ) : (
-              error
-            )}
-          </div>
-        )}
+        {error && <ApiKeyHint error={error} />}
 
         {evaluation && mode !== "running" && (
           <>
@@ -1221,11 +1203,7 @@ function TenurePanel() {
             )}
           </div>
 
-          {error && (
-            <p className="mt-2 font-mono text-[11px]" style={{ color: "#d64933" }}>
-              {error}
-            </p>
-          )}
+          {error && <div className="mt-2"><ApiKeyHint error={error} inline /></div>}
 
           {framings.length > 0 && (
             <ul className="mt-2 space-y-1">
