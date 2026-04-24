@@ -50,3 +50,8 @@ next-env.d.ts
 # + labels + public keys). See lib/pairing/server.ts — file-backed so
 # pairings survive `npm run dev` restarts without a DB. Never commit.
 .pairing-devices.json
+
+# Local personal overrides — never commit your real data
+/content/profile.local.ts
+/content/cvs/personal/
+/.backups/
