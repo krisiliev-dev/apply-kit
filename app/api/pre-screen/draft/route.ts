@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, type LanguageModelUsage } from "ai";
 import type { ParsedJob, PreScreenTone } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
 import type { Settings } from "@/lib/settings/types";
@@ -6,6 +6,7 @@ import {
   resolveForRoute,
   respondProviderError,
   streamingUsageHeader,
+  withStreamUsageSentinel,
 } from "@/lib/ai/route";
 
 // POST /api/pre-screen/draft
@@ -143,17 +144,28 @@ TONE: ${tone} — ${TONE_GUIDANCE[tone]}`;
     "Remember the delimiter format: `--- QUESTION <n> ---` on its own line before each answer body.",
   );
 
+  let finalUsage: LanguageModelUsage | null = null;
+
   const result = streamText({
     model: resolved.model,
     system,
     prompt: userParts.join("\n"),
+    onFinish({ usage }) {
+      finalUsage = usage;
+    },
   });
 
-  return result.toTextStreamResponse({
+  const textStream = result.toTextStreamResponse({
     headers: streamingUsageHeader({
       feature: resolved.feature,
       choice: resolved.choice,
     }),
+  });
+
+  return withStreamUsageSentinel(textStream, {
+    feature: resolved.feature,
+    choice: resolved.choice,
+    getUsage: () => finalUsage,
   });
 }
 

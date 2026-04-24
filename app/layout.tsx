@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Inter,
   Instrument_Serif,
@@ -12,6 +12,8 @@ import {
 import "./globals.css";
 import { AutoBackupLoop } from "@/components/backup/AutoBackupLoop";
 import { CostPill } from "@/components/ai/CostPill";
+import { Cheatsheet } from "@/components/shortcuts/Cheatsheet";
+import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
 
 // Curated font set. Adding new ones: register here, then add an entry to
 // lib/fonts.ts. Keep the list small — every font is a network cost and a
@@ -67,6 +69,16 @@ const fontVars = [
 export const metadata: Metadata = {
   title: "CV Maker",
   description: "Personal CV workshop",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "CV Maker",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#fafaf7",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -76,6 +88,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <AutoBackupLoop />
         <CostPill />
+        <Cheatsheet />
+        <ServiceWorkerRegistrar />
       </body>
     </html>
   );

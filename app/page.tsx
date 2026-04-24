@@ -3,11 +3,13 @@ import { cvList } from "@/content/cvs";
 import { DemoControls, DemoHint } from "@/components/home/DemoControls";
 import { CapturedPill } from "@/components/pair/CapturedPill";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
+import { ShortcutHint } from "@/components/shortcuts/ShortcutHint";
 
 export default function Home() {
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
       <OnboardingOverlay />
+      <ShortcutHint />
       <header className="mb-12">
         <div className="flex items-baseline justify-between gap-4">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">

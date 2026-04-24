@@ -4,6 +4,7 @@ import {
   tool,
   stepCountIs,
   type UIMessage,
+  type LanguageModelUsage,
 } from "ai";
 import { buildSystemPrompt } from "@/lib/ai/system";
 import { toolSchemas } from "@/lib/ai/tools";
@@ -13,6 +14,7 @@ import {
   resolveForRoute,
   respondProviderError,
   streamingUsageHeader,
+  withSseUsageSentinel,
 } from "@/lib/ai/route";
 
 // Client-executed tools: we declare them here *without* an execute function so
@@ -43,11 +45,19 @@ export async function POST(req: Request) {
 
   const modelMessages = await convertToModelMessages(messages);
 
+  let finalUsage: LanguageModelUsage | null = null;
+
   const result = streamText({
     model: resolved.model,
     system: buildSystemPrompt(document, selectedIds ?? []),
     messages: modelMessages,
     stopWhen: stepCountIs(10),
+    onFinish({ totalUsage }) {
+      // `totalUsage` sums across the whole multi-step tool-loop run; that's
+      // the figure we want for cost tracking (per-step usage would
+      // under-report multi-step chats).
+      finalUsage = totalUsage;
+    },
     tools: {
       addText: tool({
         description: "Add a text node to the page.",
@@ -91,10 +101,16 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse({
+  const sseRes = result.toUIMessageStreamResponse({
     headers: streamingUsageHeader({
       feature: resolved.feature,
       choice: resolved.choice,
     }),
+  });
+
+  return withSseUsageSentinel(sseRes, {
+    feature: resolved.feature,
+    choice: resolved.choice,
+    getUsage: () => finalUsage,
   });
 }
