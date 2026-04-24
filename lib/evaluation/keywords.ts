@@ -1,16 +1,25 @@
 import type { CVContent } from "@/lib/types";
+import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
+import type {
+  AffindaExtracted,
+  KeywordScore,
+} from "./types";
+import { extractPlainText } from "./extractText";
 
-// Lightweight heuristic scoring for a tailored CV draft.
+// ————————————————————————————————————————————————
+// Layer 2 — Keyword alignment.
 //
-// This does NOT try to be an LLM judge. It's a cheap static check that flags
-// the two failure modes the prompt is meant to prevent:
-//   1. Hallucinated companies / roles / titles not present in the base CV.
-//   2. Bullets that drift past the configured character cap.
-// Plus one positive signal — keyword coverage from the parsed job.
+// Scores the fraction of job keywords that surface in the CV text. Two
+// interfaces:
+//   • evaluateDraftKeywords — for the /jobs/draft flow, compares a drafted
+//     CVContent against the base CVContent (hallucination guard) and scores
+//     keyword coverage using the drafted corpus.
+//   • scoreCvDocumentKeywords — for the editor eval. Prefers Affinda's
+//     extracted text when available; falls back to raw CvDocument text.
 //
-// Output is a `{ score, warnings }` pair that the /jobs/[appId] UI surfaces so
-// the user can eyeball whether the draft is worth using as-is.
+// Both share the same corpus-normalization + coverage math.
+// ————————————————————————————————————————————————
 
 export const DEFAULT_BULLET_CHAR_CAP = 160;
 
@@ -36,7 +45,7 @@ export type DraftEvalResult = {
   warnings: DraftWarning[];
 };
 
-type EvalInput = {
+type DraftEvalInput = {
   draft: CVContent;
   baseCv: CVContent;
   job: ParsedJob;
@@ -46,7 +55,11 @@ type EvalInput = {
 };
 
 function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9+#./\s-]/g, " ").replace(/\s+/g, " ").trim();
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9+#./\s-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function collectDraftCorpus(draft: CVContent): string {
@@ -66,7 +79,24 @@ function collectDraftCorpus(draft: CVContent): string {
   return norm(parts.join(" \n "));
 }
 
-export function evaluateDraft(input: EvalInput): DraftEvalResult {
+function collectAffindaCorpus(extracted: AffindaExtracted): string {
+  const parts: string[] = [];
+  if (extracted.summary) parts.push(extracted.summary);
+  for (const w of extracted.workExperience) {
+    if (w.title) parts.push(w.title);
+    if (w.company) parts.push(w.company);
+    for (const b of w.bullets ?? []) parts.push(b);
+  }
+  for (const s of extracted.skills) parts.push(s);
+  for (const e of extracted.education) {
+    if (e.degree) parts.push(e.degree);
+    if (e.school) parts.push(e.school);
+  }
+  for (const l of extracted.languages ?? []) parts.push(l);
+  return norm(parts.join(" \n "));
+}
+
+export function evaluateDraftKeywords(input: DraftEvalInput): DraftEvalResult {
   const cap = input.bulletCharCap ?? DEFAULT_BULLET_CHAR_CAP;
   const floor = input.keywordCoverageFloor ?? 0.45;
   const warnings: DraftWarning[] = [];
@@ -90,8 +120,6 @@ export function evaluateDraft(input: EvalInput): DraftEvalResult {
       });
     }
     if (role && !baseRoles.has(role)) {
-      // Role changes are softer than company changes (titles get rewritten),
-      // but still worth flagging if the user wants strict truthfulness.
       warnings.push({
         kind: "hallucinated-role",
         message: `Role title "${exp.role}" at ${exp.company} isn't in the base CV verbatim.`,
@@ -138,8 +166,6 @@ export function evaluateDraft(input: EvalInput): DraftEvalResult {
     });
   }
 
-  // Composite: 0.6 weight on keyword coverage, 0.3 on no-fabrication, 0.1 on
-  // bullet discipline. We don't want one big bullet to tank the whole score.
   const totalBullets = input.draft.experiences.reduce(
     (n, e) => n + (e.bullets?.length ?? 0),
     0,
@@ -164,10 +190,81 @@ export function evaluateDraft(input: EvalInput): DraftEvalResult {
 }
 
 // ————————————————————————————————————————————————
-// Per-application eval persistence
+// Doc-level keyword scoring (for the editor "Evaluate + improve" flow).
 //
-// Stored in localStorage so /jobs/[appId] can surface warnings without
-// extending the shared Application type (off-limits for this iteration).
+// When Affinda extraction is present, we score keywords against what the ATS
+// actually extracted — that's the real signal. When it's absent, we fall back
+// to raw document text.
+// ————————————————————————————————————————————————
+
+type DocKeywordInput = {
+  doc: CvDocument;
+  job: ParsedJob | null;
+  extracted?: AffindaExtracted | null;
+  keywordCoverageFloor?: number;
+};
+
+export function scoreCvDocumentKeywords(input: DocKeywordInput): KeywordScore {
+  const warnings: string[] = [];
+  const floor = input.keywordCoverageFloor ?? 0.5;
+
+  const corpus = input.extracted
+    ? collectAffindaCorpus(input.extracted)
+    : norm(extractPlainText(input.doc));
+
+  const keywords = input.job?.keywords ?? [];
+
+  if (keywords.length === 0) {
+    // No job context: coverage is undefined. Give a neutral 70 so the composite
+    // still works without inflating above "real" evaluations.
+    return {
+      score: 70,
+      coverage: 1,
+      missed: [],
+      matched: [],
+      warnings: [
+        "No parsed job attached — keyword alignment is neutral (70/100).",
+      ],
+    };
+  }
+
+  const matched: string[] = [];
+  const missed: string[] = [];
+  for (const k of keywords) {
+    const n = norm(k);
+    if (!n) continue;
+    if (corpus.includes(n)) matched.push(k);
+    else missed.push(k);
+  }
+
+  const denom = matched.length + missed.length;
+  const coverage = denom === 0 ? 1 : matched.length / denom;
+
+  if (coverage < floor) {
+    warnings.push(
+      `Only ${Math.round(coverage * 100)}% of the job's keywords appear in the ${
+        input.extracted ? "parsed" : "raw"
+      } CV text. Missing: ${missed.slice(0, 8).join(", ")}${
+        missed.length > 8 ? "…" : ""
+      }`,
+    );
+  }
+
+  if (!input.extracted) {
+    warnings.push(
+      "Keyword check ran on raw document text — some words may be visible to a human but lost to a parser.",
+    );
+  }
+
+  // Cap at 95 — keyword overlap alone shouldn't be a perfect score. The
+  // recruiter layer deals with nuance.
+  const score = Math.round(Math.min(0.95, coverage) * 100);
+
+  return { score, coverage, matched, missed, warnings };
+}
+
+// ————————————————————————————————————————————————
+// Per-application eval persistence
 // ————————————————————————————————————————————————
 
 const STORAGE_KEY = "cv-maker:draft-evals";

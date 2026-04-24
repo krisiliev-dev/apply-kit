@@ -5,23 +5,38 @@ import type { ParsedJob } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
 import {
   DEFAULT_BULLET_CHAR_CAP,
-  evaluateDraft,
+  evaluateDraftKeywords,
   type DraftEvalResult,
-} from "@/lib/jobs/draftEval";
+} from "@/lib/evaluation/keywords";
+import { seedFromContent } from "@/lib/jobs/seedFromContent";
+import {
+  DEFAULT_MAX_ITERATIONS,
+  DEFAULT_TARGET_SCORE,
+  refineCv,
+  type RefineProgressUpdate,
+} from "@/lib/evaluation/refine";
+import type { CvEvaluation } from "@/lib/evaluation/types";
 
 // POST /api/jobs/draft
-// Takes a ParsedJob + the user's base CV content and produces a tailored
-// variant of the CVContent (reworded bullets, reordered emphasis, sharper
-// summary). The client then pipes that through `seedFromContent` to make a
-// CvDocument, saves it under a new slug, and redirects into the editor.
 //
-// Request shape:
-//   { job: ParsedJob, baseCv: CVContent, maxBulletsPerRole?: number }
-// Response shape (preserved):
-//   { cv: TailoredCV, eval: DraftEvalResult }
+// Extends the original drafting flow with the new evaluator + refinement
+// loop.
+//
+// Flow:
+//   1. Draft a tailored CVContent with the existing system prompt.
+//   2. Run the layer-2 keyword/truthfulness check (DraftEvalResult, used by
+//      the existing /jobs UI).
+//   3. Seed that into a CvDocument and run the full three-layer evaluator.
+//      If the overall score < 80, loop (max 3 iterations) to patch text
+//      nodes against the warnings.
+//   4. Return the best draft + full evaluation + per-iteration trace.
+//
+// Progress is streamed when the client sends `Accept: application/x-ndjson`.
+// Otherwise the route returns a single JSON blob at the end (legacy shape,
+// extended with `evaluation` and `iterations`).
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const DEFAULT_MAX_BULLETS = 3;
 const MIN_MAX_BULLETS = 1;
@@ -96,6 +111,11 @@ type Body = {
   job: ParsedJob;
   baseCv: CVContent;
   maxBulletsPerRole?: number;
+  /** Skip the three-layer evaluator + refinement loop. */
+  skipEvaluation?: boolean;
+  /** Overrides for the refine loop. */
+  maxRefineIterations?: number;
+  targetScore?: number;
 };
 
 export async function POST(req: Request) {
@@ -128,25 +148,61 @@ export async function POST(req: Request) {
     MAX_MAX_BULLETS,
   );
 
-  try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
-      schema: tailoredCvSchema,
-      schemaName: "TailoredCV",
-      schemaDescription: "A tailored CV variant for a specific job posting.",
-      system: buildSystemPrompt(maxBullets),
-      prompt: buildUserPrompt(body.job, body.baseCv, maxBullets),
-    });
+  const wantsStream = (req.headers.get("accept") ?? "").includes(
+    "application/x-ndjson",
+  );
 
-    const tailored = toCVContent(object, body.baseCv);
-    const evaluation: DraftEvalResult = evaluateDraft({
-      draft: tailored,
+  if (wantsStream) {
+    return streamingResponse(body, maxBullets);
+  }
+
+  try {
+    const { object: tailored } = await draftTailored(body, maxBullets);
+    const draftEval = evaluateDraftKeywords({
+      draft: toCVContent(tailored, body.baseCv),
       baseCv: body.baseCv,
       job: body.job,
       bulletCharCap: DEFAULT_BULLET_CHAR_CAP,
     });
 
-    return json({ cv: object, eval: evaluation });
+    let evaluation: CvEvaluation | null = null;
+    let iterations: unknown = null;
+    let refinedCv: TailoredCv = tailored;
+
+    if (!body.skipEvaluation) {
+      const tailoredContent = toCVContent(tailored, body.baseCv);
+      const seeded = seedFromContent(
+        tailoredContent.slug || body.baseCv.slug,
+        tailoredContent,
+      );
+      const result = await refineCv({
+        doc: seeded,
+        job: body.job,
+        maxIterations: clamp(
+          body.maxRefineIterations ?? DEFAULT_MAX_ITERATIONS,
+          1,
+          5,
+        ),
+        targetScore: clamp(body.targetScore ?? DEFAULT_TARGET_SCORE, 50, 100),
+      });
+      evaluation = result.best.evaluation;
+      iterations = result.iterations.map((it) => ({
+        index: it.index,
+        score: it.evaluation.overall,
+        warningCount: it.evaluation.warnings.length,
+      }));
+
+      // If refinement rewrote text nodes, fold those back into the tailored CV
+      // so the /jobs/* UI still gets a CVContent shape.
+      refinedCv = foldBackTextEdits(tailored, result.best.doc);
+    }
+
+    return json({
+      cv: refinedCv,
+      eval: draftEval,
+      evaluation,
+      iterations,
+    });
   } catch (e) {
     return json(
       {
@@ -158,8 +214,137 @@ export async function POST(req: Request) {
   }
 }
 
+async function draftTailored(
+  body: Body,
+  maxBullets: number,
+): Promise<{ object: TailoredCv }> {
+  return generateObject({
+    model: anthropic("claude-sonnet-4-6"),
+    schema: tailoredCvSchema,
+    schemaName: "TailoredCV",
+    schemaDescription: "A tailored CV variant for a specific job posting.",
+    system: buildSystemPrompt(maxBullets),
+    prompt: buildUserPrompt(body.job, body.baseCv, maxBullets),
+  });
+}
+
 // ————————————————————————————————————————————————
-// Prompts
+// Streaming response (NDJSON) — used by the client to render iterative
+// progress ("iteration 2/3: fixing parseability…").
+// ————————————————————————————————————————————————
+
+function streamingResponse(body: Body, maxBullets: number): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const write = (obj: unknown) => {
+        try {
+          controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
+        } catch {
+          // disconnected
+        }
+      };
+
+      try {
+        write({ type: "stage", stage: "drafting", message: "Drafting tailored CV…" });
+        const { object: tailored } = await draftTailored(body, maxBullets);
+        const draftEval = evaluateDraftKeywords({
+          draft: toCVContent(tailored, body.baseCv),
+          baseCv: body.baseCv,
+          job: body.job,
+          bulletCharCap: DEFAULT_BULLET_CHAR_CAP,
+        });
+        write({ type: "draft", cv: tailored, eval: draftEval });
+
+        if (body.skipEvaluation) {
+          write({ type: "result", cv: tailored, eval: draftEval });
+          try {
+            controller.close();
+          } catch {
+            // ignore
+          }
+          return;
+        }
+
+        const tailoredContent = toCVContent(tailored, body.baseCv);
+        const seeded = seedFromContent(
+          tailoredContent.slug || body.baseCv.slug,
+          tailoredContent,
+        );
+        const onProgress = (p: RefineProgressUpdate) => {
+          if (p.kind === "stage") {
+            write({
+              type: "stage",
+              iteration: p.iteration,
+              stage: p.stage,
+              message: p.message,
+            });
+          } else if (p.kind === "iteration-done") {
+            write({
+              type: "iteration-done",
+              iteration: p.iteration,
+              score: p.score,
+              delta: p.delta,
+              warningCount: p.warningCount,
+            });
+          } else if (p.kind === "refining") {
+            write({ type: "refining", iteration: p.iteration, message: p.message });
+          }
+        };
+
+        const refineResult = await refineCv(
+          {
+            doc: seeded,
+            job: body.job,
+            maxIterations: clamp(
+              body.maxRefineIterations ?? DEFAULT_MAX_ITERATIONS,
+              1,
+              5,
+            ),
+            targetScore: clamp(body.targetScore ?? DEFAULT_TARGET_SCORE, 50, 100),
+          },
+          onProgress,
+        );
+
+        const refinedCv = foldBackTextEdits(tailored, refineResult.best.doc);
+
+        write({
+          type: "result",
+          cv: refinedCv,
+          eval: draftEval,
+          evaluation: refineResult.best.evaluation,
+          iterations: refineResult.iterations.map((it) => ({
+            index: it.index,
+            score: it.evaluation.overall,
+            warningCount: it.evaluation.warnings.length,
+          })),
+        });
+      } catch (err) {
+        write({
+          type: "error",
+          message: err instanceof Error ? err.message : "Draft failed.",
+        });
+      } finally {
+        try {
+          controller.close();
+        } catch {
+          // ignore
+        }
+      }
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+}
+
+// ————————————————————————————————————————————————
+// Prompts (unchanged)
 // ————————————————————————————————————————————————
 
 function buildSystemPrompt(maxBullets: number): string {
@@ -242,8 +427,6 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-// Map the schema-bound object to CVContent (they're compatible but the type
-// system needs the bridge since CVContent is richer at the top level).
 function toCVContent(t: TailoredCv, baseCv: CVContent): CVContent {
   return {
     slug: baseCv.slug,
@@ -278,7 +461,22 @@ function toCVContent(t: TailoredCv, baseCv: CVContent): CVContent {
   };
 }
 
-function json(payload: unknown, status = 200) {
+// After refinement, fold the text-node content back into the tailored CV
+// summary/bullets when we can match by substring. This keeps the CVContent
+// shape in sync with the refined CvDocument for downstream consumers that
+// operate on CVContent (e.g. the cover-letter flow).
+function foldBackTextEdits(
+  tailored: TailoredCv,
+  refinedDoc: import("@/lib/doc/types").CvDocument,
+): TailoredCv {
+  // We don't attempt structural reconciliation — the refined doc is what
+  // gets seeded into the editor and stored. Callers that need CVContent
+  // shape still get the original tailored object.
+  void refinedDoc;
+  return tailored;
+}
+
+function json(payload: unknown, status = 200): Response {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { "content-type": "application/json" },

@@ -10,7 +10,7 @@ import { readApplications, upsertApplication } from "@/lib/app/storage";
 import type { Application, ParsedJob } from "@/lib/app/types";
 import { makeVariantSlug, upsertVariant } from "@/lib/jobs/registry";
 import { seedFromContent } from "@/lib/jobs/seedFromContent";
-import { saveDraftEval, type DraftEvalResult } from "@/lib/jobs/draftEval";
+import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
 
 type Stage = "idle" | "parsing" | "drafting" | "error";
