@@ -13,6 +13,7 @@ import { cvs } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // Pre-screen answer drafter.
 // - User pastes the application's short-answer prompts.
@@ -184,7 +185,7 @@ export function PreScreenSection({ app }: { app: Application }) {
       abortRef.current = ctrl;
       const baseCV = resolveBaseCV(app.cvSlug);
 
-      const res = await fetch("/api/pre-screen/draft", {
+      const res = await trackedFetch("/api/pre-screen/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

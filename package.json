@@ -7,10 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "vitest run"
+    "eval:fixtures": "tsx scripts/eval-fixtures.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.71",
+    "@ai-sdk/openai-compatible": "^2.0.41",
     "@ai-sdk/react": "^3.0.170",
     "ai": "^6.0.168",
     "cheerio": "^1.2.0",
@@ -24,6 +28,8 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-moveable": "^0.56.0",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.5",
     "zod": "^4.3.6",
     "zundo": "^2.3.0",
     "zustand": "^5.0.12"

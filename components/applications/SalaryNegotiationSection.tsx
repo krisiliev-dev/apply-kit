@@ -12,6 +12,7 @@ import { cvs } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // SalaryNegotiationSection — appears on the application detail page when
 // status is offer/interview. Three-step flow:
@@ -87,7 +88,7 @@ function OfferCapture({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch("/api/salary/parse", {
+      const res = await trackedFetch("/api/salary/parse", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ rawOfferText: raw }),
@@ -460,7 +461,7 @@ function AnalysisPanel({
     setError(null);
     try {
       const baseCV = resolveBaseCV(app.cvSlug);
-      const res = await fetch("/api/salary/analyze", {
+      const res = await trackedFetch("/api/salary/analyze", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

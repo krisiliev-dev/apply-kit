@@ -1,8 +1,13 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { Application, RejectionReasonKind } from "@/lib/app/types";
 import { REJECTION_REASON_KINDS } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/rejection/extract
 // Body: { applicationId: string; application: Application; rawText?: string; kind: RejectionReasonKind }
@@ -65,6 +70,7 @@ type Body = {
   application: Application;
   rawText?: string;
   kind: RejectionReasonKind;
+  settings?: Settings;
 };
 
 function isValidKind(k: unknown): k is RejectionReasonKind {
@@ -72,16 +78,6 @@ function isValidKind(k: unknown): k is RejectionReasonKind {
 }
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -94,6 +90,16 @@ export async function POST(req: Request) {
   }
   if (!isValidKind(body.kind)) {
     return json({ error: "Invalid rejection kind." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const rawText =
@@ -144,8 +150,8 @@ ${rejectionBlock}
 Produce the structured extraction now.`;
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: extractionSchema,
       schemaName: "RejectionExtraction",
       schemaDescription:
@@ -154,17 +160,16 @@ Produce the structured extraction now.`;
       prompt,
     });
 
-    return json(object);
+    return jsonWithUsage(object, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+      usage,
+    });
   } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Model failed to return a rejection extraction.",
-      },
-      500,
-    );
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

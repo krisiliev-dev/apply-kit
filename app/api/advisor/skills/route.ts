@@ -1,9 +1,14 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { SkillGapAnalysis } from "@/lib/advisor/types";
 import type { CVContent } from "@/lib/types";
 import { extractUserSkills } from "@/lib/advisor/profileSkills";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/advisor/skills
 //
@@ -104,19 +109,10 @@ type Body = {
   profile: CVContent["profile"];
   cvVariants: CVContent[];
   recentPostings: PostingInput[];
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -126,6 +122,16 @@ export async function POST(req: Request) {
 
   if (!body?.profile || !Array.isArray(body?.cvVariants)) {
     return json({ error: "Missing `profile` or `cvVariants` in body." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const postings = Array.isArray(body.recentPostings) ? body.recentPostings : [];
@@ -153,8 +159,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: responseSchema,
       schemaName: "SkillGapAnalysis",
       schemaDescription:
@@ -172,17 +178,15 @@ export async function POST(req: Request) {
       acquisitionPaths: object.acquisitionPaths,
       generatedAt: now,
     };
-    return json({ analysis });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Model failed to generate skill-gap analysis.",
-      },
-      500,
+    return jsonWithUsage(
+      { analysis },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

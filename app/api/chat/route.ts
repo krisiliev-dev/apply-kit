@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import {
   streamText,
   convertToModelMessages,
@@ -9,6 +8,12 @@ import {
 import { buildSystemPrompt } from "@/lib/ai/system";
 import { toolSchemas } from "@/lib/ai/tools";
 import type { CvDocument } from "@/lib/doc/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  resolveForRoute,
+  respondProviderError,
+  streamingUsageHeader,
+} from "@/lib/ai/route";
 
 // Client-executed tools: we declare them here *without* an execute function so
 // the model emits tool calls the client will handle (the doc lives in the
@@ -22,24 +27,24 @@ type Body = {
   messages: UIMessage[];
   document: CvDocument;
   selectedIds: string[];
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      }),
-      { status: 400, headers: { "content-type": "application/json" } },
-    );
+  const body = (await req.json()) as Body;
+  const { messages, document, selectedIds } = body;
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("chat", body);
+  } catch (err) {
+    return respondProviderError(err, { feature: "chat", settings: body?.settings });
   }
 
-  const { messages, document, selectedIds } = (await req.json()) as Body;
   const modelMessages = await convertToModelMessages(messages);
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: resolved.model,
     system: buildSystemPrompt(document, selectedIds ?? []),
     messages: modelMessages,
     stopWhen: stepCountIs(10),
@@ -86,5 +91,10 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    headers: streamingUsageHeader({
+      feature: resolved.feature,
+      choice: resolved.choice,
+    }),
+  });
 }

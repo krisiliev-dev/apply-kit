@@ -1,5 +1,6 @@
 import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
 import type { CvEvaluation, SixSecondReport } from "./types";
 import { parseCv } from "./affinda";
 import { renderCvToPdf } from "./render";
@@ -27,6 +28,7 @@ import { inspectTenure } from "./tenureInspector";
 export type EvaluateOptions = {
   doc: CvDocument;
   job: ParsedJob | null;
+  settings?: Settings;
 };
 
 export type ProgressUpdate = {
@@ -81,7 +83,7 @@ export async function evaluateCv(
   });
 
   emit({ stage: "recruiter", message: "Running recruiter-eye pass…" });
-  const recruiterPromise = recruiterEyePass(opts.doc, opts.job);
+  const recruiterPromise = recruiterEyePass(opts.doc, opts.job, opts.settings);
 
   // Six-second test: requires both the PDF and (ideally) the Affinda extract
   // for mismatch checks. Skips cleanly when either dependency is missing.
@@ -121,6 +123,7 @@ export async function evaluateCv(
       doc: opts.doc,
       pdf,
       extracted,
+      settings: opts.settings,
     });
   })();
 

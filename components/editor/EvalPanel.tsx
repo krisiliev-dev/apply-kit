@@ -25,6 +25,7 @@ import { detectArchetypes } from "@/lib/evaluation/archetypeDetector";
 import { inspectTenure } from "@/lib/evaluation/tenureInspector";
 import { ARCHETYPE_BY_CATEGORY_LABEL } from "@/lib/evaluation/archetypes";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // ————————————————————————————————————————————————
 // Eval panel — right-pane tab for CV evaluation.
@@ -123,7 +124,7 @@ export function EvalPanel({ slug }: { slug: string }) {
 
       try {
         if (!refine) {
-          const res = await fetch("/api/cv-evaluate", {
+          const res = await trackedFetch("/api/cv-evaluate", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ doc }),
@@ -144,7 +145,7 @@ export function EvalPanel({ slug }: { slug: string }) {
           return;
         }
 
-        const res = await fetch("/api/cv-evaluate/refine", {
+        const res = await trackedFetch("/api/cv-evaluate/refine", {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -1069,7 +1070,7 @@ function TenurePanel() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/cv-evaluate/tenure-frame", {
+      const res = await trackedFetch("/api/cv-evaluate/tenure-frame", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

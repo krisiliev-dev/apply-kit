@@ -1,7 +1,12 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import type { CoverLetterTone, ParsedJob } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  resolveForRoute,
+  respondProviderError,
+  streamingUsageHeader,
+} from "@/lib/ai/route";
 
 // POST /api/cover-letter
 // Streams a tailored cover letter built from the user's base CV and (optionally)
@@ -18,6 +23,7 @@ type Body = {
   baseCV: CVContent;
   tone?: CoverLetterTone;
   wordTarget?: number;
+  settings?: Settings;
 };
 
 const TONE_GUIDANCE: Record<CoverLetterTone, string> = {
@@ -32,16 +38,6 @@ const TONE_GUIDANCE: Record<CoverLetterTone, string> = {
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      }),
-      { status: 400, headers: { "content-type": "application/json" } },
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -57,6 +53,16 @@ export async function POST(req: Request) {
       JSON.stringify({ error: "Missing `baseCV` in body." }),
       { status: 400, headers: { "content-type": "application/json" } },
     );
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const tone: CoverLetterTone = body.tone ?? "direct";
@@ -94,12 +100,17 @@ ${JSON.stringify(body.baseCV, null, 2)}
 Write the cover letter body now. Plain text, three paragraphs, blank line between each. No greeting or sign-off.`;
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: resolved.model,
     system,
     prompt,
   });
 
-  return result.toTextStreamResponse();
+  return result.toTextStreamResponse({
+    headers: streamingUsageHeader({
+      feature: resolved.feature,
+      choice: resolved.choice,
+    }),
+  });
 }
 
 function clampWords(n: number): number {

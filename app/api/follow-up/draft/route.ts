@@ -1,8 +1,13 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import type { Application, FollowUpKind } from "@/lib/app/types";
 import { FOLLOWUP_KIND_TONE } from "@/lib/app/followupCadence";
 import { profile as baseProfile } from "@/content/profile";
+import type { Settings } from "@/lib/settings/types";
+import {
+  resolveForRoute,
+  respondProviderError,
+  streamingUsageHeader,
+} from "@/lib/ai/route";
 
 // POST /api/follow-up/draft
 // Body: { applicationId: string; application: Application; kind: FollowUpKind }
@@ -15,19 +20,10 @@ type Body = {
   applicationId: string;
   application: Application;
   kind: FollowUpKind;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      }),
-      { status: 400, headers: { "content-type": "application/json" } },
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -45,6 +41,16 @@ export async function POST(req: Request) {
     );
   }
 
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
+  }
+
   const { application: app, kind } = body;
 
   // post-offer is a candidate-facing reminder, not an email to the company.
@@ -58,11 +64,16 @@ Rules:
 - Never syrupy. Never "you've got this".`;
     const prompt = `Context:\n- Company: ${app.company}\n- Role: ${app.role}\n- Current status: ${app.status}\n- Notes: ${app.notes ?? "(none)"}\n\nWrite the self-reminder now.`;
     const result = streamText({
-      model: anthropic("claude-sonnet-4-6"),
+      model: resolved.model,
       system,
       prompt,
     });
-    return result.toTextStreamResponse();
+    return result.toTextStreamResponse({
+      headers: streamingUsageHeader({
+        feature: resolved.feature,
+        choice: resolved.choice,
+      }),
+    });
   }
 
   const system = `You write follow-up emails that sound like a thoughtful candidate wrote them. Not templates. Not LinkedIn-flavour spam.
@@ -92,10 +103,15 @@ Hard rules:
   const prompt = `Application context:\n${context}\n\nFollow-up kind: ${kind}\n\nWrite the follow-up email body now. Plain text only.`;
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: resolved.model,
     system,
     prompt,
   });
 
-  return result.toTextStreamResponse();
+  return result.toTextStreamResponse({
+    headers: streamingUsageHeader({
+      feature: resolved.feature,
+      choice: resolved.choice,
+    }),
+  });
 }

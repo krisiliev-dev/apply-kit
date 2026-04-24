@@ -1,8 +1,13 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { ApplyFitCheck, ParsedJob } from "@/lib/app/types";
 import type { CVContent, Profile } from "@/lib/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/apply-fit/check
 // Body: { parsedJob: ParsedJob; baseCV: CVContent; profile: Profile }
@@ -58,19 +63,10 @@ type Body = {
   parsedJob: ParsedJob;
   baseCV: CVContent;
   profile: Profile;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -83,6 +79,16 @@ export async function POST(req: Request) {
       { error: "Missing parsedJob, baseCV, or profile." },
       400,
     );
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const system = `You are a brutally honest career friend. The candidate is deciding whether THIS application is worth their limited energy. Tell them the weaknesses plainly, not the strengths-wrapped version. Don't encourage applying if they're a misaligned fit.
@@ -113,8 +119,8 @@ ${JSON.stringify(body.baseCV, null, 2)}
 Produce the structured ApplyFitCheck now.`;
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema,
       schemaName: "ApplyFitCheck",
       schemaDescription:
@@ -128,15 +134,15 @@ Produce the structured ApplyFitCheck now.`;
       generatedAt: Date.now(),
     };
 
-    return json({ fit });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error ? e.message : "Model failed to produce a fit check.",
-      },
-      500,
+    return jsonWithUsage(
+      { fit },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

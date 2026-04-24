@@ -1,7 +1,12 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText } from "ai";
 import type { ParsedJob, PreScreenTone } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  resolveForRoute,
+  respondProviderError,
+  streamingUsageHeader,
+} from "@/lib/ai/route";
 
 // POST /api/pre-screen/draft
 // Drafts answers to the short-answer questions that commonly appear on job
@@ -42,19 +47,10 @@ type Body = {
   baseCV: CVContent;
   parsedJob?: ParsedJob;
   tone?: PreScreenTone;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      }),
-      { status: 400, headers: { "content-type": "application/json" } },
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -65,6 +61,16 @@ export async function POST(req: Request) {
   if (!body?.baseCV) return jsonError("Missing `baseCV` in body.", 400);
   if (!Array.isArray(body.questions) || body.questions.length === 0) {
     return jsonError("Provide at least one question prompt.", 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const tone: PreScreenTone = body.tone ?? "direct";
@@ -138,12 +144,17 @@ TONE: ${tone} — ${TONE_GUIDANCE[tone]}`;
   );
 
   const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
+    model: resolved.model,
     system,
     prompt: userParts.join("\n"),
   });
 
-  return result.toTextStreamResponse();
+  return result.toTextStreamResponse({
+    headers: streamingUsageHeader({
+      feature: resolved.feature,
+      choice: resolved.choice,
+    }),
+  });
 }
 
 function formatJob(job: ParsedJob): string {

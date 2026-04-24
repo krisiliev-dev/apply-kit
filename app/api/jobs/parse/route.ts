@@ -1,7 +1,12 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import { fetchJobFromUrl } from "@/lib/jobs/fetch";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/jobs/parse
 // Body: { url?: string; text?: string }
@@ -25,21 +30,21 @@ const parsedJobSchema = z.object({
 });
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
-  let body: { url?: string; text?: string };
+  let body: { url?: string; text?: string; settings?: Settings };
   try {
     body = await req.json();
   } catch {
     return json({ error: "Invalid JSON body." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
   }
 
   const url = typeof body.url === "string" ? body.url.trim() : "";
@@ -66,8 +71,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: parsedJobSchema,
       schemaName: "ParsedJob",
       schemaDescription: "Structured extraction of a job posting.",
@@ -76,15 +81,19 @@ export async function POST(req: Request) {
       prompt: `Extract the job posting below.\n\n---\n${sourceText}\n---`,
     });
 
-    return json({ job: { ...object, sourceUrl } });
-  } catch (e) {
-    return json(
+    return jsonWithUsage(
+      { job: { ...object, sourceUrl } },
       {
-        error:
-          e instanceof Error ? e.message : "Model failed to return a parsed job.",
+        feature: resolved.feature,
+        choice: resolved.choice,
+        usage,
       },
-      500,
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

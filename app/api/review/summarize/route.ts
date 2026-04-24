@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import type {
   FunnelCounts,
@@ -8,6 +7,12 @@ import type {
   VariantPerformance,
   WeekBucket,
 } from "@/lib/app/analytics";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/review/summarize
 // Streams a concise 3-5 sentence diagnostic built from the aggregate numbers.
@@ -24,19 +29,10 @@ type Body = {
   variants: VariantPerformance[];
   stall: StallPattern;
   lessons: RecurringLesson[];
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -52,6 +48,16 @@ export async function POST(req: Request) {
     return json({
       summary:
         "No applications in the last 90 days to review. Log a few outcomes and come back — the patterns only appear with signal.",
+    });
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
     });
   }
 
@@ -89,22 +95,20 @@ ${lessonsBlock}
 Write the diagnostic now — 3 to 5 sentences, ending with one concrete adjustment.`;
 
   try {
-    const { text } = await generateText({
-      model: anthropic("claude-sonnet-4-6"),
+    const { text, usage } = await generateText({
+      model: resolved.model,
       system,
       prompt,
     });
-    return json({ summary: text.trim() });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Model failed to generate the review summary.",
-      },
-      500,
+    return jsonWithUsage(
+      { summary: text.trim() },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

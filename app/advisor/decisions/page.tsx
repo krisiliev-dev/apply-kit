@@ -14,6 +14,7 @@ import {
 import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // /advisor/decisions — three focused helpers in one page with tabs.
 // Structured form per kind + optional free-form context → POST to
@@ -190,7 +191,7 @@ function KindForm<T extends DecisionInput>({
     setError(null);
     try {
       const input: DecisionInput = { ...state, context: ctx || undefined } as DecisionInput;
-      const res = await fetch("/api/advisor/decisions", {
+      const res = await trackedFetch("/api/advisor/decisions", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ kind, input, profile, cvVariants: cvList }),

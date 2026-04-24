@@ -1,4 +1,3 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type {
@@ -8,6 +7,12 @@ import type {
 } from "@/lib/advisor/types";
 import type { CVContent } from "@/lib/types";
 import type { Application } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/advisor/decisions
 //
@@ -75,19 +80,10 @@ type Body = {
   profile?: CVContent["profile"];
   cvVariants?: CVContent[];
   application?: Application;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -106,9 +102,19 @@ export async function POST(req: Request) {
     );
   }
 
+  let resolved;
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    resolved = resolveForRoute("default", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "default",
+      settings: body.settings,
+    });
+  }
+
+  try {
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: decisionSchema,
       schemaName: "DecisionAnalysis",
       schemaDescription:
@@ -128,17 +134,15 @@ export async function POST(req: Request) {
       confidence: object.confidence,
       generatedAt: Date.now(),
     };
-    return json({ decision });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Model failed to generate decision analysis.",
-      },
-      500,
+    return jsonWithUsage(
+      { decision },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

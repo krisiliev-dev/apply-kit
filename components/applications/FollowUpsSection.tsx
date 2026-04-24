@@ -15,6 +15,7 @@ import {
 import { FOLLOWUP_KIND_LABEL } from "@/lib/app/followupCadence";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // FollowUpsSection — appears on the application detail page.
 // Lists every follow-up for this application (pending, snoozed, sent, skipped).
@@ -157,7 +158,7 @@ function FollowUpRow({
     setError(null);
     setStreamed("");
     try {
-      const res = await fetch("/api/follow-up/draft", {
+      const res = await trackedFetch("/api/follow-up/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

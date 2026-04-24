@@ -1,8 +1,13 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { StrategicProfile } from "@/lib/advisor/types";
 import type { CVContent } from "@/lib/types";
+import type { Settings } from "@/lib/settings/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+} from "@/lib/ai/route";
 
 // POST /api/advisor/ceiling
 //
@@ -68,19 +73,10 @@ type Body = {
   profile: CVContent["profile"];
   cvVariants: CVContent[];
   roles: RoleInput[];
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -90,6 +86,16 @@ export async function POST(req: Request) {
 
   if (!body?.profile || !Array.isArray(body?.cvVariants)) {
     return json({ error: "Missing `profile` or `cvVariants` in body." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("narrative", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "narrative",
+      settings: body.settings,
+    });
   }
 
   const roles = Array.isArray(body.roles) ? body.roles.slice(0, 40) : [];
@@ -114,8 +120,8 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+    const { object, usage } = await generateObject({
+      model: resolved.model,
       schema: responseSchema,
       schemaName: "StrategicProfile",
       schemaDescription:
@@ -131,17 +137,15 @@ export async function POST(req: Request) {
       classifications: object.classifications,
       generatedAt: now,
     };
-    return json({ strategic });
-  } catch (e) {
-    return json(
-      {
-        error:
-          e instanceof Error
-            ? e.message
-            : "Model failed to classify roles.",
-      },
-      500,
+    return jsonWithUsage(
+      { strategic },
+      { feature: resolved.feature, choice: resolved.choice, usage },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 

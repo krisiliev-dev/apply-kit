@@ -1,11 +1,14 @@
 import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
 import {
   DEFAULT_MAX_ITERATIONS,
   DEFAULT_TARGET_SCORE,
   refineCv,
   type RefineProgressUpdate,
 } from "@/lib/evaluation/refine";
+import { describeChoice } from "@/lib/ai/provider";
+import { streamingUsageHeader } from "@/lib/ai/route";
 
 // POST /api/cv-evaluate/refine
 //
@@ -32,6 +35,7 @@ type Body = {
   parsedJob?: ParsedJob;
   maxIterations?: number;
   targetScore?: number;
+  settings?: Settings;
 };
 
 export async function POST(req: Request): Promise<Response> {
@@ -94,6 +98,7 @@ export async function POST(req: Request): Promise<Response> {
           {
             doc: body.doc,
             job: body.parsedJob ?? null,
+            settings: body.settings,
             maxIterations,
             targetScore,
           },
@@ -131,11 +136,13 @@ export async function POST(req: Request): Promise<Response> {
     },
   });
 
+  const choice = describeChoice("draft", body.settings);
   return new Response(stream, {
     status: 200,
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
       "cache-control": "no-store",
+      ...streamingUsageHeader({ feature: "draft", choice }),
     },
   });
 }

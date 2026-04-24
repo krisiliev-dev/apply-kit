@@ -11,6 +11,7 @@ import {
 } from "next/font/google";
 import "./globals.css";
 import { AutoBackupLoop } from "@/components/backup/AutoBackupLoop";
+import { CostPill } from "@/components/ai/CostPill";
 
 // Curated font set. Adding new ones: register here, then add an entry to
 // lib/fonts.ts. Keep the list small — every font is a network cost and a
@@ -74,6 +75,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={fontVars}>
         {children}
         <AutoBackupLoop />
+        <CostPill />
       </body>
     </html>
   );

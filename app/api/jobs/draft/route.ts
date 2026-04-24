@@ -1,8 +1,8 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { ParsedJob } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
+import type { Settings } from "@/lib/settings/types";
 import {
   DEFAULT_BULLET_CHAR_CAP,
   evaluateDraftKeywords,
@@ -16,6 +16,12 @@ import {
   type RefineProgressUpdate,
 } from "@/lib/evaluation/refine";
 import type { CvEvaluation } from "@/lib/evaluation/types";
+import {
+  jsonWithUsage,
+  resolveForRoute,
+  respondProviderError,
+  streamingUsageHeader,
+} from "@/lib/ai/route";
 
 // POST /api/jobs/draft
 //
@@ -116,19 +122,10 @@ type Body = {
   /** Overrides for the refine loop. */
   maxRefineIterations?: number;
   targetScore?: number;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return json(
-      {
-        error:
-          "ANTHROPIC_API_KEY missing. Add it to .env.local and restart the dev server.",
-      },
-      400,
-    );
-  }
-
   let body: Body;
   try {
     body = (await req.json()) as Body;
@@ -138,6 +135,16 @@ export async function POST(req: Request) {
 
   if (!body?.job || !body?.baseCv) {
     return json({ error: "Missing `job` or `baseCv` in body." }, 400);
+  }
+
+  let resolved;
+  try {
+    resolved = resolveForRoute("draft", body);
+  } catch (err) {
+    return respondProviderError(err, {
+      feature: "draft",
+      settings: body.settings,
+    });
   }
 
   const maxBullets = clamp(
@@ -153,11 +160,11 @@ export async function POST(req: Request) {
   );
 
   if (wantsStream) {
-    return streamingResponse(body, maxBullets);
+    return streamingResponse(body, maxBullets, resolved);
   }
 
   try {
-    const { object: tailored } = await draftTailored(body, maxBullets);
+    const { object: tailored, usage } = await draftTailored(body, maxBullets, resolved.model);
     const draftEval = evaluateDraftKeywords({
       draft: toCVContent(tailored, body.baseCv),
       baseCv: body.baseCv,
@@ -178,6 +185,7 @@ export async function POST(req: Request) {
       const result = await refineCv({
         doc: seeded,
         job: body.job,
+        settings: body.settings,
         maxIterations: clamp(
           body.maxRefineIterations ?? DEFAULT_MAX_ITERATIONS,
           1,
@@ -197,29 +205,34 @@ export async function POST(req: Request) {
       refinedCv = foldBackTextEdits(tailored, result.best.doc);
     }
 
-    return json({
-      cv: refinedCv,
-      eval: draftEval,
-      evaluation,
-      iterations,
-    });
-  } catch (e) {
-    return json(
+    return jsonWithUsage(
       {
-        error:
-          e instanceof Error ? e.message : "Model failed to draft a tailored CV.",
+        cv: refinedCv,
+        eval: draftEval,
+        evaluation,
+        iterations,
       },
-      500,
+      {
+        feature: resolved.feature,
+        choice: resolved.choice,
+        usage,
+      },
     );
+  } catch (e) {
+    return respondProviderError(e, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+    });
   }
 }
 
 async function draftTailored(
   body: Body,
   maxBullets: number,
-): Promise<{ object: TailoredCv }> {
+  model: ReturnType<typeof resolveForRoute>["model"],
+) {
   return generateObject({
-    model: anthropic("claude-sonnet-4-6"),
+    model,
     schema: tailoredCvSchema,
     schemaName: "TailoredCV",
     schemaDescription: "A tailored CV variant for a specific job posting.",
@@ -233,7 +246,11 @@ async function draftTailored(
 // progress ("iteration 2/3: fixing parseability…").
 // ————————————————————————————————————————————————
 
-function streamingResponse(body: Body, maxBullets: number): Response {
+function streamingResponse(
+  body: Body,
+  maxBullets: number,
+  resolved: ReturnType<typeof resolveForRoute>,
+): Response {
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -247,7 +264,7 @@ function streamingResponse(body: Body, maxBullets: number): Response {
 
       try {
         write({ type: "stage", stage: "drafting", message: "Drafting tailored CV…" });
-        const { object: tailored } = await draftTailored(body, maxBullets);
+        const { object: tailored } = await draftTailored(body, maxBullets, resolved.model);
         const draftEval = evaluateDraftKeywords({
           draft: toCVContent(tailored, body.baseCv),
           baseCv: body.baseCv,
@@ -296,6 +313,7 @@ function streamingResponse(body: Body, maxBullets: number): Response {
           {
             doc: seeded,
             job: body.job,
+            settings: body.settings,
             maxIterations: clamp(
               body.maxRefineIterations ?? DEFAULT_MAX_ITERATIONS,
               1,
@@ -339,6 +357,10 @@ function streamingResponse(body: Body, maxBullets: number): Response {
     headers: {
       "content-type": "application/x-ndjson; charset=utf-8",
       "cache-control": "no-store",
+      ...streamingUsageHeader({
+        feature: resolved.feature,
+        choice: resolved.choice,
+      }),
     },
   });
 }

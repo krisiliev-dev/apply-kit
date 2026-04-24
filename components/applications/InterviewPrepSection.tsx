@@ -14,6 +14,7 @@ import { cvs } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 // Interview prep — visible when the application has reached screen/interview/offer.
 // - Optional company-notes paste block feeds richer generation.
@@ -82,7 +83,7 @@ export function InterviewPrepSection({ app }: { app: Application }) {
     setError(null);
     try {
       const baseCV = resolveBaseCV(app.cvSlug);
-      const res = await fetch("/api/interview/generate", {
+      const res = await trackedFetch("/api/interview/generate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

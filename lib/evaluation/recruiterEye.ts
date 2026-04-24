@@ -1,10 +1,11 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateObject } from "ai";
 import { z } from "zod";
 import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
 import type { RecruiterReport } from "./types";
 import { extractPlainText } from "./extractText";
+import { ProviderConfigError, resolveModel } from "@/lib/ai/provider";
 
 // ————————————————————————————————————————————————
 // Layer 3 — Recruiter-eye LLM pass.
@@ -80,8 +81,16 @@ Do not pad. If there are fewer than 6 issues, return fewer. Do not be nice.`;
 export async function recruiterEyePass(
   doc: CvDocument,
   job: ParsedJob | null,
+  settings?: Settings,
 ): Promise<RecruiterReport> {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  let model;
+  try {
+    model = resolveModel("evaluator", settings);
+  } catch (err) {
+    const reason =
+      err instanceof ProviderConfigError
+        ? err.message
+        : "AI provider not configured — recruiter-eye pass skipped.";
     return {
       strongestSignal: "",
       biggestWeakness: "",
@@ -89,8 +98,7 @@ export async function recruiterEyePass(
       flaggedIssues: [],
       interviewOdds: "Mid",
       unavailable: true,
-      unavailableReason:
-        "ANTHROPIC_API_KEY not set — recruiter-eye pass skipped.",
+      unavailableReason: reason,
     };
   }
 
@@ -99,7 +107,7 @@ export async function recruiterEyePass(
 
   try {
     const { object } = await generateObject({
-      model: anthropic("claude-sonnet-4-6"),
+      model,
       schema: recruiterSchema,
       schemaName: "RecruiterReport",
       schemaDescription: "A senior recruiter's 15-second triage of a CV.",

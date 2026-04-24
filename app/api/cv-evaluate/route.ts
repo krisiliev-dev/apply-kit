@@ -1,5 +1,6 @@
 import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
+import type { Settings } from "@/lib/settings/types";
 import { evaluateCv } from "@/lib/evaluation/evaluate";
 
 // POST /api/cv-evaluate
@@ -15,6 +16,7 @@ export const maxDuration = 120;
 type Body = {
   doc: CvDocument;
   parsedJob?: ParsedJob;
+  settings?: Settings;
 };
 
 export async function POST(req: Request) {
@@ -33,6 +35,7 @@ export async function POST(req: Request) {
     const evaluation = await evaluateCv({
       doc: body.doc,
       job: body.parsedJob ?? null,
+      settings: body.settings,
     });
     return json(evaluation);
   } catch (err) {

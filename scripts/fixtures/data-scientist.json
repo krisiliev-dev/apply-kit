@@ -1,0 +1,14 @@
+{
+  "id": "data-scientist",
+  "description": "Data Scientist (Growth) at Quillion\n\nQuillion is a reading subscription service (180k paying subscribers, growing ~14% QoQ). We're hiring our second data scientist, focused on growth — acquisition, activation, retention.\n\nScope\n- Own the retention model. Our current version is a logistic regression from 2023 that does not merit the name 'model'. Rebuild it.\n- Run the weekly cohort review with the growth team. Not a dashboard — a narrative.\n- Set up the experimentation framework. Today PMs copy a template Google Doc. That's not a system.\n- Partner with the data engineer on warehouse cleanup. Yes, there's tech debt.\n\nWhat we care about\n- 4+ years doing data science at a consumer subscription product.\n- Python, SQL, pandas, one of scikit-learn / PyTorch / statsmodels.\n- You can tell us a story about an experiment that changed a decision. The number on the dashboard is not the story.\n- Strong writing. We're suspicious of data scientists who can't write.\n\nNice extras\n- Experience with causal inference techniques (DiD, synthetic control).\n- Prior work at a subscription or media company.",
+  "expectedKeywords": [
+    "Python",
+    "SQL",
+    "retention",
+    "cohorts",
+    "experimentation",
+    "causal inference",
+    "growth",
+    "A/B testing"
+  ]
+}
