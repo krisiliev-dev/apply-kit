@@ -14,6 +14,14 @@ import {
   type VariantPerformance,
   type WeekBucket,
 } from "@/lib/app/analytics";
+import {
+  BURN_LABEL,
+  computeEffortBudget,
+  loadTargetCapacity,
+  saveTargetCapacity,
+  type EffortBudget,
+} from "@/lib/app/effortBudget";
+import type { Application } from "@/lib/app/types";
 
 export default function ReviewPage() {
   const { applications, loaded, load } = useApplications();
@@ -62,7 +70,7 @@ export default function ReviewPage() {
       ) : !snapshot || snapshot.funnel.total === 0 ? (
         <EmptyState />
       ) : (
-        <ReviewBody snapshot={snapshot} />
+        <ReviewBody snapshot={snapshot} applications={applications} />
       )}
     </main>
   );
@@ -87,10 +95,17 @@ function EmptyState() {
   );
 }
 
-function ReviewBody({ snapshot }: { snapshot: ReviewSnapshot }) {
+function ReviewBody({
+  snapshot,
+  applications,
+}: {
+  snapshot: ReviewSnapshot;
+  applications: Application[];
+}) {
   return (
     <div className="space-y-16">
       <AISummarySection snapshot={snapshot} />
+      <EffortBudgetSection applications={applications} />
       <FunnelSection funnel={snapshot.funnel} />
       <WeeklySection weekly={snapshot.weekly} />
       <HistogramSection histogram={snapshot.histogram} />
@@ -98,6 +113,101 @@ function ReviewBody({ snapshot }: { snapshot: ReviewSnapshot }) {
       <StallSection stall={snapshot.stall} />
       <LessonsSection lessons={snapshot.lessons} />
     </div>
+  );
+}
+
+// ———————————————————————————————————————————————
+// Effort budget
+// ———————————————————————————————————————————————
+
+function EffortBudgetSection({ applications }: { applications: Application[] }) {
+  const [target, setTarget] = useState<number>(20);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    setTarget(loadTargetCapacity());
+    setLoaded(true);
+  }, []);
+
+  const effort: EffortBudget = useMemo(
+    () => computeEffortBudget(applications, { targetCapacity: target }),
+    [applications, target],
+  );
+
+  const onChangeTarget = useCallback((n: number) => {
+    const clamped = Math.max(1, Math.min(200, Math.round(n)));
+    setTarget(clamped);
+    saveTargetCapacity(clamped);
+  }, []);
+
+  if (!loaded) {
+    return (
+      <section>
+        <SectionHeading>Effort budget · last 30 days</SectionHeading>
+        <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/40">
+          …
+        </p>
+      </section>
+    );
+  }
+
+  const metrics: Array<{ label: string; value: string; dim?: boolean }> = [
+    {
+      label: "Applied",
+      value: String(effort.appliedInWindow),
+    },
+    { label: "Target", value: String(effort.targetCapacity), dim: true },
+    {
+      label: "Tailored",
+      value: `${Math.round(effort.qualityRatio * 100)}%`,
+    },
+    {
+      label: "Non-auto-rejected",
+      value: `${Math.round(effort.responseRate * 100)}%`,
+    },
+    {
+      label: "Burn rate",
+      value: BURN_LABEL[effort.burnRate],
+    },
+  ];
+
+  return (
+    <section>
+      <SectionHeading>Effort budget · last 30 days</SectionHeading>
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-5">
+        {metrics.map((m) => (
+          <div key={m.label}>
+            <div className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50 mb-1">
+              {m.label}
+            </div>
+            <div
+              className={`font-display text-3xl ${m.dim ? "text-ink/40" : "text-ink"}`}
+            >
+              {m.value}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="border-l-2 border-accent/50 pl-3 text-sm text-ink/85 leading-snug mb-4">
+        {effort.guidance}
+      </p>
+      <div className="flex items-center gap-3 flex-wrap">
+        <label className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50">
+          Target capacity
+        </label>
+        <input
+          type="number"
+          min={1}
+          max={200}
+          value={target}
+          onChange={(e) => onChangeTarget(Number(e.target.value) || 1)}
+          className="font-mono bg-transparent border border-ink/15 focus:border-ink/60 focus:outline-none px-2 py-1 w-20"
+        />
+        <span className="font-mono text-[11px] text-ink/50">
+          high-quality applications / 30 days
+        </span>
+      </div>
+    </section>
   );
 }
 

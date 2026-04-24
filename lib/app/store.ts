@@ -5,14 +5,18 @@ import type {
   Application,
   ApplicationEvent,
   ApplicationStatus,
+  ApplyFitCheck,
   CoverLetter,
+  OfferRecord,
   RejectionSignal,
   InterviewPrep,
   InterviewQuestion,
   PreScreen,
   PreScreenQuestion,
+  SalaryAnalysis,
 } from "./types";
 import { loadAllFromStorage, saveAllToStorage } from "./persist";
+import { autoStageFollowUpsForStatus } from "./followupCadence";
 
 // ———————————————————————————————————————————————
 // Store shape
@@ -62,6 +66,12 @@ type Actions = {
     questionId: string,
     patch: Partial<Omit<PreScreenQuestion, "id">>,
   ) => void;
+  /** Attach (or replace) the offer details for an application. */
+  setOffer: (id: string, offer: OfferRecord | undefined) => void;
+  /** Attach (or replace) the salary analysis for an application. */
+  setSalaryAnalysis: (id: string, analysis: SalaryAnalysis | undefined) => void;
+  /** Attach (or replace) the apply-fit check on an application. */
+  setApplyFit: (id: string, fit: ApplyFitCheck | undefined) => void;
 };
 
 export type AppStore = AppState & Actions;
@@ -108,9 +118,12 @@ const creator: StateCreator<AppStore> = (set, get) => ({
 
   updateStatus: (id, nextStatus, note) => {
     const { applications } = get();
+    let changedApp: Application | undefined;
+    let prevStatus: ApplicationStatus | undefined;
     const next = applications.map((a) => {
       if (a.id !== id) return a;
       if (a.status === nextStatus) return a;
+      prevStatus = a.status;
       const event: ApplicationEvent = {
         at: Date.now(),
         kind: "status-change",
@@ -118,14 +131,21 @@ const creator: StateCreator<AppStore> = (set, get) => ({
         to: nextStatus,
         note,
       };
-      return {
+      const updated: Application = {
         ...a,
         status: nextStatus,
         events: [...(a.events ?? []), event],
       };
+      changedApp = updated;
+      return updated;
     });
     persist(next);
     set({ applications: next });
+    // Side effect: stage any follow-ups that the new status implies. Done
+    // outside the map so we don't block the state transition if storage fails.
+    if (changedApp) {
+      autoStageFollowUpsForStatus(changedApp, prevStatus, nextStatus);
+    }
   },
 
   remove: (id) => {
@@ -244,6 +264,30 @@ const creator: StateCreator<AppStore> = (set, get) => ({
       );
       return { ...a, preScreen: { ...a.preScreen, questions } };
     });
+    persist(next);
+    set({ applications: next });
+  },
+
+  setOffer: (id, offer) => {
+    const next = get().applications.map((a) =>
+      a.id === id ? { ...a, offer } : a,
+    );
+    persist(next);
+    set({ applications: next });
+  },
+
+  setSalaryAnalysis: (id, analysis) => {
+    const next = get().applications.map((a) =>
+      a.id === id ? { ...a, salaryAnalysis: analysis } : a,
+    );
+    persist(next);
+    set({ applications: next });
+  },
+
+  setApplyFit: (id, fit) => {
+    const next = get().applications.map((a) =>
+      a.id === id ? { ...a, applyFit: fit } : a,
+    );
     persist(next);
     set({ applications: next });
   },
