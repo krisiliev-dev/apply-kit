@@ -7,10 +7,11 @@ import { Canvas } from "./Canvas";
 import { AlignBar } from "./AlignBar";
 import { Inspector } from "./Inspector";
 import { ChatPanel } from "./ChatPanel";
+import { EvalPanel } from "./EvalPanel";
 import { useEditorShortcuts } from "./useEditorShortcuts";
 import { usePersist } from "./usePersist";
 
-type RightTab = "inspector" | "chat";
+type RightTab = "inspector" | "chat" | "eval";
 
 // Editor root. Four-region layout:
 //   ┌───────────────────────────────┐
@@ -49,9 +50,18 @@ export function Editor({ slug }: { slug: string }) {
             <TabBtn active={tab === "chat"} onClick={() => setTab("chat")}>
               Chat
             </TabBtn>
+            <TabBtn active={tab === "eval"} onClick={() => setTab("eval")}>
+              Eval
+            </TabBtn>
           </div>
           <div className="flex-1 min-h-0">
-            {tab === "inspector" ? <Inspector /> : <ChatPanel />}
+            {tab === "inspector" ? (
+              <Inspector />
+            ) : tab === "chat" ? (
+              <ChatPanel />
+            ) : (
+              <EvalPanel slug={slug} />
+            )}
           </div>
         </div>
       </div>

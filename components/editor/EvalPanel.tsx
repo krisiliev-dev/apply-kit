@@ -15,19 +15,24 @@ import {
 } from "@/lib/evaluation/history";
 import { diffDocuments, type DocDiff } from "@/lib/evaluation/diff";
 import { computeParserCoverage } from "@/lib/evaluation/locate";
+import { SixSecondCard } from "./SixSecondCard";
+import { NumberInspectorPanel } from "./NumberInspectorPanel";
 
 // ————————————————————————————————————————————————
 // Eval panel — right-pane tab for CV evaluation.
 //
-// Three modes:
-//   idle      — shows last eval (if any), current sparkline, a big "Evaluate"
-//               button and an "Evaluate + improve" button.
-//   running   — live progress indicator with iteration/stage messages.
-//   done      — layered scorecard, flat warning list, layer-by-layer
-//               breakdown, parser heatmap toggle, before/after diff.
+// Modes:
+//   idle      — shows last eval, big "Evaluate" + "Evaluate + improve".
+//   running   — live progress with iteration/stage messages.
+//   done      — layered scorecard, flat warning list, layer cards (including
+//               the new 6-second and number-inspector surfaces), parser view
+//               toggle, before/after diff.
 //
-// Scores are streamed in via the /api/cv-evaluate/refine NDJSON endpoint so
-// the UI can show "iteration 2/3: fixing parseability…" as it happens.
+// Scores stream in via /api/cv-evaluate/refine NDJSON so the UI can show
+// "iteration 2/3: fixing parseability…" as it happens.
+//
+// The number-inspector runs independently in its own panel — it doesn't need
+// a server round-trip and surfaces results live on every keystroke.
 // ————————————————————————————————————————————————
 
 type Mode = "idle" | "running" | "done";
@@ -44,16 +49,10 @@ type IterationSummary = {
   warningCount: number;
 };
 
-export function EvalPanel({
-  slug,
-  showParserOverlay,
-  onToggleParserOverlay,
-}: {
-  slug: string;
-  showParserOverlay: boolean;
-  onToggleParserOverlay: (v: boolean) => void;
-}) {
+export function EvalPanel({ slug }: { slug: string }) {
   const doc = useEditor((s) => s.doc);
+  const showParserOverlay = useEditor((s) => s.showParserOverlay);
+  const setShowParserOverlay = useEditor((s) => s.setShowParserOverlay);
 
   const [mode, setMode] = useState<Mode>("idle");
   const [evaluation, setEvaluation] = useState<CvEvaluation | null>(null);
@@ -72,13 +71,15 @@ export function EvalPanel({
     setHistory(readHistory(slug));
   }, [slug]);
 
+  // Derived — coverage map for the current doc against the last evaluation.
+  // Pushed out as two window events: one for the legacy coverage consumers,
+  // one carrying the full evaluation so ParserOverlay can read warnings too.
   const currentParserCoverage = useMemo(() => {
     if (!evaluation?.parseability.extracted) return null;
     return computeParserCoverage(doc, evaluation.parseability.extracted);
   }, [doc, evaluation]);
 
   useEffect(() => {
-    // Push parser coverage to the overlay host via window event.
     if (typeof window === "undefined") return;
     window.dispatchEvent(
       new CustomEvent("cv-eval:coverage", {
@@ -92,6 +93,13 @@ export function EvalPanel({
       }),
     );
   }, [currentParserCoverage]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.dispatchEvent(
+      new CustomEvent("cv-eval:result", { detail: evaluation }),
+    );
+  }, [evaluation]);
 
   const runEvaluate = useCallback(
     async ({ refine }: { refine: boolean }) => {
@@ -204,7 +212,12 @@ export function EvalPanel({
 
   const diff = useMemo<DocDiff | null>(() => {
     if (!docBefore || !docAfter) return null;
-    return diffDocuments(docBefore, docAfter, evalBefore ?? undefined, evaluation ?? undefined);
+    return diffDocuments(
+      docBefore,
+      docAfter,
+      evalBefore ?? undefined,
+      evaluation ?? undefined,
+    );
   }, [docBefore, docAfter, evalBefore, evaluation]);
 
   return (
@@ -229,7 +242,7 @@ export function EvalPanel({
             className="editor-btn flex-1"
             disabled={mode === "running"}
             onClick={() => runEvaluate({ refine: true })}
-            title="Run all three layers and iteratively refine up to 3 times"
+            title="Run all layers and iteratively refine up to 3 times"
           >
             Evaluate + improve
           </button>
@@ -240,30 +253,31 @@ export function EvalPanel({
           )}
         </div>
 
-        {evaluation && mode !== "running" && (
-          <div className="flex items-center gap-2 text-[11px] font-mono">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={showParserOverlay}
-                onChange={(e) => onToggleParserOverlay(e.target.checked)}
-              />
-              <span>Show parser view</span>
-            </label>
-          </div>
-        )}
+        <div className="flex items-center gap-2 text-[11px] font-mono">
+          <button
+            type="button"
+            className="editor-btn"
+            onClick={() => setShowParserOverlay(!showParserOverlay)}
+            aria-pressed={showParserOverlay}
+            style={{
+              background: showParserOverlay
+                ? "rgba(78,193,109,0.15)"
+                : undefined,
+            }}
+          >
+            Parser view {showParserOverlay ? "on" : "off"}
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto px-3 py-3 space-y-4">
-        {mode === "idle" && !evaluation && (
-          <EmptyState history={history} />
-        )}
+        {/* Always-on — runs on every doc change, no API call. */}
+        <NumberInspectorPanel />
+
+        {mode === "idle" && !evaluation && <EmptyState history={history} />}
 
         {mode === "running" && (
-          <RunningState
-            progress={progress}
-            iterations={iterationSummaries}
-          />
+          <RunningState progress={progress} iterations={iterationSummaries} />
         )}
 
         {error && (
@@ -282,6 +296,9 @@ export function EvalPanel({
           <>
             <ScoreBlock evaluation={evaluation} history={history} />
             <LayerBlock evaluation={evaluation} />
+            {evaluation.sixSecond && (
+              <SixSecondCard report={evaluation.sixSecond} />
+            )}
             <RecruiterBlock recruiter={evaluation.recruiter} />
             <WarningsBlock warnings={evaluation.warnings} />
             {iterationSummaries.length > 1 && (
@@ -298,7 +315,7 @@ export function EvalPanel({
 }
 
 // ————————————————————————————————————————————————
-// Frame handling for NDJSON stream
+// NDJSON frame handling
 // ————————————————————————————————————————————————
 
 type FrameHandlers = {
@@ -377,8 +394,9 @@ function EmptyState({ history }: { history: HistoryEntry[] }) {
     <div className="space-y-3">
       <p className="font-mono text-[11px] text-[var(--color-editor-text-dim)] leading-relaxed">
         Run the evaluator to render your CV to PDF, push it through Affinda
-        (ATS parser), check keyword alignment, and get a senior-recruiter
-        skim. Then let the loop iteratively fix what it finds.
+        (ATS parser), run a recruiter-eye skim, and (when Affinda is wired up)
+        a 6-second glance test. Then let the loop iteratively fix what it
+        finds.
       </p>
       {history.length > 0 && <HistorySparkline history={history} />}
     </div>
@@ -555,6 +573,26 @@ function LayerBlock({ evaluation }: { evaluation: CvEvaluation }) {
             : `odds: ${evaluation.recruiter.interviewOdds}`
         }
       />
+      {evaluation.sixSecond && (
+        <LayerRow
+          label="6-second"
+          score={evaluation.sixSecond.scannabilityScore}
+          detail={
+            evaluation.sixSecond.unavailable
+              ? "unavailable"
+              : `${evaluation.sixSecond.misreadings.length} misread${
+                  evaluation.sixSecond.misreadings.length === 1 ? "" : "s"
+                }`
+          }
+        />
+      )}
+      {evaluation.numbers && (
+        <LayerRow
+          label="Numbers"
+          score={evaluation.numbers.score}
+          detail={`${evaluation.numbers.bulletsWithMetrics}/${evaluation.numbers.totalBullets} bullets with metric`}
+        />
+      )}
     </section>
   );
 }
@@ -707,9 +745,7 @@ function WarningsBlock({ warnings }: { warnings: EvalWarning[] }) {
 
 function highlightTargets(ids: string[]): void {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent("cv-eval:highlight", { detail: ids }),
-  );
+  window.dispatchEvent(new CustomEvent("cv-eval:highlight", { detail: ids }));
 }
 
 function IterationTrace({ iterations }: { iterations: IterationSummary[] }) {
@@ -732,7 +768,8 @@ function IterationTrace({ iterations }: { iterations: IterationSummary[] }) {
                 <span
                   className="tabular-nums"
                   style={{
-                    color: delta > 0 ? "#4ec16d" : delta < 0 ? "#d64933" : undefined,
+                    color:
+                      delta > 0 ? "#4ec16d" : delta < 0 ? "#d64933" : undefined,
                   }}
                 >
                   ({delta > 0 ? "+" : ""}
