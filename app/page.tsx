@@ -2,10 +2,12 @@ import Link from "next/link";
 import { cvList } from "@/content/cvs";
 import { DemoControls, DemoHint } from "@/components/home/DemoControls";
 import { CapturedPill } from "@/components/pair/CapturedPill";
+import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 
 export default function Home() {
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+      <OnboardingOverlay />
       <header className="mb-12">
         <div className="flex items-baseline justify-between gap-4">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
@@ -27,6 +29,9 @@ export default function Home() {
               </Link>
               <Link href="/pair" className="hover:text-ink">
                 Pair
+              </Link>
+              <Link href="/settings" className="hover:text-ink">
+                Settings
               </Link>
             </nav>
           </div>
