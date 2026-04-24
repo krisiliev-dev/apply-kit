@@ -8,7 +8,7 @@ import {
   type RefineProgressUpdate,
 } from "@/lib/evaluation/refine";
 import { describeChoice } from "@/lib/ai/provider";
-import { streamingUsageHeader } from "@/lib/ai/route";
+import { buildNdjsonUsageFrame, streamingUsageHeader } from "@/lib/ai/route";
 
 // POST /api/cv-evaluate/refine
 //
@@ -64,6 +64,7 @@ export async function POST(req: Request): Promise<Response> {
   const targetScore = clamp(body.targetScore ?? DEFAULT_TARGET_SCORE, 50, 100);
 
   const encoder = new TextEncoder();
+  const choice = describeChoice("draft", body.settings);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
@@ -128,6 +129,25 @@ export async function POST(req: Request): Promise<Response> {
         });
       } finally {
         try {
+          // Final usage frame for the client ledger. The internal refine
+          // loop runs many `generateObject` calls whose individual usage
+          // isn't currently aggregated here; we emit an envelope that
+          // identifies feature/provider/model so the ledger at least
+          // records the session. When `lib/evaluation/refine.ts` returns
+          // aggregate usage, plumb it into `usage` here.
+          controller.enqueue(
+            encoder.encode(
+              buildNdjsonUsageFrame({
+                feature: "draft",
+                choice,
+                usage: null,
+              }) + "\n",
+            ),
+          );
+        } catch {
+          // never block stream closure on ledger bookkeeping
+        }
+        try {
           controller.close();
         } catch {
           // ignore
@@ -136,7 +156,6 @@ export async function POST(req: Request): Promise<Response> {
     },
   });
 
-  const choice = describeChoice("draft", body.settings);
   return new Response(stream, {
     status: 200,
     headers: {

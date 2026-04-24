@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, type LanguageModelUsage } from "ai";
 import type { Application, FollowUpKind } from "@/lib/app/types";
 import { FOLLOWUP_KIND_TONE } from "@/lib/app/followupCadence";
 import { profile as baseProfile } from "@/content/profile";
@@ -7,6 +7,7 @@ import {
   resolveForRoute,
   respondProviderError,
   streamingUsageHeader,
+  withStreamUsageSentinel,
 } from "@/lib/ai/route";
 
 // POST /api/follow-up/draft
@@ -63,16 +64,25 @@ Rules:
 - State the deadline context, one clarifying question the candidate should answer, and one action.
 - Never syrupy. Never "you've got this".`;
     const prompt = `Context:\n- Company: ${app.company}\n- Role: ${app.role}\n- Current status: ${app.status}\n- Notes: ${app.notes ?? "(none)"}\n\nWrite the self-reminder now.`;
+    let reminderUsage: LanguageModelUsage | null = null;
     const result = streamText({
       model: resolved.model,
       system,
       prompt,
+      onFinish({ usage }) {
+        reminderUsage = usage;
+      },
     });
-    return result.toTextStreamResponse({
+    const reminderStream = result.toTextStreamResponse({
       headers: streamingUsageHeader({
         feature: resolved.feature,
         choice: resolved.choice,
       }),
+    });
+    return withStreamUsageSentinel(reminderStream, {
+      feature: resolved.feature,
+      choice: resolved.choice,
+      getUsage: () => reminderUsage,
     });
   }
 
@@ -102,16 +112,27 @@ Hard rules:
 
   const prompt = `Application context:\n${context}\n\nFollow-up kind: ${kind}\n\nWrite the follow-up email body now. Plain text only.`;
 
+  let finalUsage: LanguageModelUsage | null = null;
+
   const result = streamText({
     model: resolved.model,
     system,
     prompt,
+    onFinish({ usage }) {
+      finalUsage = usage;
+    },
   });
 
-  return result.toTextStreamResponse({
+  const textStream = result.toTextStreamResponse({
     headers: streamingUsageHeader({
       feature: resolved.feature,
       choice: resolved.choice,
     }),
+  });
+
+  return withStreamUsageSentinel(textStream, {
+    feature: resolved.feature,
+    choice: resolved.choice,
+    getUsage: () => finalUsage,
   });
 }

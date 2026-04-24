@@ -95,3 +95,76 @@ export function withUsageHeader(res: Response, env: UsageEnvelope): Response {
     headers,
   });
 }
+
+// ————————————————————————————————————————————————
+// Stream-end sentinel marker.
+//
+// The `x-cv-usage` header is sent before token counts are final for streams.
+// To fix that, streaming routes append a trailing marker INSIDE the body once
+// `streamText`'s `onFinish` resolves. The marker uses zero-width-space
+// delimiters so it never shows up in normal prose output and is easy to scan
+// for on the client without accidentally matching user-visible text.
+//
+// Format: `​​cv-usage:<base64-json>​​`
+//
+// NDJSON streams use their own line-oriented protocol and emit
+// `{"__cvUsage":<envelope>}` on a dedicated line instead — callers should
+// parse that as a normal NDJSON frame before falling through to sentinel
+// scanning.
+// ————————————————————————————————————————————————
+
+export const STREAM_USAGE_SENTINEL_PREFIX = "​​cv-usage:";
+export const STREAM_USAGE_SENTINEL_SUFFIX = "​​";
+export const NDJSON_USAGE_KEY = "__cvUsage";
+
+/** Serialise a usage envelope as an in-stream sentinel for text/plain/SSE bodies. */
+export function encodeUsageSentinel(env: UsageEnvelope): string {
+  return (
+    STREAM_USAGE_SENTINEL_PREFIX +
+    encodeUsageHeader(env) +
+    STREAM_USAGE_SENTINEL_SUFFIX
+  );
+}
+
+/**
+ * Scan a buffer tail for an embedded `cv-usage` sentinel and return the
+ * parsed envelope on match (or null if none / malformed).
+ *
+ * The scan looks at the last ~2KB of buffer so it's constant-time regardless
+ * of stream length. Callers that also parse a structured protocol (NDJSON)
+ * should check their protocol first and only fall through to this as a
+ * fallback for flat text streams.
+ */
+export function extractUsageSentinel(buffer: string): UsageEnvelope | null {
+  const slice = buffer.length > 2048 ? buffer.slice(buffer.length - 2048) : buffer;
+  const prefixIdx = slice.lastIndexOf(STREAM_USAGE_SENTINEL_PREFIX);
+  if (prefixIdx === -1) return null;
+  const startPayload = prefixIdx + STREAM_USAGE_SENTINEL_PREFIX.length;
+  const suffixIdx = slice.indexOf(STREAM_USAGE_SENTINEL_SUFFIX, startPayload);
+  if (suffixIdx === -1) return null;
+  const payload = slice.slice(startPayload, suffixIdx);
+  return decodeUsageHeader(payload);
+}
+
+/**
+ * Scan NDJSON text for a `{"__cvUsage":…}` line and return the envelope.
+ * Returns null if no such frame exists.
+ */
+export function extractNdjsonUsage(buffer: string): UsageEnvelope | null {
+  const lines = buffer.split("\n");
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = lines[i].trim();
+    if (!line.startsWith("{") || !line.includes(NDJSON_USAGE_KEY)) continue;
+    try {
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      const candidate = parsed[NDJSON_USAGE_KEY];
+      if (candidate && typeof candidate === "object") {
+        const env = candidate as UsageEnvelope;
+        if (typeof env.model === "string") return env;
+      }
+    } catch {
+      // fall through
+    }
+  }
+  return null;
+}

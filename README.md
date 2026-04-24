@@ -41,6 +41,16 @@ bin/cv help      # list commands
 
 Override the port with `CV_MAKER_PORT=3001 bin/cv start`.
 
+### Install as app
+
+After the dev server starts, Chrome / Edge will surface an **Install app** item in the address-bar menu (uses `public/manifest.webmanifest` + `public/sw.js`). Installing drops a "CV Maker" icon into your dock or homescreen; launching it opens the workspace in a standalone window, no tab chrome.
+
+The included icon is a plain `cv` wordmark on paper. To replace it, edit `public/icon.svg` and re-generate the 192/512 PNGs from it (the first commit of this feature includes a one-off `scripts/gen-icons.mjs` pattern you can adapt, or just export the SVG manually).
+
+### Keyboard shortcuts
+
+Press `?` anywhere in the app to open a cheatsheet overlay listing every keyboard shortcut grouped by area (Editor, Applications, Discover, Advisor, Global). Escape closes it. Source of truth: `components/shortcuts/Cheatsheet.tsx`.
+
 ## Running it
 
 ```

@@ -1,4 +1,4 @@
-import { streamText } from "ai";
+import { streamText, type LanguageModelUsage } from "ai";
 import type { CoverLetterTone, ParsedJob } from "@/lib/app/types";
 import type { CVContent } from "@/lib/types";
 import type { Settings } from "@/lib/settings/types";
@@ -6,6 +6,7 @@ import {
   resolveForRoute,
   respondProviderError,
   streamingUsageHeader,
+  withStreamUsageSentinel,
 } from "@/lib/ai/route";
 
 // POST /api/cover-letter
@@ -99,17 +100,30 @@ ${JSON.stringify(body.baseCV, null, 2)}
 
 Write the cover letter body now. Plain text, three paragraphs, blank line between each. No greeting or sign-off.`;
 
+  let finalUsage: LanguageModelUsage | null = null;
+
   const result = streamText({
     model: resolved.model,
     system,
     prompt,
+    onFinish({ usage }) {
+      // Stash final usage so the stream wrapper can append an accurate
+      // trailing sentinel once the producer resolves.
+      finalUsage = usage;
+    },
   });
 
-  return result.toTextStreamResponse({
+  const textStream = result.toTextStreamResponse({
     headers: streamingUsageHeader({
       feature: resolved.feature,
       choice: resolved.choice,
     }),
+  });
+
+  return withStreamUsageSentinel(textStream, {
+    feature: resolved.feature,
+    choice: resolved.choice,
+    getUsage: () => finalUsage,
   });
 }
 

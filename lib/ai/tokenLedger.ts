@@ -2,7 +2,12 @@
 
 import { useSyncExternalStore } from "react";
 import type { UsageEnvelope } from "./tokenTracker";
-import { USAGE_HEADER, decodeUsageHeader } from "./tokenTracker";
+import {
+  USAGE_HEADER,
+  decodeUsageHeader,
+  extractNdjsonUsage,
+  extractUsageSentinel,
+} from "./tokenTracker";
 
 // ————————————————————————————————————————————————
 // Client-side token ledger.
@@ -142,8 +147,89 @@ export function useTokenLedger(): TokenLedgerSnapshot {
 
 // ————————————————————————————————————————————————
 // trackedFetch — wrap `fetch` so any AI-backed response that carries the
-// `x-cv-usage` header lands in the ledger. Pass through for everything else.
+// `x-cv-usage` header (JSON routes) OR an in-stream usage sentinel (streaming
+// routes) lands in the ledger. Pass through for everything else.
 // ————————————————————————————————————————————————
+
+const STREAM_CONTENT_TYPES = [
+  "text/plain",
+  "text/event-stream",
+  "application/x-ndjson",
+];
+
+function isStreamingContentType(ct: string | null): boolean {
+  if (!ct) return false;
+  const lower = ct.toLowerCase();
+  return STREAM_CONTENT_TYPES.some((c) => lower.includes(c));
+}
+
+/**
+ * Wrap the response body so bytes pass through untouched while we buffer the
+ * decoded tail. On stream end, scan for either an NDJSON usage frame or a
+ * flat sentinel and append the envelope to the ledger.
+ *
+ * We keep only the last ~4KB of decoded text to bound memory and stay
+ * constant-time for long responses. That covers the sentinel plus at least
+ * one full NDJSON usage line even when pretty-printed.
+ */
+function wrapBodyForUsageScan(res: Response): Response {
+  if (!res.body) return res;
+  const originalBody = res.body;
+  const decoder = new TextDecoder("utf-8");
+  let tail = "";
+  const isNdjson = (res.headers.get("content-type") ?? "")
+    .toLowerCase()
+    .includes("application/x-ndjson");
+
+  const wrapped = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const reader = originalBody.getReader();
+      const pump = (): Promise<void> =>
+        reader.read().then(
+          ({ done, value }) => {
+            if (done) {
+              try {
+                tail += decoder.decode();
+              } catch {
+                // ignore
+              }
+              try {
+                const env = isNdjson
+                  ? extractNdjsonUsage(tail) ?? extractUsageSentinel(tail)
+                  : extractUsageSentinel(tail);
+                if (env) appendLedgerEntry(env);
+              } catch {
+                // never let ledger bookkeeping break playback
+              }
+              controller.close();
+              return;
+            }
+            if (value) {
+              controller.enqueue(value);
+              try {
+                const chunk = decoder.decode(value, { stream: true });
+                tail = (tail + chunk).slice(-4096);
+              } catch {
+                // ignore decoding errors; pass-through still works
+              }
+            }
+            return pump();
+          },
+          (err) => controller.error(err),
+        );
+      void pump();
+    },
+    cancel(reason) {
+      return originalBody.cancel(reason);
+    },
+  });
+
+  return new Response(wrapped, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  });
+}
 
 export async function trackedFetch(
   input: RequestInfo | URL,
@@ -153,9 +239,25 @@ export async function trackedFetch(
   try {
     const header = res.headers.get(USAGE_HEADER);
     const env = decodeUsageHeader(header);
-    if (env) appendLedgerEntry(env);
+    // Only append here if the header carries real token counts. Streaming
+    // routes stamp a zero-token envelope up front and then emit the real
+    // figures via an in-stream sentinel — we skip those to avoid
+    // double-counting (the sentinel path appends the accurate one).
+    if (env && (env.inputTokens > 0 || env.outputTokens > 0)) {
+      appendLedgerEntry(env);
+    }
   } catch {
     // never let ledger bookkeeping break the fetch caller
+  }
+
+  // If the body is a stream we care about, wrap it so we can parse the
+  // trailing usage marker once the stream finishes.
+  if (res.ok && res.body && isStreamingContentType(res.headers.get("content-type"))) {
+    try {
+      return wrapBodyForUsageScan(res);
+    } catch {
+      return res;
+    }
   }
   return res;
 }
