@@ -1,14 +1,19 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { nanoid } from "nanoid";
 import { useEditor } from "@/lib/doc/store";
 import { useTemporalEditor } from "./useTemporal";
 import { defaultTheme } from "@/lib/doc/types";
+import { downloadAtsText } from "@/lib/export/atsText";
+import { listVariants } from "@/lib/jobs/registry";
+import { cvs } from "@/content/cvs";
 
 export function Toolbar() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const exportMenuRef = useRef<HTMLDivElement | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [compareAvailable, setCompareAvailable] = useState(false);
 
   const zoom = useEditor((s) => s.zoom);
   const setZoom = useEditor((s) => s.setZoom);
@@ -21,6 +26,26 @@ export function Toolbar() {
   const setTargetRole = useEditor((s) => s.setTargetRole);
 
   const { undo, redo, canUndo, canRedo } = useTemporalEditor();
+
+  // Compare link only shows when there are >= 2 known variants.
+  useEffect(() => {
+    const staticCount = Object.keys(cvs).length;
+    const dynamicCount = listVariants().length;
+    setCompareAvailable(staticCount + dynamicCount >= 2);
+  }, []);
+
+  // Close export menu on outside click.
+  useEffect(() => {
+    if (!exportOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (!exportMenuRef.current) return;
+      if (!exportMenuRef.current.contains(e.target as globalThis.Node)) {
+        setExportOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", handler);
+    return () => window.removeEventListener("mousedown", handler);
+  }, [exportOpen]);
 
   const addText = () => {
     addNode({
@@ -206,13 +231,61 @@ export function Toolbar() {
 
       <div className="h-5 w-px bg-[var(--color-editor-border)]" />
 
-      <button
-        className="editor-btn"
-        onClick={() => window.print()}
-        title="Print or save as PDF"
-      >
-        print / pdf
-      </button>
+      {compareAvailable && (
+        <Link
+          href="/cv/compare"
+          className="editor-btn editor-btn-ghost"
+          title="Compare variants side by side"
+        >
+          compare
+        </Link>
+      )}
+
+      <div className="relative" ref={exportMenuRef}>
+        <button
+          type="button"
+          className="editor-btn"
+          onClick={() => setExportOpen((o) => !o)}
+          title="Export this CV"
+          aria-haspopup="menu"
+          aria-expanded={exportOpen}
+        >
+          export ▾
+        </button>
+        {exportOpen && (
+          <div
+            role="menu"
+            className="absolute right-0 top-full mt-1 py-1 min-w-[180px] z-10"
+            style={{
+              background: "var(--color-editor-panel)",
+              border: "1px solid var(--color-editor-border)",
+            }}
+          >
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full text-left px-3 py-1.5 font-mono text-[11px] hover:bg-[rgba(255,255,255,0.06)]"
+              onClick={() => {
+                setExportOpen(false);
+                window.print();
+              }}
+            >
+              Print / PDF
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              className="w-full text-left px-3 py-1.5 font-mono text-[11px] hover:bg-[rgba(255,255,255,0.06)]"
+              onClick={() => {
+                setExportOpen(false);
+                downloadAtsText(useEditor.getState().doc);
+              }}
+            >
+              Plain text (.txt)
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -12,6 +12,7 @@ import type {
 import { cvs } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { formatDateTime } from "@/lib/app/ui";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // Pre-screen answer drafter.
 // - User pastes the application's short-answer prompts.
@@ -464,9 +465,9 @@ export function PreScreenSection({ app }: { app: Application }) {
           </div>
 
           {streamError && (
-            <p className="mt-4 font-mono text-[11px] text-accent">
-              {streamError}
-            </p>
+            <div className="mt-4">
+              <ApiKeyHint error={streamError} inline />
+            </div>
           )}
 
           {streamBuf && streaming && (

@@ -23,6 +23,7 @@ import { FitCheckCard } from "@/components/applications/FitCheckCard";
 import { profile as baseProfile } from "@/content/profile";
 import { pullInbox, pendingCount } from "@/lib/pairing/client";
 import { CapturedPill } from "@/components/pair/CapturedPill";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // Discovery-side fit cache — keep results per posting id to avoid respending
 // tokens on re-opens. SSR-safe.
@@ -447,7 +448,9 @@ export default function DiscoverPage() {
           <p className="font-mono text-[11px] text-ink/60 mt-3">{fetchInfo}</p>
         )}
         {fetchError && (
-          <p className="font-mono text-[11px] text-accent mt-3">{fetchError}</p>
+          <div className="mt-3">
+            <ApiKeyHint error={fetchError} inline />
+          </div>
         )}
       </section>
 

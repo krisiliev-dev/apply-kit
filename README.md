@@ -1,6 +1,6 @@
 # CV Maker
 
-A visual CV editor with an AI copilot. Each CV is a free-canvas document you edit by clicking, dragging, resizing — or by asking the copilot in plain English.
+A visual CV editor with an AI copilot, a job-application tracker, a discovery queue, an evaluation pipeline, and a career-advisor lens — all in one local-first web app. Each CV is a free-canvas document you edit by clicking, dragging, resizing — or by asking the copilot in plain English.
 
 ## Running it
 
@@ -11,55 +11,112 @@ npm run dev
 
 Then <http://localhost:3000>. Click a CV variant to open the editor.
 
-For the AI copilot, create `.env.local`:
+For any AI feature, create `.env.local`:
 
 ```
 ANTHROPIC_API_KEY=sk-ant-...
+# Optional — unlocks parseability + six-second test:
+AFFINDA_API_KEY=your-key
 ```
+
+Every AI route gracefully falls back to a 400 with a copy-paste instruction when keys are missing — nothing crashes.
 
 ## Architecture
 
+The app has grown to roughly 17 routes, one editor, one tracker, a discovery queue, and an evaluation pipeline. Organising principle: **three lenses** (applicant, recruiter, career advisor) layered over **one canvas editor** and **one persistent application record**. Everything is local-first — nothing leaves the browser except prompt bodies to `/api/*`.
+
 ```
 app/
-  page.tsx                   home — lists CV variants
-  cv/[slug]/page.tsx         mounts the Editor for <slug>
-  api/chat/route.ts          AI SDK streaming endpoint with tool defs
-  layout.tsx                 root layout + font registration
-  globals.css                Tailwind theme + editor chrome + print CSS
+  page.tsx                      home — lists CV variants, demo controls
+  layout.tsx                    root layout + font registration
+  globals.css                   Tailwind theme + editor chrome + print CSS
 
-components/editor/
-  Editor.tsx                 four-region layout: toolbar + layers + canvas + right pane
-  Canvas.tsx                 zoomable viewport
-  PageView.tsx               A4 page wrapper — mounts nodes, handles selection
-  NodeView.tsx               renders one text/image/shape node
-  SelectionOverlay.tsx       react-moveable — drag, resize, snap
-  Toolbar.tsx                add blocks, undo/redo, zoom, grid, print
-  LayersPanel.tsx            left rail — tree of blocks, reorder, hide/lock
-  Inspector.tsx              right pane — transform + typography + theme
-  ChatPanel.tsx              right pane (alt tab) — AI copilot
-  useEditorShortcuts.ts      keyboard: arrow nudge, ⌘D, del, ⌘Z, esc
-  usePersist.ts              load/save per-slug document to localStorage
-  useTemporal.ts             undo/redo bindings
+  cv/[slug]/page.tsx            mounts the Editor for <slug>
+  cv/compare/page.tsx           side-by-side diff of two variants
 
-lib/doc/
-  types.ts                   Node / Page / Theme / CvDocument
-  store.ts                   Zustand + zundo (undo history)
-  seed.ts                    seeds a CV doc from typed content
-  persist.ts                 localStorage I/O
-  units.ts                   mm ↔ px conversion (96 DPI)
+  jobs/page.tsx                 paste a job → parse → draft a tailored CV
+  jobs/[appId]/page.tsx         per-application job view (ATS prefill + fit + parsed job)
 
-lib/ai/
-  tools.ts                   zod schemas for model tools (shared client+server)
-  system.ts                  copilot system prompt + doc summary injector
-  applyTool.ts               executes tool calls against the doc store
+  applications/page.tsx         tracker dashboard + status filter + effort budget
+  applications/new/page.tsx     manual entry form
+  applications/[id]/page.tsx    per-app detail: cover letter, prep, salary, rejection, follow-ups
+  applications/review/page.tsx  90-day diagnostic
+
+  discover/page.tsx             ranked postings (Greenhouse/Lever/Ashby/HN/RSS + extension)
+  discover/preferences/page.tsx watchlist + RSS feeds config
+
+  advisor/page.tsx              index — four lenses
+  advisor/narrative/page.tsx    the story your CV is telling, plus alternatives
+  advisor/skills/page.tsx       gap analysis across target-role postings
+  advisor/ceiling/page.tsx      stretch / in-range / below-level classification
+  advisor/decisions/page.tsx    decision-support (offer, stay-vs-go, pivot)
+
+  api/                          See below
+
+components/
+  editor/            canvas, toolbar, inspector, chat, eval panels
+  applications/     fit check, interview prep, pre-screen, salary, follow-ups, cover letter
+  home/             demo controls
+  errors/           shared ApiKeyHint error display
+
+lib/
+  doc/              editor document model + zustand store + persist + compare
+  ai/               system prompt + tool schemas + tool dispatch
+  app/              application record, store, followups, export, analytics, effort budget
+  advisor/          advisor store + types + pacing
+  discovery/        ingest buffer, scoring, persistence
+  evaluation/       parseability, keywords, recruiter-eye, six-second, numbers, proof,
+                    archetypes, tenure, refine loop, score history, diff
+  export/           ATS-friendly plain-text generator (cv-plain.txt)
+  jobs/             registry + tailored-CV seeding + ATS schema detection
+  types.ts          CVContent (typed content source of truth)
 
 content/
-  profile.ts                 stable identity (seeded into new variants)
-  cvs/<slug>.ts              typed CV content used as the initial seed
-  cvs/index.ts               variant registry
+  profile.ts        stable demo persona
+  cvs/<slug>.ts     typed CV content used as the initial seed
+  cvs/index.ts      variant registry
 
-references/                  drop reference images here to share with Claude
+references/         drop reference images here to share with Claude
 ```
+
+### API surface
+
+Grouped by feature:
+
+```
+/api/chat                    AI copilot (streaming, client-side tool execution)
+/api/cover-letter            cover letter draft (streaming)
+/api/paraphrase              inline rewrite helper
+
+/api/cv-evaluate             full CV evaluation (non-streaming)
+/api/cv-evaluate/refine      iterative refine loop (NDJSON progress)
+/api/cv-evaluate/tenure-frame one-liner tenure framing
+
+/api/jobs/parse              job URL/text → structured ParsedJob
+/api/jobs/draft              job + base CV → tailored CV content
+/api/jobs/ats-schema         detect + fetch Greenhouse/Lever/Ashby/etc. schema
+
+/api/apply-fit/check         "should I even apply?" verdict
+/api/pre-screen/draft        short-answer drafts for screening fields
+/api/interview/research      company research for prep
+/api/interview/generate      likely-question generator (STAR)
+/api/salary/parse            offer text → structured offer
+/api/salary/analyze          market context + counter-offer email
+/api/rejection/extract       rejection text → structured signals + lessons
+/api/follow-up/draft         follow-up email drafts
+/api/review/summarize        90-day diagnostic summary
+
+/api/advisor/narrative       the story your CV tells
+/api/advisor/skills          skill-gap analysis
+/api/advisor/ceiling         role-tier classification
+/api/advisor/decisions       decision support
+/api/advisor/pacing          (static — live computed client-side)
+
+/api/discover/fetch          multi-source job-posting fetch (Greenhouse/Lever/Ashby/HN/RSS)
+/api/discover/ingest         extension-push ingest buffer
+```
+
+Every AI route checks `process.env.ANTHROPIC_API_KEY` (and `AFFINDA_API_KEY` where relevant) up front and returns a 400 with a clean error message when missing. Client-side, `components/errors/ApiKeyHint.tsx` renders a unified hint for those failures.
 
 ## Editing in the canvas
 
@@ -70,9 +127,16 @@ references/                  drop reference images here to share with Claude
 - **⌘Z / ⌘⇧Z** undo / redo (includes AI edits).
 - **⌘ + scroll** zoom the canvas.
 
-Right pane has two tabs:
+Right pane tabs:
 - **Inspector** — transform + typography + theme. With nothing selected, this shows global theme (colors, fonts).
-- **Chat** — AI copilot. Ask for any change in plain English. See `components/editor/ChatPanel.tsx` for example prompts.
+- **Chat** — AI copilot. Ask for any change in plain English.
+- **Eval** — evaluation pipeline: parseability, keyword alignment, recruiter-eye read, 6-second test, number/proof/archetype/tenure inspectors, score history sparkline, iterative refine loop.
+
+Toolbar **Export** dropdown:
+- **Print / PDF** — opens the native print dialog; print CSS scales to A4 exactly.
+- **Plain text (.txt)** — ATS-friendly single-column rendering (`<slug>-plain.txt`). If a typed CVContent is registered for the slug, it's used directly; otherwise nodes are walked in reading order.
+
+Toolbar **Compare** button (shown when ≥2 variants exist) opens `/cv/compare`.
 
 ## Making a new CV variant
 
@@ -87,9 +151,14 @@ The AI chat panel uses Vercel AI SDK v6 with `@ai-sdk/anthropic`. On every turn,
 
 Tools available to the model: `addText`, `addImage`, `addShape`, `updateNodeTransform`, `updateTextContent`, `updateTextStyle`, `deleteNode`, `duplicateNode`, `setTheme`. Schemas live in `lib/ai/tools.ts`.
 
-## Exporting
+## Application bundle export
 
-Click **print / pdf** in the toolbar (or ⌘P). Print CSS hides editor chrome, scales the page to exact A4, and strips the dark canvas background.
+On any application detail page, **Export bundle** produces a zip:
+
+- `cover-letter.txt` — if generated.
+- `cv.json` — full editor document dump.
+- `cv-plain.txt` — ATS-friendly plain text (companion to `cv.json`).
+- `README.md` — per-bundle instructions.
 
 ## Reference images
 
@@ -97,62 +166,70 @@ Drop images into `references/`. Tell Claude the filename (e.g. *"match the layou
 
 ## Roadmap
 
-Shape: three lenses — **applicant** (your outcomes), **recruiter** (how your CV actually gets read), **career advisor** (the longer arc). Items move from Queued → In progress → Shipped as work lands.
+Shape: three lenses — **applicant** (your outcomes), **recruiter** (how your CV actually gets read), **career advisor** (the longer arc). Everything previously queued now ships.
 
 ### Shipped
+
+**Editor**
+- Free-canvas editor with snap guides, undo/redo, layers, inspector, alignment, distribution
+- AI copilot with client-side tool execution; streams responses; accepts reference images
 - Palette presets + theme controls
-- Cover letter generator (streaming, tone + word-target, bundle export)
+- Printable A4 output via print CSS; ATS-friendly plain-text export (.txt)
+- **Multi-variant side-by-side diff** (`/cv/compare`) — preview A vs. B at 40%, stats, diff summary
+
+**Applicant lens**
 - Application tracking dashboard (`/applications`) with CRUD, status pipeline, CSV export
+- Manual-entry form (`/applications/new`)
+- Cover letter generator (streaming, tone + word-target); included in zip bundle
+- Bundle export — `cover-letter.txt` + `cv.json` + `cv-plain.txt` + README
 - Tailored-CV drafting from job post (`/jobs` → `/api/jobs/parse` + `/api/jobs/draft`)
 - ATS prefill (Greenhouse + Ashby real schemas; Lever + Workday + SmartRecruiters + Teamtailor stub fallbacks)
-- `/discover` — watchlist (Greenhouse/Lever/Ashby) + HN Who-is-hiring + RSS + extension-ingested postings + scoring
+- "Should I even apply?" fit check, surfaced on `/jobs/[appId]` + `/discover` modal
+- Pre-screen question drafter — per-field streaming drafts against profile + posting
+- Interview prep — company research + STAR-format likely questions, per-question "mark practiced"
+- Salary negotiation — offer parse + market context + counter-offer email
+- Follow-up orchestration — auto-staged cadences (post-apply/screen/interview/offer); per-row regenerate/snooze/mark-sent
+- Effort-budget banner + `/applications/review` 90-day diagnostic
+- Rejection → lessons loop — structured signal extraction per application
+
+**Recruiter lens — evaluation**
+- Affinda parseability (skip-with-warning when key missing)
+- Keyword alignment vs. parsed job
+- Recruiter-eye LLM pass
+- Iterative refinement loop (NDJSON progress stream)
+- Parseability heatmap overlay
+- Score history + sparkline
+- 6-second test simulator (requires PDF render + Affinda)
+- "Where's the number?" inspector (static, live on every keystroke)
+- Proof-of-work links per bullet + canvas pill + Inspector fields
+- Generic-archetype detector (40 curated phrases, 5 categories)
+- Tenure-pattern warnings + optional one-liner framing
+
+**Career-advisor lens**
+- Career narrative engine — detected story + alternative framings
+- Skill-gap analysis — aggregate required skills across target-role postings
+- Strategic ceiling/floor — stretch/in-range/below-level classification
+- Decision-support agents — offer evaluation, stay-vs-go, pivot
+- Pacing + burnout awareness — sprint detection + guidance, persisted per session
+
+**Discovery**
+- `/discover` — watchlist (Greenhouse/Lever/Ashby) + HN Who-is-hiring + RSS + extension postings
+- Scoring against registered CVs; per-source filter chips
+- Preferences page (`/discover/preferences`) for watchlist + feeds
+- Fit-check modal from posting rows
+
+**Tooling & demo**
 - Demo seed (Ines Valverde persona + 3 CV variants + 8 sample applications)
 - Chrome MV3 autofill extension — Q&A store, form observer, inline suggestions
 - Extension: LinkedIn / Indeed / Glassdoor posting capture into discovery queue
 
-### In progress
-- CV evaluation system — Affinda parseability + keyword alignment + recruiter-eye LLM pass + iterative refinement loop + parseability heatmap + score history (agent running)
+### What's next
 
-### Evaluation — recruiter-perspective extensions (shipped)
+- **Real deploy (Vercel)** — current build is production-clean and locally hosted; next step is provisioning on Vercel (env vars, preview deployments, maybe KV for the pair inbox).
+- **KV-backed pair-inbox** — the pairing-flow agent currently stores captured postings in localStorage; promote that to a shared key-value store so the extension and the web app can hand off across devices.
+- **Actual usage feedback loop** — after a few weeks of real applications, feed outcomes back in: which tailorings converted to screens, which archetype-flags correlated with rejections, which advisor framings we acted on. Only worth building once volume exists.
 
-Three additions extend the evaluation pipeline with a recruiter's point of view. They live alongside the existing parseability / keyword / recruiter-eye layers in `lib/evaluation/` and surface inside the editor's Eval tab:
-
-- **6-second test simulator** (`lib/evaluation/sixSecondTest.ts`) — feeds the rendered PDF to Claude with a 6-second-skim instruction and asks what stuck (name, current role, seniority, strongest signal, one thing remembered). Mismatches between the skim and the real data turn into hard warnings. Runs as an optional 4th layer when `AFFINDA_API_KEY` is set (needs the PDF render); skipped cleanly otherwise. Weighted 15% of the overall score.
-- **"Where's the number?" inspector** (`lib/evaluation/numberInspector.ts`) — static analyser that walks every text node. Flags bullets with an outcome verb (shipped, scaled, led, improved…) but no number, percentage, or scope word. No LLM call, ~1ms — runs live on every keystroke in the `NumberInspectorPanel` inside the Eval tab.
-- **Parseability heatmap** (`components/editor/ParserOverlay.tsx`) — toggleable overlay that outlines every text node green (Affinda extracted it) or red (it looks extractable but wasn't). Small numbered badges near each node link back to the relevant warning. Toggle via the **Parser view** button in the Eval tab.
-- **Proof-of-work links** (`lib/evaluation/proofInspector.ts` + canvas pill + Inspector fields) — every bullet-like text node carries an optional `proofUrl`, `proofLabel`, and `proofRequired` slot. A heuristic picks bullets automatically (`Exp:<company> bullet`, `• …`, bullet-per-line blocks). Required bullets without a proof link surface a red `proof?` pill on the canvas (piggybacks on the Parser view toggle) and a `layer: "proof"` warning in the unified flag list. Weighted 7.5% of the overall score.
-- **Generic-archetype detector** (`lib/evaluation/archetypes.ts` + `archetypeDetector.ts`) — 40 hand-curated boilerplate phrases across vague-achievement / filler-adjective / corporate-cliché / generic-collaboration / pace-cliché categories. Each hit comes with an actionable replacement tactic. Purely regex, no LLM call. Warnings are severity "info" by default; any node that collects >3 matches escalates to "warn". Surfaces in a collapsible "Boilerplate language" section in the Eval panel.
-- **Tenure-pattern warnings** (`lib/evaluation/tenureInspector.ts` + `app/api/cv-evaluate/tenure-frame/route.ts`) — walks experience entries (from the registered CV content when available, else parsed from `Exp:<company>` node names). Flags two consecutive sub-12-month stints, avg tenure <18 months across the last four, and gaps >3 months. Optional one-liner framing is generated via Anthropic `claude-sonnet-4-6` with a 10-minute in-memory cache keyed on the input hash; "use as profile summary" appends to the detected summary node or falls back to clipboard.
-
-### Queued — recruiter lens
-- **Pre-screen question drafter** — short-answer fields ("why us?", "describe a failure") drafted in-tool against your knowledge base.
-
-### Applicant lens — shipped
-
-Four connected features surface around the application detail page and the tracker:
-
-- **Salary negotiation** (`components/applications/SalaryNegotiationSection.tsx`) — paste an offer on any `interview`/`offer` application; `/api/salary/parse` extracts structured fields; `/api/salary/analyze` returns market context (pre-training inference, clearly flagged as approximate), leverage points sourced from the CV, risks, and a ~150-word counter-offer email. Copy-to-clipboard on the email body. Persists `offer` + `salaryAnalysis` on the Application.
-- **"Should I even apply?"** (`components/applications/FitCheckCard.tsx`) — surfaces on `/jobs/[appId]` above the Draft CV action and on `/discover` via a "Check fit" modal. `/api/apply-fit/check` returns `overallFit` (strong / plausible / stretch / misaligned), weaknesses (listed first), strengths, clarifying questions, and an effort estimate. Tells the candidate plainly when not to apply. Cached per posting id on `/discover` (`cv-maker:discovery-fit-cache`) and on the Application record on `/jobs`.
-- **Follow-up orchestration** (`lib/app/followupCadence.ts`, `lib/app/followupStore.ts`, `components/applications/FollowUpsSection.tsx`) — auto-stages follow-ups when an application's status changes (post-apply +7d, post-screen +3d, post-interview +2d, post-offer +1d). `/api/follow-up/draft` streams a concise email body. Per-row controls: regenerate, snooze 3d, mark sent, skip, delete. Editable draft textarea (autosaved on blur). Inline `⏰ follow-up due` pill on `/applications` rows when any pending follow-up is within 2 days.
-- **Effort budget** (`lib/app/effortBudget.ts`) — one-line banner atop `/applications` with a tiny bar chart showing velocity vs. configurable target (default 20 / 30 days). Burn-rate classifier: `under`, `on-track`, `over`, `spray` (high volume + low tailoring). Full-section version on `/applications/review` with a configurable target input (persisted to `cv-maker:effort-target`).
-
-### Queued — applicant lens
-- **Rejection → lessons loop** — capture rejection emails / ghostings; AI extracts signal per application; patterns aggregate over time. *(shipped earlier; see below)*
-- **Interview prep module** — when an application moves to `screen`/`interview`, generate likely questions from the posting + public company writing; STAR-format practice answers sourced from profile. *(shipped earlier; see below)*
-
-### Queued — career advisor lens
-- **Career narrative engine** — read full history + applied roles; identify the story you're (often unintentionally) telling; propose alternative framings.
-- **Skill gap analysis** — aggregate required skills across target-role postings; flag ubiquitous ones you lack; suggest concrete acquisition paths.
-- **Strategic ceiling / floor** — cluster target roles into stretch / in-range / below-level; discourage below-level unless intentional.
-- **Quarterly review** — every 90 days, surface response-rate trends, funnel-stall points, time-to-offer, which variants outperformed; diagnostic prompts rather than dashboards.
-- **Rejection-as-data (aggregate)** — beyond per-rejection lessons, pattern-find across 50 rejections ("you stall at technical screens for companies of size X — here's why").
-- **Decision-support agents** — offer evaluation, stay-vs-go, pivot decisions, scoped to your full history.
-- **Pacing + burnout awareness** — notice sprints; push for quality over volume.
-
-### Priority order (next 3 to build)
-
-1. **6-second test simulator + "where's the number?" inspector** — directly improves every CV you ship; extends the CV-eval system in flight.
-2. **Rejection → lessons loop + quarterly aggregate view** — closes the outcome-learning loop the tool currently lacks.
-3. **Interview prep + pre-screen drafter** — massive conversion-rate lever once applications reach `screen`.
-
-Everything below priority 3 is parked pending data from 1–3 and real usage. Skill-gap and narrative-engine work best once there's volume flowing through the system.
+Parked pending data + real usage:
+- **Rejection-as-data (aggregate)** — beyond per-rejection lessons, pattern-find across ≥50 rejections (*"you stall at technical screens for companies of size X"*).
+- **Copilot-initiated actions** — today the chat only edits the doc on request; let it flag issues proactively when the user types obvious regressions.
+- **Collaboration** — the editor is single-user by design; shared drafts (over the pair inbox) would unlock review loops.

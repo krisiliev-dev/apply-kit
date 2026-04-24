@@ -3,11 +3,13 @@
 import JSZip from "jszip";
 import type { Application } from "./types";
 import { loadFromStorage } from "@/lib/doc/persist";
+import { toAtsText } from "@/lib/export/atsText";
 
 // Build-and-download a zip bundle for an application.
 // Contents:
 //   - cover-letter.txt            (only if app.coverLetter exists)
 //   - cv.json                     (tailored CV document dump, if cvSlug resolves)
+//   - cv-plain.txt                (ATS-friendly plain text, same conditions as cv.json)
 //   - README.md                   (instructions for exporting the CV to PDF)
 
 export type CoverLetterExportResult = {
@@ -15,6 +17,7 @@ export type CoverLetterExportResult = {
   included: {
     coverLetter: boolean;
     cv: boolean;
+    cvPlain: boolean;
   };
 };
 
@@ -58,11 +61,15 @@ function buildReadme(app: Application, hasCv: boolean): string {
     lines.push(
       "## cv.json",
       "",
-      `A JSON dump of the tailored CV document currently saved under slug \`${app.cvSlug}\`.`,
+      `A JSON dump of the tailored CV document currently saved under slug \`${app.cvSlug}\`. This is the full editor-model representation — positions, styles, theme — suitable for re-opening in the workshop.`,
+      "",
+      "## cv-plain.txt",
+      "",
+      "An ATS-friendly plain-text rendering of the same CV: single column, standard section headings, no decorative nodes. Paste into application forms that strip formatting, or use to verify what an ATS will actually read.",
       "",
       "### Exporting the CV to PDF",
       "",
-      `1. Open the app and visit \`/cv/${app.cvSlug}\`.`,
+      `1. Open the workshop and visit \`/cv/${app.cvSlug}\`.`,
       "2. Press ⌘P (or Ctrl+P on Windows/Linux).",
       "3. Choose **Save as PDF** as the destination.",
       "4. Print CSS strips the editor chrome and scales to A4 automatically.",
@@ -80,7 +87,7 @@ function buildReadme(app: Application, hasCv: boolean): string {
     lines.push(
       "## CV",
       "",
-      "No CV linked to this application. Set a CV slug in the detail page to include it on the next export.",
+      "No CV linked to this application. Set a CV slug in the detail page to include it on the next bundle export.",
       "",
     );
   }
@@ -94,11 +101,21 @@ export async function exportApplicationBundle(
   const zip = new JSZip();
 
   let cvIncluded = false;
+  let cvPlainIncluded = false;
   if (app.cvSlug) {
     const doc = loadFromStorage(app.cvSlug);
     if (doc) {
       zip.file("cv.json", JSON.stringify(doc, null, 2));
       cvIncluded = true;
+      try {
+        const plain = toAtsText(doc);
+        if (plain.trim().length > 0) {
+          zip.file("cv-plain.txt", plain);
+          cvPlainIncluded = true;
+        }
+      } catch {
+        // Plain-text rendering is best-effort — never block the bundle.
+      }
     }
   }
 
@@ -130,6 +147,7 @@ export async function exportApplicationBundle(
     included: {
       coverLetter: coverLetterIncluded,
       cv: cvIncluded,
+      cvPlain: cvPlainIncluded,
     },
   };
 }

@@ -11,6 +11,7 @@ import type {
 import { cvs } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { formatDateTime } from "@/lib/app/ui";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // SalaryNegotiationSection — appears on the application detail page when
 // status is offer/interview. Three-step flow:
@@ -139,7 +140,9 @@ function OfferCapture({
             )}
           </div>
           {error && (
-            <p className="mt-3 font-mono text-[11px] text-accent">{error}</p>
+            <div className="mt-3">
+              <ApiKeyHint error={error} inline />
+            </div>
           )}
         </>
       ) : (
@@ -512,7 +515,9 @@ function AnalysisPanel({
           {busy ? "Analysing…" : "Analyze offer"}
         </button>
         {error && (
-          <p className="mt-3 font-mono text-[11px] text-accent">{error}</p>
+          <div className="mt-3">
+            <ApiKeyHint error={error} inline />
+          </div>
         )}
       </div>
     );
@@ -600,7 +605,11 @@ function AnalysisPanel({
             {formatDateTime(analysis.generatedAt)}
           </span>
         </div>
-        {error && <p className="mt-3 font-mono text-[11px] text-accent">{error}</p>}
+        {error && (
+          <div className="mt-3">
+            <ApiKeyHint error={error} inline />
+          </div>
+        )}
       </AnalysisCard>
     </div>
   );

@@ -14,6 +14,7 @@ import {
 } from "@/lib/app/followupStore";
 import { FOLLOWUP_KIND_LABEL } from "@/lib/app/followupCadence";
 import { formatDateTime } from "@/lib/app/ui";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // FollowUpsSection — appears on the application detail page.
 // Lists every follow-up for this application (pending, snoozed, sent, skipped).
@@ -352,7 +353,9 @@ function FollowUpRow({
           </div>
         )}
         {error && (
-          <p className="mt-2 font-mono text-[11px] text-accent">{error}</p>
+          <div className="mt-2">
+            <ApiKeyHint error={error} inline />
+          </div>
         )}
       </div>
     </li>

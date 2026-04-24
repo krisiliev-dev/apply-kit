@@ -22,6 +22,7 @@ import {
   type EffortBudget,
 } from "@/lib/app/effortBudget";
 import type { Application } from "@/lib/app/types";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 export default function ReviewPage() {
   const { applications, loaded, load } = useApplications();
@@ -280,7 +281,9 @@ function AISummarySection({ snapshot }: { snapshot: ReviewSnapshot }) {
             {busy ? "Thinking…" : "Write diagnostic"}
           </button>
           {error && (
-            <p className="mt-3 font-mono text-[11px] text-accent">{error}</p>
+            <div className="mt-3">
+              <ApiKeyHint error={error} inline />
+            </div>
           )}
         </div>
       )}
