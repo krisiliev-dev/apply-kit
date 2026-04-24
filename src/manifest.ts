@@ -48,7 +48,9 @@ export default defineManifest({
       all_frames: false,
     },
   ],
-  permissions: ["storage", "activeTab", "scripting"],
+  // `alarms` powers the 5-minute background discovery sync when the
+  // extension is paired with the web app (see src/background/index.ts).
+  permissions: ["storage", "activeTab", "scripting", "alarms"],
   // <all_urls> covers the autofill observer on arbitrary application pages.
   // The three job-board patterns are listed explicitly so the intent is
   // obvious on review; they are already a subset of <all_urls>.

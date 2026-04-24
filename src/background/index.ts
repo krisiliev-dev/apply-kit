@@ -5,7 +5,16 @@ import type {
   BgResponse,
   CapturedJob,
   HistoricalAnswer,
+  PairedDeviceSummary,
 } from "../shared/types";
+import {
+  clearPairing,
+  generatePublicJwk,
+  getPairing,
+  normalizeWebAppUrl,
+  setPairing,
+  type PairedDeviceState,
+} from "../shared/pairing";
 import {
   allJobs,
   allRecords,
@@ -29,6 +38,25 @@ import { paraphrase } from "../paraphrase";
 
 chrome.runtime.onInstalled.addListener(() => {
   console.info("[cv-autofill] installed");
+  // Ensure the background sync alarm exists. Safe to call repeatedly — if an
+  // alarm with the same name exists it's replaced. 5-minute period balances
+  // timeliness (captures land within minutes of going offline) with idle
+  // resource use.
+  chrome.alarms.create("sync-discovery", { periodInMinutes: 5 });
+});
+
+// Startup rehydration: if the alarm was cleared by browser restart, re-add it.
+chrome.runtime.onStartup?.addListener(() => {
+  chrome.alarms.create("sync-discovery", { periodInMinutes: 5 });
+});
+
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name !== "sync-discovery") return;
+  // Fire-and-forget; errors are recorded via console and the JobSyncResult's
+  // error field. We don't await — the alarm doesn't care.
+  void syncAll().catch((err) => {
+    console.warn("[cv-autofill] background sync failed:", err);
+  });
 });
 
 chrome.runtime.onMessage.addListener(
@@ -221,6 +249,85 @@ async function handle(req: BgRequest): Promise<BgResponse> {
       return { kind: "setConfig", cvMakerBaseUrl: value };
     }
 
+    case "getPairing": {
+      const p = await getPairing();
+      return {
+        kind: "getPairing",
+        pairing: p ? toSummary(p) : null,
+      };
+    }
+
+    case "completePairing": {
+      const webAppUrl = normalizeWebAppUrl(req.webAppUrl);
+      if (!webAppUrl) throw new Error("Invalid web-app URL.");
+      const code = req.code.trim().toUpperCase();
+      if (!code) throw new Error("Pair code required.");
+      const label = req.deviceLabel.trim() || "Chrome";
+
+      // Generate the keypair and call the web-app's /api/pair/complete. On
+      // success we persist the token + deviceId in chrome.storage.sync.
+      const publicKey = await generatePublicJwk();
+      const res = await fetch(`${webAppUrl}/api/pair/complete`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code, publicKey, deviceLabel: label }),
+      });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try {
+          const body = (await res.json()) as { error?: string };
+          if (body?.error) msg = body.error;
+        } catch {
+          // ignore
+        }
+        throw new Error(msg);
+      }
+      const data = (await res.json()) as {
+        deviceId: string;
+        token: string;
+        deviceLabel: string;
+        pairedAt: number;
+      };
+      const state: PairedDeviceState = {
+        webAppUrl,
+        deviceId: data.deviceId,
+        deviceToken: data.token,
+        deviceLabel: data.deviceLabel,
+        pairedAt: data.pairedAt,
+        lastSyncAt: 0,
+        publicKey,
+      };
+      await setPairing(state);
+
+      // Kick off an immediate sync so the user sees captures flow without
+      // waiting for the next alarm tick.
+      void syncAll().catch(() => {});
+
+      return {
+        kind: "completePairing",
+        pairing: toSummary(state),
+      };
+    }
+
+    case "unpair": {
+      const p = await getPairing();
+      if (p) {
+        // Best-effort notify the web-app so the device disappears from its
+        // list. Ignore failures — local state wins.
+        try {
+          await fetch(`${p.webAppUrl}/api/pair/revoke`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ deviceId: p.deviceId }),
+          });
+        } catch {
+          // offline / unreachable — carry on and clear local state anyway
+        }
+      }
+      await clearPairing();
+      return { kind: "unpair", ok: true };
+    }
+
     case "paraphrase": {
       const next = await paraphrase(req.text, req.context);
       return { kind: "paraphrase", text: next, changed: next !== req.text };
@@ -231,4 +338,14 @@ async function handle(req: BgRequest): Promise<BgResponse> {
 function latestAt(r: AnswerRecord): number {
   const last = r.answers[r.answers.length - 1];
   return last ? last.at : 0;
+}
+
+function toSummary(p: PairedDeviceState): PairedDeviceSummary {
+  return {
+    webAppUrl: p.webAppUrl,
+    deviceId: p.deviceId,
+    deviceLabel: p.deviceLabel,
+    pairedAt: p.pairedAt,
+    lastSyncAt: p.lastSyncAt,
+  };
 }

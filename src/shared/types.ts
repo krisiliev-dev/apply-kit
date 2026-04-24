@@ -73,6 +73,14 @@ export interface JobSyncResult {
 // Message contract between content <-> background.
 // Using a discriminated union keeps `any` out of the channel.
 
+export interface PairedDeviceSummary {
+  webAppUrl: string;
+  deviceId: string;
+  deviceLabel: string;
+  pairedAt: number;
+  lastSyncAt: number;
+}
+
 export type BgRequest =
   | { kind: "queryByQuestion"; field: FieldContext }
   | {
@@ -97,6 +105,14 @@ export type BgRequest =
   | { kind: "syncJob"; id: string }
   | { kind: "getConfig" }
   | { kind: "setConfig"; cvMakerBaseUrl: string }
+  | { kind: "getPairing" }
+  | {
+      kind: "completePairing";
+      webAppUrl: string;
+      code: string;
+      deviceLabel: string;
+    }
+  | { kind: "unpair" }
   | {
       kind: "paraphrase";
       text: string;
@@ -119,5 +135,11 @@ export type BgResponse =
   | { kind: "syncJob"; job: CapturedJob; synced: boolean }
   | { kind: "getConfig"; cvMakerBaseUrl: string }
   | { kind: "setConfig"; cvMakerBaseUrl: string }
+  | { kind: "getPairing"; pairing: PairedDeviceSummary | null }
+  | {
+      kind: "completePairing";
+      pairing: PairedDeviceSummary;
+    }
+  | { kind: "unpair"; ok: true }
   | { kind: "paraphrase"; text: string; changed: boolean }
   | { kind: "error"; message: string };

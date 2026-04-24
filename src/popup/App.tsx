@@ -1,11 +1,12 @@
 import { useState, type ReactElement } from "react";
 import { QAPanel } from "./panels/QAPanel";
 import { DiscoveryPanel } from "./panels/DiscoveryPanel";
+import { PairPanel } from "./panels/PairPanel";
 
-// The popup is two small panels toggled by a tab bar. Both panels talk to the
-// background worker via sendToBackground — no shared state is necessary.
+// The popup is three small panels toggled by a tab bar. All panels talk to
+// the background worker via sendToBackground — no shared state is necessary.
 
-type Tab = "qa" | "discovery";
+type Tab = "qa" | "discovery" | "pair";
 
 export function App(): ReactElement {
   const [tab, setTab] = useState<Tab>("qa");
@@ -16,7 +17,11 @@ export function App(): ReactElement {
         <div>
           <div className="cvaf-label">CV Autofill</div>
           <h1 className="cvaf-h text-2xl leading-none">
-            {tab === "qa" ? "Your Q&A memory" : "Discovery queue"}
+            {tab === "qa"
+              ? "Your Q&A memory"
+              : tab === "discovery"
+                ? "Discovery queue"
+                : "Pair with web app"}
           </h1>
         </div>
         <nav className="flex gap-1" role="tablist">
@@ -36,10 +41,24 @@ export function App(): ReactElement {
           >
             Discovery
           </button>
+          <button
+            role="tab"
+            aria-selected={tab === "pair"}
+            className={`cvaf-btn ${tab === "pair" ? "accent" : ""}`}
+            onClick={() => setTab("pair")}
+          >
+            Pair
+          </button>
         </nav>
       </header>
 
-      {tab === "qa" ? <QAPanel /> : <DiscoveryPanel />}
+      {tab === "qa" ? (
+        <QAPanel />
+      ) : tab === "discovery" ? (
+        <DiscoveryPanel />
+      ) : (
+        <PairPanel />
+      )}
     </div>
   );
 }
