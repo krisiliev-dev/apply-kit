@@ -130,6 +130,78 @@ export type RejectionSignal = {
   lessonsForFuture: string[]; // 1-3 concrete, non-generic
 };
 
+// ———————————————————————————————————————————————
+// Interview prep
+// ———————————————————————————————————————————————
+
+export type InterviewQuestionKind =
+  | "behavioral"
+  | "technical"
+  | "system-design"
+  | "values"
+  | "situational"
+  | "culture-fit"
+  | "other";
+
+export type InterviewConfidence = "low" | "mid" | "high";
+
+export type InterviewStarAnswer = {
+  situation: string;
+  task: string;
+  action: string;
+  result: string;
+  sourcedFrom?: string; // e.g. "experience: Senior Eng at Kettle Labs"
+};
+
+export type InterviewQuestion = {
+  id: string;
+  question: string;
+  kind: InterviewQuestionKind;
+  rationale: string;
+  starAnswer?: InterviewStarAnswer;
+  userDraft?: string;
+  confidence?: InterviewConfidence;
+  lastPracticedAt?: number;
+};
+
+export type CompanyPublicSignal = {
+  source: string;
+  note: string;
+};
+
+export type CompanyResearch = {
+  summary: string;
+  publicSignals: CompanyPublicSignal[];
+  likelyInterviewStyle?: string;
+};
+
+export type InterviewPrep = {
+  generatedAt: number;
+  questions: InterviewQuestion[];
+  companyResearch?: CompanyResearch;
+};
+
+// ———————————————————————————————————————————————
+// Pre-screen answers
+// ———————————————————————————————————————————————
+
+export type PreScreenTone = "direct" | "warm" | "witty" | "neutral";
+
+export type PreScreenQuestion = {
+  id: string;
+  prompt: string;
+  wordLimit?: number;
+  draft?: string;
+  finalAnswer?: string;
+  generatedAt?: number;
+  tone?: PreScreenTone;
+};
+
+export type PreScreen = {
+  questions: PreScreenQuestion[];
+  generatedAt: number;
+};
+
 export type Application = {
   id: string;
   company: string;
@@ -144,6 +216,8 @@ export type Application = {
   events?: ApplicationEvent[];
   coverLetter?: CoverLetter;
   rejection?: RejectionSignal;
+  interviewPrep?: InterviewPrep;
+  preScreen?: PreScreen;
 };
 
 // Persistence key used by both the reader (lib/app/persist.ts) and the
