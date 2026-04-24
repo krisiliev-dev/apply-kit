@@ -30,6 +30,8 @@ type UiState = {
   zoom: number;
   showGrid: boolean;
   showGuides: boolean;
+  /** Toggles the parseability heatmap (ParserOverlay) on top of the canvas. */
+  showParserOverlay: boolean;
 };
 
 type Actions = {
@@ -63,6 +65,7 @@ type Actions = {
   setZoom: (z: number) => void;
   setShowGrid: (v: boolean) => void;
   setShowGuides: (v: boolean) => void;
+  setShowParserOverlay: (v: boolean) => void;
 };
 
 export type Store = DocState & UiState & Actions;
@@ -135,6 +138,7 @@ const creator: StateCreator<Store> = (set, get) => {
     zoom: 1,
     showGrid: false,
     showGuides: true,
+    showParserOverlay: false,
 
     loadDoc: (doc) =>
       set({
@@ -366,6 +370,7 @@ const creator: StateCreator<Store> = (set, get) => {
     setZoom: (zoom) => set({ zoom: Math.max(0.2, Math.min(3, zoom)) }),
     setShowGrid: (v) => set({ showGrid: v }),
     setShowGuides: (v) => set({ showGuides: v }),
+    setShowParserOverlay: (v) => set({ showParserOverlay: v }),
   };
 };
 

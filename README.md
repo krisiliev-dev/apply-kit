@@ -113,9 +113,15 @@ Shape: three lenses — **applicant** (your outcomes), **recruiter** (how your C
 ### In progress
 - CV evaluation system — Affinda parseability + keyword alignment + recruiter-eye LLM pass + iterative refinement loop + parseability heatmap + score history (agent running)
 
+### Evaluation — recruiter-perspective extensions (shipped)
+
+Three additions extend the evaluation pipeline with a recruiter's point of view. They live alongside the existing parseability / keyword / recruiter-eye layers in `lib/evaluation/` and surface inside the editor's Eval tab:
+
+- **6-second test simulator** (`lib/evaluation/sixSecondTest.ts`) — feeds the rendered PDF to Claude with a 6-second-skim instruction and asks what stuck (name, current role, seniority, strongest signal, one thing remembered). Mismatches between the skim and the real data turn into hard warnings. Runs as an optional 4th layer when `AFFINDA_API_KEY` is set (needs the PDF render); skipped cleanly otherwise. Weighted 15% of the overall score.
+- **"Where's the number?" inspector** (`lib/evaluation/numberInspector.ts`) — static analyser that walks every text node. Flags bullets with an outcome verb (shipped, scaled, led, improved…) but no number, percentage, or scope word. No LLM call, ~1ms — runs live on every keystroke in the `NumberInspectorPanel` inside the Eval tab.
+- **Parseability heatmap** (`components/editor/ParserOverlay.tsx`) — toggleable overlay that outlines every text node green (Affinda extracted it) or red (it looks extractable but wasn't). Small numbered badges near each node link back to the relevant warning. Toggle via the **Parser view** button in the Eval tab.
+
 ### Queued — recruiter lens
-- **6-second test simulator** — renders the CV, shows to a model for 6 seconds, asks what stuck. Catches the scannability failure that kills most CVs.
-- **"Where's the number?" inspector** — flags every bullet lacking scope, metric, or baseline. Forces specificity.
 - **Proof-of-work links** — every bullet gets a structured artifact slot (commit URL, published piece, dashboard); empty proof = visible warning.
 - **Generic-archetype detector** — AI compares draft vs. 100 boilerplate CV archetypes; flags boilerplate phrasing.
 - **Tenure-pattern warnings** — two consecutive sub-year stints? Flag + optional framing prompt.

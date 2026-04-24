@@ -5,6 +5,7 @@ import type { Page, Theme } from "@/lib/doc/types";
 import { NodeView } from "./NodeView";
 import { useEditor } from "@/lib/doc/store";
 import { SelectionOverlay } from "./SelectionOverlay";
+import { ParserOverlay } from "./ParserOverlay";
 
 export function PageView({
   page,
@@ -60,6 +61,7 @@ export function PageView({
         ))}
 
       <SelectionOverlay page={page} pageRef={pageRef} />
+      <ParserOverlay page={page} />
     </div>
   );
 }

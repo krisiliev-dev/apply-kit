@@ -1,9 +1,11 @@
 // Shared types for the CV evaluation pipeline.
 //
-// The evaluator runs three independent layers against a CvDocument:
-//   1. Parseability — render to PDF, feed to Affinda, see what an ATS extracts.
-//   2. Keyword alignment — text coverage against the parsed job's keyword list.
+// The evaluator runs five independent layers against a CvDocument:
+//   1. Parseability  — render to PDF, feed to Affinda, see what an ATS extracts.
+//   2. Keyword       — text coverage against the parsed job's keyword list.
 //   3. Recruiter-eye — subjective LLM pass as a senior recruiter.
+//   4. Six-second    — simulates a recruiter's first-glance skim of the PDF.
+//   5. Numbers       — static check that outcome-claiming bullets have scope.
 //
 // Composite score and unified warnings are assembled in `score.ts`.
 
@@ -69,7 +71,59 @@ export type RecruiterReport = {
   unavailableReason?: string;
 };
 
-export type EvalLayer = "parse" | "keywords" | "recruiter";
+// ————————————————————————————————————————————————
+// Six-second test — simulates a recruiter skimming the rendered PDF. We want
+// to know what sticks in 6s, what got misread, and whether the candidate's
+// name and current role survive a glance. Catches the scannability failure
+// that kills most CVs even when every other layer passes.
+// ————————————————————————————————————————————————
+
+export type SixSecondSeniority =
+  | "junior"
+  | "mid"
+  | "senior"
+  | "staff"
+  | "unclear";
+
+export type SixSecondReport = {
+  nameRead?: string;
+  currentRoleRead?: string;
+  seniorityImpression?: SixSecondSeniority;
+  strongestSignal: string;
+  oneThingRemembered: string;
+  /** Things the simulated recruiter got wrong (wrong name, wrong company, misread). */
+  misreadings: string[];
+  scannabilityScore: number; // 0-100
+  warnings: string[];
+  unavailable?: boolean;
+  unavailableReason?: string;
+};
+
+// ————————————————————————————————————————————————
+// "Where's the number?" inspector — flags bullets that claim an outcome
+// without scope, metric, or baseline. Purely static — runs every keystroke.
+// ————————————————————————————————————————————————
+
+export type NumberInspectorFlag = {
+  nodeId: string;
+  text: string;
+  reason: string;
+};
+
+export type NumberInspectorReport = {
+  totalBullets: number;
+  bulletsWithMetrics: number;
+  flaggedBullets: NumberInspectorFlag[];
+  /** bulletsWithMetrics / totalBullets * 100, rounded. 100 if no bullets. */
+  score: number;
+};
+
+export type EvalLayer =
+  | "parse"
+  | "keywords"
+  | "recruiter"
+  | "six-second"
+  | "numbers";
 export type EvalSeverity = "info" | "warn" | "error";
 
 export type EvalWarning = {
@@ -101,6 +155,10 @@ export type CvEvaluation = {
   parseability: ParseabilityScore;
   keywords: KeywordScore;
   recruiter: RecruiterReport;
+  /** Optional six-second recruiter-skim pass. Requires Affinda + PDF render. */
+  sixSecond?: SixSecondReport;
+  /** Always-on static number-in-bullet inspector. */
+  numbers?: NumberInspectorReport;
   warnings: EvalWarning[];
   runId: string;
   evaluatedAt: number;

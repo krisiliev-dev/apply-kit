@@ -1,18 +1,24 @@
 import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
-import type { CvEvaluation } from "./types";
+import type { CvEvaluation, SixSecondReport } from "./types";
 import { parseCv } from "./affinda";
 import { renderCvToPdf } from "./render";
 import { scoreCvDocumentKeywords } from "./keywords";
 import { recruiterEyePass } from "./recruiterEye";
 import { composeEvaluation, scoreParseability } from "./score";
+import { runSixSecondTest } from "./sixSecondTest";
+import { inspectNumbers } from "./numberInspector";
 
 // ————————————————————————————————————————————————
-// Top-level evaluator — orchestrates all three layers in parallel where
-// possible and composes the result.
+// Top-level evaluator — orchestrates all layers where possible and composes
+// the result.
 //
 // Render + Affinda is a serial pair (parse needs the PDF). The recruiter-eye
-// pass is independent and runs concurrently.
+// pass and the six-second test are both LLM calls; recruiter uses flattened
+// text (no render dependency), six-second needs the PDF so it runs only
+// after render succeeds. Both kick off as soon as their dependencies resolve.
+//
+// The number inspector is static and always runs.
 // ————————————————————————————————————————————————
 
 export type EvaluateOptions = {
@@ -26,6 +32,8 @@ export type ProgressUpdate = {
     | "parse"
     | "keywords"
     | "recruiter"
+    | "six-second"
+    | "numbers"
     | "score"
     | "done"
     | "error";
@@ -46,27 +54,83 @@ export async function evaluateCv(
 
   emit({ stage: "render", message: "Rendering CV to PDF…" });
 
-  const pdfPromise = safeRender(opts.doc).then((r) => {
+  // PDF render is a shared dependency for parseability + six-second. Kick it
+  // off once, then fan out.
+  const pdfPromise: Promise<Buffer | null> = safeRender(opts.doc).catch((err) => {
+    emit({ stage: "error", message: `Render failed: ${formatErr(err)}` });
+    return null;
+  });
+
+  const parseResultPromise = pdfPromise.then(async (pdf) => {
+    if (!pdf) {
+      return null;
+    }
     emit({ stage: "parse", message: "Parsing with Affinda…" });
-    return parseCv(r);
+    try {
+      return await parseCv(pdf);
+    } catch (err) {
+      emit({ stage: "error", message: `Parse layer failed: ${formatErr(err)}` });
+      return null;
+    }
   });
 
   emit({ stage: "recruiter", message: "Running recruiter-eye pass…" });
   const recruiterPromise = recruiterEyePass(opts.doc, opts.job);
 
-  const [parseResult, recruiterResult] = await Promise.all([
-    pdfPromise.catch((err) => {
-      emit({ stage: "error", message: `Parse layer failed: ${formatErr(err)}` });
-      return null;
-    }),
+  // Six-second test: requires both the PDF and (ideally) the Affinda extract
+  // for mismatch checks. Skips cleanly when either dependency is missing.
+  const sixSecondPromise: Promise<SixSecondReport | undefined> = (async () => {
+    const pdf = await pdfPromise;
+    if (!pdf) {
+      return {
+        strongestSignal: "",
+        oneThingRemembered: "",
+        misreadings: [],
+        scannabilityScore: 60,
+        warnings: [],
+        unavailable: true,
+        unavailableReason:
+          "Six-second test requires Affinda + Puppeteer (needs the PDF render).",
+      } satisfies SixSecondReport;
+    }
+    const affindaKey = process.env.AFFINDA_API_KEY;
+    if (!affindaKey) {
+      return {
+        strongestSignal: "",
+        oneThingRemembered: "",
+        misreadings: [],
+        scannabilityScore: 60,
+        warnings: [],
+        unavailable: true,
+        unavailableReason:
+          "Six-second test requires Affinda + Puppeteer (needs the PDF render).",
+      } satisfies SixSecondReport;
+    }
+
+    emit({ stage: "six-second", message: "Running 6-second skim simulation…" });
+    const parseResult = await parseResultPromise;
+    const extracted =
+      parseResult && !parseResult.unavailable ? parseResult.extracted : null;
+    return await runSixSecondTest({
+      doc: opts.doc,
+      pdf,
+      extracted,
+    });
+  })();
+
+  const [parseResult, recruiterResult, sixSecondResult] = await Promise.all([
+    parseResultPromise,
     recruiterPromise,
+    sixSecondPromise,
   ]);
+
+  emit({ stage: "numbers", message: "Inspecting bullets for metrics…" });
+  const numbersReport = inspectNumbers(opts.doc);
 
   emit({ stage: "keywords", message: "Scoring keyword alignment…" });
 
-  const extractedForKeywords = parseResult && !parseResult.unavailable
-    ? parseResult.extracted
-    : null;
+  const extractedForKeywords =
+    parseResult && !parseResult.unavailable ? parseResult.extracted : null;
   const keywordScore = scoreCvDocumentKeywords({
     doc: opts.doc,
     job: opts.job,
@@ -101,6 +165,8 @@ export async function evaluateCv(
     parseability: parseabilityScore,
     keywords: keywordScore,
     recruiter: recruiterResult,
+    sixSecond: sixSecondResult,
+    numbers: numbersReport,
   });
 
   emit({ stage: "done", message: `Overall ${evaluation.overall}/100.` });

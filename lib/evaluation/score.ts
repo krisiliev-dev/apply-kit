@@ -6,30 +6,44 @@ import type {
   CvEvaluation,
   EvalWarning,
   KeywordScore,
+  NumberInspectorReport,
   ParseabilityScore,
   RecruiterReport,
+  SixSecondReport,
 } from "./types";
 import { fuzzyLocateNodes } from "./locate";
 
 // ————————————————————————————————————————————————
-// Composite scoring — weighted blend of the three layers.
+// Composite scoring — weighted blend of the layers.
 //
-// Weights:
-//   • Parseability 40% — a visually-beautiful CV that parsers can't read is
-//     useless for 70%+ of the pipeline. The single highest-leverage failure
-//     mode, and the one most easily missed without tooling.
-//   • Keywords     35% — strong correlation with first-pass filters, but not
-//     the whole story (keyword-stuffed CVs still get thrown out by humans).
-//   • Recruiter    25% — subjective, LLM-driven. Valuable signal but noisy —
-//     kept as a meaningful but non-dominant slice.
+// Base weights (when six-second is unavailable):
+//   • Parseability 40%
+//   • Keywords     35%
+//   • Recruiter    25%
+//
+// When the six-second layer IS available, reweight so the pass gets a fair
+// slice without dominating:
+//   • Parseability 35%
+//   • Keywords     30%
+//   • Recruiter    20%
+//   • Six-second   15%
+//
+// The number-inspector is always on but doesn't get its own slice — it
+// surfaces warnings that feed the existing parseability/recruiter picture
+// and shows its own panel in the UI.
 //
 // These add to 100. Changing the weights changes how much each layer tugs on
 // the overall score, but not the per-layer diagnostics.
 // ————————————————————————————————————————————————
 
-const WEIGHT_PARSE = 0.4;
-const WEIGHT_KEYWORDS = 0.35;
-const WEIGHT_RECRUITER = 0.25;
+const WEIGHT_PARSE_BASE = 0.4;
+const WEIGHT_KEYWORDS_BASE = 0.35;
+const WEIGHT_RECRUITER_BASE = 0.25;
+
+const WEIGHT_PARSE_SIX = 0.35;
+const WEIGHT_KEYWORDS_SIX = 0.3;
+const WEIGHT_RECRUITER_SIX = 0.2;
+const WEIGHT_SIX_SECOND = 0.15;
 
 type ScoreInput = {
   doc: CvDocument;
@@ -37,6 +51,8 @@ type ScoreInput = {
   parseability: ParseabilityScore;
   keywords: KeywordScore;
   recruiter: RecruiterReport;
+  sixSecond?: SixSecondReport;
+  numbers?: NumberInspectorReport;
 };
 
 export function composeEvaluation(input: ScoreInput): CvEvaluation {
@@ -44,17 +60,31 @@ export function composeEvaluation(input: ScoreInput): CvEvaluation {
 
   const recruiterScore = recruiterToScore(input.recruiter);
 
-  const overall = Math.round(
-    WEIGHT_PARSE * input.parseability.score +
-      WEIGHT_KEYWORDS * input.keywords.score +
-      WEIGHT_RECRUITER * recruiterScore,
-  );
+  const hasSix = input.sixSecond && !input.sixSecond.unavailable;
+
+  let overall: number;
+  if (hasSix && input.sixSecond) {
+    overall = Math.round(
+      WEIGHT_PARSE_SIX * input.parseability.score +
+        WEIGHT_KEYWORDS_SIX * input.keywords.score +
+        WEIGHT_RECRUITER_SIX * recruiterScore +
+        WEIGHT_SIX_SECOND * input.sixSecond.scannabilityScore,
+    );
+  } else {
+    overall = Math.round(
+      WEIGHT_PARSE_BASE * input.parseability.score +
+        WEIGHT_KEYWORDS_BASE * input.keywords.score +
+        WEIGHT_RECRUITER_BASE * recruiterScore,
+    );
+  }
 
   return {
     overall: clamp(overall, 0, 100),
     parseability: input.parseability,
     keywords: input.keywords,
     recruiter: input.recruiter,
+    sixSecond: input.sixSecond,
+    numbers: input.numbers,
     warnings,
     runId: nanoid(10),
     evaluatedAt: Date.now(),
@@ -149,7 +179,7 @@ export function scoreParseability(
   };
 }
 
-// Flatten all three layers' warnings into one list with consistent shape +
+// Flatten all layers' warnings into one list with consistent shape +
 // targetNodeIds where we can compute them.
 function assembleWarnings(input: ScoreInput): EvalWarning[] {
   const out: EvalWarning[] = [];
@@ -216,6 +246,54 @@ function assembleWarnings(input: ScoreInput): EvalWarning[] {
       message: input.recruiter.unavailableReason,
       severity: "info",
     });
+  }
+
+  // Six-second layer
+  if (input.sixSecond) {
+    if (input.sixSecond.unavailable) {
+      if (input.sixSecond.unavailableReason) {
+        out.push({
+          layer: "six-second",
+          kind: "unavailable",
+          message: input.sixSecond.unavailableReason,
+          severity: "info",
+        });
+      }
+    } else {
+      for (const mis of input.sixSecond.misreadings) {
+        out.push({
+          layer: "six-second",
+          kind: "misreading",
+          message: `Skim misread: ${mis}`,
+          severity: "warn",
+        });
+      }
+      for (const w of input.sixSecond.warnings) {
+        out.push({
+          layer: "six-second",
+          kind: "scannability",
+          message: w,
+          severity:
+            /didn't identify your name/i.test(w) ||
+            /not readable at a glance/i.test(w)
+              ? "error"
+              : "warn",
+        });
+      }
+    }
+  }
+
+  // Number-inspector — always on
+  if (input.numbers) {
+    for (const f of input.numbers.flaggedBullets) {
+      out.push({
+        layer: "numbers",
+        kind: "missing-metric",
+        message: `No number/scope: "${f.text}"`,
+        targetNodeIds: [f.nodeId],
+        severity: "warn",
+      });
+    }
   }
 
   return out;
