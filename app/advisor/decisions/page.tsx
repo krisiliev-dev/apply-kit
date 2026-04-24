@@ -13,6 +13,7 @@ import {
 } from "@/lib/advisor/types";
 import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // /advisor/decisions — three focused helpers in one page with tabs.
 // Structured form per kind + optional free-form context → POST to
@@ -269,7 +270,7 @@ function KindForm<T extends DecisionInput>({
         >
           {busy ? "Thinking…" : "Generate analysis"}
         </button>
-        {error ? <p className="font-mono text-[11px] text-accent">{error}</p> : null}
+        {error ? <ApiKeyHint error={error} inline /> : null}
       </div>
     </form>
   );

@@ -37,6 +37,12 @@ export default function Home() {
           <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             CV variants
           </h2>
+          <Link
+            href="/cv/compare"
+            className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink underline decoration-ink/20 underline-offset-4"
+          >
+            Compare variants →
+          </Link>
         </div>
         <DemoHint />
         <ul className="divide-y divide-ink/10 border-y border-ink/10">

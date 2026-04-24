@@ -27,6 +27,8 @@ import { InterviewPrepSection } from "@/components/applications/InterviewPrepSec
 import { PreScreenSection } from "@/components/applications/PreScreenSection";
 import { SalaryNegotiationSection } from "@/components/applications/SalaryNegotiationSection";
 import { FollowUpsSection } from "@/components/applications/FollowUpsSection";
+import { loadFromStorage } from "@/lib/doc/persist";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 export default function ApplicationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -141,21 +143,24 @@ export default function ApplicationDetailPage() {
         />
 
         <Label>CV</Label>
-        <div className="flex items-center gap-3">
-          <InlineText
-            value={app.cvSlug ?? ""}
-            onCommit={(v) => setField(app.id, { cvSlug: v || undefined })}
-            className="font-mono text-sm text-ink/80 w-full max-w-xs"
-            placeholder="cv slug (e.g. default)"
-          />
-          {app.cvSlug && (
-            <Link
-              href={`/cv/${app.cvSlug}`}
-              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/70 hover:text-ink shrink-0"
-            >
-              Open CV →
-            </Link>
-          )}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-3">
+            <InlineText
+              value={app.cvSlug ?? ""}
+              onCommit={(v) => setField(app.id, { cvSlug: v || undefined })}
+              className="font-mono text-sm text-ink/80 w-full max-w-xs"
+              placeholder="cv slug (e.g. default)"
+            />
+            {app.cvSlug && (
+              <Link
+                href={`/cv/${app.cvSlug}`}
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/70 hover:text-ink shrink-0"
+              >
+                Open CV →
+              </Link>
+            )}
+          </div>
+          <CvSlugStatus slug={app.cvSlug} />
         </div>
 
         <Label>Created</Label>
@@ -242,6 +247,62 @@ export default function ApplicationDetailPage() {
       </footer>
     </main>
   );
+}
+
+// ———————————————————————————————————————————————
+// CV slug status — explains when a referenced slug has no saved doc yet
+// ———————————————————————————————————————————————
+
+function CvSlugStatus({ slug }: { slug: string | undefined }) {
+  const [state, setState] = useState<"loading" | "saved" | "typed" | "unknown">(
+    "loading",
+  );
+
+  useEffect(() => {
+    if (!slug) {
+      setState("loading");
+      return;
+    }
+    const saved = loadFromStorage(slug);
+    if (saved) {
+      setState("saved");
+      return;
+    }
+    if (cvs[slug]) {
+      setState("typed");
+      return;
+    }
+    setState("unknown");
+  }, [slug]);
+
+  if (!slug) return null;
+
+  if (state === "saved") return null;
+
+  if (state === "typed") {
+    return (
+      <p className="font-mono text-[10px] text-ink/50">
+        Typed seed available — click &ldquo;Open CV&rdquo; to materialise it in
+        the editor.
+      </p>
+    );
+  }
+
+  if (state === "unknown") {
+    return (
+      <p className="font-mono text-[10px] text-ink/50">
+        This variant was never opened.{" "}
+        <Link
+          href={`/cv/${slug}`}
+          className="underline decoration-ink/30 underline-offset-4 hover:text-ink"
+        >
+          Seed it now?
+        </Link>
+      </p>
+    );
+  }
+
+  return null;
 }
 
 // ———————————————————————————————————————————————
@@ -536,9 +597,9 @@ function CoverLetterSection({
           </div>
 
           {error && (
-            <p className="mt-4 font-mono text-[11px] text-accent">
-              {error.message}
-            </p>
+            <div className="mt-4">
+              <ApiKeyHint error={error.message} inline />
+            </div>
           )}
 
           {streaming && (
@@ -798,7 +859,9 @@ function RejectionLearningSection({
           </div>
 
           {error && (
-            <p className="mt-4 font-mono text-[11px] text-accent">{error}</p>
+            <div className="mt-4">
+              <ApiKeyHint error={error} inline />
+            </div>
           )}
         </div>
       )}

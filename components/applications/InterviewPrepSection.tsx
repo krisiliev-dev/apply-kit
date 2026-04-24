@@ -13,6 +13,7 @@ import type {
 import { cvs } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { formatDateTime } from "@/lib/app/ui";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // Interview prep — visible when the application has reached screen/interview/offer.
 // - Optional company-notes paste block feeds richer generation.
@@ -258,7 +259,9 @@ export function InterviewPrepSection({ app }: { app: Application }) {
           </div>
 
           {error && (
-            <p className="mt-4 font-mono text-[11px] text-accent">{error}</p>
+            <div className="mt-4">
+              <ApiKeyHint error={error} inline />
+            </div>
           )}
         </div>
       )}

@@ -21,6 +21,7 @@ import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
 import { FitCheckCard } from "@/components/applications/FitCheckCard";
 import { profile as baseProfile } from "@/content/profile";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // Discovery-side fit cache — keep results per posting id to avoid respending
 // tokens on re-opens. SSR-safe.
@@ -380,7 +381,9 @@ export default function DiscoverPage() {
           <p className="font-mono text-[11px] text-ink/60 mt-3">{fetchInfo}</p>
         )}
         {fetchError && (
-          <p className="font-mono text-[11px] text-accent mt-3">{fetchError}</p>
+          <div className="mt-3">
+            <ApiKeyHint error={fetchError} inline />
+          </div>
         )}
       </section>
 

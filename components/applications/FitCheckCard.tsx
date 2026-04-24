@@ -8,6 +8,7 @@ import type {
   ParsedJob,
 } from "@/lib/app/types";
 import type { CVContent, Profile } from "@/lib/types";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // FitCheckCard — brutally honest pre-application read.
 // Used in two surfaces:
@@ -104,9 +105,7 @@ export function FitCheckCard({
         >
           {busy ? "Reading the posting…" : "Check fit"}
         </button>
-        {error && (
-          <p className="mt-3 font-mono text-[11px] text-accent">{error}</p>
-        )}
+        {error && <div className="mt-3"><ApiKeyHint error={error} inline /></div>}
       </div>
     );
   }
@@ -200,7 +199,7 @@ export function FitCheckCard({
         </span>
       </div>
 
-      {error && <p className="mt-3 font-mono text-[11px] text-accent">{error}</p>}
+      {error && <div className="mt-3"><ApiKeyHint error={error} inline /></div>}
     </div>
   );
 }

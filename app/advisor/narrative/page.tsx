@@ -8,6 +8,7 @@ import type { CareerNarrative, NarrativeFraming } from "@/lib/advisor/types";
 import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
 import { useApplications } from "@/lib/app/store";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // /advisor/narrative — detailed.
 // Shows currentStoryDetected, then each framing as a card with evidence +
@@ -99,9 +100,7 @@ export default function NarrativePage() {
             Last generated {formatRelative(narrative.generatedAt)}.
           </p>
         ) : null}
-        {error ? (
-          <p className="font-mono text-[11px] text-accent">{error}</p>
-        ) : null}
+        {error ? <ApiKeyHint error={error} inline /> : null}
       </div>
 
       {narrative ? (

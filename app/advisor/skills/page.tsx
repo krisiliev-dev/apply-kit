@@ -7,6 +7,7 @@ import { formatRelative } from "@/lib/advisor/ui";
 import type { SkillGapAnalysis, SkillDemand } from "@/lib/advisor/types";
 import { profile } from "@/content/profile";
 import { cvList } from "@/content/cvs";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 // /advisor/skills — detailed. Shows the latest skill-gap analysis as a table
 // with demand counts, adjacency notes, and concrete acquisition paths. Needs
@@ -91,7 +92,7 @@ export default function SkillsPage() {
             Last generated {formatRelative(skills.generatedAt)} · {skills.analyzedPostingCount} postings analyzed
           </p>
         ) : null}
-        {error ? <p className="font-mono text-[11px] text-accent">{error}</p> : null}
+        {error ? <ApiKeyHint error={error} inline /> : null}
       </div>
 
       {skills ? (

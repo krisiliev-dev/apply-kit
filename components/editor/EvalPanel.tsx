@@ -24,6 +24,7 @@ import { inspectProof } from "@/lib/evaluation/proofInspector";
 import { detectArchetypes } from "@/lib/evaluation/archetypeDetector";
 import { inspectTenure } from "@/lib/evaluation/tenureInspector";
 import { ARCHETYPE_BY_CATEGORY_LABEL } from "@/lib/evaluation/archetypes";
+import { isApiKeyMissing } from "@/components/errors/ApiKeyHint";
 
 // ————————————————————————————————————————————————
 // Eval panel — right-pane tab for CV evaluation.
@@ -298,7 +299,15 @@ export function EvalPanel({ slug }: { slug: string }) {
               color: "var(--color-accent, #d64933)",
             }}
           >
-            {error}
+            {isApiKeyMissing(error) ? (
+              <>
+                Add <code>ANTHROPIC_API_KEY</code> (and optionally{" "}
+                <code>AFFINDA_API_KEY</code>) to <code>.env.local</code> and
+                restart the dev server.
+              </>
+            ) : (
+              error
+            )}
           </div>
         )}
 

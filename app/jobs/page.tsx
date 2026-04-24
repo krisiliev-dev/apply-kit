@@ -12,6 +12,7 @@ import { makeVariantSlug, upsertVariant } from "@/lib/jobs/registry";
 import { seedFromContent } from "@/lib/jobs/seedFromContent";
 import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
+import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 
 type Stage = "idle" | "parsing" | "drafting" | "error";
 
@@ -211,9 +212,7 @@ export default function JobsPage() {
           {stage !== "idle" && stage !== "error" && (
             <span className="font-mono text-xs text-ink/60">{statusMsg}</span>
           )}
-          {stage === "error" && (
-            <span className="font-mono text-xs text-accent">{errorMsg}</span>
-          )}
+          {stage === "error" && <ApiKeyHint error={errorMsg} inline />}
         </div>
       </form>
 
