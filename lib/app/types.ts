@@ -202,6 +202,92 @@ export type PreScreen = {
   generatedAt: number;
 };
 
+// ———————————————————————————————————————————————
+// Salary negotiation
+// ———————————————————————————————————————————————
+
+export type RemoteMode = "remote" | "hybrid" | "on-site";
+
+export type OfferRecord = {
+  baseSalary: number;
+  currency: string; // "USD" | "EUR" | "GBP" | free-form 3-letter
+  equity?: string; // "0.25% vesting 4yr, 1yr cliff" — free-form
+  bonus?: string; // e.g. "15% target"
+  signOn?: number;
+  ptoDays?: number;
+  remote?: RemoteMode;
+  benefits?: string;
+  rawOfferText?: string;
+  receivedAt: number;
+};
+
+export type SalaryMarketContext = {
+  bandLow?: number;
+  bandMid?: number;
+  bandHigh?: number;
+  bandSource?: string; // e.g. "levels.fyi-adjacent inference, approximate"
+  confidenceNote: string;
+};
+
+export type SalaryCounterOffer = {
+  headline: string; // "Counter at X base + Y equity"
+  emailBody: string; // email draft, ~150 words, professional
+  rationale: string; // why this specific counter
+};
+
+export type SalaryAnalysis = {
+  marketContext: SalaryMarketContext;
+  leveragePoints: string[];
+  risks: string[]; // things NOT to push on
+  counterOfferDraft: SalaryCounterOffer;
+  generatedAt: number;
+};
+
+// ———————————————————————————————————————————————
+// Follow-up orchestration
+// ———————————————————————————————————————————————
+
+export type FollowUpStatus = "pending" | "sent" | "skipped" | "snoozed";
+
+export type FollowUpKind =
+  | "post-apply"
+  | "post-screen"
+  | "post-interview"
+  | "post-offer"
+  | "custom";
+
+export type FollowUp = {
+  id: string;
+  applicationId: string;
+  kind: FollowUpKind;
+  scheduledFor: number;
+  status: FollowUpStatus;
+  emailDraft?: string; // generated body
+  generatedAt?: number;
+  sentAt?: number;
+};
+
+export const FOLLOWUPS_STORAGE_KEY = "cv-maker:followups";
+
+// ———————————————————————————————————————————————
+// Apply-fit check (used by /jobs and /discover)
+// ———————————————————————————————————————————————
+
+export type ApplyFitVerdict = "strong" | "plausible" | "stretch" | "misaligned";
+export type ApplyFitEffort = "low" | "mid" | "high";
+
+export type ApplyFitCheck = {
+  overallFit: ApplyFitVerdict;
+  strengths: string[];
+  weaknesses: string[];
+  deltaQuestions: string[];
+  effortEstimate: ApplyFitEffort;
+  honest: string;
+  generatedAt: number;
+};
+
+// ———————————————————————————————————————————————
+
 export type Application = {
   id: string;
   company: string;
@@ -218,6 +304,9 @@ export type Application = {
   rejection?: RejectionSignal;
   interviewPrep?: InterviewPrep;
   preScreen?: PreScreen;
+  offer?: OfferRecord;
+  salaryAnalysis?: SalaryAnalysis;
+  applyFit?: ApplyFitCheck;
 };
 
 // Persistence key used by both the reader (lib/app/persist.ts) and the

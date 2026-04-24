@@ -127,13 +127,18 @@ Three additions extend the evaluation pipeline with a recruiter's point of view.
 - **Tenure-pattern warnings** — two consecutive sub-year stints? Flag + optional framing prompt.
 - **Pre-screen question drafter** — short-answer fields ("why us?", "describe a failure") drafted in-tool against your knowledge base.
 
+### Applicant lens — shipped
+
+Four connected features surface around the application detail page and the tracker:
+
+- **Salary negotiation** (`components/applications/SalaryNegotiationSection.tsx`) — paste an offer on any `interview`/`offer` application; `/api/salary/parse` extracts structured fields; `/api/salary/analyze` returns market context (pre-training inference, clearly flagged as approximate), leverage points sourced from the CV, risks, and a ~150-word counter-offer email. Copy-to-clipboard on the email body. Persists `offer` + `salaryAnalysis` on the Application.
+- **"Should I even apply?"** (`components/applications/FitCheckCard.tsx`) — surfaces on `/jobs/[appId]` above the Draft CV action and on `/discover` via a "Check fit" modal. `/api/apply-fit/check` returns `overallFit` (strong / plausible / stretch / misaligned), weaknesses (listed first), strengths, clarifying questions, and an effort estimate. Tells the candidate plainly when not to apply. Cached per posting id on `/discover` (`cv-maker:discovery-fit-cache`) and on the Application record on `/jobs`.
+- **Follow-up orchestration** (`lib/app/followupCadence.ts`, `lib/app/followupStore.ts`, `components/applications/FollowUpsSection.tsx`) — auto-stages follow-ups when an application's status changes (post-apply +7d, post-screen +3d, post-interview +2d, post-offer +1d). `/api/follow-up/draft` streams a concise email body. Per-row controls: regenerate, snooze 3d, mark sent, skip, delete. Editable draft textarea (autosaved on blur). Inline `⏰ follow-up due` pill on `/applications` rows when any pending follow-up is within 2 days.
+- **Effort budget** (`lib/app/effortBudget.ts`) — one-line banner atop `/applications` with a tiny bar chart showing velocity vs. configurable target (default 20 / 30 days). Burn-rate classifier: `under`, `on-track`, `over`, `spray` (high volume + low tailoring). Full-section version on `/applications/review` with a configurable target input (persisted to `cv-maker:effort-target`).
+
 ### Queued — applicant lens
-- **Rejection → lessons loop** — capture rejection emails / ghostings; AI extracts signal per application; patterns aggregate over time.
-- **Interview prep module** — when an application moves to `screen`/`interview`, generate likely questions from the posting + public company writing; STAR-format practice answers sourced from profile.
-- **Salary negotiation** — paste an offer; get market context + leverage analysis + counter-offer draft.
-- **"Should I even apply?"** — honest pre-screen surfacing *weaknesses* for this role, not just strengths.
-- **Effort budget** — track "~20 high-quality applications / month" and show when you're overspending on low-signal volume.
-- **Follow-up orchestration** — calibrated nudges at the right intervals with drafted emails (not spam).
+- **Rejection → lessons loop** — capture rejection emails / ghostings; AI extracts signal per application; patterns aggregate over time. *(shipped earlier; see below)*
+- **Interview prep module** — when an application moves to `screen`/`interview`, generate likely questions from the posting + public company writing; STAR-format practice answers sourced from profile. *(shipped earlier; see below)*
 
 ### Queued — career advisor lens
 - **Career narrative engine** — read full history + applied roles; identify the story you're (often unintentionally) telling; propose alternative framings.

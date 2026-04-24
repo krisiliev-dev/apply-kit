@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import type { Application } from "@/lib/app/types";
+import type { Application, ApplyFitCheck } from "@/lib/app/types";
 import { getApplication, patchApplication } from "@/lib/app/storage";
 import { profile as baseProfile } from "@/content/profile";
 import type { AtsJobSchema } from "@/lib/jobs/ats";
 import { detectAts } from "@/lib/jobs/ats";
 import { loadDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
+import { FitCheckCard } from "@/components/applications/FitCheckCard";
+import { defaultCV } from "@/content/cvs/default";
+import { cvs } from "@/content/cvs";
 
 type AtsState =
   | { kind: "none" }
@@ -148,6 +151,24 @@ export function JobDetailView({ appId }: { appId: string }) {
           </button>
         ))}
       </section>
+
+      {job && (
+        <section className="mb-12">
+          <FitCheckCard
+            inputs={{
+              parsedJob: job,
+              baseCV:
+                (app.cvSlug && cvs[app.cvSlug]) || defaultCV,
+              profile: baseProfile,
+            }}
+            cached={app.applyFit}
+            onResult={(fit: ApplyFitCheck) => {
+              const updated = patchApplication(app.id, { applyFit: fit });
+              if (updated) setApp(updated);
+            }}
+          />
+        </section>
+      )}
 
       <section className="grid md:grid-cols-2 gap-8 mb-12">
         <div>

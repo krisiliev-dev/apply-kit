@@ -6,6 +6,18 @@ import { useApplications } from "@/lib/app/store";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/app/types";
 import { STATUS_CLASS, STATUS_LABEL, formatDate } from "@/lib/app/ui";
 import { downloadApplicationsCsv } from "@/lib/app/csv";
+import {
+  BURN_LABEL,
+  computeEffortBudget,
+  loadTargetCapacity,
+  type BurnRate,
+  type EffortBudget,
+} from "@/lib/app/effortBudget";
+import {
+  useFollowUps,
+  selectAllDueSoon,
+} from "@/lib/app/followupStore";
+import { backfillMissingPostApply } from "@/lib/app/followupCadence";
 
 type FilterStatus = ApplicationStatus | "all";
 
@@ -13,12 +25,35 @@ const FILTERS: FilterStatus[] = ["all", ...APPLICATION_STATUSES];
 
 export default function ApplicationsPage() {
   const { applications, loaded, load, updateStatus } = useApplications();
+  const loadFollowUps = useFollowUps((s) => s.load);
+  const dueSoonItems = useFollowUps(selectAllDueSoon());
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [query, setQuery] = useState("");
+  const [targetCapacity, setTargetCapacity] = useState<number>(20);
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadFollowUps();
+    setTargetCapacity(loadTargetCapacity());
+  }, [load, loadFollowUps]);
+
+  // Backfill post-apply follow-ups once, after applications are loaded. The
+  // helper is idempotent (checks for existing pending rows per app+kind).
+  useEffect(() => {
+    if (!loaded) return;
+    backfillMissingPostApply(applications);
+  }, [loaded, applications]);
+
+  const effort: EffortBudget | null = useMemo(() => {
+    if (!loaded) return null;
+    return computeEffortBudget(applications, { targetCapacity });
+  }, [applications, loaded, targetCapacity]);
+
+  const followUpByAppId = useMemo(() => {
+    const map = new Map<string, true>();
+    for (const f of dueSoonItems) map.set(f.applicationId, true);
+    return map;
+  }, [dueSoonItems]);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -75,6 +110,10 @@ export default function ApplicationsPage() {
           </div>
         </div>
       </header>
+
+      {effort && applications.length > 0 && (
+        <EffortBanner effort={effort} />
+      )}
 
       <section className="mb-6 flex flex-wrap items-center gap-2">
         {FILTERS.map((f) => {
@@ -138,6 +177,14 @@ export default function ApplicationsPage() {
                       {a.company}
                     </span>
                     <span className="text-ink/70 truncate">{a.role}</span>
+                    {followUpByAppId.has(a.id) && (
+                      <span
+                        className="font-mono text-[10px] uppercase tracking-[0.15em] text-accent border border-accent/30 bg-accent/5 px-1.5 py-0.5 shrink-0"
+                        title="A follow-up is due soon"
+                      >
+                        ⏰ follow-up due
+                      </span>
+                    )}
                   </Link>
 
                   <select
@@ -181,5 +228,69 @@ export default function ApplicationsPage() {
         )}
       </section>
     </main>
+  );
+}
+
+// ———————————————————————————————————————————————
+// Effort banner (one line, SVG bar + guidance)
+// ———————————————————————————————————————————————
+
+const BURN_ACCENT: Record<BurnRate, string> = {
+  under: "text-ink/70",
+  "on-track": "text-ink",
+  over: "text-accent",
+  spray: "text-accent",
+};
+
+function EffortBanner({ effort }: { effort: EffortBudget }) {
+  // Bar width as a fraction of 1.5× target (caps at 100%). Target marker at
+  // ratio = target/(1.5*target) = 0.667 of the bar.
+  const scale = Math.max(1, effort.targetCapacity * 1.5);
+  const width = Math.min(100, (effort.appliedInWindow / scale) * 100);
+  const markerPct = (effort.targetCapacity / scale) * 100;
+  const color =
+    effort.burnRate === "spray"
+      ? "bg-accent"
+      : effort.burnRate === "over"
+        ? "bg-accent/70"
+        : effort.burnRate === "on-track"
+          ? "bg-ink"
+          : "bg-ink/40";
+
+  return (
+    <section className="mb-6 border border-ink/10 px-4 py-3">
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50">
+            Effort
+          </span>
+          <span
+            className={`font-mono text-[10px] uppercase tracking-[0.2em] ${BURN_ACCENT[effort.burnRate]}`}
+          >
+            · {BURN_LABEL[effort.burnRate]}
+          </span>
+        </div>
+        <div className="flex-1 min-w-[160px] h-3 relative bg-ink/[0.04]">
+          <div
+            className={`absolute inset-y-0 left-0 ${color}`}
+            style={{ width: `${width}%` }}
+          />
+          <div
+            className="absolute inset-y-[-2px] w-px bg-ink/50"
+            style={{ left: `${markerPct}%` }}
+            title={`Target · ${effort.targetCapacity}`}
+          />
+        </div>
+        <p className="font-mono text-[11px] text-ink/70 flex-[2_1_280px] min-w-0">
+          {effort.guidance}
+        </p>
+        <Link
+          href="/applications/review"
+          className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50 hover:text-ink shrink-0"
+        >
+          tune →
+        </Link>
+      </div>
+    </section>
   );
 }

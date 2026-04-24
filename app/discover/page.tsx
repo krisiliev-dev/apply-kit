@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { cvList } from "@/content/cvs";
 import { defaultCV } from "@/content/cvs/default";
 import { useDiscovery } from "@/lib/discovery/store";
@@ -14,11 +14,41 @@ import type {
 } from "@/lib/discovery/types";
 import { saveToStorage } from "@/lib/doc/persist";
 import { upsertApplication } from "@/lib/app/storage";
-import type { Application, ParsedJob } from "@/lib/app/types";
+import type { Application, ApplyFitCheck, ParsedJob } from "@/lib/app/types";
 import { makeVariantSlug, upsertVariant } from "@/lib/jobs/registry";
 import { seedFromContent } from "@/lib/jobs/seedFromContent";
 import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
+import { FitCheckCard } from "@/components/applications/FitCheckCard";
+import { profile as baseProfile } from "@/content/profile";
+
+// Discovery-side fit cache — keep results per posting id to avoid respending
+// tokens on re-opens. SSR-safe.
+const DISCOVERY_FIT_CACHE_KEY = "cv-maker:discovery-fit-cache";
+
+type DiscoveryFitCache = Record<string, ApplyFitCheck>;
+
+function loadFitCache(): DiscoveryFitCache {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(DISCOVERY_FIT_CACHE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    return parsed as DiscoveryFitCache;
+  } catch {
+    return {};
+  }
+}
+
+function saveFitCache(cache: DiscoveryFitCache) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(DISCOVERY_FIT_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // ignore
+  }
+}
 
 type Filter = "all" | "saved" | JobPostingSourceKind;
 type Stage = "idle" | "parsing" | "drafting" | "error";
@@ -53,6 +83,42 @@ export default function DiscoverPage() {
   const [fetchInfo, setFetchInfo] = useState<string | null>(null);
   const [draftStage, setDraftStage] = useState<Stage>("idle");
   const [draftingId, setDraftingId] = useState<string | null>(null);
+  const [fitModalFor, setFitModalFor] = useState<ScoredPosting | null>(null);
+  const [fitCache, setFitCache] = useState<DiscoveryFitCache>({});
+
+  useEffect(() => {
+    setFitCache(loadFitCache());
+  }, []);
+
+  const saveFitResult = useCallback((postingId: string, fit: ApplyFitCheck) => {
+    setFitCache((prev) => {
+      const next = { ...prev, [postingId]: fit };
+      saveFitCache(next);
+      return next;
+    });
+  }, []);
+
+  const parseForFit = useCallback(
+    async (p: ScoredPosting): Promise<ParsedJob | null> => {
+      const body =
+        p.description && p.description.length > 60
+          ? { text: p.description, url: p.url }
+          : { url: p.url };
+      try {
+        const res = await fetch("/api/jobs/parse", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) return null;
+        return data.job as ParsedJob;
+      } catch {
+        return null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     load();
@@ -369,9 +435,11 @@ export default function DiscoverPage() {
                 saved={Boolean(state.saved[p.id])}
                 drafting={draftingId === p.id}
                 busy={draftStage !== "idle"}
+                hasFit={Boolean(fitCache[p.id])}
                 onDraft={() => handleDraft(p)}
                 onSave={() => save(p.id)}
                 onDismiss={() => dismiss(p.id)}
+                onCheckFit={() => setFitModalFor(p)}
               />
             </li>
           ))}
@@ -385,7 +453,112 @@ export default function DiscoverPage() {
           </Link>
         </p>
       </footer>
+
+      {fitModalFor && (
+        <FitCheckModal
+          posting={fitModalFor}
+          cached={fitCache[fitModalFor.id]}
+          parseJob={parseForFit}
+          onResult={(fit) => saveFitResult(fitModalFor.id, fit)}
+          onClose={() => setFitModalFor(null)}
+        />
+      )}
     </main>
+  );
+}
+
+// ———————————————————————————————————————————————
+// Fit-check modal
+// ———————————————————————————————————————————————
+
+function FitCheckModal({
+  posting,
+  cached,
+  parseJob,
+  onResult,
+  onClose,
+}: {
+  posting: ScoredPosting;
+  cached?: ApplyFitCheck;
+  parseJob: (p: ScoredPosting) => Promise<ParsedJob | null>;
+  onResult: (fit: ApplyFitCheck) => void;
+  onClose: () => void;
+}) {
+  const [parsed, setParsed] = useState<ParsedJob | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true);
+    setError(null);
+    (async () => {
+      const job = await parseJob(posting);
+      if (cancelled) return;
+      if (!job) {
+        setError("Could not parse this posting.");
+        setBusy(false);
+        return;
+      }
+      setParsed(job);
+      setBusy(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [posting, parseJob]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 bg-ink/40 z-50 flex items-start justify-center overflow-y-auto p-6"
+      onClick={onClose}
+    >
+      <div
+        className="bg-paper max-w-2xl w-full border border-ink/20 p-6 my-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-baseline justify-between mb-4 gap-4">
+          <div className="min-w-0">
+            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 truncate">
+              {posting.company}
+            </p>
+            <h3 className="font-display text-2xl truncate">{posting.title}</h3>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 hover:text-ink shrink-0"
+          >
+            Close
+          </button>
+        </div>
+        {busy && !parsed && (
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/40">
+            Parsing posting…
+          </p>
+        )}
+        {error && <p className="font-mono text-[11px] text-accent">{error}</p>}
+        {parsed && (
+          <FitCheckCard
+            inputs={{
+              parsedJob: parsed,
+              baseCV: defaultCV,
+              profile: baseProfile,
+            }}
+            cached={cached}
+            onResult={onResult}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -418,17 +591,21 @@ function PostingRow({
   saved,
   drafting,
   busy,
+  hasFit,
   onDraft,
   onSave,
   onDismiss,
+  onCheckFit,
 }: {
   posting: ScoredPosting;
   saved: boolean;
   drafting: boolean;
   busy: boolean;
+  hasFit: boolean;
   onDraft: () => void;
   onSave: () => void;
   onDismiss: () => void;
+  onCheckFit: () => void;
 }) {
   const score100 = Math.round(posting.score * 100);
   const why = posting.why.join(" · ");
@@ -482,6 +659,18 @@ function PostingRow({
           className="border border-ink bg-ink text-paper px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] hover:bg-transparent hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {drafting ? "Drafting…" : "Draft application"}
+        </button>
+        <button
+          type="button"
+          onClick={onCheckFit}
+          disabled={busy}
+          className={`border px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+            hasFit
+              ? "bg-accent/10 text-accent border-accent/30"
+              : "border-ink/30 text-ink/70 hover:border-ink hover:text-ink"
+          }`}
+        >
+          {hasFit ? "Fit ✓" : "Check fit"}
         </button>
         <button
           type="button"
