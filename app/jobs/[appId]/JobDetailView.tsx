@@ -7,7 +7,7 @@ import { getApplication, patchApplication } from "@/lib/app/storage";
 import { profile as baseProfile } from "@/content/profile";
 import type { AtsJobSchema } from "@/lib/jobs/ats";
 import { detectAts } from "@/lib/jobs/ats";
-import { loadDraftEval, type DraftEvalResult } from "@/lib/jobs/draftEval";
+import { loadDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 
 type AtsState =
   | { kind: "none" }
