@@ -7,11 +7,17 @@ import { useCompletion } from "@ai-sdk/react";
 import { useApplications } from "@/lib/app/store";
 import {
   APPLICATION_STATUSES,
+  CLOSED_UNFAVOURABLE_STATUSES,
+  REJECTION_REASON_KINDS,
+  REJECTION_REASON_LABEL,
   type Application,
   type ApplicationStatus,
   type ApplicationEvent,
   type CoverLetter,
   type CoverLetterTone,
+  type RejectionReasonKind,
+  type RejectionSignal,
+  type RejectionExtractedSignals,
 } from "@/lib/app/types";
 import { STATUS_CLASS, STATUS_LABEL, formatDateTime } from "@/lib/app/ui";
 import { exportApplicationBundle } from "@/lib/app/coverLetterExport";
@@ -31,6 +37,8 @@ export default function ApplicationDetailPage() {
     updateStatus,
     remove,
     setCoverLetter,
+    setRejectionSignal,
+    clearRejectionSignal,
   } = useApplications();
 
   useEffect(() => {
@@ -164,6 +172,14 @@ export default function ApplicationDetailPage() {
         onSave={(cl) => setCoverLetter(app.id, cl)}
         onClear={() => setCoverLetter(app.id, undefined)}
       />
+
+      {CLOSED_UNFAVOURABLE_STATUSES.includes(app.status) && (
+        <RejectionLearningSection
+          app={app}
+          onSave={(signal) => setRejectionSignal(app.id, signal)}
+          onClear={() => clearRejectionSignal(app.id)}
+        />
+      )}
 
       <section className="mb-12">
         <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 mb-4">
@@ -601,6 +617,300 @@ function ExportAllButton({ app }: { app: Application }) {
         </span>
       )}
     </div>
+  );
+}
+
+// ———————————————————————————————————————————————
+// Rejection learning
+// ———————————————————————————————————————————————
+
+function defaultKindForStatus(status: ApplicationStatus): RejectionReasonKind {
+  switch (status) {
+    case "ghosted-short":
+      return "ghosted-short";
+    case "ghosted-long":
+      return "ghosted-long";
+    case "withdrawn":
+      return "self-withdrawn";
+    default:
+      return "auto-rejection";
+  }
+}
+
+function RejectionLearningSection({
+  app,
+  onSave,
+  onClear,
+}: {
+  app: Application;
+  onSave: (signal: RejectionSignal) => void;
+  onClear: () => void;
+}) {
+  const existing = app.rejection;
+  const [showForm, setShowForm] = useState(!existing);
+  const [kind, setKind] = useState<RejectionReasonKind>(
+    existing?.kind ?? defaultKindForStatus(app.status),
+  );
+  const [rawText, setRawText] = useState(existing?.rawInputText ?? "");
+  const [showRaw, setShowRaw] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const onExtract = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/rejection/extract", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          applicationId: app.id,
+          application: app,
+          rawText: rawText.trim() || undefined,
+          kind,
+        }),
+      });
+      const data = (await res.json()) as
+        | {
+            extractedSignals: RejectionExtractedSignals;
+            aiSummary: string;
+            lessonsForFuture: string[];
+          }
+        | { error: string };
+      if (!res.ok || "error" in data) {
+        const msg =
+          "error" in data && data.error ? data.error : "Extraction failed.";
+        setError(msg);
+        return;
+      }
+      const signal: RejectionSignal = {
+        kind,
+        rawInputText: rawText.trim() || undefined,
+        closedAt: existing?.closedAt ?? Date.now(),
+        extractedSignals: data.extractedSignals,
+        aiSummary: data.aiSummary,
+        lessonsForFuture: data.lessonsForFuture,
+      };
+      onSave(signal);
+      setShowForm(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Network error.");
+    } finally {
+      setBusy(false);
+    }
+  }, [app, rawText, kind, existing?.closedAt, onSave]);
+
+  return (
+    <section className="mb-12">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+          Rejection learning
+        </h2>
+        {existing && !showForm && (
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink"
+            >
+              Re-extract
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  typeof window !== "undefined" &&
+                  window.confirm("Clear this rejection analysis?")
+                ) {
+                  onClear();
+                  setRawText("");
+                  setShowForm(true);
+                }
+              }}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/40 hover:text-accent"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="border border-ink/10 p-5 mb-4">
+          <div className="grid grid-cols-[120px_1fr] gap-y-5 gap-x-6 items-start">
+            <Label>Kind</Label>
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as RejectionReasonKind)}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] px-2.5 py-1.5 border border-ink/15 bg-transparent appearance-none cursor-pointer w-fit"
+            >
+              {REJECTION_REASON_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {REJECTION_REASON_LABEL[k]}
+                </option>
+              ))}
+            </select>
+
+            <Label>Message</Label>
+            <textarea
+              value={rawText}
+              onChange={(e) => setRawText(e.target.value)}
+              rows={6}
+              placeholder="Paste the rejection email or note (optional) — context-only if left blank."
+              className="w-full bg-transparent border border-ink/10 hover:border-ink/20 focus:border-ink/60 focus:outline-none px-3 py-2 text-sm leading-relaxed placeholder:text-ink/30 resize-y"
+            />
+          </div>
+
+          <div className="flex items-center gap-4 mt-6">
+            <button
+              type="button"
+              onClick={onExtract}
+              disabled={busy}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] px-4 py-2 bg-ink text-paper hover:bg-ink/80 disabled:bg-ink/30 disabled:cursor-not-allowed"
+            >
+              {busy ? "Extracting…" : existing ? "Re-extract" : "Extract signal"}
+            </button>
+            {existing && !busy && (
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/60 hover:text-ink"
+              >
+                Cancel
+              </button>
+            )}
+          </div>
+
+          {error && (
+            <p className="mt-4 font-mono text-[11px] text-accent">{error}</p>
+          )}
+        </div>
+      )}
+
+      {existing && !showForm && (
+        <div className="border-l-2 border-accent/40 pl-5 py-1">
+          <p className="font-display text-lg italic text-ink/85 leading-snug">
+            {existing.aiSummary}
+          </p>
+
+          <div className="mt-5 grid grid-cols-[130px_1fr] gap-y-2 gap-x-5">
+            <Label>Kind</Label>
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/80">
+              {REJECTION_REASON_LABEL[existing.kind]}
+            </div>
+
+            <Label>Stage lost</Label>
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/80">
+              {existing.extractedSignals.stageLost}
+            </div>
+
+            <Label>Politeness</Label>
+            <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/80">
+              {existing.extractedSignals.politeness}
+            </div>
+
+            {existing.extractedSignals.seniorityFeedback && (
+              <>
+                <Label>Seniority</Label>
+                <div className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/80">
+                  {existing.extractedSignals.seniorityFeedback}
+                </div>
+              </>
+            )}
+
+            {existing.extractedSignals.salaryMismatch && (
+              <>
+                <Label>Salary</Label>
+                <div className="font-mono text-[11px] text-ink/80">
+                  mismatch
+                  {existing.extractedSignals.compensationHint ? (
+                    <span className="text-ink/50">
+                      {" "}
+                      · {existing.extractedSignals.compensationHint}
+                    </span>
+                  ) : null}
+                </div>
+              </>
+            )}
+          </div>
+
+          {existing.extractedSignals.citedReasons.length > 0 && (
+            <div className="mt-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50 mb-2">
+                Cited
+              </p>
+              <ul className="space-y-1.5">
+                {existing.extractedSignals.citedReasons.map((r, i) => (
+                  <li
+                    key={`cited-${i}`}
+                    className="text-sm text-ink/80 leading-snug"
+                  >
+                    &ldquo;{r}&rdquo;
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {existing.extractedSignals.inferredReasons.length > 0 && (
+            <div className="mt-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50 mb-2">
+                Inferred
+              </p>
+              <ul className="space-y-1.5">
+                {existing.extractedSignals.inferredReasons.map((r, i) => (
+                  <li
+                    key={`inf-${i}`}
+                    className="text-sm text-ink/75 leading-snug"
+                  >
+                    — {r}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {existing.lessonsForFuture.length > 0 && (
+            <div className="mt-5">
+              <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-ink/50 mb-2">
+                Lessons for future
+              </p>
+              <ul className="space-y-2">
+                {existing.lessonsForFuture.map((l, i) => (
+                  <li
+                    key={`lesson-${i}`}
+                    className="border-l-2 border-accent/50 pl-3 text-sm text-ink/85 leading-snug"
+                  >
+                    {l}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          <div className="mt-6 flex items-center gap-4">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/40">
+              Recorded {formatDateTime(existing.closedAt)}
+            </p>
+            {existing.rawInputText ? (
+              <button
+                type="button"
+                onClick={() => setShowRaw((v) => !v)}
+                className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50 hover:text-ink"
+              >
+                {showRaw ? "Hide email" : "Show email"}
+              </button>
+            ) : null}
+          </div>
+
+          {showRaw && existing.rawInputText && (
+            <pre className="mt-3 whitespace-pre-wrap bg-ink/5 border border-ink/10 p-3 text-[12px] text-ink/70 font-mono leading-relaxed">
+              {existing.rawInputText}
+            </pre>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
