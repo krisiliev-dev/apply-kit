@@ -35,6 +35,20 @@ export type TextNode = NodeBase & {
   type: "text";
   content: string; // plain text for now; newlines preserved
   style: TextStyle;
+  // ————————————————————————————————————————————
+  // Proof-of-work slot. "Bullet" text nodes (experience lines, •-prefixed
+  // items, lines like `Exp:<company> bullet`) are expected to link to an
+  // artifact — a commit, a published piece, a dashboard. An empty `proofUrl`
+  // on a `proofRequired` node surfaces a warning in the evaluator and a
+  // subtle pill on the canvas.
+  //
+  // `proofRequired` is inferred by heuristic on every doc change (see
+  // `lib/evaluation/proofInspector.ts`). If the user explicitly sets this
+  // false via the Inspector, the heuristic stops setting it back to true.
+  // ————————————————————————————————————————————
+  proofUrl?: string;
+  proofLabel?: string;
+  proofRequired?: boolean;
 };
 
 export type ImageNode = NodeBase & {

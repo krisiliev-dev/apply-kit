@@ -4,9 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useEditor } from "@/lib/doc/store";
 import type { CvDocument } from "@/lib/doc/types";
 import type {
+  ArchetypeReport,
   CvEvaluation,
   EvalWarning,
+  ProofInspectorReport,
   RecruiterReport,
+  TenureReport,
 } from "@/lib/evaluation/types";
 import {
   appendToHistory,
@@ -17,6 +20,10 @@ import { diffDocuments, type DocDiff } from "@/lib/evaluation/diff";
 import { computeParserCoverage } from "@/lib/evaluation/locate";
 import { SixSecondCard } from "./SixSecondCard";
 import { NumberInspectorPanel } from "./NumberInspectorPanel";
+import { inspectProof } from "@/lib/evaluation/proofInspector";
+import { detectArchetypes } from "@/lib/evaluation/archetypeDetector";
+import { inspectTenure } from "@/lib/evaluation/tenureInspector";
+import { ARCHETYPE_BY_CATEGORY_LABEL } from "@/lib/evaluation/archetypes";
 
 // ————————————————————————————————————————————————
 // Eval panel — right-pane tab for CV evaluation.
@@ -273,6 +280,9 @@ export function EvalPanel({ slug }: { slug: string }) {
       <div className="flex-1 overflow-auto px-3 py-3 space-y-4">
         {/* Always-on — runs on every doc change, no API call. */}
         <NumberInspectorPanel />
+        <ProofInspectorPanel />
+        <ArchetypePanel />
+        <TenurePanel />
 
         {mode === "idle" && !evaluation && <EmptyState history={history} />}
 
@@ -593,6 +603,33 @@ function LayerBlock({ evaluation }: { evaluation: CvEvaluation }) {
           detail={`${evaluation.numbers.bulletsWithMetrics}/${evaluation.numbers.totalBullets} bullets with metric`}
         />
       )}
+      {evaluation.proof && (
+        <LayerRow
+          label="Proof"
+          score={evaluation.proof.score}
+          detail={`${evaluation.proof.bulletsWithProof}/${evaluation.proof.bulletsTotal} bullets with proof link`}
+        />
+      )}
+      {evaluation.archetype && (
+        <LayerRow
+          label="Boilerplate"
+          score={evaluation.archetype.score}
+          detail={`${evaluation.archetype.uniqueMatches} boilerplate phrase${
+            evaluation.archetype.uniqueMatches === 1 ? "" : "s"
+          } detected`}
+        />
+      )}
+      {evaluation.tenure && (
+        <LayerRow
+          label="Tenure"
+          score={evaluation.tenure.score}
+          detail={
+            evaluation.tenure.averageTenureMonths !== null
+              ? `avg ${evaluation.tenure.averageTenureMonths}mo · ${evaluation.tenure.warnings.length} flag${evaluation.tenure.warnings.length === 1 ? "" : "s"}`
+              : "no parseable dates"
+          }
+        />
+      )}
     </section>
   );
 }
@@ -875,4 +912,334 @@ function DiffBlock({
 function sign(n: number): string {
   if (n > 0) return `+${n}`;
   return String(n);
+}
+
+// ————————————————————————————————————————————————
+// Always-on static panels. Each re-runs on every doc change via a memo
+// keyed on `doc`. Zero LLM calls. Safe to render live as the user types.
+// ————————————————————————————————————————————————
+
+function ProofInspectorPanel() {
+  const doc = useEditor((s) => s.doc);
+  const select = useEditor((s) => s.select);
+  const report: ProofInspectorReport = useMemo(() => inspectProof(doc), [doc]);
+
+  if (report.bulletsTotal === 0) return null;
+
+  const color =
+    report.score >= 80 ? "#4ec16d" : report.score >= 60 ? "#d6a63d" : "#d64933";
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between">
+        <h3 className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-editor-text-dim)]">
+          Proof of work
+        </h3>
+        <span
+          className="font-mono text-[11px] tabular-nums"
+          style={{ color }}
+        >
+          {report.bulletsWithProof}/{report.bulletsTotal}
+        </span>
+      </div>
+
+      {report.missing.length === 0 ? (
+        <p className="mt-1 font-mono text-[11px] text-[var(--color-editor-text-dim)] leading-snug">
+          Every required bullet has a proof link. Nice.
+        </p>
+      ) : (
+        <ul className="mt-2 space-y-1 max-h-60 overflow-auto">
+          {report.missing.map((f, i) => (
+            <li key={`${f.nodeId}-${i}`}>
+              <button
+                type="button"
+                onClick={() => select([f.nodeId])}
+                className="w-full text-left font-mono text-[11px] leading-snug px-2 py-1 border transition-colors"
+                style={{
+                  borderColor: "var(--color-editor-border)",
+                  color: "var(--color-editor-text)",
+                }}
+                title="Add a proofUrl in the Inspector"
+              >
+                <span className="mr-2 shrink-0" style={{ color: "#d64933" }}>
+                  ◆
+                </span>
+                <span>{f.text}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function ArchetypePanel() {
+  const doc = useEditor((s) => s.doc);
+  const select = useEditor((s) => s.select);
+  const [open, setOpen] = useState(false);
+  const report: ArchetypeReport = useMemo(() => detectArchetypes(doc), [doc]);
+
+  // Group matches by category so long lists stay skimmable.
+  const byCategory = useMemo(() => {
+    const map = new Map<string, typeof report.matches>();
+    for (const m of report.matches) {
+      const list = map.get(m.category) ?? [];
+      list.push(m);
+      map.set(m.category, list);
+    }
+    return map;
+  }, [report.matches]);
+
+  if (report.matches.length === 0) return null;
+
+  const color =
+    report.score >= 80 ? "#4ec16d" : report.score >= 60 ? "#d6a63d" : "#d64933";
+
+  return (
+    <section>
+      <button
+        type="button"
+        className="w-full flex items-baseline justify-between"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-editor-text-dim)]">
+          Boilerplate language {open ? "▾" : "▸"}
+        </span>
+        <span
+          className="font-mono text-[11px] tabular-nums"
+          style={{ color }}
+        >
+          {report.matches.length} hit{report.matches.length === 1 ? "" : "s"}
+        </span>
+      </button>
+
+      {open && (
+        <ul className="mt-2 space-y-2">
+          {Array.from(byCategory.entries()).map(([cat, items]) => (
+            <li key={cat}>
+              <div className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--color-editor-text-dim)]">
+                {ARCHETYPE_BY_CATEGORY_LABEL[
+                  cat as keyof typeof ARCHETYPE_BY_CATEGORY_LABEL
+                ] ?? cat}
+              </div>
+              <ul className="mt-1 space-y-1">
+                {items.map((m, i) => (
+                  <li key={`${m.nodeId}-${i}`}>
+                    <button
+                      type="button"
+                      onClick={() => select([m.nodeId])}
+                      className="w-full text-left font-mono text-[11px] leading-snug px-2 py-1 border transition-colors"
+                      style={{
+                        borderColor: "var(--color-editor-border)",
+                        color: "var(--color-editor-text)",
+                      }}
+                      title={m.suggestion}
+                    >
+                      <span
+                        className="mr-2 shrink-0"
+                        style={{ color: "#6d8ea8" }}
+                      >
+                        ◇
+                      </span>
+                      <span className="font-mono">&ldquo;{m.phrase}&rdquo;</span>
+                      <span className="text-[var(--color-editor-text-dim)]">
+                        {" "}
+                        — {m.suggestion}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+// Tenure panel — static report plus a "suggest framing" button that hits
+// the /api/cv-evaluate/tenure-frame route. The returned framings can be
+// applied to the profile summary node (detected by name prefix) via
+// updateNode; if there's no summary node we fall back to clipboard.
+function TenurePanel() {
+  const doc = useEditor((s) => s.doc);
+  const updateNode = useEditor((s) => s.updateNode);
+  const report: TenureReport = useMemo(() => inspectTenure(doc), [doc]);
+
+  const [framings, setFramings] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [applied, setApplied] = useState<string | null>(null);
+
+  const askForFraming = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/cv-evaluate/tenure-frame", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          experiences: report.experiences,
+          patterns: report.warnings,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Server returned ${res.status}.`);
+      }
+      const data = (await res.json()) as { framings?: string[] };
+      setFramings(data.framings ?? []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Framing request failed.");
+    } finally {
+      setLoading(false);
+    }
+  }, [report.experiences, report.warnings]);
+
+  const findSummaryNodeId = useCallback((): string | null => {
+    for (const page of doc.pages) {
+      for (const n of page.nodes) {
+        if (n.type !== "text") continue;
+        const name = (n.name ?? "").toLowerCase();
+        if (
+          name.includes("about body") ||
+          name.includes("summary") ||
+          name.includes("profile")
+        ) {
+          return n.id;
+        }
+      }
+    }
+    return null;
+  }, [doc]);
+
+  const applyFraming = useCallback(
+    async (line: string) => {
+      const summaryId = findSummaryNodeId();
+      if (summaryId) {
+        const node = doc.pages
+          .flatMap((p) => p.nodes)
+          .find((n) => n.id === summaryId);
+        if (node && node.type === "text") {
+          const existing = node.content.trim();
+          const next = existing ? `${existing}\n\n${line}` : line;
+          updateNode(summaryId, { content: next });
+          setApplied("appended to profile summary");
+          return;
+        }
+      }
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(line);
+          setApplied("copied to clipboard");
+          return;
+        } catch {
+          // fall through
+        }
+      }
+      setApplied("no summary node found; copy manually");
+    },
+    [doc, findSummaryNodeId, updateNode],
+  );
+
+  if (report.experiences.length === 0) return null;
+
+  const color =
+    report.score >= 80 ? "#4ec16d" : report.score >= 60 ? "#d6a63d" : "#d64933";
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between">
+        <h3 className="font-mono text-[10px] uppercase tracking-[0.2em] text-[var(--color-editor-text-dim)]">
+          Tenure
+        </h3>
+        <span
+          className="font-mono text-[11px] tabular-nums"
+          style={{ color }}
+        >
+          {report.averageTenureMonths !== null
+            ? `avg ${report.averageTenureMonths}mo`
+            : "–"}
+        </span>
+      </div>
+
+      {report.warnings.length === 0 ? (
+        <p className="mt-1 font-mono text-[11px] text-[var(--color-editor-text-dim)] leading-snug">
+          No tenure patterns flagged.
+        </p>
+      ) : (
+        <>
+          <ul className="mt-2 space-y-1">
+            {report.warnings.map((w, i) => (
+              <li
+                key={`${w.kind}-${i}`}
+                className="font-mono text-[11px] leading-snug px-2 py-1 border"
+                style={{ borderColor: "var(--color-editor-border)" }}
+              >
+                <span
+                  className="mr-2"
+                  style={{
+                    color: w.kind === "gap" ? "#6d8ea8" : "#d6a63d",
+                  }}
+                >
+                  ▲
+                </span>
+                <span className="text-[10px] text-[var(--color-editor-text-dim)] uppercase tracking-[0.1em] mr-1">
+                  {w.kind}
+                </span>
+                <span>{w.message}</span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              className="editor-btn"
+              onClick={askForFraming}
+              disabled={loading}
+              title="Ask Claude for a one-line reframe you can add to your profile summary."
+            >
+              {loading ? "thinking…" : "suggest framing"}
+            </button>
+            {applied && (
+              <span className="font-mono text-[10px] text-[var(--color-editor-text-dim)]">
+                {applied}
+              </span>
+            )}
+          </div>
+
+          {error && (
+            <p className="mt-2 font-mono text-[11px]" style={{ color: "#d64933" }}>
+              {error}
+            </p>
+          )}
+
+          {framings.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {framings.map((line, i) => (
+                <li
+                  key={i}
+                  className="font-mono text-[11px] leading-snug px-2 py-1 border"
+                  style={{ borderColor: "var(--color-editor-border)" }}
+                >
+                  <div className="mb-1">{line}</div>
+                  <button
+                    type="button"
+                    className="editor-btn"
+                    onClick={() => applyFraming(line)}
+                  >
+                    use as profile summary
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </section>
+  );
 }

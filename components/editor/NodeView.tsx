@@ -3,6 +3,7 @@
 import { useEffect, useRef, type CSSProperties } from "react";
 import type { Node, TextNode, TextStyle, Theme } from "@/lib/doc/types";
 import { useEditor } from "@/lib/doc/store";
+import { heuristicIsBullet } from "@/lib/evaluation/proofInspector";
 
 // Resolves a font token against the current theme.
 function resolveFont(style: TextStyle, theme: Theme): string {
@@ -87,6 +88,46 @@ export function NodeView({
       onMouseLeave={() => onHoverChange(null)}
     >
       <NodeBody node={node} theme={theme} />
+      {node.type === "text" && <ProofWarningPill node={node} />}
+    </div>
+  );
+}
+
+// Tiny "proof?" chip in the top-right of a bullet node when its proofUrl is
+// empty. Visible only while the parser overlay is on — reuses the existing
+// editor-chrome toggle so this doesn't add another UI control.
+function ProofWarningPill({ node }: { node: TextNode }) {
+  const showParserOverlay = useEditor((s) => s.showParserOverlay);
+  if (!showParserOverlay) return null;
+
+  const required =
+    node.proofRequired === undefined
+      ? heuristicIsBullet(node)
+      : node.proofRequired;
+  if (!required) return null;
+  if (node.proofUrl && node.proofUrl.trim().length > 0) return null;
+
+  return (
+    <div
+      data-editor-chrome
+      aria-hidden="true"
+      style={{
+        position: "absolute",
+        top: -6,
+        right: -6,
+        padding: "1px 4px",
+        background: "#d64933",
+        color: "#fff",
+        fontFamily: "var(--font-mono)",
+        fontSize: 8,
+        letterSpacing: 0.4,
+        textTransform: "uppercase",
+        borderRadius: 2,
+        pointerEvents: "none",
+        zIndex: 50,
+      }}
+    >
+      proof?
     </div>
   );
 }

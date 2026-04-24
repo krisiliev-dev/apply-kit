@@ -8,6 +8,9 @@ import { recruiterEyePass } from "./recruiterEye";
 import { composeEvaluation, scoreParseability } from "./score";
 import { runSixSecondTest } from "./sixSecondTest";
 import { inspectNumbers } from "./numberInspector";
+import { inspectProof } from "./proofInspector";
+import { detectArchetypes } from "./archetypeDetector";
+import { inspectTenure } from "./tenureInspector";
 
 // ————————————————————————————————————————————————
 // Top-level evaluator — orchestrates all layers where possible and composes
@@ -34,6 +37,9 @@ export type ProgressUpdate = {
     | "recruiter"
     | "six-second"
     | "numbers"
+    | "proof"
+    | "archetype"
+    | "tenure"
     | "score"
     | "done"
     | "error";
@@ -127,6 +133,15 @@ export async function evaluateCv(
   emit({ stage: "numbers", message: "Inspecting bullets for metrics…" });
   const numbersReport = inspectNumbers(opts.doc);
 
+  emit({ stage: "proof", message: "Checking proof-of-work links…" });
+  const proofReport = inspectProof(opts.doc);
+
+  emit({ stage: "archetype", message: "Scanning for boilerplate phrases…" });
+  const archetypeReport = detectArchetypes(opts.doc);
+
+  emit({ stage: "tenure", message: "Analysing tenure pattern…" });
+  const tenureReport = inspectTenure(opts.doc);
+
   emit({ stage: "keywords", message: "Scoring keyword alignment…" });
 
   const extractedForKeywords =
@@ -167,6 +182,9 @@ export async function evaluateCv(
     recruiter: recruiterResult,
     sixSecond: sixSecondResult,
     numbers: numbersReport,
+    proof: proofReport,
+    archetype: archetypeReport,
+    tenure: tenureReport,
   });
 
   emit({ stage: "done", message: `Overall ${evaluation.overall}/100.` });

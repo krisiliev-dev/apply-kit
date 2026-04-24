@@ -3,47 +3,74 @@ import type { CvDocument } from "@/lib/doc/types";
 import type { ParsedJob } from "@/lib/app/types";
 import type {
   AffindaResult,
+  ArchetypeReport,
   CvEvaluation,
   EvalWarning,
   KeywordScore,
   NumberInspectorReport,
   ParseabilityScore,
+  ProofInspectorReport,
   RecruiterReport,
   SixSecondReport,
+  TenureReport,
 } from "./types";
 import { fuzzyLocateNodes } from "./locate";
+import {
+  ARCHETYPE_BY_CATEGORY_LABEL,
+} from "./archetypes";
+import { countMatchesPerNode } from "./archetypeDetector";
 
 // ————————————————————————————————————————————————
-// Composite scoring — weighted blend of the layers.
+// Composite scoring — weighted blend of every layer.
 //
-// Base weights (when six-second is unavailable):
-//   • Parseability 40%
-//   • Keywords     35%
-//   • Recruiter    25%
+// The recruiter lens rolled out three more fast synchronous layers (proof,
+// archetype, tenure). Rationale for the current weight slicing:
 //
-// When the six-second layer IS available, reweight so the pass gets a fair
-// slice without dominating:
-//   • Parseability 35%
-//   • Keywords     30%
-//   • Recruiter    20%
-//   • Six-second   15%
+// When all five "heavy" layers run (parseability + keywords + recruiter +
+// six-second + the fast layers):
+//   • Parseability    30%   — machine-readability is still the floor
+//   • Keywords        25%   — job match is the biggest qualifier
+//   • Recruiter       15%   — subjective but signal-rich
+//   • Six-second      15%   — scannability (slightly lower than before)
+//   • Numbers          7.5% — concrete outcomes
+//   • Proof            7.5% — verifiable artifacts
+//   • Archetype       ~0%   — reported but doesn't move the composite much,
+//                             since it mostly overlaps recruiter-eye
+//   • Tenure          ~0%   — signals a narrative problem, not a score one
 //
-// The number-inspector is always on but doesn't get its own slice — it
-// surfaces warnings that feed the existing parseability/recruiter picture
-// and shows its own panel in the UI.
+// Wait — archetype and tenure at zero? We include them in warnings (which
+// is where they matter most) and keep them scoreable from the UI, but their
+// heuristics are softer than the rest. Dropping them out of composite
+// keeps overall score tied to verifiable facts. Both still surface in the
+// EvalPanel and both move the "overall flag count" a user reads first.
 //
-// These add to 100. Changing the weights changes how much each layer tugs on
-// the overall score, but not the per-layer diagnostics.
+// When six-second is unavailable (no AFFINDA_API_KEY), we redistribute
+// proportionally:
+//   • Parseability    35%
+//   • Keywords        30%
+//   • Recruiter       20%
+//   • Numbers          7.5%
+//   • Proof            7.5%
+//
+// All slices add to 100 in their respective modes. Keywords coverage alone
+// isn't enough to lift a CV; proof/numbers stack on top.
 // ————————————————————————————————————————————————
 
-const WEIGHT_PARSE_BASE = 0.4;
-const WEIGHT_KEYWORDS_BASE = 0.35;
-const WEIGHT_RECRUITER_BASE = 0.25;
+// With-six-second weights
+const W_PARSE_SIX = 0.3;
+const W_KEYWORDS_SIX = 0.25;
+const W_RECRUITER_SIX = 0.15;
+const W_SIX_SECOND = 0.15;
+const W_NUMBERS_SIX = 0.075;
+const W_PROOF_SIX = 0.075;
 
-const WEIGHT_PARSE_SIX = 0.35;
-const WEIGHT_KEYWORDS_SIX = 0.3;
-const WEIGHT_RECRUITER_SIX = 0.2;
-const WEIGHT_SIX_SECOND = 0.15;
+// No-six-second (base) weights — preserve parseability dominance, keep
+// numbers+proof at the same 7.5 each for behavioural consistency.
+const W_PARSE_BASE = 0.35;
+const W_KEYWORDS_BASE = 0.3;
+const W_RECRUITER_BASE = 0.2;
+const W_NUMBERS_BASE = 0.075;
+const W_PROOF_BASE = 0.075;
 
 type ScoreInput = {
   doc: CvDocument;
@@ -53,28 +80,37 @@ type ScoreInput = {
   recruiter: RecruiterReport;
   sixSecond?: SixSecondReport;
   numbers?: NumberInspectorReport;
+  proof?: ProofInspectorReport;
+  archetype?: ArchetypeReport;
+  tenure?: TenureReport;
 };
 
 export function composeEvaluation(input: ScoreInput): CvEvaluation {
   const warnings = assembleWarnings(input);
 
   const recruiterScore = recruiterToScore(input.recruiter);
+  const numbersScore = input.numbers?.score ?? 100;
+  const proofScore = input.proof?.score ?? 100;
 
   const hasSix = input.sixSecond && !input.sixSecond.unavailable;
 
   let overall: number;
   if (hasSix && input.sixSecond) {
     overall = Math.round(
-      WEIGHT_PARSE_SIX * input.parseability.score +
-        WEIGHT_KEYWORDS_SIX * input.keywords.score +
-        WEIGHT_RECRUITER_SIX * recruiterScore +
-        WEIGHT_SIX_SECOND * input.sixSecond.scannabilityScore,
+      W_PARSE_SIX * input.parseability.score +
+        W_KEYWORDS_SIX * input.keywords.score +
+        W_RECRUITER_SIX * recruiterScore +
+        W_SIX_SECOND * input.sixSecond.scannabilityScore +
+        W_NUMBERS_SIX * numbersScore +
+        W_PROOF_SIX * proofScore,
     );
   } else {
     overall = Math.round(
-      WEIGHT_PARSE_BASE * input.parseability.score +
-        WEIGHT_KEYWORDS_BASE * input.keywords.score +
-        WEIGHT_RECRUITER_BASE * recruiterScore,
+      W_PARSE_BASE * input.parseability.score +
+        W_KEYWORDS_BASE * input.keywords.score +
+        W_RECRUITER_BASE * recruiterScore +
+        W_NUMBERS_BASE * numbersScore +
+        W_PROOF_BASE * proofScore,
     );
   }
 
@@ -85,6 +121,9 @@ export function composeEvaluation(input: ScoreInput): CvEvaluation {
     recruiter: input.recruiter,
     sixSecond: input.sixSecond,
     numbers: input.numbers,
+    proof: input.proof,
+    archetype: input.archetype,
+    tenure: input.tenure,
     warnings,
     runId: nanoid(10),
     evaluatedAt: Date.now(),
@@ -292,6 +331,54 @@ function assembleWarnings(input: ScoreInput): EvalWarning[] {
         message: `No number/scope: "${f.text}"`,
         targetNodeIds: [f.nodeId],
         severity: "warn",
+      });
+    }
+  }
+
+  // Proof-of-work — always on
+  if (input.proof) {
+    for (const m of input.proof.missing) {
+      out.push({
+        layer: "proof",
+        kind: "missing-proof",
+        message: `Missing proof-of-work link: "${m.text}"`,
+        targetNodeIds: [m.nodeId],
+        severity: "warn",
+      });
+    }
+  }
+
+  // Archetype — always on. Severity "info" unless a single node collects
+  // >3 matches, in which case escalate that node's matches to "warn".
+  if (input.archetype) {
+    const perNode = countMatchesPerNode(input.archetype.matches);
+    for (const m of input.archetype.matches) {
+      const count = perNode.get(m.nodeId) ?? 0;
+      const sev: "info" | "warn" = count > 3 ? "warn" : "info";
+      const label = ARCHETYPE_BY_CATEGORY_LABEL[m.category];
+      out.push({
+        layer: "archetype",
+        kind: m.category,
+        message: `${label}: "${m.phrase}". Try: ${m.suggestion}`,
+        targetNodeIds: [m.nodeId],
+        severity: sev,
+      });
+    }
+  }
+
+  // Tenure — always on
+  if (input.tenure) {
+    for (const w of input.tenure.warnings) {
+      out.push({
+        layer: "tenure",
+        kind: w.kind,
+        message: w.message,
+        severity:
+          w.kind === "consecutive-short-tenure"
+            ? "warn"
+            : w.kind === "overall-short-tenure"
+              ? "warn"
+              : "info",
       });
     }
   }
