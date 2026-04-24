@@ -4,6 +4,7 @@ import { useEditor, isTextNode, isImageNode, isShapeNode } from "@/lib/doc/store
 import type { Node, TextNode, ImageNode, ShapeNode, FontToken } from "@/lib/doc/types";
 import { FONT_OPTIONS, findFontByCssVar } from "@/lib/fonts";
 import { PALETTES, matchPaletteId, type Palette } from "@/lib/palettes";
+import { heuristicIsBullet } from "@/lib/evaluation/proofInspector";
 
 // Inspector — edits the currently selected node(s).
 // When multiple nodes are selected, only fields that apply to all types are shown.
@@ -277,6 +278,74 @@ function TextBlock({
             UPPER
           </button>
         </div>
+      </Row>
+
+      <ProofBlock node={node} updateNode={updateNode} />
+    </>
+  );
+}
+
+// Proof-of-work editor. Rendered only when this text node looks like a
+// bullet (by the shared heuristic) OR the user has explicitly opted-in via
+// the "required" checkbox. Keeps the Inspector uncluttered for non-bullet
+// text like headings and meta rows.
+function ProofBlock({
+  node,
+  updateNode,
+}: {
+  node: TextNode;
+  updateNode: (id: string, patch: Partial<Node>) => void;
+}) {
+  const inferred = heuristicIsBullet(node);
+  const explicit = node.proofRequired;
+  // Show the block when the heuristic says bullet, the user set required
+  // explicitly, OR the node already has a proof URL (so they can edit it
+  // even if they later toggle required off).
+  const visible = inferred || explicit === true || Boolean(node.proofUrl);
+  if (!visible) return null;
+
+  const required = explicit === undefined ? inferred : explicit;
+
+  return (
+    <>
+      <SectionHead>Proof of work</SectionHead>
+      <Row label="URL">
+        <input
+          type="url"
+          className="editor-input"
+          placeholder="https://github.com/me/project/pull/42"
+          value={node.proofUrl ?? ""}
+          onChange={(e) =>
+            updateNode(node.id, {
+              proofUrl: e.target.value.trim() ? e.target.value : undefined,
+            })
+          }
+        />
+      </Row>
+      <Row label="Label">
+        <input
+          type="text"
+          className="editor-input"
+          placeholder="optional — falls back to hostname"
+          value={node.proofLabel ?? ""}
+          onChange={(e) =>
+            updateNode(node.id, {
+              proofLabel: e.target.value.trim() ? e.target.value : undefined,
+            })
+          }
+        />
+      </Row>
+      <Row label="Require">
+        <label className="flex items-center gap-2 font-mono text-[11px] text-[var(--color-editor-text-dim)]">
+          <input
+            type="checkbox"
+            checked={required}
+            onChange={(e) =>
+              updateNode(node.id, { proofRequired: e.target.checked })
+            }
+          />
+          flag when empty
+        </label>
       </Row>
     </>
   );

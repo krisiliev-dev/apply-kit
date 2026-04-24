@@ -123,8 +123,92 @@ export type EvalLayer =
   | "keywords"
   | "recruiter"
   | "six-second"
-  | "numbers";
+  | "numbers"
+  | "proof"
+  | "archetype"
+  | "tenure";
 export type EvalSeverity = "info" | "warn" | "error";
+
+// ————————————————————————————————————————————————
+// Proof-of-work inspector — flags bullets that don't link to an artifact.
+// Static, runs on every doc change (no LLM).
+// ————————————————————————————————————————————————
+
+export type ProofMissingFlag = {
+  nodeId: string;
+  text: string;
+};
+
+export type ProofInspectorReport = {
+  bulletsTotal: number;
+  bulletsWithProof: number;
+  missing: ProofMissingFlag[];
+  /** bulletsWithProof / bulletsTotal * 100, rounded. 100 if no required bullets. */
+  score: number;
+};
+
+// ————————————————————————————————————————————————
+// Generic-archetype detector — regex scan against a bundle of
+// boilerplate phrases (pace-cliches, filler-adjectives, vague-achievements).
+// Pure static, runs on every doc change.
+// ————————————————————————————————————————————————
+
+export type ArchetypeCategory =
+  | "vague-achievement"
+  | "filler-adjective"
+  | "corporate-cliche"
+  | "generic-collaboration"
+  | "pace-cliche";
+
+export type ArchetypeMatch = {
+  nodeId: string;
+  category: ArchetypeCategory;
+  phrase: string; // the actual matched slice from the text
+  suggestion: string;
+};
+
+export type ArchetypeReport = {
+  totalTextNodes: number;
+  uniqueMatches: number;
+  matches: ArchetypeMatch[];
+  /** 100 = no boilerplate; 0 = every node triggers. Clamped. */
+  score: number;
+};
+
+// ————————————————————————————————————————————————
+// Tenure-pattern inspector — static analyser across experience entries.
+// Catches job-hopping patterns and long gaps. Emits an optional framing
+// suggestion endpoint (see /api/cv-evaluate/tenure-frame).
+// ————————————————————————————————————————————————
+
+export type TenurePatternKind =
+  | "consecutive-short-tenure"
+  | "overall-short-tenure"
+  | "gap";
+
+export type TenurePatternWarning = {
+  kind: TenurePatternKind;
+  message: string;
+  /** Experience indexes (0-based) the warning points at. */
+  experienceIndexes: number[];
+};
+
+export type TenureExperienceSummary = {
+  role: string;
+  company: string;
+  startMonth: number | null; // epoch months (year*12+month); null if unparseable
+  endMonth: number | null; // "present" → current epoch months
+  tenureMonths: number | null;
+};
+
+export type TenureReport = {
+  experiences: TenureExperienceSummary[];
+  averageTenureMonths: number | null; // null if we have <1 parseable entry
+  hasGaps: boolean;
+  warnings: TenurePatternWarning[];
+  /** 0-100. Fuzz penalty: starts at 100, subtracts for each pattern. */
+  score: number;
+};
 
 export type EvalWarning = {
   layer: EvalLayer;
@@ -159,6 +243,12 @@ export type CvEvaluation = {
   sixSecond?: SixSecondReport;
   /** Always-on static number-in-bullet inspector. */
   numbers?: NumberInspectorReport;
+  /** Always-on static proof-of-work link inspector. */
+  proof?: ProofInspectorReport;
+  /** Always-on static boilerplate-phrase detector. */
+  archetype?: ArchetypeReport;
+  /** Always-on tenure-pattern analyser. */
+  tenure?: TenureReport;
   warnings: EvalWarning[];
   runId: string;
   evaluatedAt: number;
