@@ -2,6 +2,45 @@
 
 A visual CV editor with an AI copilot, a job-application tracker, a discovery queue, an evaluation pipeline, and a career-advisor lens — all in one local-first web app. Each CV is a free-canvas document you edit by clicking, dragging, resizing — or by asking the copilot in plain English.
 
+## Local-only design
+
+Nothing is deployed anywhere. Data lives in your browser's localStorage; the app runs on `localhost` via `npm run dev` (or the `bin/cv` helper — see below). Portability is via the Settings → Backup page: download your state as a JSON blob, import it on another machine or after a wipe. There's no server-side database, no sync service, no account.
+
+The fictional **Ines Valverde** demo persona is the only "seed" in the repo — everything under `content/cvs/` and `content/profile.ts` is fake. Your real profile never has to touch version control.
+
+### Bringing your own data
+
+Three paths:
+
+1. **Use the editor.** Open `/cv/<any-slug>` — a blank canvas appears. Add blocks, type, and let the AI copilot do the repetitive work. Everything persists to localStorage automatically.
+2. **Import a backup.** If you've already used the app and exported a JSON backup, the first-run onboarding wizard and the Settings → Backup tab both accept it.
+3. **Local override (advanced).** Copy `content/profile.ts` to `content/profile.local.ts` and import that instead in your own fork. Matching `*.local.ts` files are already gitignored — they won't be committed. Keep the schema identical so the evaluation pipeline and seed logic still work.
+
+### Ollama / local models
+
+Settings → Models lets you swap the provider per-feature: Anthropic hosted, or any OpenAI-compatible local server (tested with Ollama's `/v1`). Presets cover Claude Sonnet 4.6 / Haiku 4.5 / Opus 4.7 and two common Ollama tags; you can also paste any model name + base URL. The provider-swap agent owns route wiring; this tab just stores the choice.
+
+### Backups
+
+Settings → Backup:
+
+- **Download backup (.json)** — one-shot pretty-printed export of every `cv-maker:*` localStorage key. Pairing-device tokens are excluded.
+- **Choose backup folder (Chromium only)** — uses the File System Access API. The app then writes a daily rolling file (`cv-maker-YYYY-MM-DD.json`) to that folder on the cadence you pick (15m / 30m / 1h / 2h). Keeps the last 7 days and auto-prunes older ones. Safari/Firefox fall back to manual download.
+- **Restore from backup…** — picks up a previously exported file, confirms what's about to be replaced, then writes it back and reloads.
+
+### Start commands
+
+If you'd rather not type `npm run dev` every time:
+
+```
+bin/cv start     # kills any stale dev server on :3000 and runs npm run dev
+bin/cv open      # opens http://localhost:3000 in your default browser
+bin/cv backup    # prints instructions for downloading the current backup
+bin/cv help      # list commands
+```
+
+Override the port with `CV_MAKER_PORT=3001 bin/cv start`.
+
 ## Running it
 
 ```
