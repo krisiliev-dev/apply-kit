@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# Build output
+.next/
+out/
+build/
+dist/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Environment / secrets
+.env*
+!.env.example
+*.pem
+.mcp.json
+.pairing-devices.json
+
+# Python virtualenvs
+.venv/
+venv/
+env/
+__pycache__/
+
+# Personal documents and data: never commit real CVs or profile data
+*.pdf
+*.docx
+*.doc
+*.pages
+**/content/profile.local.ts
+**/content/cvs/personal/
+.backups/
+.data/
+personal/
+
+# OS / editor
+.DS_Store
+.icloud
+*.log
