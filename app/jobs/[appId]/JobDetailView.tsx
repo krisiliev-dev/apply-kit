@@ -4,13 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { Application, ApplyFitCheck } from "@/lib/app/types";
 import { getApplication, patchApplication } from "@/lib/app/storage";
-import { profile as baseProfile } from "@/content/profile";
 import type { AtsJobSchema } from "@/lib/jobs/ats";
 import { detectAts } from "@/lib/jobs/ats";
 import { loadDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import { FitCheckCard } from "@/components/applications/FitCheckCard";
 import { CvSlugStatus } from "@/components/applications/CvSlugStatus";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv, getBaseProfile } from "@/lib/profile/base";
 import { cvs } from "@/content/cvs";
 
 type AtsState =
@@ -159,8 +158,8 @@ export function JobDetailView({ appId }: { appId: string }) {
             inputs={{
               parsedJob: job,
               baseCV:
-                (app.cvSlug && cvs[app.cvSlug]) || defaultCV,
-              profile: baseProfile,
+                (app.cvSlug && cvs[app.cvSlug]) || getBaseCv(),
+              profile: getBaseProfile(),
             }}
             cached={app.applyFit}
             onResult={(fit: ApplyFitCheck) => {
@@ -507,6 +506,7 @@ function buildDefaults(
   schema: AtsJobSchema,
   app: Application,
 ): Record<string, string> {
+  const baseProfile = getBaseProfile();
   const firstName = baseProfile.name.split(" ")[0] ?? "";
   const lastName = baseProfile.name.split(" ").slice(1).join(" ");
   const linkedin =
@@ -558,6 +558,7 @@ function buildDefaults(
 }
 
 function coverLetterSeed(app: Application): string {
+  const baseProfile = getBaseProfile();
   const job = app.jobData;
   if (!job) return "";
   const firstBit = job.requirements.slice(0, 2).join(" and ");

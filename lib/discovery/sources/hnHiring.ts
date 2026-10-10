@@ -16,6 +16,10 @@ import { stableId } from "../id";
 const HN_USER_PAGE = "https://news.ycombinator.com/submitted?id=whoishiring";
 const HN_API_ITEM = (id: number | string) =>
   `https://hacker-news.firebaseio.com/v0/item/${id}.json`;
+// Algolia search is the robust way to find the monthly thread — structured
+// JSON, sorted newest-first, immune to HN HTML markup changes.
+const HN_ALGOLIA =
+  "https://hn.algolia.com/api/v1/search_by_date?tags=story,author_whoishiring&query=who%20is%20hiring&hitsPerPage=10";
 
 type HnItem = {
   id: number;
@@ -39,6 +43,25 @@ type HnItem = {
  * offline).
  */
 export async function resolveLatestHiringThreadId(): Promise<string | null> {
+  // Primary: Algolia. Returns stories by `whoishiring`, newest first; pick the
+  // first that's an "Ask HN: Who is hiring?" (skips the "who wants to be
+  // hired?" sibling thread).
+  try {
+    const res = await fetch(HN_ALGOLIA, { headers: { accept: "application/json" } });
+    if (res.ok) {
+      const data = (await res.json()) as {
+        hits?: Array<{ objectID?: string; title?: string }>;
+      };
+      const hit = (data.hits ?? []).find(
+        (h) => typeof h.title === "string" && /^ask hn:\s*who is hiring/i.test(h.title),
+      );
+      if (hit?.objectID) return hit.objectID;
+    }
+  } catch {
+    // fall through to the HTML scrape
+  }
+
+  // Fallback: scrape the submitted-by page.
   const res = await fetch(HN_USER_PAGE, {
     headers: { accept: "text/html" },
   });

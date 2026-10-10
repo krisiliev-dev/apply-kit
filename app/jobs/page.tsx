@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { AppNav } from "@/components/nav/AppNav";
 import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
 import { useEffect, useMemo, useState } from "react";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv } from "@/lib/profile/base";
 import { saveToStorage } from "@/lib/doc/persist";
 import { readApplications, upsertApplication } from "@/lib/app/storage";
 import type { Application, ParsedJob } from "@/lib/app/types";
@@ -74,7 +75,7 @@ export default function JobsPage() {
       const res = await trackedFetch("/api/jobs/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job, baseCv: defaultCV }),
+        body: JSON.stringify({ job, baseCv: getBaseCv() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -140,11 +141,12 @@ export default function JobsPage() {
 
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+      <AppNav />
       <header className="mb-12">
         <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
           Apply
         </p>
-        <h1 className="font-display text-5xl mt-2">
+        <h1 className="font-display text-5xl mt-2 tracking-tight">
           One role, <em>one tailored CV.</em>
         </h1>
         <p className="mt-4 text-ink/70 max-w-prose">

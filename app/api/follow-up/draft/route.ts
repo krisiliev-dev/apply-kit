@@ -1,7 +1,8 @@
 import { streamText, type LanguageModelUsage } from "ai";
 import type { Application, FollowUpKind } from "@/lib/app/types";
 import { FOLLOWUP_KIND_TONE } from "@/lib/app/followupCadence";
-import { profile as baseProfile } from "@/content/profile";
+import { profile as demoProfile } from "@/content/profile";
+import type { Profile } from "@/lib/types";
 import type { Settings } from "@/lib/settings/types";
 import {
   resolveForRoute,
@@ -21,6 +22,9 @@ type Body = {
   applicationId: string;
   application: Application;
   kind: FollowUpKind;
+  // The candidate identity. Sent by the client (read from localStorage so the
+  // user's real name/title is used). Falls back to the demo persona.
+  profile?: Profile;
   settings?: Settings;
 };
 
@@ -53,6 +57,7 @@ export async function POST(req: Request) {
   }
 
   const { application: app, kind } = body;
+  const candidate = body.profile ?? demoProfile;
 
   // post-offer is a candidate-facing reminder, not an email to the company.
   if (kind === "post-offer") {
@@ -96,7 +101,7 @@ Hard rules:
 - Style for this follow-up kind: ${FOLLOWUP_KIND_TONE[kind] ?? ""}`;
 
   const context = [
-    `Candidate: ${baseProfile.name} (${baseProfile.title ?? "professional"})`,
+    `Candidate: ${candidate.name} (${candidate.title ?? "professional"})`,
     `Company: ${app.company}`,
     `Role: ${app.role}`,
     `Current status: ${app.status}`,

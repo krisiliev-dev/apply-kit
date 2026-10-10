@@ -7,9 +7,18 @@ export type JobPostingSource =
   | { kind: "ashby"; company: string }
   | { kind: "hn-hiring"; threadId: string }
   | { kind: "rss"; feedUrl: string }
+  | { kind: "careerpage"; url: string; site?: string }
+  | { kind: "smartrecruiters"; company: string }
+  | { kind: "workday"; company: string }
+  | { kind: "jooble"; query: string }
+  | { kind: "arbeitnow"; query?: string }
+  | { kind: "jobapi"; provider: string; query?: string }
   | { kind: "linkedin" }
   | { kind: "indeed" }
-  | { kind: "glassdoor" };
+  | { kind: "glassdoor" }
+  | { kind: "jobsbg" }
+  // Generic own-session capture from the browser extension (any job page).
+  | { kind: "capture"; site?: string };
 
 export type JobPostingSourceKind = JobPostingSource["kind"];
 
@@ -19,9 +28,17 @@ export const JOB_SOURCE_KINDS: JobPostingSourceKind[] = [
   "ashby",
   "hn-hiring",
   "rss",
+  "careerpage",
+  "smartrecruiters",
+  "workday",
+  "jooble",
+  "arbeitnow",
+  "jobapi",
   "linkedin",
   "indeed",
   "glassdoor",
+  "jobsbg",
+  "capture",
 ];
 
 export type JobPosting = {
@@ -41,6 +58,9 @@ export type ScoredPosting = JobPosting & {
   score: number;
   why: string[];
   hardReject?: boolean;
+  // Lower = more preferred location. 0 = first preferred location (e.g. Sofia),
+  // then other preferred, then remote, then everywhere else. Primary sort key.
+  locationRank?: number;
 };
 
 export type DiscoveryPreferences = {
@@ -67,7 +87,9 @@ export type DiscoveryState = {
 
 // Payload accepted by /api/discover/ingest from the browser extension.
 export type IngestPayload = {
-  source: "linkedin" | "indeed" | "glassdoor";
+  source: "linkedin" | "indeed" | "glassdoor" | "jobsbg" | "capture";
+  /** Optional site label for generic 'capture' source (e.g. host). */
+  site?: string;
   url: string;
   title: string;
   company: string;
@@ -75,6 +97,40 @@ export type IngestPayload = {
   salary?: string;
   description?: string;
   capturedAt: number;
+};
+
+// A registered, crawlable source. The agent's research adds these (addedBy:
+// "research"); the user can add them manually too. ATS + rss kinds feed the
+// existing aggregator (their ref is folded into DiscoveryPreferences at crawl
+// time); careerpage/board kinds are crawled by the puppeteer extractor.
+export type DiscoverySourceKind =
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "rss"
+  | "careerpage"
+  | "board"
+  | "smartrecruiters"
+  | "workday"
+  | "jooble"
+  | "arbeitnow"
+  | "reed"
+  | "remotive"
+  | "jobicy"
+  | "themuse"
+  | "findwork"
+  | "eures";
+
+export type DiscoverySource = {
+  id: string; // deterministic: `${kind}:${ref}` (lowercased)
+  kind: DiscoverySourceKind;
+  ref: string; // ATS slug, or full URL for rss/careerpage/board
+  label: string;
+  region?: string; // free-text hint, e.g. "Sofia" / "Manchester" / "Remote-EU"
+  addedBy: "manual" | "research";
+  enabled: boolean;
+  lastCrawledAt?: number;
+  note?: string;
 };
 
 export const DISCOVERY_PREFS_KEY = "cv-maker:discovery-prefs";

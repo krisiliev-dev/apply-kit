@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppNav } from "@/components/nav/AppNav";
 import QRCode from "qrcode";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -142,21 +143,12 @@ export default function PairPage() {
 
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+      <AppNav />
       <header className="mb-10">
-        <div className="flex items-baseline justify-between gap-4">
-          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
-            Pair extension
-          </p>
-          <nav aria-label="Primary" className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4">
-            <Link href="/" className="hover:text-ink">
-              Home
-            </Link>
-            <Link href="/discover" className="hover:text-ink">
-              Discover
-            </Link>
-          </nav>
-        </div>
-        <h1 className="font-display text-5xl mt-2">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+          Pair extension
+        </p>
+        <h1 className="font-display text-5xl mt-2 tracking-tight">
           Pair a <em>device.</em>
         </h1>
         <p className="mt-4 text-ink/70 max-w-prose">

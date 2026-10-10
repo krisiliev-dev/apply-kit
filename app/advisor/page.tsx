@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppNav } from "@/components/nav/AppNav";
 import { useEffect, useMemo } from "react";
 import { useAdvisor } from "@/lib/advisor/store";
 import { formatRelative } from "@/lib/advisor/ui";
@@ -47,24 +48,20 @@ export default function AdvisorIndexPage() {
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-6 py-16">
+      <AppNav />
       <header className="mb-10">
         <div className="flex items-baseline justify-between gap-4">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             Advisor
           </p>
-          <nav aria-label="Primary" className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4">
-            <Link href="/" className="hover:text-ink">
-              CV Workshop
-            </Link>
-            <Link href="/applications" className="hover:text-ink">
-              Applications
-            </Link>
-            <Link href="/applications/review" className="hover:text-ink">
-              Review
-            </Link>
-          </nav>
+          <Link
+            href="/applications/review"
+            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 hover:text-ink"
+          >
+            Review
+          </Link>
         </div>
-        <h1 className="font-display text-5xl mt-3">
+        <h1 className="font-display text-5xl mt-3 tracking-tight">
           The longer <em>arc.</em>
         </h1>
         <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 mt-3">

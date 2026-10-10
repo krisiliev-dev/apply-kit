@@ -12,10 +12,12 @@ import {
   useFollowUps,
   selectForApplication,
 } from "@/lib/app/followupStore";
+import { useShallow } from "zustand/react/shallow";
 import { FOLLOWUP_KIND_LABEL } from "@/lib/app/followupCadence";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 import { trackedFetch } from "@/lib/ai/tokenLedger";
+import { getBaseProfile } from "@/lib/profile/base";
 
 // FollowUpsSection — appears on the application detail page.
 // Lists every follow-up for this application (pending, snoozed, sent, skipped).
@@ -49,7 +51,7 @@ const STATUS_CLASS: Record<FollowUpStatus, string> = {
 export function FollowUpsSection({ app }: { app: Application }) {
   const load = useFollowUps((s) => s.load);
   const refresh = useFollowUps((s) => s.refresh);
-  const items = useFollowUps(selectForApplication(app.id));
+  const items = useFollowUps(useShallow(selectForApplication(app.id)));
   const add = useFollowUps((s) => s.add);
   const update = useFollowUps((s) => s.update);
   const remove = useFollowUps((s) => s.remove);
@@ -165,6 +167,7 @@ function FollowUpRow({
           applicationId: app.id,
           application: app,
           kind: fu.kind,
+          profile: getBaseProfile(),
         }),
       });
       if (!res.ok || !res.body) {

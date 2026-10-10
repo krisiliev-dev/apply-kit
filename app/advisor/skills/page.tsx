@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAdvisor } from "@/lib/advisor/store";
 import { formatRelative } from "@/lib/advisor/ui";
 import type { SkillGapAnalysis, SkillDemand } from "@/lib/advisor/types";
-import { profile } from "@/content/profile";
+import { getBaseProfile } from "@/lib/profile/base";
 import { cvList } from "@/content/cvs";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 import { trackedFetch } from "@/lib/ai/tokenLedger";
@@ -51,7 +51,7 @@ export default function SkillsPage() {
       const res = await trackedFetch("/api/advisor/skills", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile, cvVariants: cvList, recentPostings }),
+        body: JSON.stringify({ profile: getBaseProfile(), cvVariants: cvList, recentPostings }),
       });
       const data = (await res.json()) as { analysis?: SkillGapAnalysis; error?: string };
       if (!res.ok || !data.analysis) {

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useDiscovery } from "@/lib/discovery/store";
 import type { DiscoveryPreferences } from "@/lib/discovery/types";
+import { pushServerPrefs } from "@/lib/discovery/sync";
 
 // CRUD for the discovery preferences bucket. Kept intentionally plain — a
 // stack of list editors, each one "type a value, press add, click × to
@@ -37,6 +38,7 @@ export default function PreferencesPage() {
     const next = { ...draft, ...patch };
     setDraft(next);
     setPrefs(patch);
+    void pushServerPrefs(next);
   }
 
   function commitWatchlist(
@@ -48,6 +50,7 @@ export default function PreferencesPage() {
     const next = { ...draft, watchlist };
     setDraft(next);
     setPrefs({ watchlist });
+    void pushServerPrefs(next);
   }
 
   return (

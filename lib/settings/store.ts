@@ -4,6 +4,7 @@ import { create, type StateCreator } from "zustand";
 import {
   DEFAULT_SETTINGS,
   type BackupConfig,
+  type DiscoveryScheduleConfig,
   type ModelChoice,
   type ModelFeature,
   type ModelsConfig,
@@ -31,6 +32,7 @@ type Actions = {
   setModelFeature: (feature: ModelFeature, choice: ModelChoice | null) => void;
   setBackup: (patch: Partial<BackupConfig>) => void;
   setUi: (patch: Partial<UiConfig>) => void;
+  setDiscovery: (patch: Partial<DiscoveryScheduleConfig>) => void;
   reset: () => void;
 };
 
@@ -41,6 +43,7 @@ function snapshot(state: State): Settings {
     models: state.models,
     backup: state.backup,
     ui: state.ui,
+    discovery: state.discovery,
   };
 }
 
@@ -95,6 +98,13 @@ const creator: StateCreator<SettingsStore> = (set, get) => ({
     const next: Settings = { ...snapshot(get()), ui: nextUi };
     saveSettingsToStorage(next);
     set({ ui: nextUi });
+  },
+
+  setDiscovery: (patch) => {
+    const nextDiscovery: DiscoveryScheduleConfig = { ...get().discovery, ...patch };
+    const next: Settings = { ...snapshot(get()), discovery: nextDiscovery };
+    saveSettingsToStorage(next);
+    set({ discovery: nextDiscovery });
   },
 
   reset: () => {

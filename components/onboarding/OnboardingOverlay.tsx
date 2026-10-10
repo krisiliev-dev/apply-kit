@@ -234,7 +234,7 @@ export function OnboardingOverlay() {
                     type="text"
                     value={ollamaBase}
                     onChange={(e) => setOllamaBase(e.target.value)}
-                    className="flex-1 border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+                    className="flex-1 border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
                   />
                   <button
                     type="button"
@@ -247,12 +247,12 @@ export function OnboardingOverlay() {
                 {ollamaTest ? (
                   <div className="mt-2 font-mono text-[11px]">
                     {ollamaTest.kind === "ok" ? (
-                      <span className="text-green-700">
+                      <span className="text-green-400">
                         OK — {ollamaTest.models.length} model
                         {ollamaTest.models.length === 1 ? "" : "s"}
                       </span>
                     ) : (
-                      <span className="text-red-700">
+                      <span className="text-red-400">
                         Failed: {ollamaTest.msg}
                       </span>
                     )}
@@ -333,7 +333,7 @@ export function OnboardingOverlay() {
                   }}
                 />
                 {error ? (
-                  <p className="mt-2 font-mono text-[11px] text-red-700">
+                  <p className="mt-2 font-mono text-[11px] text-red-400">
                     {error}
                   </p>
                 ) : null}

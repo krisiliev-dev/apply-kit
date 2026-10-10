@@ -1,4 +1,5 @@
 import { pushIngest } from "@/lib/discovery/ingestBuffer";
+import { ingestPostings } from "@/lib/doc/serverStore";
 import type { IngestPayload } from "@/lib/discovery/types";
 
 // POST /api/discover/ingest
@@ -25,6 +26,8 @@ const ALLOWED_SOURCES: IngestPayload["source"][] = [
   "linkedin",
   "indeed",
   "glassdoor",
+  "jobsbg",
+  "capture",
 ];
 
 export async function POST(req: Request) {
@@ -38,6 +41,10 @@ export async function POST(req: Request) {
   if (!parsed.ok) return json({ error: parsed.error }, 400);
 
   const posting = pushIngest(parsed.value);
+  // Also land it in the shared server pool so it unifies with crawled postings
+  // and is visible via MCP / the /discover server sync (not just the in-memory
+  // buffer the browser drains).
+  await ingestPostings([posting]);
   return json({ ok: true, posting });
 }
 

@@ -28,11 +28,17 @@ export function Editor({ slug }: { slug: string }) {
   const [tab, setTab] = useState<RightTab>("inspector");
   const unresolved = useEditor((s) => unresolvedCommentCount(s.doc));
 
-  usePersist(slug);
+  const { externalDoc, applyExternal, dismissExternal } = usePersist(slug);
   useEditorShortcuts();
 
   return (
     <div className="editor-root flex flex-col">
+      {externalDoc && (
+        <ExternalUpdateBanner
+          onReload={applyExternal}
+          onDismiss={dismissExternal}
+        />
+      )}
       <Toolbar />
       <div className="flex flex-1 min-h-0">
         <LayersPanel />
@@ -99,6 +105,46 @@ export function Editor({ slug }: { slug: string }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Shown when the shared store has a newer version of this CV than what's in
+// the editor — i.e. the agent (via MCP) or another tab changed it. We don't
+// auto-replace mid-edit; the user chooses when to pull it in.
+function ExternalUpdateBanner({
+  onReload,
+  onDismiss,
+}: {
+  onReload: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      className="flex items-center justify-between gap-4 px-4 py-2 text-[11px] font-mono"
+      style={{ background: "var(--color-editor-select)", color: "#fff" }}
+    >
+      <span className="uppercase tracking-[0.15em]">
+        This CV was updated by the agent.
+      </span>
+      <span className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onReload}
+          className="underline underline-offset-2 hover:opacity-80"
+        >
+          Reload
+        </button>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="opacity-70 hover:opacity-100"
+        >
+          ✕
+        </button>
+      </span>
     </div>
   );
 }

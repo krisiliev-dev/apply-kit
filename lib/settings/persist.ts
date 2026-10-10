@@ -4,6 +4,7 @@ import {
   DEFAULT_SETTINGS,
   SETTINGS_STORAGE_KEY,
   type BackupConfig,
+  type DiscoveryScheduleConfig,
   type ModelsConfig,
   type Settings,
   type UiConfig,
@@ -17,6 +18,7 @@ export type RawSettings = {
   models?: Partial<ModelsConfig>;
   backup?: Partial<BackupConfig>;
   ui?: Partial<UiConfig>;
+  discovery?: Partial<DiscoveryScheduleConfig>;
 };
 
 // Single-blob persistence under `cv-maker:settings`. Merges with
@@ -101,5 +103,17 @@ export function mergeWithDefaults(
         : DEFAULT_SETTINGS.ui.showOnboarding,
   };
 
-  return { models, backup, ui };
+  const discovery: DiscoveryScheduleConfig = {
+    autoRefreshEnabled:
+      typeof raw.discovery?.autoRefreshEnabled === "boolean"
+        ? raw.discovery.autoRefreshEnabled
+        : DEFAULT_SETTINGS.discovery.autoRefreshEnabled,
+    autoRefreshIntervalMinutes:
+      typeof raw.discovery?.autoRefreshIntervalMinutes === "number"
+        ? raw.discovery.autoRefreshIntervalMinutes
+        : DEFAULT_SETTINGS.discovery.autoRefreshIntervalMinutes,
+    lastRefreshAt: raw.discovery?.lastRefreshAt ?? undefined,
+  };
+
+  return { models, backup, ui, discovery };
 }

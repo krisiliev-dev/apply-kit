@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { nanoid } from "nanoid";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { cvList } from "@/content/cvs";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv, getBaseProfile, pullBaseFromServer } from "@/lib/profile/base";
 import { useDiscovery } from "@/lib/discovery/store";
 import type {
   JobPosting,
@@ -20,11 +20,19 @@ import { seedFromContent } from "@/lib/jobs/seedFromContent";
 import { saveDraftEval, type DraftEvalResult } from "@/lib/evaluation/keywords";
 import type { CVContent } from "@/lib/types";
 import { FitCheckCard } from "@/components/applications/FitCheckCard";
-import { profile as baseProfile } from "@/content/profile";
 import { pullInbox, pendingCount } from "@/lib/pairing/client";
 import { CapturedPill } from "@/components/pair/CapturedPill";
+import { AppNav } from "@/components/nav/AppNav";
 import { trackedFetch } from "@/lib/ai/tokenLedger";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
+import {
+  pullServerPostings,
+  pullServerPrefs,
+  pushServerPrefs,
+  runServerDiscovery,
+} from "@/lib/discovery/sync";
+// `profile`/`defaultCV` come from the resolver so AI flows use the user's
+// real data (localStorage) when present, demo persona otherwise.
 
 // Discovery-side fit cache — keep results per posting id to avoid respending
 // tokens on re-opens. SSR-safe.
@@ -63,9 +71,17 @@ const SOURCE_LABEL: Record<JobPostingSourceKind, string> = {
   ashby: "Ashby",
   "hn-hiring": "HN Hiring",
   rss: "RSS",
+  careerpage: "Career page",
+  smartrecruiters: "SmartRecruiters",
+  workday: "Workday",
+  jooble: "Jooble",
+  arbeitnow: "Arbeitnow",
+  jobapi: "Job API",
   linkedin: "LinkedIn",
   indeed: "Indeed",
   glassdoor: "Glassdoor",
+  jobsbg: "jobs.bg",
+  capture: "Captured",
 };
 
 export default function DiscoverPage() {
@@ -78,7 +94,10 @@ export default function DiscoverPage() {
   const rescore = useDiscovery((s) => s.rescore);
   const dismiss = useDiscovery((s) => s.dismiss);
   const save = useDiscovery((s) => s.save);
-  const markFetched = useDiscovery((s) => s.markFetched);
+  const replacePrefs = useDiscovery((s) => s.replacePrefs);
+
+  // Score against the user's real base CV plus the demo variants.
+  const scoringCvs = useMemo(() => [getBaseCv(), ...cvList], []);
 
   const [filter, setFilter] = useState<Filter>("all");
   const [search, setSearch] = useState("");
@@ -129,8 +148,28 @@ export default function DiscoverPage() {
   }, [load]);
 
   useEffect(() => {
-    if (loaded) rescore(cvList);
+    if (loaded) rescore(scoringCvs);
     // Run once per reload to adopt the latest CV content for scoring.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
+
+  // Pull the shared server store (prefs + postings the agent/MCP set or
+  // crawled) into the local store on load, scored against the base CV.
+  useEffect(() => {
+    if (!loaded) return;
+    void (async () => {
+      // Pull the user's real base CV into localStorage FIRST so scoring uses
+      // it, not the demo persona. BaseSync (global) is async and can lose the
+      // race with the initial rescore, which would rank against the demo CVs.
+      await pullBaseFromServer();
+      const cvs = [getBaseCv(), ...cvList];
+      const sp = await pullServerPrefs();
+      if (sp) replacePrefs(sp);
+      const posts: JobPosting[] = await pullServerPostings();
+      if (posts.length) ingest(posts, cvs);
+      // Re-score everything against the real base CV + latest prefs.
+      rescore(cvs);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loaded]);
 
@@ -143,7 +182,7 @@ export default function DiscoverPage() {
     try {
       const postings = await pullInbox();
       if (postings.length > 0) {
-        ingest(postings, cvList);
+        ingest(postings, scoringCvs);
         setFetchInfo(
           `Pulled ${postings.length} capture${postings.length === 1 ? "" : "s"} from the extension.`,
         );
@@ -151,7 +190,7 @@ export default function DiscoverPage() {
     } catch {
       // transient — the pill will retry
     }
-  }, [loaded, ingest]);
+  }, [loaded, ingest, scoringCvs]);
 
   useEffect(() => {
     if (loaded) void drainPairInbox();
@@ -211,7 +250,12 @@ export default function DiscoverPage() {
           (p.location ?? "").toLowerCase().includes(q),
       );
     }
-    return list.sort((a, b) => b.score - a.score);
+    // Primary: location tier (Sofia → other preferred → remote → rest).
+    // Secondary: cyber-weighted relevance score.
+    return list.sort(
+      (a, b) =>
+        (a.locationRank ?? 9) - (b.locationRank ?? 9) || b.score - a.score,
+    );
   }, [loaded, state.postings, state.saved, state.dismissed, filter, search]);
 
   const availableSourceKinds = useMemo(() => {
@@ -233,36 +277,37 @@ export default function DiscoverPage() {
     setFetchError(null);
     setFetchInfo(null);
     try {
-      const res = await trackedFetch("/api/discover/fetch", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prefs }),
-      });
-      const data = (await res.json()) as {
-        postings?: JobPosting[];
-        errors?: Array<{ sourceKey: string; message: string }>;
-        cacheHits?: string[];
-        sourceKeys?: string[];
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        setFetchError(data.error ?? `Fetch failed (${res.status})`);
-        return;
-      }
-      const postings = data.postings ?? [];
-      ingest(postings, cvList);
-      for (const key of data.sourceKeys ?? []) markFetched(key);
-      const freshCount = postings.length;
-      const errCount = data.errors?.length ?? 0;
-      const hitCount = data.cacheHits?.length ?? 0;
+      // Push the current prefs to the server so the crawl uses them, run the
+      // server-side aggregation (ATS/RSS/HN + registered sources), then pull
+      // the merged pool back and score it locally.
+      await pushServerPrefs(prefs);
+      const res = await runServerDiscovery();
+      const posts: JobPosting[] = await pullServerPostings();
+      ingest(posts, scoringCvs);
+      const errCount = res.errors?.length ?? 0;
+      // Report what the user actually sees, not the raw server pool. After
+      // ingest the store is scored, so "matching" mirrors the All chip (open,
+      // non-hard-rejected, non-dismissed) and "outside region" explains the
+      // gap (roles filtered by your work-auth/location prefs).
+      const store = useDiscovery.getState().state;
+      const all = Object.values(store.postings);
+      const matching = all.filter(
+        (p) => !p.hardReject && !store.dismissed[p.id],
+      ).length;
+      const outsideRegion = all.filter((p) => p.hardReject).length;
       setFetchInfo(
-        `Loaded ${freshCount} posting${freshCount === 1 ? "" : "s"}` +
-          (hitCount > 0 ? ` · ${hitCount} cached` : "") +
-          (errCount > 0 ? ` · ${errCount} source error${errCount === 1 ? "" : "s"}` : ""),
+        `${matching} role${matching === 1 ? "" : "s"} match your filters` +
+          (res.added > 0 ? ` · ${res.added} new` : "") +
+          (outsideRegion > 0
+            ? ` · ${outsideRegion} outside your work region`
+            : "") +
+          (errCount > 0
+            ? ` · ${errCount} source error${errCount === 1 ? "" : "s"}`
+            : ""),
       );
     } catch (err) {
       setFetchError(
-        err instanceof Error ? err.message : "Network error during fetch.",
+        err instanceof Error ? err.message : "Network error during refresh.",
       );
     } finally {
       setRefreshing(false);
@@ -288,7 +333,7 @@ export default function DiscoverPage() {
       const res = await trackedFetch("/api/jobs/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job: parsed, baseCv: defaultCV }),
+        body: JSON.stringify({ job: parsed, baseCv: getBaseCv() }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -381,35 +426,25 @@ export default function DiscoverPage() {
 
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+      <AppNav />
       <header className="mb-10">
         <div className="flex items-baseline justify-between gap-4">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             Discover
           </p>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             {/* On /discover the pill routes clicks to a local pull rather
                 than navigating, so the user stays on the page. */}
             <CapturedPill href="#pull" />
-            <nav aria-label="Primary" className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4">
-              <Link href="/" className="hover:text-ink">
-                Home
-              </Link>
-              <Link href="/applications" className="hover:text-ink">
-                Applications
-              </Link>
-              <Link href="/jobs" className="hover:text-ink">
-                Jobs
-              </Link>
-              <Link href="/pair" className="hover:text-ink">
-                Pair
-              </Link>
-              <Link href="/discover/preferences" className="hover:text-ink">
-                Preferences
-              </Link>
-            </nav>
+            <Link
+              href="/discover/preferences"
+              className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 hover:text-ink"
+            >
+              Preferences
+            </Link>
           </div>
         </div>
-        <h1 className="font-display text-5xl mt-2">
+        <h1 className="font-display text-5xl mt-2 tracking-tight">
           Roles worth <em>your time.</em>
         </h1>
         <p className="mt-4 text-ink/70 max-w-prose">
@@ -424,7 +459,7 @@ export default function DiscoverPage() {
           <button
             type="button"
             onClick={handleRefresh}
-            disabled={refreshing || !watchlistConfigured}
+            disabled={refreshing}
             className="border border-ink bg-ink text-paper px-4 py-2 font-mono text-xs uppercase tracking-[0.2em] hover:bg-transparent hover:text-ink disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
           >
             {refreshing ? "Refreshing…" : "Refresh all sources"}
@@ -472,9 +507,17 @@ export default function DiscoverPage() {
             "ashby",
             "hn-hiring",
             "rss",
+            "careerpage",
+            "smartrecruiters",
+            "workday",
+            "jooble",
+            "arbeitnow",
+            "jobapi",
             "linkedin",
             "indeed",
             "glassdoor",
+            "jobsbg",
+            "capture",
           ] as JobPostingSourceKind[]
         ).map((k) => {
           if (!availableSourceKinds.has(k)) return null;
@@ -621,8 +664,8 @@ function FitCheckModal({
           <FitCheckCard
             inputs={{
               parsedJob: parsed,
-              baseCV: defaultCV,
-              profile: baseProfile,
+              baseCV: getBaseCv(),
+              profile: getBaseProfile(),
             }}
             cached={cached}
             onResult={onResult}
@@ -693,7 +736,7 @@ function PostingRow({
             >
               {posting.title}
             </a>
-            <SourceBadge kind={posting.source.kind} />
+            <SourceBadge source={posting.source} />
           </div>
           <p className="mt-1 font-mono text-xs text-ink/70">
             <span className="text-ink">{posting.company}</span>
@@ -768,10 +811,14 @@ function PostingRow({
   );
 }
 
-function SourceBadge({ kind }: { kind: JobPostingSourceKind }) {
+function SourceBadge({ source }: { source: ScoredPosting["source"] }) {
+  const label =
+    source.kind === "jobapi"
+      ? source.provider.charAt(0).toUpperCase() + source.provider.slice(1)
+      : SOURCE_LABEL[source.kind];
   return (
     <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-ink/60 border border-ink/20 rounded px-1.5 py-0.5">
-      {SOURCE_LABEL[kind]}
+      {label}
     </span>
   );
 }

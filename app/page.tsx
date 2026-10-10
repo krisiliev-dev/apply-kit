@@ -4,6 +4,7 @@ import { DemoControls, DemoHint } from "@/components/home/DemoControls";
 import { CapturedPill } from "@/components/pair/CapturedPill";
 import { OnboardingOverlay } from "@/components/onboarding/OnboardingOverlay";
 import { ShortcutHint } from "@/components/shortcuts/ShortcutHint";
+import { AppNav } from "@/components/nav/AppNav";
 
 export default function Home() {
   return (
@@ -16,38 +17,17 @@ export default function Home() {
       </a>
       <OnboardingOverlay />
       <ShortcutHint />
+      <AppNav />
       <header className="mb-12">
         <div className="flex items-baseline justify-between gap-4">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             CV Workshop
           </p>
-          <div className="flex items-center gap-3">
-            {/* Pill only renders when the pair inbox has captures; hidden
-                otherwise so it doesn't clutter the header. */}
-            <CapturedPill />
-            <nav
-              aria-label="Primary"
-              className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4"
-            >
-              <Link href="/discover" className="hover:text-ink">
-                Discover
-              </Link>
-              <Link href="/applications" className="hover:text-ink">
-                Applications
-              </Link>
-              <Link href="/jobs" className="hover:text-ink">
-                Jobs
-              </Link>
-              <Link href="/pair" className="hover:text-ink">
-                Pair
-              </Link>
-              <Link href="/settings" className="hover:text-ink">
-                Settings
-              </Link>
-            </nav>
-          </div>
+          {/* Pill only renders when the pair inbox has captures; hidden
+              otherwise so it doesn't clutter the header. */}
+          <CapturedPill />
         </div>
-        <h1 className="font-display text-5xl mt-2">
+        <h1 className="font-display text-5xl mt-2 tracking-tight">
           Your CVs, <em>tailored per role.</em>
         </h1>
         <p className="mt-4 text-ink/70 max-w-prose">

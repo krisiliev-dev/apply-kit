@@ -41,10 +41,16 @@ function getBuffer(): BufferEntry[] {
   return g[BUFFER_KEY];
 }
 
-export function pushIngest(payload: IngestPayload): JobPosting {
-  const posting: JobPosting = {
+// Normalize a captured payload into a JobPosting. Shared by the buffer and the
+// pair-ingest route so both feed the same shape into the server pool.
+export function payloadToPosting(payload: IngestPayload): JobPosting {
+  const source =
+    payload.source === "capture"
+      ? { kind: "capture" as const, site: payload.site }
+      : { kind: payload.source };
+  return {
     id: stableId([payload.source, payload.url, payload.capturedAt]),
-    source: { kind: payload.source },
+    source,
     url: payload.url,
     title: payload.title,
     company: payload.company,
@@ -54,6 +60,10 @@ export function pushIngest(payload: IngestPayload): JobPosting {
     postedAt: payload.capturedAt,
     fetchedAt: Date.now(),
   };
+}
+
+export function pushIngest(payload: IngestPayload): JobPosting {
+  const posting = payloadToPosting(payload);
 
   const buf = getBuffer();
   // Replace any earlier entry with the same posting id so repeated captures

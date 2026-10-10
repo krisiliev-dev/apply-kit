@@ -1,7 +1,7 @@
 import { nanoid } from "nanoid";
 import type { CvDocument, Node } from "./types";
 import { A4, defaultTheme } from "./types";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv } from "@/lib/profile/base";
 
 // Converts typed CV content into a document seed. Used the first time a slug
 // is opened — after that, edits are persisted to localStorage and this seed
@@ -78,7 +78,7 @@ function stackText(
 }
 
 export function seedFromDefault(): CvDocument {
-  const cv = defaultCV;
+  const cv = getBaseCv();
   const { profile } = cv;
   const nodes: Node[] = [];
 

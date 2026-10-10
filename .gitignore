@@ -55,3 +55,9 @@ next-env.d.ts
 /content/profile.local.ts
 /content/cvs/personal/
 /.backups/
+
+# MCP bridge: machine-specific config (absolute paths) + the shared file store
+# if it's ever pointed at the project dir. The MCP server (mcp/server.mjs) IS
+# committed.
+/.mcp.json
+/.data/

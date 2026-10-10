@@ -3,6 +3,8 @@ import {
   touchDevice,
   validateToken,
 } from "@/lib/pairing/server";
+import { payloadToPosting } from "@/lib/discovery/ingestBuffer";
+import { ingestPostings } from "@/lib/doc/serverStore";
 import type { IngestPayload } from "@/lib/discovery/types";
 import type {
   PairIngestRequest,
@@ -36,6 +38,8 @@ const ALLOWED_SOURCES: IngestPayload["source"][] = [
   "linkedin",
   "indeed",
   "glassdoor",
+  "jobsbg",
+  "capture",
 ];
 
 export async function POST(req: Request) {
@@ -73,7 +77,7 @@ export async function POST(req: Request) {
   }
 
   const errors: string[] = [];
-  let accepted = 0;
+  const acceptedItems: IngestPayload[] = [];
   let rejected = 0;
   for (const raw of parsed.value.items) {
     const v = validateItem(raw);
@@ -83,7 +87,14 @@ export async function POST(req: Request) {
       continue;
     }
     appendInboxItem(deviceId, v.value);
-    accepted++;
+    acceptedItems.push(v.value);
+  }
+  const accepted = acceptedItems.length;
+
+  // Unify captures into the shared server pool (alongside the legacy inbox the
+  // browser drains), so they're visible via MCP and the /discover server sync.
+  if (acceptedItems.length > 0) {
+    await ingestPostings(acceptedItems.map(payloadToPosting));
   }
 
   await touchDevice(deviceId);

@@ -21,7 +21,7 @@ import {
 } from "@/lib/app/types";
 import { STATUS_CLASS, STATUS_LABEL, formatDateTime } from "@/lib/app/ui";
 import { exportApplicationBundle } from "@/lib/app/coverLetterExport";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv } from "@/lib/profile/base";
 import { cvs } from "@/content/cvs";
 import { InterviewPrepSection } from "@/components/applications/InterviewPrepSection";
 import { PreScreenSection } from "@/components/applications/PreScreenSection";
@@ -334,7 +334,7 @@ const TONES: { value: CoverLetterTone; label: string; hint: string }[] = [
 
 function resolveBaseCV(cvSlug?: string) {
   if (cvSlug && cvs[cvSlug]) return cvs[cvSlug];
-  return defaultCV;
+  return getBaseCv();
 }
 
 function CoverLetterSection({

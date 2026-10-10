@@ -2,15 +2,27 @@
 
 @theme {
   --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-display: var(--font-space-grotesk), var(--font-inter), ui-sans-serif, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 
-  --color-ink: #111111;
-  --color-paper: #fafaf7;
-  --color-accent: #d64933;
-  --color-editor-bg: #2a2a2a;
-  --color-editor-panel: #1f1f1f;
-  --color-editor-border: #3a3a3a;
+  /* App chrome — dark theme. `ink` is the foreground (light), `paper` the
+     background (dark), so the whole app's ink-on-paper styling inverts here.
+     The printable CV document keeps its own light tokens (see --color-cv-*). */
+  --color-ink: #e9e9ec;
+  --color-paper: #15171c;
+  --color-surface: #1d2027; /* cards, inputs, raised panels */
+  --color-surface-2: #262a33; /* hover / elevated */
+  --color-line: #343a45; /* explicit borders */
+  --color-accent: #ff5a3c; /* brighter red-orange, legible on dark */
+  --color-accent-soft: #2a1c19; /* accent-tinted fill on dark */
+
+  /* The CV is a real document — it stays a light page regardless of theme. */
+  --color-cv-ink: #111111;
+  --color-cv-paper: #fafaf7;
+
+  --color-editor-bg: #1a1c20;
+  --color-editor-panel: #16181c;
+  --color-editor-border: #30343c;
   --color-editor-text: #e8e8e8;
   --color-editor-text-dim: #9a9a9a;
   --color-editor-select: #4f8cff;
@@ -21,9 +33,25 @@ body {
   background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Readability floor for the app chrome. The pages use a lot of arbitrary
+   ultra-small label sizes; nudge the smallest up so meta text stays legible.
+   Unlayered rules beat Tailwind's layered utilities, and the CV document /
+   editor canvas use their own classes (.cv-page / inline styles), so they're
+   unaffected. */
+.text-\[9px\] { font-size: 10.5px; }
+.text-\[10px\] { font-size: 11px; }
+.text-\[11px\] { font-size: 12px; }
+
+/* Tighten the very wide letter-spacing on micro uppercase labels — it's the
+   main thing that made small text hard to read. */
+.tracking-\[0\.2em\] { letter-spacing: 0.12em; }
+.tracking-\[0\.25em\] { letter-spacing: 0.14em; }
 
 /* ———————————————————————————————————————
    Editor chrome
@@ -171,11 +199,11 @@ body {
    ——————————————————————————————————————— */
 
 .cv-page {
-  background: var(--color-paper);
+  background: var(--color-cv-paper);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 16px 48px rgba(0, 0, 0, 0.4);
   position: relative;
   overflow: hidden;
-  color: var(--color-ink);
+  color: var(--color-cv-ink);
 }
 
 .cv-page[data-grid="true"]::before {

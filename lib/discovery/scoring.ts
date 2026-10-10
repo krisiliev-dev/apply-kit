@@ -5,6 +5,7 @@ import type {
   ScoredPosting,
 } from "./types";
 import type { CVContent } from "@/lib/types";
+import { locationMatches, normalizeLoc } from "./location";
 
 // Lightweight scoring — lexical + freshness + user signals.
 //
@@ -62,6 +63,87 @@ const STOPWORDS = new Set([
   "one",
   "than",
 ]);
+
+// Cybersecurity lexicon — the user's primary target domain. A hit in the title
+// is strong signal; a hit only in the body is weak. Drives the cyber boost so
+// security roles outrank generic SWE/CS postings (which still score on title +
+// keyword overlap, just without the cyber lift).
+const CYBER_TERMS = [
+  "cybersecurity",
+  "cyber security",
+  "cyber",
+  "infosec",
+  "information security",
+  "security engineer",
+  "security analyst",
+  "security operations",
+  "soc analyst",
+  "soc ",
+  "siem",
+  "penetration",
+  "pentest",
+  "vulnerability",
+  "threat",
+  "incident response",
+  "forensic",
+  "malware",
+  "appsec",
+  "devsecops",
+  "ethical hack",
+  "red team",
+  "blue team",
+  "purple team",
+  "iso 27001",
+  "soc 2",
+  "grc",
+  "ciso",
+  "ids/ips",
+  "firewall",
+  "encryption",
+  "cryptography",
+  "zero trust",
+  "iam",
+  "identity and access",
+  "compliance",
+  "risk analyst",
+  "security operations center",
+];
+
+/**
+ * 0–1 cybersecurity relevance. Title hits dominate; body-only hits add a little.
+ * Caps at 1 so a keyword-stuffed posting can't run away with the score.
+ */
+function cyberRelevance(p: JobPosting): number {
+  const title = (p.title ?? "").toLowerCase();
+  const body = (p.description ?? "").toLowerCase();
+  let s = 0;
+  for (const term of CYBER_TERMS) {
+    if (title.includes(term)) s += 0.34;
+    else if (body.includes(term)) s += 0.07;
+  }
+  return Math.min(1, s);
+}
+
+/**
+ * Location preference tier (primary sort key on /discover). Lower = better:
+ *   0..n-1  → matched preferredLocations in listed order (so Sofia, listed
+ *             first, is tier 0 and surfaces above everything else)
+ *   n       → remote (desired but not a specific preferred city)
+ *   n+1     → passes work-auth but no location preference matched
+ * With no preferences set, everything is the same neutral tier.
+ */
+function locationTier(
+  location: string | undefined,
+  preferred: string[],
+): number {
+  if (preferred.length === 0) return 0;
+  for (let i = 0; i < preferred.length; i++) {
+    if (locationMatches(location, [preferred[i]])) return i;
+  }
+  const n = normalizeLoc(location);
+  if (/\bremote\b|\banywhere\b/.test(n)) return preferred.length;
+  return preferred.length + 1;
+}
 
 export function tokenize(text: string): string[] {
   return text
@@ -155,7 +237,7 @@ function regionMatches(
   workAuth: string[],
   remoteOnly: boolean | undefined,
 ): { pass: boolean; reason?: string } {
-  const loc = (location ?? "").toLowerCase();
+  const loc = normalizeLoc(location);
   const isRemote = /\bremote\b|\banywhere\b/.test(loc);
   if (remoteOnly && !isRemote) {
     return { pass: false, reason: "remote-only filter (location not remote)" };
@@ -215,7 +297,16 @@ function regionAliases(code: string): string[] {
       "stockholm",
       "munich",
       "zurich",
+      // Bulgaria is an EU member — include it (Latin; Cyrillic is normalized
+      // to Latin before matching).
+      "bulgaria",
+      "sofia",
+      "plovdiv",
+      "varna",
+      "burgas",
+      "ruse",
     ],
+    BG: ["bulgaria", "sofia", "plovdiv", "varna", "burgas", "ruse"],
     DE: ["germany", "berlin", "munich", "hamburg"],
     PT: ["portugal", "lisbon", "porto"],
     ES: ["spain", "madrid", "barcelona"],
@@ -309,14 +400,39 @@ export function scorePosting(inputs: ScoreInputs): ScoredPosting {
   }
 
   const fresh = freshnessBoost(posting.postedAt);
-  // Composite: 0.45 title match + 0.4 keyword overlap + 0.15 freshness.
-  // Overlap is typically small (0.0–0.15 even for strong matches) so we
-  // stretch it. Title sim already spans 0–1.
+  const cyber = cyberRelevance(posting);
+  const tier = locationTier(posting.location, prefs.preferredLocations);
+  // Soft boost when the posting is in one of the user's preferred locations
+  // (Cyrillic-aware — "София" matches "Sofia"). The primary ordering is the
+  // location tier (see scoreMany sort); this just nudges within a tier.
+  const locBoost =
+    prefs.preferredLocations.length > 0 &&
+    locationMatches(posting.location, prefs.preferredLocations)
+      ? 0.05
+      : 0;
+  // Composite, cyber-weighted: title 0.30 + keyword overlap 0.25 + cyber 0.30 +
+  // freshness 0.10, plus a small preferred-location nudge. Cyber is heavy so
+  // security roles float above generic SWE; non-cyber CS roles still score on
+  // title + overlap (the user is open to them, just not first). Overlap is
+  // typically small (0.0–0.15) so we stretch it. Title sim already spans 0–1.
   const overlapStretched = Math.min(1, bestOverlap * 4);
   const raw =
-    0.45 * bestTitleSim + 0.4 * overlapStretched + 0.15 * fresh - dismissPenalty;
+    0.3 * bestTitleSim +
+    0.25 * overlapStretched +
+    0.3 * cyber +
+    0.1 * fresh +
+    locBoost -
+    dismissPenalty;
   const score = Math.max(0, Math.min(1, raw));
 
+  // Location leads — it's the primary ordering signal (Sofia-first), so it
+  // should also be the first thing shown and survive the why.slice below.
+  if (tier === 0 && prefs.preferredLocations.length > 0) {
+    why.push(`Top location: ${prefs.preferredLocations[0]}`);
+  } else if (locBoost > 0) {
+    why.push("In a location you prefer");
+  }
+  if (cyber >= 0.34) why.push(`Cybersecurity match (${pct(cyber)})`);
   if (bestTitleSim >= 0.5) {
     why.push(`Title aligns with your target roles (${pct(bestTitleSim)})`);
   } else if (bestTitleSim > 0) {
@@ -337,6 +453,7 @@ export function scorePosting(inputs: ScoreInputs): ScoredPosting {
   return {
     ...posting,
     score,
+    locationRank: tier,
     why: why.slice(0, 3),
   };
 }

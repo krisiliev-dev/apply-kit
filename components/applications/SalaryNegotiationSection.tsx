@@ -9,7 +9,7 @@ import type {
   SalaryAnalysis,
 } from "@/lib/app/types";
 import { cvs } from "@/content/cvs";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv } from "@/lib/profile/base";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 import { trackedFetch } from "@/lib/ai/tokenLedger";
@@ -24,7 +24,7 @@ import { trackedFetch } from "@/lib/ai/tokenLedger";
 
 function resolveBaseCV(cvSlug?: string) {
   if (cvSlug && cvs[cvSlug]) return cvs[cvSlug];
-  return defaultCV;
+  return getBaseCv();
 }
 
 export function SalaryNegotiationSection({ app }: { app: Application }) {

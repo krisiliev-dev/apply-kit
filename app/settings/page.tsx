@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppNav } from "@/components/nav/AppNav";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettings } from "@/lib/settings/store";
 import {
@@ -26,6 +27,14 @@ import {
   requestBackupPermission,
   type AutoBackupStatus,
 } from "@/lib/settings/autoBackup";
+import {
+  clearLocalBase,
+  getBaseProfile,
+  hasLocalBase,
+  parseBaseImport,
+  pushBaseToServer,
+  setLocalBase,
+} from "@/lib/profile/base";
 
 // The single /settings page. Inline tabs to keep the scope small — four tabs
 // with no nested routes. Each tab is a simple stateless section that talks
@@ -151,19 +160,12 @@ export default function SettingsPage() {
 
   return (
     <main className="min-h-screen max-w-3xl mx-auto px-6 py-16">
+      <AppNav />
       <header className="mb-10">
-        <div className="flex items-baseline justify-between gap-4">
-          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
-            Settings
-          </p>
-          <Link
-            href="/"
-            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 hover:text-ink"
-          >
-            ← back
-          </Link>
-        </div>
-        <h1 className="font-display text-5xl mt-2">
+        <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
+          Settings
+        </p>
+        <h1 className="font-display text-5xl mt-2 tracking-tight">
           Settings <em>&amp; durability</em>
         </h1>
         <p className="mt-4 text-ink/70 max-w-prose">
@@ -306,7 +308,7 @@ function ModelsTab() {
                     Preset
                   </label>
                   <select
-                    className="w-full border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+                    className="w-full border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
                     onChange={(e) => {
                       if (!e.target.value) return;
                       applyPreset(feature, e.target.value);
@@ -395,7 +397,7 @@ function ChoiceEditor({ choice, disabled, onChange }: ChoiceEditorProps) {
             Provider
           </label>
           <select
-            className="w-full border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+            className="w-full border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
             value={choice.provider}
             onChange={(e) =>
               onChange({
@@ -418,7 +420,7 @@ function ChoiceEditor({ choice, disabled, onChange }: ChoiceEditorProps) {
           </label>
           <input
             type="text"
-            className="w-full border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+            className="w-full border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
             value={choice.model}
             onChange={(e) => onChange({ ...choice, model: e.target.value })}
             placeholder={
@@ -435,7 +437,7 @@ function ChoiceEditor({ choice, disabled, onChange }: ChoiceEditorProps) {
           <div className="flex gap-2">
             <input
               type="text"
-              className="flex-1 border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+              className="flex-1 border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
               value={choice.baseUrl ?? ""}
               onChange={(e) => onChange({ ...choice, baseUrl: e.target.value })}
               placeholder="http://localhost:11434/v1"
@@ -452,7 +454,7 @@ function ChoiceEditor({ choice, disabled, onChange }: ChoiceEditorProps) {
           {testResult ? (
             <div className="mt-2 font-mono text-[11px]">
               {testResult.kind === "ok" ? (
-                <span className="text-green-700">
+                <span className="text-green-400">
                   OK — {testResult.models.length} model
                   {testResult.models.length === 1 ? "" : "s"} visible
                   {testResult.models.length
@@ -460,7 +462,7 @@ function ChoiceEditor({ choice, disabled, onChange }: ChoiceEditorProps) {
                     : ""}
                 </span>
               ) : (
-                <span className="text-red-700">
+                <span className="text-red-400">
                   Failed: {testResult.message}
                 </span>
               )}
@@ -474,7 +476,7 @@ function ChoiceEditor({ choice, disabled, onChange }: ChoiceEditorProps) {
         </label>
         <input
           type="text"
-          className="w-full border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+          className="w-full border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
           value={choice.label ?? ""}
           onChange={(e) => onChange({ ...choice, label: e.target.value })}
           placeholder="Shown in the UI"
@@ -600,7 +602,7 @@ function BackupTab() {
                 Interval
               </label>
               <select
-                className="border border-ink/20 bg-white px-3 py-2 font-mono text-sm"
+                className="border border-ink/20 bg-surface px-3 py-2 font-mono text-sm"
                 value={backup.autoBackupIntervalMinutes}
                 onChange={(e) =>
                   setBackup({
@@ -626,7 +628,7 @@ function BackupTab() {
                 <button
                   type="button"
                   onClick={onRequestPermission}
-                  className="font-mono text-[11px] uppercase tracking-[0.2em] border border-amber-700/40 text-amber-800 px-4 py-2 hover:border-amber-700"
+                  className="font-mono text-[11px] uppercase tracking-[0.2em] border border-amber-500/40 text-amber-400 px-4 py-2 hover:border-amber-500/50"
                 >
                   Re-grant permission
                 </button>
@@ -701,10 +703,10 @@ function BackupTab() {
       </div>
 
       {notice ? (
-        <p className="font-mono text-[11px] text-green-800">{notice}</p>
+        <p className="font-mono text-[11px] text-green-400">{notice}</p>
       ) : null}
       {error ? (
-        <p className="font-mono text-[11px] text-red-700">{error}</p>
+        <p className="font-mono text-[11px] text-red-400">{error}</p>
       ) : null}
 
       {restorePending ? (
@@ -734,7 +736,7 @@ function RestoreConfirmModal({
       role="dialog"
       aria-modal="true"
     >
-      <div className="bg-white max-w-lg w-full p-6 border border-ink/20 rounded-sm">
+      <div className="bg-surface max-w-lg w-full p-6 border border-ink/20 rounded-sm">
         <h3 className="font-display text-2xl mb-2">Restore this backup?</h3>
         <p className="text-sm text-ink/70 mb-3">
           Exported {new Date(payload.exportedAt).toLocaleString()}. This will
@@ -835,6 +837,7 @@ function DataTab() {
 
   return (
     <section className="space-y-6">
+      <BaseDataPanel />
       <div>
         <h2 className="font-display text-2xl mb-1">Stored data</h2>
         <p className="font-mono text-[11px] text-ink/60">
@@ -854,7 +857,7 @@ function DataTab() {
             <button
               type="button"
               onClick={() => onClearKey(k)}
-              className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50 border border-ink/15 px-3 py-1.5 hover:border-red-700 hover:text-red-700 shrink-0"
+              className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50 border border-ink/15 px-3 py-1.5 hover:border-red-500/50 hover:text-red-400 shrink-0"
             >
               Clear
             </button>
@@ -870,13 +873,13 @@ function DataTab() {
         <button
           type="button"
           onClick={onClearAll}
-          className="font-mono text-[11px] uppercase tracking-[0.2em] border border-red-700/30 text-red-800 px-4 py-2 hover:border-red-700 hover:bg-red-50"
+          className="font-mono text-[11px] uppercase tracking-[0.2em] border border-red-500/40 text-red-400 px-4 py-2 hover:border-red-500/50 hover:bg-red-500/10"
         >
           Clear ALL cv-maker data
         </button>
       </div>
       {notice ? (
-        <p className="font-mono text-[11px] text-green-800">{notice}</p>
+        <p className="font-mono text-[11px] text-green-400">{notice}</p>
       ) : null}
     </section>
   );
@@ -888,6 +891,146 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`;
 }
 
+// Base CV & profile — the identity the AI tailors FROM. Stored only in this
+// browser's localStorage (never committed), so a public repo stays clean.
+function BaseDataPanel() {
+  const [hasLocal, setHasLocal] = useState(false);
+  const [name, setName] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [paste, setPaste] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const refresh = useCallback(() => {
+    const local = hasLocalBase();
+    setHasLocal(local);
+    setName(local ? getBaseProfile().name : null);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const onLoad = useCallback(() => {
+    setError(null);
+    setNotice(null);
+    try {
+      const parsed = parseBaseImport(paste);
+      setLocalBase(parsed);
+      // Mirror to the shared store so the MCP bridge + tailor_cv can use it.
+      void pushBaseToServer(parsed);
+      setNotice(
+        `Loaded ${parsed.profile.name}. This is now the base for fit-checks, drafts, follow-ups, and advisor features. Reload open tabs to pick it up.`,
+      );
+      setPaste("");
+      setOpen(false);
+      refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not load.");
+    }
+  }, [paste, refresh]);
+
+  const onClear = useCallback(() => {
+    const ok = window.confirm(
+      "Revert to the demo persona? Your loaded data is removed from this browser (your saved CVs and applications are NOT touched).",
+    );
+    if (!ok) return;
+    clearLocalBase();
+    setNotice("Reverted to the demo persona.");
+    setError(null);
+    refresh();
+  }, [refresh]);
+
+  return (
+    <div className="border border-ink/15 rounded-sm p-5 bg-ink/[0.015]">
+      <div className="flex items-baseline justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="font-display text-2xl mb-1">Base CV &amp; profile</h2>
+          <p className="font-mono text-[11px] text-ink/60">
+            {hasLocal ? (
+              <>
+                Using your data: <span className="text-ink">{name}</span>
+              </>
+            ) : (
+              "On the demo persona (Ines Valverde). Load yours to tailor against your real background."
+            )}
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => {
+              setOpen((o) => !o);
+              setError(null);
+            }}
+            className="font-mono text-[11px] uppercase tracking-[0.2em] border border-ink/30 px-4 py-2 hover:border-ink"
+          >
+            {hasLocal ? "Replace…" : "Load my data…"}
+          </button>
+          {hasLocal ? (
+            <button
+              type="button"
+              onClick={onClear}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] border border-ink/15 text-ink/60 px-4 py-2 hover:border-ink/30"
+            >
+              Revert to demo
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      {open ? (
+        <div className="mt-4 space-y-3">
+          <p className="font-mono text-[11px] text-ink/60 leading-relaxed">
+            Paste a JSON object with <span className="text-ink">profile</span>{" "}
+            and <span className="text-ink">cv</span> keys. Ask the chat copilot
+            to &ldquo;structure my CV into base-data JSON&rdquo; if you don&apos;t
+            have it yet. Nothing is uploaded — it stays in this browser.
+          </p>
+          <textarea
+            value={paste}
+            onChange={(e) => setPaste(e.target.value)}
+            rows={8}
+            spellCheck={false}
+            placeholder={
+              '{\n  "profile": { "name": "…", "email": "…", "title": "…" },\n  "cv": { "targetRole": "…", "experiences": [], "education": [], "skills": [] }\n}'
+            }
+            className="w-full border border-ink/20 bg-surface px-3 py-2 font-mono text-[12px] leading-relaxed resize-y"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={onLoad}
+              disabled={!paste.trim()}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] border border-ink/30 px-4 py-2 hover:border-ink disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Load
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setPaste("");
+                setError(null);
+              }}
+              className="font-mono text-[11px] uppercase tracking-[0.2em] text-ink/50 hover:text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {error ? (
+        <p className="mt-3 font-mono text-[11px] text-red-400">{error}</p>
+      ) : null}
+      {notice ? (
+        <p className="mt-3 font-mono text-[11px] text-green-400">{notice}</p>
+      ) : null}
+    </div>
+  );
+}
+
 // ———————————————————————————————————————————————————————————————
 // General tab
 // ———————————————————————————————————————————————————————————————
@@ -895,6 +1038,8 @@ function formatBytes(n: number): string {
 function GeneralTab() {
   const ui = useSettings((s) => s.ui);
   const setUi = useSettings((s) => s.setUi);
+  const discovery = useSettings((s) => s.discovery);
+  const setDiscovery = useSettings((s) => s.setDiscovery);
   const reset = useSettings((s) => s.reset);
 
   const onReset = useCallback(() => {
@@ -929,6 +1074,48 @@ function GeneralTab() {
           Show first-run onboarding overlay
         </label>
       </div>
+
+      <div className="space-y-3 border-t border-ink/10 pt-5">
+        <label className="flex items-center gap-3 font-mono text-[12px]">
+          <input
+            type="checkbox"
+            checked={discovery.autoRefreshEnabled}
+            onChange={(e) => setDiscovery({ autoRefreshEnabled: e.target.checked })}
+          />
+          Auto-refresh discovery while the app is open
+        </label>
+        <p className="font-mono text-[10px] text-ink/50 max-w-prose">
+          Periodically crawls your sources (dev.bg, ATS, aggregators, HN/RSS) and
+          ingests job-alert emails — the legitimate, ToS-clean pulls. For always-on
+          (app closed), point a cron at /api/discover/run + /api/discover/email-sync
+          (see docs/email-alerts.md).
+        </p>
+        {discovery.autoRefreshEnabled ? (
+          <div className="flex items-center gap-2">
+            <label className="font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">
+              Every
+            </label>
+            <select
+              className="border border-ink/20 bg-surface px-3 py-1.5 font-mono text-sm"
+              value={discovery.autoRefreshIntervalMinutes}
+              onChange={(e) =>
+                setDiscovery({ autoRefreshIntervalMinutes: Number(e.target.value) })
+              }
+            >
+              <option value={30}>30 minutes</option>
+              <option value={60}>hour</option>
+              <option value={180}>3 hours</option>
+              <option value={360}>6 hours</option>
+              <option value={720}>12 hours</option>
+            </select>
+            {discovery.lastRefreshAt ? (
+              <span className="font-mono text-[10px] text-ink/40">
+                last: {relativeTime(discovery.lastRefreshAt)}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <div className="flex flex-wrap gap-3">
         <button
           type="button"
@@ -959,6 +1146,7 @@ function DebugBlob() {
     models: s.models,
     backup: s.backup,
     ui: s.ui,
+    discovery: s.discovery,
   }));
   return (
     <details className="mt-6">

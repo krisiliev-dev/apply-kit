@@ -55,10 +55,21 @@ export type UiConfig = {
   showOnboarding: boolean;
 };
 
+export type DiscoveryScheduleConfig = {
+  /** Master switch for hands-off discovery: periodically run all sources +
+   * email-alert ingestion while the app is open. */
+  autoRefreshEnabled: boolean;
+  /** Minimum gap between auto-refreshes, in minutes. */
+  autoRefreshIntervalMinutes: number;
+  /** Last successful auto-refresh timestamp. */
+  lastRefreshAt?: number;
+};
+
 export type Settings = {
   models: ModelsConfig;
   backup: BackupConfig;
   ui: UiConfig;
+  discovery: DiscoveryScheduleConfig;
 };
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -76,6 +87,10 @@ export const DEFAULT_SETTINGS: Settings = {
   ui: {
     showCostPill: true,
     showOnboarding: true,
+  },
+  discovery: {
+    autoRefreshEnabled: false,
+    autoRefreshIntervalMinutes: 360,
   },
 };
 

@@ -14,6 +14,8 @@ import { AutoBackupLoop } from "@/components/backup/AutoBackupLoop";
 import { CostPill } from "@/components/ai/CostPill";
 import { Cheatsheet } from "@/components/shortcuts/Cheatsheet";
 import { ServiceWorkerRegistrar } from "@/components/pwa/ServiceWorkerRegistrar";
+import { BaseSync } from "@/components/sync/BaseSync";
+import { DiscoveryAutoRefresh } from "@/components/sync/DiscoveryAutoRefresh";
 
 // Curated font set. Adding new ones: register here, then add an entry to
 // lib/fonts.ts. Keep the list small — every font is a network cost and a
@@ -78,7 +80,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#fafaf7",
+  themeColor: "#15171c",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -90,6 +92,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <CostPill />
         <Cheatsheet />
         <ServiceWorkerRegistrar />
+        <BaseSync />
+        <DiscoveryAutoRefresh />
       </body>
     </html>
   );

@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useAdvisor } from "@/lib/advisor/store";
 import { formatRelative } from "@/lib/advisor/ui";
 import type { RoleTier, StrategicProfile } from "@/lib/advisor/types";
-import { profile } from "@/content/profile";
+import { getBaseProfile } from "@/lib/profile/base";
 import { cvList } from "@/content/cvs";
 import { useApplications } from "@/lib/app/store";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
@@ -83,7 +83,7 @@ export default function CeilingPage() {
       const res = await trackedFetch("/api/advisor/ceiling", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ profile, cvVariants: cvList, roles }),
+        body: JSON.stringify({ profile: getBaseProfile(), cvVariants: cvList, roles }),
       });
       const data = (await res.json()) as { profile?: StrategicProfile; error?: string };
       if (!res.ok || !data.profile) {

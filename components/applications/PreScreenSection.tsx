@@ -10,7 +10,7 @@ import type {
   PreScreenTone,
 } from "@/lib/app/types";
 import { cvs } from "@/content/cvs";
-import { defaultCV } from "@/content/cvs/default";
+import { getBaseCv } from "@/lib/profile/base";
 import { formatDateTime } from "@/lib/app/ui";
 import { ApiKeyHint } from "@/components/errors/ApiKeyHint";
 import { trackedFetch } from "@/lib/ai/tokenLedger";
@@ -34,7 +34,7 @@ const DELIMITER_RE = /^---\s*QUESTION\s*(\d+)\s*---\s*$/i;
 
 function resolveBaseCV(cvSlug?: string) {
   if (cvSlug && cvs[cvSlug]) return cvs[cvSlug];
-  return defaultCV;
+  return getBaseCv();
 }
 
 // ———————————————————————————————————————————————

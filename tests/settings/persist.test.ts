@@ -43,6 +43,10 @@ describe("settings defaults merging", () => {
         showCostPill: false,
         showOnboarding: false,
       },
+      discovery: {
+        autoRefreshEnabled: true,
+        autoRefreshIntervalMinutes: 180,
+      },
     };
     saveSettingsToStorage(filled);
     const loaded = loadSettingsFromStorage();

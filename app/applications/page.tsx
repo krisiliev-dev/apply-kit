@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AppNav } from "@/components/nav/AppNav";
 import { useEffect, useMemo, useState } from "react";
 import { useApplications } from "@/lib/app/store";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@/lib/app/types";
@@ -17,6 +18,7 @@ import {
   useFollowUps,
   selectAllDueSoon,
 } from "@/lib/app/followupStore";
+import { useShallow } from "zustand/react/shallow";
 import { backfillMissingPostApply } from "@/lib/app/followupCadence";
 
 type FilterStatus = ApplicationStatus | "all";
@@ -26,7 +28,10 @@ const FILTERS: FilterStatus[] = ["all", ...APPLICATION_STATUSES];
 export default function ApplicationsPage() {
   const { applications, loaded, load, updateStatus } = useApplications();
   const loadFollowUps = useFollowUps((s) => s.load);
-  const dueSoonItems = useFollowUps(selectAllDueSoon());
+  // useShallow: the selector returns a fresh filtered array each render, so
+  // without shallow comparison the snapshot ref changes every time and
+  // useSyncExternalStore loops ("getServerSnapshot should be cached").
+  const dueSoonItems = useFollowUps(useShallow(selectAllDueSoon()));
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [query, setQuery] = useState("");
   const [targetCapacity, setTargetCapacity] = useState<number>(20);
@@ -71,28 +76,21 @@ export default function ApplicationsPage() {
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-6 py-16">
+      <AppNav />
       <header className="mb-10">
         <div className="flex items-baseline justify-between gap-4">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60">
             Applications
           </p>
-          <nav
-            aria-label="Primary"
-            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 flex gap-4"
+          <Link
+            href="/applications/review"
+            className="font-mono text-[11px] uppercase tracking-[0.25em] text-ink/60 hover:text-ink"
           >
-            <Link href="/" className="hover:text-ink">
-              CV Workshop
-            </Link>
-            <Link href="/jobs" className="hover:text-ink">
-              Jobs
-            </Link>
-            <Link href="/applications/review" className="hover:text-ink">
-              Review
-            </Link>
-          </nav>
+            Review
+          </Link>
         </div>
         <div className="flex items-end justify-between gap-4 mt-2">
-          <h1 className="font-display text-5xl">
+          <h1 className="font-display text-5xl tracking-tight">
             Where did you <em>apply?</em>
           </h1>
           <div className="flex gap-2 pb-2">
