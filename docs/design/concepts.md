@@ -56,6 +56,19 @@ Weighted 1–3. Each concept is scored 1–5 per criterion by the user.
 | B | **Coach interview** | Has a conversation, role by role, with an AI coach that mines achievements and numbers; imports only feed its questions | Whether talking surfaces stronger material than editing |
 | C | **Just in time** | Imports one CV and starts applying today; the profile grows from gap questions asked during tailoring | Whether a thin start plus learning beats a big upfront effort |
 
-## Decision
+## Decision (2026-10-11)
 
-To be filled in after the user scores the concepts. Hybrids are allowed when one concept's strength fixes another's weakness; record what each rejected concept taught us.
+| Screen | Chosen | User's reason | Carried over from the others |
+|---|---|---|---|
+| **Feed** | **B · Scan table**, sorted by fit by default | Freedom to choose what to apply for, with the most suitable roles at the top | From C: each row shows a one-line "why it ranks here" so the sort is explainable. From A: keyboard shortcuts for save/pass on the focused row |
+| **Package** | **A · Guided steps** | Be sure everything is done correctly before sending | From B: the CV step shows each requirement next to the evidence used. From C: flagged items (near the line, gaps, low confidence) are highlighted inside their step so they can't be missed |
+| **Applications** | **B on top of A**: action queue, then the grouped list | Best of both: what needs me first, the full picture below | Stats strip stays above both. C's weekly chart lives in the stats strip |
+| **Profile onboarding** | **A → B → C**, in sequence | Import gives the AI a base; then it questions what it wrote plus gaps and forgotten skills; then it keeps learning from answers given during applications | All three concepts kept, as phases |
+
+What the rejected options taught us:
+- **Feed A (triage)**: forcing a decision on every job is too slow at ~30 a day; focus matters less than freedom. **Feed C (shortlist)**: delegating the choice entirely loses trust, but the ranking itself is wanted as the default sort.
+- **Package B (map)** and **C (exceptions)**: evidence and flagging build trust, but the user wants a guaranteed full pass, not a shortcut. Both survive as content inside the guided steps.
+- **Applications C (timeline)**: events aren't the organising unit; a status and action view is.
+
+Onboarding interview scope (phase B): verify what was imported, ask about gaps in the CV timeline, and probe for skills the user has likely developed but not written down.
+
