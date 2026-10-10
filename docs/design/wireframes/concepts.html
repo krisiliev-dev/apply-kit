@@ -1,0 +1,667 @@
+<title>apply-kit Concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: wireframe board — screen tabs on top, concept tabs per screen, notes beside a framed greyscale screen */
+:root {
+  --bg: #f3f4f5; --paper: #ffffff; --ink: #1d2126; --ink-2: #555c66; --ink-3: #8a919b;
+  --line: #d5d9de; --fill: #e8eaed; --fill-2: #dcdfe3; --focus: #1d2126;
+  --warn: #6b5a1e; --warn-bg: #f1ecdc; --bad: #7a2c2c; --bad-bg: #f3e3e1; --ok: #2f5b3a; --ok-bg: #e3eee5;
+  --sans: "Public Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15181b; --paper: #1d2125; --ink: #e8eaed; --ink-2: #aab1ba; --ink-3: #78808a;
+  --line: #343a41; --fill: #262b30; --fill-2: #30363c; --focus: #e8eaed;
+  --warn: #e3cf86; --warn-bg: #3a3420; --bad: #f0aaa3; --bad-bg: #3d2523; --ok: #9fd3ab; --ok-bg: #213628; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #15181b; --paper: #1d2125; --ink: #e8eaed; --ink-2: #aab1ba; --ink-3: #78808a;
+  --line: #343a41; --fill: #262b30; --fill-2: #30363c; --focus: #e8eaed;
+  --warn: #e3cf86; --warn-bg: #3a3420; --bad: #f0aaa3; --bad-bg: #3d2523; --ok: #9fd3ab; --ok-bg: #213628; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 24px 48px }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 24px }
+h1, h2, h3 { text-wrap: balance; margin: 0 }
+h1 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em }
+.lede { color: var(--ink-2); max-width: 68ch; margin: 4px 0 0 }
+.label { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3) }
+button { font: inherit; color: inherit; cursor: pointer }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 6px }
+.tab { border: 1px solid var(--line); background: var(--paper); border-radius: 999px; padding: 6px 14px; font-weight: 500 }
+.tab[aria-selected="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink) }
+.screen-head { display: grid; gap: 6px }
+.question { font-size: 1.1rem; font-weight: 600; max-width: 70ch }
+
+.concept { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 20px; align-items: start }
+@media (max-width: 860px) { .concept { grid-template-columns: minmax(0, 1fr) } }
+.notes { display: grid; gap: 14px; position: sticky; top: env(safe-area-inset-top, 0px) }
+@media (max-width: 860px) { .notes { position: static } }
+.notes h3 { font-size: 1.15rem }
+.notes p { margin: 0; color: var(--ink-2) }
+.notes dl { margin: 0; display: grid; gap: 10px }
+.notes dd { margin: 2px 0 0; color: var(--ink) }
+
+.frame { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-width: 0 }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--fill) }
+.bar .nav { display: flex; gap: 14px; font-weight: 600; color: var(--ink-3) }
+.bar .nav .on { color: var(--ink) }
+.spacer { flex: 1 }
+.body { padding: 16px; display: grid; gap: 14px; min-width: 0 }
+
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 6px; padding: 1px 8px; font-size: 0.82rem; background: var(--paper); white-space: nowrap }
+.chip.ok { background: var(--ok-bg); color: var(--ok); border-color: transparent }
+.chip.warn { background: var(--warn-bg); color: var(--warn); border-color: transparent }
+.chip.bad { background: var(--bad-bg); color: var(--bad); border-color: transparent }
+.btn { border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 7px 14px; font-weight: 600 }
+.btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink) }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); padding-inline: 6px }
+kbd { font-family: var(--mono); font-size: 0.75rem; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--ink-2) }
+.muted { color: var(--ink-2) }
+.small { font-size: 0.85rem }
+.box { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 10px; min-width: 0 }
+.box.dashed { border-style: dashed; background: var(--fill) }
+.title { font-weight: 700; font-size: 1.05rem }
+.health { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-2) }
+.health b { color: var(--ok) }
+.text-block { display: grid; gap: 6px }
+.line { height: 9px; border-radius: 4px; background: var(--fill-2) }
+.line.w60 { width: 60% } .line.w80 { width: 80% } .line.w40 { width: 40% } .line.w90 { width: 90% }
+
+.scroll { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums }
+th { text-align: left; font-family: var(--mono); font-size: 0.7rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3); font-weight: 500; padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap }
+td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top }
+tr.hidden-row td { color: var(--ink-3); background: var(--fill) }
+
+.stepper { display: flex; flex-wrap: wrap; gap: 6px }
+.step { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-3) }
+.step.done { color: var(--ok); border-color: transparent; background: var(--ok-bg) }
+.step.now { color: var(--paper); background: var(--ink); border-color: var(--ink) }
+
+.diff del { background: var(--bad-bg); color: var(--bad); text-decoration: line-through }
+.diff ins { background: var(--ok-bg); color: var(--ok); text-decoration: none }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
+.stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px }
+.stat b { font-size: 1.3rem; font-variant-numeric: tabular-nums }
+.spark { width: 100%; height: 28px }
+.group-h { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; padding: 6px 0; font-weight: 700 }
+.list { display: grid }
+.item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line) }
+.item select { font: inherit; font-size: 0.85rem; border: 1px solid var(--line); border-radius: 6px; padding: 3px 6px; background: var(--paper); color: var(--ink) }
+.day { font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding-top: 6px }
+.event { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--line) }
+.event time { font-family: var(--mono); font-size: 0.8rem; color: var(--ink-3) }
+
+.chat { display: grid; gap: 10px }
+.msg { max-width: 85%; padding: 10px 12px; border-radius: 10px; background: var(--fill) }
+.msg.me { justify-self: end; background: var(--ink); color: var(--paper) }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: 14px }
+@media (max-width: 640px) { .split { grid-template-columns: minmax(0, 1fr) } }
+.meter { height: 8px; background: var(--fill-2); border-radius: 4px; overflow: hidden }
+.meter span { display: block; height: 100%; background: var(--ink) }
+input[type="text"] { font: inherit; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--paper); color: var(--ink) }
+.toast { font-size: 0.85rem; color: var(--ok) }
+@media (prefers-reduced-motion: no-preference) { .frame .body { transition: opacity .15s } }
+</style>
+
+<div class="wrap">
+  <header class="screen-head">
+    <span class="label">Design step 3 · Diverge</span>
+    <h1>apply-kit concepts</h1>
+    <p class="lede">Twelve greyscale concepts, three per key screen. They differ in what you do, not how they look. Click through each, then score them against the criteria at the bottom. All data is made up.</p>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Screen" id="screenTabs">
+    <button class="tab" role="tab" aria-selected="true" data-screen="feed">1 · Feed</button>
+    <button class="tab" role="tab" aria-selected="false" data-screen="package">2 · Package</button>
+    <button class="tab" role="tab" aria-selected="false" data-screen="apps">3 · Applications</button>
+    <button class="tab" role="tab" aria-selected="false" data-screen="onboard">4 · Profile onboarding</button>
+  </nav>
+
+  <!-- ================= FEED ================= -->
+  <section data-screen-panel="feed" class="wrap">
+    <div class="screen-head">
+      <span class="label">The question</span>
+      <p class="question">How do you get through ~30 new jobs a day quickly, while trusting nothing was missed?</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Feed concept">
+      <button class="tab" role="tab" aria-selected="true" data-concept="feed-a">A · Triage queue</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="feed-b">B · Scan table</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="feed-c">C · Daily shortlist</button>
+    </div>
+
+    <div class="concept" data-concept-panel="feed-a">
+      <div class="notes">
+        <h3>Triage queue</h3>
+        <p>One job at a time, like clearing an inbox. Every job needs a decision.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Read the summary, press <kbd>P</kbd> Prepare, <kbd>S</kbd> Save or <kbd>X</kbd> Pass with a reason.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether focused one-at-a-time decisions beat scanning.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Slow on heavy days; hard to compare two similar jobs.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span class="on">Feed</span><span>Applications</span><span>Profile</span><span>Settings</span></div><span class="spacer"></span><span class="health">Sources <b>14/14 OK</b> · checked 07:30</span></div>
+        <div class="body" id="triage">
+          <div class="row"><span class="label" id="triageCount">23 new jobs left</span><span class="spacer"></span></div>
+          <div class="box" id="triageCard"></div>
+          <div class="row">
+            <button class="btn primary" data-triage="prep">Prepare <kbd>P</kbd></button>
+            <button class="btn" data-triage="save">Save <kbd>S</kbd></button>
+            <button class="btn" data-triage="pass">Pass <kbd>X</kbd></button>
+            <span class="toast" id="triageToast" aria-live="polite"></span>
+          </div>
+          <p class="small muted">Up next: 22 more · 7 hidden today (4 need German, 2 need 7+ years, 1 on-site in Plovdiv) · <u>show hidden</u></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="feed-b" hidden>
+      <div class="notes">
+        <h3>Scan table</h3>
+        <p>Everything new at once, dense and sortable. Open a job only when it looks interesting.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Scan rows, sort by fit or salary, filter by angle, multi-select to save or pass in bulk.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether overview and comparison beat focus.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Easy to skim past a good job; dense on a laptop.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span class="on">Feed</span><span>Applications</span><span>Profile</span><span>Settings</span></div><span class="spacer"></span><span class="health">Sources <b>14/14 OK</b> · checked 07:30</span></div>
+        <div class="body">
+          <div class="row"><span class="chip">New today · 23</span><span class="chip">Angle: all ▾</span><span class="chip">Sofia + Remote EU</span><span class="chip">Sort: fit ▾</span><span class="spacer"></span><button class="btn" disabled>Save 0</button><button class="btn" disabled>Pass 0</button></div>
+          <div class="scroll">
+            <table>
+              <thead><tr><th></th><th>Job</th><th>Where</th><th>Angle</th><th>Requirements</th><th>Salary</th><th>Seen on</th><th>Age</th></tr></thead>
+              <tbody id="scanBody"></tbody>
+            </table>
+          </div>
+          <button class="btn ghost small" id="toggleHidden" aria-expanded="false">Show 7 hidden jobs and why</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="feed-c" hidden>
+      <div class="notes">
+        <h3>Daily shortlist</h3>
+        <p>The system ranks; you read the top five and why each made it. The rest are a click away.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Read five reasons, prepare one or two, glance at "also new" if you have time.</dd></div>
+          <div><dt class="label">It tests</dt><dd>How much ranking you're willing to hand over.</dd></div>
+          <div><dt class="label">Risk</dt><dd>A ranking bug quietly buries a great job.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span class="on">Feed</span><span>Applications</span><span>Profile</span><span>Settings</span></div><span class="spacer"></span><span class="health">Sources <b>14/14 OK</b> · checked 07:30</span></div>
+        <div class="body">
+          <div><div class="title">5 worth a look today</div><p class="small muted">out of 31 new · ranked by fit with your angles and locations</p></div>
+          <div class="list" id="shortList"></div>
+          <button class="group-h" data-toggle="alsoNew" aria-expanded="false">▸ Also new · 19 jobs</button>
+          <div id="alsoNew" class="small muted" hidden>Junior Frontend Developer · Lumen Health · Remote EU — Product Designer · Brightwave · Sofia — Cloud Engineer · Halden Systems · Sofia — +16 more</div>
+          <button class="group-h" data-toggle="hiddenC" aria-expanded="false">▸ Hidden · 7 jobs</button>
+          <div id="hiddenC" class="small muted" hidden>4 require German · 2 require 7+ years · 1 on-site in Plovdiv. Each opens with its reason.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= PACKAGE ================= -->
+  <section data-screen-panel="package" class="wrap" hidden>
+    <div class="screen-head">
+      <span class="label">The question</span>
+      <p class="question">How do you review and approve a tailored package fast, while staying sure it's true and sounds like you?</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Package concept">
+      <button class="tab" role="tab" aria-selected="true" data-concept="pkg-a">A · Guided steps</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="pkg-b">B · Requirement map</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="pkg-c">C · Exceptions only</button>
+    </div>
+
+    <div class="concept" data-concept-panel="pkg-a">
+      <div class="notes">
+        <h3>Guided steps</h3>
+        <p>A fixed path through the package. Nothing is skipped; each part is approved before the next.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Approve target posting, CV changes, letter, answers and ATS check, in that order.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether a fixed sequence feels safer than freedom.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Five screens every time, even when everything is fine.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span class="on">Feed</span><span>Applications</span><span>Profile</span><span>Settings</span></div><span class="spacer"></span><span class="small muted">Security Engineer · Kestrel Payments</span></div>
+        <div class="body">
+          <div class="stepper" id="pkgSteps"></div>
+          <div class="box" id="pkgStepBody"></div>
+          <div class="row"><button class="btn ghost" id="pkgBack">Back</button><span class="spacer"></span><button class="btn primary" id="pkgNext">Approve and continue</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="pkg-b" hidden>
+      <div class="notes">
+        <h3>Requirement map</h3>
+        <p>Every requirement in the posting, next to the evidence from your profile the CV uses for it.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Read down the requirements, check the evidence, fix gaps inline, then approve.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether evidence-per-requirement builds the most trust.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Letter and answers feel secondary; dense on small screens.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span class="on">Feed</span><span>Applications</span><span>Profile</span><span>Settings</span></div><span class="spacer"></span><span class="small muted">Security Engineer · Kestrel Payments</span></div>
+        <div class="body">
+          <div class="row"><span class="label">Target posting</span><span class="chip">kestrel.greenhouse.io ▾</span><span class="spacer"></span><span class="chip ok">ATS check passed</span></div>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>The posting asks for</th><th>Evidence used in your CV</th><th></th></tr></thead>
+              <tbody>
+                <tr><td>3+ years in security operations</td><td>Junior Security Analyst, Orbital Bank, 2023–2025 + SOC internship 2022</td><td><span class="chip ok">covered</span></td></tr>
+                <tr><td>SIEM (Splunk or Elastic)</td><td>"Built 40 Splunk detections that cut false positives by a third"</td><td><span class="chip ok">covered</span></td></tr>
+                <tr><td>Incident response</td><td><span class="diff">"<del>Took part in</del> <ins>Led</ins> response to 3 phishing incidents"</span></td><td><span class="chip warn">reworded · approve?</span></td></tr>
+                <tr><td>Kubernetes security</td><td class="muted">Nothing in your profile yet</td><td><button class="btn small">Answer a question</button></td></tr>
+                <tr><td>CISSP (preferred)</td><td class="muted">Not held · left out, not claimed</td><td><span class="chip bad">gap</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="row"><button class="btn">Cover letter</button><button class="btn">6 screening answers</button><span class="spacer"></span><button class="btn primary">Approve package</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="pkg-c" hidden>
+      <div class="notes">
+        <h3>Exceptions only</h3>
+        <p>The system does the work and shows you only what needs a human decision.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Resolve 2–4 flagged items, glance at "ready", press Approve.</dd></div>
+          <div><dt class="label">It tests</dt><dd>How far you'll let the system decide.</dd></div>
+          <div><dt class="label">Risk</dt><dd>You stop reading the parts marked ready, and miss a bad sentence.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span class="on">Feed</span><span>Applications</span><span>Profile</span><span>Settings</span></div><span class="spacer"></span><span class="small muted">Security Engineer · Kestrel Payments</span></div>
+        <div class="body">
+          <div class="title" id="excTitle">3 things need you</div>
+          <div class="box" data-exc>
+            <span class="label">Near the honesty line</span>
+            <p class="diff" style="margin:0">"<del>Took part in</del> <ins>Led</ins> response to 3 phishing incidents"</p>
+            <div class="row"><button class="btn" data-resolve>Keep "Led"</button><button class="btn ghost" data-resolve>Revert</button></div>
+          </div>
+          <div class="box" data-exc>
+            <span class="label">Gap · the posting wants Kubernetes security</span>
+            <label for="k8s" class="small">Have you secured Kubernetes anywhere? A sentence is enough.</label>
+            <input type="text" id="k8s" placeholder="e.g. Hardened a staging cluster at Orbital Bank…">
+            <div class="row"><button class="btn" data-resolve>Save to profile</button><button class="btn ghost" data-resolve>I haven't</button></div>
+          </div>
+          <div class="box" data-exc>
+            <span class="label">Low confidence · screening answer</span>
+            <p style="margin:0" class="small">"What is your notice period?" → <b>1 month</b> (guessed from your last answer)</p>
+            <div class="row"><button class="btn" data-resolve>Correct</button><button class="btn ghost" data-resolve>Change</button></div>
+          </div>
+          <div class="box dashed">
+            <span class="label">Ready</span>
+            <p style="margin:0" class="small">CV tailored from the security angle (12 changes) · cover letter, 214 words · 5 screening answers · ATS check passed · target: kestrel.greenhouse.io</p>
+          </div>
+          <div class="row"><span class="spacer"></span><button class="btn primary" id="excApprove" disabled>Approve package</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= APPLICATIONS ================= -->
+  <section data-screen-panel="apps" class="wrap" hidden>
+    <div class="screen-head">
+      <span class="label">The question</span>
+      <p class="question">How do you see where everything stands, and act on what needs attention?</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Applications concept">
+      <button class="tab" role="tab" aria-selected="true" data-concept="apps-a">A · Grouped list</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="apps-b">B · Action queue</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="apps-c">C · Activity timeline</button>
+    </div>
+
+    <div class="concept" data-concept-panel="apps-a">
+      <div class="notes">
+        <h3>Grouped list</h3>
+        <p>Applications grouped by status, like a board folded into a list. Stats on top.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Scan groups, expand one, change a status inline.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether status is the right way to organise.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Due follow-ups hide inside groups.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span>Feed</span><span class="on">Applications</span><span>Profile</span><span>Settings</span></div></div>
+        <div class="body">
+          <div class="stats" data-stats></div>
+          <div class="list" id="groupList"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="apps-b" hidden>
+      <div class="notes">
+        <h3>Action queue</h3>
+        <p>Starts with what needs you today. Applications that are just waiting sit quietly below.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Clear the "needs you" items top to bottom; check the rest rarely.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether the entry point should be actions rather than status.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Weaker overview of the whole pipeline.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span>Feed</span><span class="on">Applications</span><span>Profile</span><span>Settings</span></div></div>
+        <div class="body">
+          <div class="stats" data-stats></div>
+          <div class="title">Needs you · 4</div>
+          <div class="list">
+            <div class="item"><div><b>Follow up</b> · Security Engineer, Kestrel Payments<div class="small muted">Applied 7 days ago, no reply. Draft ready.</div></div><button class="btn small">Review draft</button></div>
+            <div class="item"><div><b>Confirm email</b> · "Thank you for applying" from Ardent Labs<div class="small muted">Matched to SOC Analyst, Ardent Labs → mark Applied?</div></div><button class="btn small">Confirm</button></div>
+            <div class="item"><div><b>Interview Thursday 14:00</b> · Full-stack Developer, Brightwave<div class="small muted">Prep sheet ready: company, likely questions, your stories.</div></div><button class="btn small">Open prep</button></div>
+            <div class="item"><div><b>Rejection</b> · Product Designer, Lumen Health<div class="small muted">Logged. Add a one-line lesson?</div></div><button class="btn small">Add lesson</button></div>
+          </div>
+          <button class="group-h small" data-toggle="waitingB" aria-expanded="false">▸ Waiting · 11 applications</button>
+          <div id="waitingB" class="small muted" hidden>8 applied, 3 screening. Nothing to do until something changes.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="apps-c" hidden>
+      <div class="notes">
+        <h3>Activity timeline</h3>
+        <p>A stream of everything that happened, newest first. The chart shows your weeks.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Read what changed since yesterday; open an application from its event.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether events, not applications, are the natural unit.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Quiet applications drop out of sight.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span>Feed</span><span class="on">Applications</span><span>Profile</span><span>Settings</span></div></div>
+        <div class="body">
+          <div class="box">
+            <span class="label">Applications per week · last 8 weeks</span>
+            <svg viewBox="0 0 320 90" class="spark" style="height:90px" role="img" aria-label="Bar chart: 3, 5, 4, 8, 6, 9, 7, 11 applications per week">
+              <g fill="var(--fill-2)">
+                <rect x="8" y="63" width="28" height="15"/><rect x="47" y="53" width="28" height="25"/><rect x="86" y="58" width="28" height="20"/><rect x="125" y="38" width="28" height="40"/>
+                <rect x="164" y="48" width="28" height="30"/><rect x="203" y="33" width="28" height="45"/><rect x="242" y="43" width="28" height="35"/>
+              </g>
+              <rect x="281" y="23" width="28" height="55" fill="var(--ink)"/>
+              <text x="295" y="18" text-anchor="middle" font-size="10" fill="var(--ink)" font-family="IBM Plex Mono, monospace">11</text>
+              <line x1="0" y1="78" x2="320" y2="78" stroke="var(--line)"/>
+              <text x="8" y="88" font-size="9" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">Aug 17</text>
+              <text x="309" y="88" text-anchor="end" font-size="9" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">This week</text>
+            </svg>
+          </div>
+          <div>
+            <div class="day">Today</div>
+            <div class="event"><time>09:12</time><div><b>Interview invite</b> · Full-stack Developer, Brightwave <span class="chip ok">→ Interviewing</span></div></div>
+            <div class="event"><time>08:40</time><div><b>Email matched</b> · "Thank you for applying", Ardent Labs <span class="chip">→ Applied</span></div></div>
+            <div class="day">Yesterday</div>
+            <div class="event"><time>17:05</time><div><b>Rejection</b> · Product Designer, Lumen Health <span class="chip bad">→ Rejected</span></div></div>
+            <div class="event"><time>11:30</time><div><b>Submitted</b> · Security Engineer, Kestrel Payments</div></div>
+            <div class="event"><time>10:02</time><div><b>Follow-up due</b> · Cloud Engineer, Halden Systems</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= ONBOARDING ================= -->
+  <section data-screen-panel="onboard" class="wrap" hidden>
+    <div class="screen-head">
+      <span class="label">The question</span>
+      <p class="question">How do you end up with a rich, confirmed master profile with the least effort?</p>
+    </div>
+    <div class="tabs" role="tablist" aria-label="Onboarding concept">
+      <button class="tab" role="tab" aria-selected="true" data-concept="ob-a">A · Import, then review</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="ob-b">B · Coach interview</button>
+      <button class="tab" role="tab" aria-selected="false" data-concept="ob-c">C · Just in time</button>
+    </div>
+
+    <div class="concept" data-concept-panel="ob-a">
+      <div class="notes">
+        <h3>Import, then review</h3>
+        <p>The system drafts your profile from what exists; you confirm it piece by piece.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Drop in old CVs and a LinkedIn export, then confirm, edit or discard each drafted piece.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether the system's first draft is good enough to start from.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Old CVs undersell you; reviewing 40 cards is tedious.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span>Feed</span><span>Applications</span><span class="on">Profile</span><span>Settings</span></div></div>
+        <div class="body">
+          <div class="box dashed"><span class="label">Imported</span><div class="row small"><span class="chip ok">CV 2025 (PDF)</span><span class="chip ok">CV 2024 (DOCX)</span><span class="chip ok">LinkedIn export</span><span class="chip">+ add GitHub</span></div></div>
+          <div class="row"><span class="label" id="obCount">12 of 38 pieces confirmed</span></div>
+          <div class="meter" aria-hidden="true"><span id="obMeter" style="width:32%"></span></div>
+          <div class="box" id="obCard">
+            <div class="row"><span class="label">Achievement · Orbital Bank, 2023–2025</span><span class="spacer"></span><span class="small muted">from CV 2025</span></div>
+            <p style="margin:0">Built 40 Splunk detections that cut false-positive alerts by about a third.</p>
+            <div class="row"><span class="chip">SIEM</span><span class="chip">Splunk</span><span class="chip">detection engineering</span><span class="chip">angle: security</span></div>
+            <div class="row"><button class="btn primary" data-ob>Confirm</button><button class="btn" data-ob>Edit</button><button class="btn ghost" data-ob>Discard</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="ob-b" hidden>
+      <div class="notes">
+        <h3>Coach interview</h3>
+        <p>A conversation, role by role, with an AI coach that digs for achievements and numbers.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Answer questions in your own words; watch pieces appear on the right; correct them.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether talking surfaces stronger material than editing.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Takes an hour or two up front.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span>Feed</span><span>Applications</span><span class="on">Profile</span><span>Settings</span></div><span class="spacer"></span><span class="small muted">Role 2 of 4 · Orbital Bank</span></div>
+        <div class="body split">
+          <div class="chat">
+            <div class="msg">Your CV says you "monitored alerts". What changed because you were there? Anything you can count?</div>
+            <div class="msg me">I rewrote a lot of the Splunk detections, there were way too many false positives. Maybe 40 rules.</div>
+            <div class="msg">Do you know roughly how much the false positives dropped? An estimate you'd defend in an interview is fine.</div>
+            <div class="msg me">About a third, the team lead mentioned it in my review.</div>
+            <div class="msg">Good. That's a strong line. Who used those detections after you?</div>
+            <label class="small muted" for="chatIn">Your answer</label>
+            <input type="text" id="chatIn" placeholder="Type your answer…">
+          </div>
+          <div class="box dashed">
+            <span class="label">Pieces found · 3</span>
+            <p class="small" style="margin:0">Built 40 Splunk detections, cutting false positives by about a third</p>
+            <p class="small" style="margin:0">Triaged ~25 alerts a day across a 6-person SOC</p>
+            <p class="small muted" style="margin:0">Led response to 3 phishing incidents · needs your OK</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="concept" data-concept-panel="ob-c" hidden>
+      <div class="notes">
+        <h3>Just in time</h3>
+        <p>Start applying today with one CV. The profile grows from questions asked while tailoring real jobs.</p>
+        <dl>
+          <div><dt class="label">You do</dt><dd>Drop in one CV, then answer one or two questions per package as they come up.</dd></div>
+          <div><dt class="label">It tests</dt><dd>Whether a thin start plus learning beats a big upfront effort.</dd></div>
+          <div><dt class="label">Risk</dt><dd>Your first applications are weaker than they could be.</dd></div>
+        </dl>
+      </div>
+      <div class="frame">
+        <div class="bar"><div class="nav"><span>Feed</span><span>Applications</span><span class="on">Profile</span><span>Settings</span></div></div>
+        <div class="body">
+          <div class="box"><div class="row"><span class="chip ok">CV 2025 imported</span><span class="spacer"></span><span class="small muted">Profile: 14 pieces · grows as you apply</span></div><div class="meter" aria-hidden="true"><span style="width:35%"></span></div></div>
+          <div class="title">You're ready to apply.</div>
+          <p class="small muted" style="margin:0">Example of how the profile grows, inside a package for Security Engineer · Kestrel Payments:</p>
+          <div class="box">
+            <span class="label">One question for this job</span>
+            <label for="jit" class="small">The posting asks for incident response. Have you handled an incident? What happened and what was your part?</label>
+            <input type="text" id="jit" placeholder="A sentence or two…">
+            <div class="row"><button class="btn primary">Save to profile and use it</button><button class="btn ghost">Skip for this job</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= CRITERIA ================= -->
+  <section class="box" style="background:var(--paper)">
+    <span class="label">How we'll choose · criteria fixed before choosing</span>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Criterion</th><th>Weight</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><b>Speed</b></td><td>×3</td><td>Time from opening the screen to the decision or action it exists for</td></tr>
+          <tr><td><b>Trust</b></td><td>×3</td><td>You can see nothing was missed, invented or decided behind your back</td></tr>
+          <tr><td><b>Effort per day</b></td><td>×2</td><td>Clicks and reading at ~30 new jobs and ~10 open applications a day</td></tr>
+          <tr><td><b>Learnability</b></td><td>×1</td><td>Obvious on day one without instructions</td></tr>
+          <tr><td><b>Build cost</b></td><td>×1</td><td>How much has to exist before it's useful</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin:0">Score each concept 1–5 per criterion, or just tell Claude which you'd pick per screen and why. Hybrids are allowed.</p>
+  </section>
+</div>
+
+<script>
+(function () {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  // screen + concept tabs
+  $$("#screenTabs .tab").forEach(t => t.addEventListener("click", () => {
+    $$("#screenTabs .tab").forEach(x => x.setAttribute("aria-selected", x === t));
+    $$("[data-screen-panel]").forEach(p => p.hidden = p.dataset.screenPanel !== t.dataset.screen);
+  }));
+  $$("[data-concept]").forEach(t => t.addEventListener("click", () => {
+    const group = t.parentElement;
+    $$(".tab", group).forEach(x => x.setAttribute("aria-selected", x === t));
+    const section = t.closest("[data-screen-panel]");
+    $$("[data-concept-panel]", section).forEach(p => p.hidden = p.dataset.conceptPanel !== t.dataset.concept);
+  }));
+  $$("[data-toggle]").forEach(b => b.addEventListener("click", () => {
+    const el = document.getElementById(b.dataset.toggle);
+    el.hidden = !el.hidden;
+    b.setAttribute("aria-expanded", !el.hidden);
+    b.textContent = b.textContent.replace(/^[▸▾]/, el.hidden ? "▸" : "▾");
+  }));
+
+  const jobs = [
+    { t: "Security Engineer", c: "Kestrel Payments", w: "Sofia · hybrid", a: "security", req: [["3+ yrs", "ok"], ["English", "ok"], ["CISSP preferred", "warn"]], s: "5,500–7,000 BGN", seen: 3, age: "2d", gaps: 1, why: "Strong security match; 2 of 3 requirements covered; salary above your floor" },
+    { t: "Full-stack Developer (React/Node)", c: "Brightwave", w: "Remote · EU", a: "developer", req: [["2+ yrs", "ok"], ["TypeScript", "ok"], ["English", "ok"]], s: "€3,200–4,200", seen: 2, age: "1d", gaps: 0, why: "All requirements covered; remote within your time zones" },
+    { t: "SOC Analyst L2", c: "Ardent Labs", w: "Sofia · on-site", a: "security", req: [["2+ yrs", "ok"], ["Bulgarian", "ok"], ["Night shifts", "warn"]], s: "not stated", seen: 1, age: "3d", gaps: 0, why: "Direct match for your SOC experience; shifts flagged" },
+    { t: "Product Designer", c: "Lumen Health", w: "Sofia · hybrid", a: "design", req: [["Portfolio", "ok"], ["3+ yrs", "warn"], ["Figma", "ok"]], s: "4,000–5,500 BGN", seen: 2, age: "today", gaps: 1, why: "Design angle; one experience gap" },
+    { t: "Cloud Security Engineer", c: "Halden Systems", w: "Remote · EU", a: "security", req: [["AWS", "ok"], ["Kubernetes", "bad"], ["4+ yrs", "warn"]], s: "€4,000–5,000", seen: 4, age: "today", gaps: 2, why: "Good security fit; Kubernetes gap you could answer" },
+  ];
+  const chips = r => r.map(([l, k]) => `<span class="chip ${k}">${l}</span>`).join("");
+
+  // Feed A
+  let i = 0, left = 23;
+  function drawTriage() {
+    const j = jobs[i % jobs.length];
+    $("#triageCount").textContent = `${left} new jobs left`;
+    $("#triageCard").innerHTML = `
+      <div class="row"><span class="label">${j.w}</span><span class="spacer"></span><span class="small muted">seen on ${j.seen} sources · ${j.age}</span></div>
+      <div class="title">${j.t}</div><div class="muted">${j.c}</div>
+      <div class="row">${chips(j.req)}<span class="chip">${j.s}</span></div>
+      <div class="small"><b>Fit:</b> ${j.a} angle · ${j.gaps ? j.gaps + " gap" + (j.gaps > 1 ? "s" : "") : "no gaps"}</div>
+      <div class="text-block" aria-hidden="true"><div class="line w90"></div><div class="line w80"></div><div class="line w60"></div></div>`;
+  }
+  function triage(kind) {
+    const j = jobs[i % jobs.length];
+    $("#triageToast").textContent = kind === "prep" ? `Preparing a package for ${j.c}` : kind === "save" ? `Saved ${j.c}` : `Passed ${j.c} · reason: not my level`;
+    i++; left = Math.max(0, left - 1); drawTriage();
+  }
+  $$("[data-triage]").forEach(b => b.addEventListener("click", () => triage(b.dataset.triage)));
+  document.addEventListener("keydown", e => {
+    if ($("[data-concept-panel='feed-a']").hidden || $("[data-screen-panel='feed']").hidden || e.target.matches("input")) return;
+    const k = { p: "prep", s: "save", x: "pass" }[e.key.toLowerCase()];
+    if (k) triage(k);
+  });
+  drawTriage();
+
+  // Feed B
+  const hiddenRows = [
+    ["Penetration Tester", "Vollmer GmbH", "Remote · DE", "security", "German required"],
+    ["Senior Security Architect", "Northgate", "Sofia", "security", "Requires 7+ years"],
+    ["Frontend Developer", "Pixelforge", "Plovdiv · on-site", "developer", "On-site outside Sofia"],
+  ];
+  $("#scanBody").innerHTML = jobs.map(j => `<tr><td><input type="checkbox" aria-label="Select ${j.t}"></td><td><b>${j.t}</b><div class="small muted">${j.c}</div></td><td>${j.w}</td><td>${j.a}</td><td><div class="row">${chips(j.req)}</div></td><td>${j.s}</td><td>${j.seen}</td><td>${j.age}</td></tr>`).join("") +
+    hiddenRows.map(h => `<tr class="hidden-row" hidden><td></td><td><b>${h[0]}</b><div class="small">${h[1]}</div></td><td>${h[2]}</td><td>${h[3]}</td><td colspan="4"><span class="chip bad">Hidden: ${h[4]}</span></td></tr>`).join("");
+  $("#toggleHidden").addEventListener("click", e => {
+    const rows = $$("#scanBody .hidden-row"); const show = rows[0].hidden;
+    rows.forEach(r => r.hidden = !show);
+    e.target.setAttribute("aria-expanded", show);
+    e.target.textContent = show ? "Hide the hidden jobs" : "Show 7 hidden jobs and why";
+  });
+
+  // Feed C
+  $("#shortList").innerHTML = jobs.map((j, n) => `<div class="item"><div><span class="label">#${n + 1} · ${j.w}</span><div><b>${j.t}</b> · ${j.c}</div><div class="small muted">${j.why}</div></div><button class="btn small">Prepare</button></div>`).join("");
+
+  // Package A
+  const steps = [
+    ["Target posting", `<p style="margin:0">This job appears on 3 sites. You'll apply through the company's own page.</p><div class="row"><span class="chip ok">kestrel.greenhouse.io · recommended</span><span class="chip">LinkedIn</span><span class="chip">dev.bg</span></div>`],
+    ["CV changes", `<p class="small muted" style="margin:0">Tailored from your security angle · 12 changes</p><p class="diff" style="margin:0">"<del>Took part in</del> <ins>Led</ins> response to 3 phishing incidents" <span class="chip warn">near the line</span></p><p class="diff" style="margin:0">Moved "Splunk detections" to the top of Orbital Bank</p>`],
+    ["Cover letter", `<p class="small muted" style="margin:0">214 words · written in your voice from 7 past letters</p><div class="text-block"><div class="line w90"></div><div class="line w80"></div><div class="line w90"></div><div class="line w60"></div></div>`],
+    ["Screening answers", `<p style="margin:0" class="small">6 questions found on the target posting. 5 from your answer bank, 1 new: "Why Kestrel?" (draft ready)</p>`],
+    ["ATS check", `<p style="margin:0" class="small"><span class="chip ok">Passed</span> All sections parsed. Dates, titles and contact details read correctly.</p>`],
+  ];
+  let s = 1;
+  function drawPkg() {
+    $("#pkgSteps").innerHTML = steps.map((st, n) => `<span class="step ${n < s ? "done" : n === s ? "now" : ""}">${n < s ? "✓" : n + 1} ${st[0]}</span>`).join("");
+    $("#pkgStepBody").innerHTML = s < steps.length ? `<span class="label">Step ${s + 1} of ${steps.length} · ${steps[s][0]}</span>${steps[s][1]}` : `<span class="label">All approved</span><p style="margin:0">Package ready. Open the target posting and the extension fills it.</p>`;
+    $("#pkgNext").disabled = s >= steps.length;
+    $("#pkgNext").textContent = s === steps.length - 1 ? "Approve package" : "Approve and continue";
+  }
+  $("#pkgNext").addEventListener("click", () => { s = Math.min(steps.length, s + 1); drawPkg(); });
+  $("#pkgBack").addEventListener("click", () => { s = Math.max(0, s - 1); drawPkg(); });
+  drawPkg();
+
+  // Package C
+  $$("[data-resolve]").forEach(b => b.addEventListener("click", () => {
+    const box = b.closest("[data-exc]"); if (box.dataset.done) return;
+    box.dataset.done = 1; box.style.opacity = .5;
+    const open = $$("[data-exc]").filter(x => !x.dataset.done).length;
+    $("#excTitle").textContent = open ? `${open} thing${open > 1 ? "s" : ""} need${open > 1 ? "" : "s"} you` : "All resolved";
+    $("#excApprove").disabled = open > 0;
+  }));
+
+  // Applications stats
+  const statsHTML = `
+    <div class="stat"><span class="label">This week</span><b>11 sent</b><svg class="spark" viewBox="0 0 100 28" aria-hidden="true"><polyline fill="none" stroke="var(--ink-3)" stroke-width="1.5" points="0,22 14,18 28,20 42,10 56,14 70,6 84,12 100,2"/><circle cx="100" cy="2" r="2.5" fill="var(--ink)"/></svg></div>
+    <div class="stat"><span class="label">Response rate</span><b>18%</b><span class="small muted">7 of 39 replied</span></div>
+    <div class="stat"><span class="label">Interviews</span><b>2</b><span class="small muted">both from the security angle</span></div>`;
+  $$("[data-stats]").forEach(el => el.innerHTML = statsHTML);
+
+  // Applications A
+  const groups = [
+    ["Interviewing", [["Full-stack Developer", "Brightwave", "Interview Thu 14:00"], ["SOC Analyst L2", "Ardent Labs", "2nd round scheduling"]]],
+    ["Screening", [["Security Engineer", "Kestrel Payments", "Follow-up due today"], ["Cloud Engineer", "Halden Systems", "Recruiter call done"], ["IT Security Specialist", "Ostrava Bank", "Waiting 4 days"]]],
+    ["Applied", [["Backend Developer", "Corvid", "Applied 2 days ago"], ["Junior Pentester", "Redline", "Applied 5 days ago"]]],
+    ["Closed", [["Product Designer", "Lumen Health", "Rejected yesterday"]]],
+  ];
+  const statuses = ["Applied", "Screening", "Interviewing", "Offer", "Rejected", "Withdrawn"];
+  $("#groupList").innerHTML = groups.map(([g, items], gi) => `
+    <button class="group-h" data-toggle="grp${gi}" aria-expanded="${gi < 2}">${gi < 2 ? "▾" : "▸"} ${g} · ${items.length}</button>
+    <div id="grp${gi}" ${gi < 2 ? "" : "hidden"}>${items.map(([t, c, note], n) => `
+      <div class="item"><div><b>${t}</b> · ${c}<div class="small muted">${note}</div></div>
+      <select aria-label="Status for ${t}" id="st${gi}${n}">${statuses.map(st => `<option ${st === (g === "Closed" ? "Rejected" : g) ? "selected" : ""}>${st}</option>`).join("")}</select></div>`).join("")}</div>`).join("");
+  $$("#groupList [data-toggle]").forEach(b => b.addEventListener("click", () => {
+    const el = document.getElementById(b.dataset.toggle); el.hidden = !el.hidden;
+    b.setAttribute("aria-expanded", !el.hidden); b.textContent = b.textContent.replace(/^[▸▾]/, el.hidden ? "▸" : "▾");
+  }));
+
+  // Onboarding A
+  let conf = 12;
+  $$("[data-ob]").forEach(b => b.addEventListener("click", () => {
+    conf = Math.min(38, conf + 1);
+    $("#obCount").textContent = `${conf} of 38 pieces confirmed`;
+    $("#obMeter").style.width = (conf / 38 * 100) + "%";
+  }));
+})();
+</script>
