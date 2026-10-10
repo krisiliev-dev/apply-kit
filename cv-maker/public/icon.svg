@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#fafaf7"/>
+  <rect x="56" y="56" width="400" height="400" rx="40" fill="none" stroke="#1c1c1c" stroke-width="10"/>
+  <text
+    x="256"
+    y="316"
+    text-anchor="middle"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-style="italic"
+    font-weight="400"
+    font-size="220"
+    fill="#1c1c1c"
+  >cv</text>
+</svg>
