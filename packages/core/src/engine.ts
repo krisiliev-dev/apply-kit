@@ -18,6 +18,9 @@ import { currentDrop, dropWording, isDrop, normalVolume, type NormalVolume, type
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
 import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
 import { describeMergeReason, type MergeReason } from "./matching.ts";
+import { jobLinkFrom, linkKey, protectedSite, robotsAllows } from "./capture/links.ts";
+import { readJobPage } from "./capture/page.ts";
+import { escapeHtml } from "./sources/shared.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
@@ -220,7 +223,7 @@ export interface FeedResult {
   view: FeedView;
   /** When this answer was computed, from the injected clock (ISO 8601). */
   asOf: string;
-  /** True until the first source is connected: the UI shows the first-run state. */
+  /** True until the first source is connected or the first job added (a pasted link): the UI shows the first-run state. */
   firstRun: boolean;
   jobs: FeedJob[];
   /**
@@ -465,7 +468,61 @@ export interface DiscoveryEngine {
    * other ways to catch its jobs, best first.
    */
   detectCompany(input: string, options?: DetectOptions): Promise<CompanyDetection>;
+  /**
+   * "Paste a job link": adds the job at a link to the Feed like any other Posting (merged with a Job
+   * already there, ranked, read later within the budget). A link already in the Feed answers with its
+   * Job and fetches nothing. The page is fetched once, politely, only where the site allows apps;
+   * protected or unreadable pages answer "unreadable" with the link kept, and Kris can then pass the
+   * posting's text himself (`pasted`), which is never fetched.
+   */
+  addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult>;
 }
+
+/** What Kris can paste along with a link, when the page can't be read (or he'd rather paste it). */
+export interface PastedPosting {
+  /** The posting's text as copied from the page. */
+  text: string;
+  title: string;
+  /** The company, when he gives one. */
+  company?: string | null;
+  location?: string | null;
+}
+
+/** Why a pasted link couldn't be read. In every case the link is kept and Kris can paste the text. */
+export type LinkProblem =
+  /** A site that forbids apps reading it, or blocks them (LinkedIn, jobs.bg, big-tech careers). Never fetched. */
+  | "protected"
+  /** The site's robots.txt asks apps not to read this page. */
+  | "robots"
+  /** The site answered with bot protection (a challenge page or a refusal). Not retried. */
+  | "blocked"
+  | "not-found"
+  | "timeout"
+  | "error"
+  /** The page was read but doesn't describe one job (a careers index, a page without the posting). */
+  | "no-posting";
+
+export type AddLinkResult =
+  /** A new Job, read from the page (JSON-LD, or the page itself) or from the text Kris pasted. */
+  | { outcome: "added"; jobId: string; via: "json-ld" | "page" | "text" }
+  /** The link is already in the Feed: nothing was fetched; open this Job. */
+  | { outcome: "existing"; jobId: string }
+  /** The page describes a Job already in the Feed from another Source: the link joined it. */
+  | { outcome: "merged"; jobId: string }
+  /** The text isn't a web link. */
+  | { outcome: "invalid"; message: string }
+  | {
+      outcome: "unreadable";
+      /** The link as it will be kept (tracking parameters dropped). */
+      link: string;
+      problem: LinkProblem;
+      /** What happened and what to do, in plain words. */
+      message: string;
+      /** The page's title, when one was read, to start the pasted job from. */
+      pageTitle: string | null;
+      /** For a protected site that sends job alerts: the email Source that covers it ("linkedin"). */
+      alertSender: string | null;
+    };
 
 export interface ReadResult {
   read: number;
@@ -498,6 +555,12 @@ interface StateFields {
 }
 
 const sqlText = (v: unknown): string | null => (v == null ? null : String(v));
+
+/**
+ * SQL condition for Sources on the watchlist: every Source but the ones Kris adds jobs through himself
+ * (pasted links), which are never checked and have no health to show.
+ */
+const onWatchlist = `kind NOT IN (${Object.entries(adapters).filter(([, a]) => a.category === "capture").map(([k]) => `'${k}'`).join(", ")})`;
 
 const viewStates: Record<FeedView, JobState[]> = {
   new: ["new"],
@@ -1030,7 +1093,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   function allSourceHealth(): SourceHealth[] {
-    const rows = db.prepare("SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL ORDER BY created_at, id").all();
+    const rows = db.prepare(`SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL AND ${onWatchlist} ORDER BY created_at, id`).all();
     const history = db.prepare(
       `SELECT checked_at, outcome, in_locations, total, error, unusual FROM source_check
        WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
@@ -1040,7 +1103,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** A Source on the watchlist (paused or not), or throws. Removed Sources are gone as far as Kris can tell. */
   function liveSource(sourceId: string): Record<string, unknown> {
-    const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ? AND removed_at IS NULL").get(sourceId);
+    const row = db.prepare(`SELECT id, name, kind, config FROM source WHERE id = ? AND removed_at IS NULL AND ${onWatchlist}`).get(sourceId);
     if (!row) throw new Error(`No source "${sourceId}"`);
     return row;
   }
@@ -1123,7 +1186,110 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return { postingIds: missing.map((p) => String(p.id)), jobIds };
   }
 
+  /** The Source pasted links belong to, created the first time Kris pastes one. */
+  function pastedLinksSource(): string {
+    const adapter = adapterFor("capture");
+    const config = adapter.parseConfig("link");
+    const id = `capture:${adapter.key(config)}`;
+    db.prepare("INSERT OR IGNORE INTO source (id, name, kind, config, created_at) VALUES (?, ?, 'capture', ?, ?)").run(
+      id, adapter.defaultName(config), JSON.stringify(config), clock.now().toISOString(),
+    );
+    return id;
+  }
+
+  /** The live Job holding a Posting at this link (any state), or undefined. */
+  function jobWithLink(link: string): string | undefined {
+    const key = linkKey(link);
+    for (const r of db.prepare("SELECT job_id, url FROM posting ORDER BY first_seen_at, id").all()) {
+      if (linkKey(String(r.url)) === key) return liveJobId(db, String(r.job_id));
+    }
+    return undefined;
+  }
+
+  /** Stores a Posting found at a pasted link; it merges with a Job already in the Feed like any other. */
+  function storePasted(found: Omit<FoundPosting, "externalId">, via: "json-ld" | "page" | "text"): AddLinkResult {
+    const sourceId = pastedLinksSource();
+    const externalId = createHash("sha256").update(linkKey(found.url)).digest("hex").slice(0, 16);
+    const now = clock.now().toISOString();
+    transaction(db, () => storePosting(db, sourceId, { ...found, externalId }, now));
+    const own = `job:${sourceId}:${externalId}`;
+    const jobId = liveJobId(db, own) ?? own;
+    const postings = count("SELECT COUNT(*) AS n FROM posting WHERE job_id = ?", jobId);
+    return postings > 1 ? { outcome: "merged", jobId } : { outcome: "added", jobId, via };
+  }
+
+  async function addJobLink(text: string, pasted?: PastedPosting): Promise<AddLinkResult> {
+    const link = jobLinkFrom(text);
+    if (!link) return { outcome: "invalid", message: "That isn't a web link. Paste the job's address, starting with https://" };
+    const existing = jobWithLink(link.href);
+    if (existing) return { outcome: "existing", jobId: existing };
+
+    if (pasted) {
+      const title = pasted.title.trim();
+      const body = pasted.text.trim();
+      if (!title || !body) throw new Error("A pasted job needs its title and text");
+      return storePasted({
+        url: link.href, title, company: pasted.company?.trim() || "Company not stated", location: pasted.location?.trim() || null,
+        salary: null, postedAt: null, descriptionHtml: textToHtml(body),
+      }, "text");
+    }
+
+    const page = await fetchJobPage(link);
+    if ("problem" in page) return { outcome: "unreadable", link: link.href, alertSender: null, pageTitle: null, ...page };
+    const { posting, via, pageTitle } = readJobPage(page.html, page.url);
+    if (!posting || !via) {
+      return {
+        outcome: "unreadable", link: link.href, problem: "no-posting", pageTitle, alertSender: null,
+        message: "This page doesn't look like one job posting. Check it's the job's own page, or paste the job's text.",
+      };
+    }
+    // The page may name its own link for the job: if that is in the Feed, it's the same job.
+    const known = jobWithLink(posting.url);
+    if (known) return { outcome: "existing", jobId: known };
+    return storePasted({
+      url: link.href, title: posting.title, company: posting.company ?? siteOf(link.href), location: posting.location,
+      salary: posting.salary, postedAt: posting.postedAt, descriptionHtml: posting.descriptionHtml,
+    }, via);
+  }
+
+  /** One polite GET of a pasted job page, or why it couldn't (or mustn't) be read. */
+  async function fetchJobPage(link: URL): Promise<{ html: string; url: string } | { problem: LinkProblem; message: string; alertSender?: string | null }> {
+    const site = protectedSite(link);
+    if (site) {
+      return {
+        problem: "protected", alertSender: site.alertSender,
+        message: `${site.name} doesn't allow apps to read its pages, so apply-kit won't open this link. Paste the job's text${site.alertSender ? `, or let its job alert emails bring it in` : ""}.`,
+      };
+    }
+    let timedOut = false;
+    const get = fetchFor("capture", { failed: (err) => { if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true; } });
+    const host = link.hostname.replace(/^www\./, "");
+    const robots = await get(`${link.origin}/robots.txt`).then((r) => (r.ok ? r.text() : ""), () => "");
+    if (!robotsAllows(robots, `${link.pathname}${link.search}`, "apply-kit")) {
+      return { problem: "robots", message: `${host} asks apps not to read this page (its robots.txt). Paste the job's text instead.` };
+    }
+    let res: Response;
+    try {
+      res = await get(link.href, { headers: { accept: "text/html,application/xhtml+xml" } });
+    } catch {
+      return timedOut
+        ? { problem: "timeout", message: `${host} didn't answer in time. Try again later, or paste the job's text.` }
+        : { problem: "error", message: `Couldn't reach ${host}. Check the link, or paste the job's text.` };
+    }
+    const html = await res.text().catch(() => "");
+    if (looksBlocked(res, html)) {
+      return { problem: "blocked", message: `${host} blocks apps from reading its pages. Paste the job's text instead.` };
+    }
+    if (res.status === 404 || res.status === 410) {
+      return { problem: "not-found", message: `${host} says this page doesn't exist (${res.status}). The job may have closed, or the link may be cut short.` };
+    }
+    if (!res.ok) return { problem: "error", message: `${host} answered ${res.status}. Try again later, or paste the job's text.` };
+    return { html, url: res.url || link.href };
+  }
+
   return {
+    addJobLink,
+
     async save(jobIds) {
       return decide("save", jobIds, ["new"], "saved");
     },
@@ -1189,7 +1355,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
 
     async queryFeed(query) {
-      const sources = count("SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL");
+      const sources = count(`SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL AND ${onWatchlist}`);
       const money = budget();
       // Every Job is built (with its Fit) so counts can leave relocation Jobs out; a personal Feed is small.
       const rows = db.prepare(
@@ -1217,7 +1383,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
-        firstRun: sources === 0,
+        firstRun: sources === 0 && rows.length === 0,
         jobs,
         counts: {
           new: countView("new"),
@@ -1311,7 +1477,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare(
-        "SELECT id, name, kind, config FROM source WHERE removed_at IS NULL AND paused_at IS NULL ORDER BY created_at, id",
+        `SELECT id, name, kind, config FROM source WHERE removed_at IS NULL AND paused_at IS NULL AND ${onWatchlist} ORDER BY created_at, id`,
       ).all();
       options.onStart?.(rows.length);
       const mail = mailboxRead();
@@ -1340,7 +1506,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           ).all(monthAgo);
           const bySource = new Map<string, { id: string; name: string; jobs: number }>();
           for (const r of rows) {
-            if ((adapters[String(r.kind)]?.category ?? "ats") === "ats") continue;
+            if ((adapters[String(r.kind)]?.category ?? "ats") === "ats" || adapters[String(r.kind)]?.category === "capture") continue;
             const company = slugFor(String(r.company));
             if (!slug || !(company === slug || (slug.length >= 4 && company.startsWith(slug)))) continue;
             const entry = bySource.get(String(r.id)) ?? { id: String(r.id), name: String(r.name), jobs: 0 };
@@ -1360,7 +1526,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 }
 
 /** Whether a Source's volume per Check is watched for drops (email alerts have a rhythm instead). */
-const watchesVolume = (a: SourceAdapter<unknown> | undefined) => a != null && a.category !== "email";
+const watchesVolume = (a: SourceAdapter<unknown> | undefined) => a != null && a.category !== "email" && a.category !== "capture";
 
 function startNow(start: () => Promise<Response>): Promise<Response> {
   try {
@@ -1368,6 +1534,23 @@ function startNow(start: () => Promise<Response>): Promise<Response> {
   } catch (err) {
     return Promise.reject(err);
   }
+}
+
+/**
+ * Whether an answer is bot protection rather than the page: a challenge (Cloudflare marks it), a
+ * refusal of automated readers, or a captcha page. The app never tries to get past one.
+ */
+function looksBlocked(res: Response, html: string): boolean {
+  if (res.headers.get("cf-mitigated") === "challenge") return true;
+  const title = /<title[^>]*>([^<]*)<\/title>/i.exec(html)?.[1] ?? "";
+  const challenge = /just a moment|attention required|are you a (human|robot)|verify you are human|captcha|access denied|pardon our interruption/i;
+  if (challenge.test(title)) return true;
+  return (res.status === 403 || res.status === 429 || res.status === 503) && /captcha|challenge|bot|automated/i.test(html.slice(0, 20_000));
+}
+
+/** Pasted plain text as HTML: one paragraph per line, so the posting reads like any other. */
+function textToHtml(text: string): string {
+  return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => `<p>${escapeHtml(l)}</p>`).join("\n");
 }
 
 /** The site a link is on, "www." aside ("dev.bg", "job-boards.eu.greenhouse.io"). */

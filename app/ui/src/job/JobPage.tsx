@@ -116,6 +116,8 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
           </span>
         </div>
       )}
+      <PastedLinkNote />
+
       {job.language === "bg" && <BulgarianBanner job={job} />}
 
       {state === "failed" && (
@@ -541,6 +543,30 @@ function Decide({ job, onReopen }: { job: JobDetail; onReopen: () => void }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * After "Paste a job link" opened this page: says whether the link was already in the Feed or joined
+ * a Job found elsewhere, so a pasted link never silently lands on an older Job.
+ */
+function PastedLinkNote() {
+  const [outcome] = useState(() => new URLSearchParams(window.location.search).get("link"));
+  useEffect(() => {
+    if (!outcome) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("link");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [outcome]);
+  const text = outcome === "existing" ? "This job was already in your Feed, so it opened here instead of being added twice."
+    : outcome === "merged" ? "This job was already in your Feed from another site. The link you pasted is now one of its postings."
+    : outcome === "added" ? "Added to your Feed from the link you pasted."
+    : null;
+  if (!text) return null;
+  return (
+    <div className="banner info" role="status">
+      <span className="text">{text}</span>
     </div>
   );
 }
