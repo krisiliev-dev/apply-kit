@@ -9,6 +9,8 @@ tailoring CVs, discovering and filtering jobs, filling application portals, outr
   (start with `docs/design/friction-map.md`).
 - Knowledge from the old project: `docs/knowledge/` and `docs/research/`.
 - Never commit real CVs, personal data or secrets. Personal data stays local.
+- **Never open, read, print or search `.env`** (it holds the user's API keys), and never search inside `data/` (the user's personal database). Refer to settings by name only.
+- Architecture: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and decisions in `docs/adr/`. Design system: [docs/design/DESIGN.md](docs/design/DESIGN.md); use tokens from `docs/design/tokens.css`, never raw values.
 - The app drafts and pre-fills; the user sends messages and presses Submit. No automation of
   LinkedIn sessions or bot-protected sites.
 

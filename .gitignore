@@ -40,3 +40,6 @@ personal/
 .DS_Store
 .icloud
 *.log
+
+# Personal database shortcut (symlink to ~/Library/Application Support/apply-kit)
+/data
