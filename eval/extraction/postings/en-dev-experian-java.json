@@ -1,0 +1,84 @@
+{
+  "id": "en-dev-experian-java",
+  "field": "dev",
+  "source": {
+    "kind": "smartrecruiters",
+    "url": "https://jobs.smartrecruiters.com/Experian/744000152148503-software-engineer-java-",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Software Engineer (Java)",
+    "company": "Experian",
+    "location": "Sofia, , Bulgaria",
+    "text": "Company Description\nExperian is a global data and technology company, powering opportunities for people and businesses around the world. We operate across a range of markets, from financial services to healthcare, automotive, agribusiness, insurance, and many more. Experian invests in people and new advanced technologies to unlock the power of data. We have an amazing team of 25,200 people in 32 countries.\nJob Description\nWe're looking for a Software Engineer (Java) to join our Digital Intelligence Software Engineering Team. This is a great opportunity to grow your skills while working on a real, impactful product.\nOur Device Intelligence platform brings together different device identifiers into a single, unified profile - helping businesses recognize a device even when only partial information is available. It's a technically interesting problem, and you'll get hands-on experience solving it.\nYou'll report to Software Team Manager.\nWhat you'll do:\n• Build and improve microservices that power one of the industry's leading device recognition solutions\n• Get exposure to the full software development lifecycle, from design to deployment\n• Learn from experienced engineers through code reviews, pairing, and mentorship\n• Work with modern tools and technologies, including AI-assisted development tools, as part of your daily workflow\n• Grow steadily into more ownership as you build confidence and expertise\nQualifications\nWhat you'll bring:\n• 5+ years of experience as a Software Engineer\n• Knowledge of OOP principles, data structures, algorithms & design patterns\n• Experience with good software development practices (Clean Code, Refactoring)\n• Knowledge of collections, concurrency, generics, error handling, and persistence frameworks\n• Knowledge of Java 8+\n• Experience with microservice architectures\n• Experience with relational and NoSQL databases\n• Experience with CI/CD, Docker and AWS\n• Experience with Rest API, Spring, Spring-MVC, Spring-Security frameworks\n• Fluency in English\nAdditional Information\nWhat you will get:\n• Personal Development - career pathway for professional growth supported by learning and development programs and unlimited access to online educational training courses, learning materials and books.\n• Work environment - excellent work conditions with friendly environment, recognized team spirit, and fun and quality recreation time.\n• Social benefit package including life insurance, food vouchers, additional health insurance, monthly flex allowance and internet coverage, corporate discounts, marriage and childbirth / adoption allowance, Multisport card, Sharesave plan, Employee assistance program, а birthday gift and many other benefits!\n• Work-life balance - 25 days paid vacation, 1 additional day off for your birthday and extra 3 paid days for participation in Social responsibility event.\n• Opportunity for Flexible working hours and Home Office.\nExperian is an Equal opportunity employer. Everyone can succeed at Experian and bring their whole self to work, irrespective of their gender, ethnicity, religion, colour, sexuality, physical ability or age. If you have a disability or special need that requires accommodation, please let us know at the earliest opportunity.\n#LI-Hybrid\nThis is a hybrid remote/in-office role.\nRecruitment Fraud Awareness - Experian's recruitment process is conducted only through authorised channels. Recruitment communications will only be sent from an @experian.com email address. Experian will never ask candidates to make any payment as part of an application, interview, assessment, onboarding, or recruitment process. To apply for roles or verify opportunities, please visit experian.com/careers.\nExperian Careers - Creating a better tomorrow together\nFind out what its like to work for Experian by clicking here"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years as a software engineer",
+        "kind": "required"
+      },
+      {
+        "text": "OOP, data structures, algorithms and design patterns",
+        "kind": "required"
+      },
+      {
+        "text": "Clean code and refactoring",
+        "kind": "required"
+      },
+      {
+        "text": "Collections, concurrency, generics, error handling, persistence frameworks",
+        "kind": "required"
+      },
+      {
+        "text": "Java 8+",
+        "kind": "required"
+      },
+      {
+        "text": "Microservice architectures",
+        "kind": "required"
+      },
+      {
+        "text": "Relational and NoSQL databases",
+        "kind": "required"
+      },
+      {
+        "text": "CI/CD, Docker and AWS",
+        "kind": "required"
+      },
+      {
+        "text": "REST APIs, Spring, Spring MVC, Spring Security",
+        "kind": "required"
+      },
+      {
+        "text": "Fluent English",
+        "kind": "required"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "software engineering",
+        "kind": "required"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "level": "fluent",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "id": "en-dev-payhawk-software-engineer",
+  "field": "dev",
+  "source": {
+    "kind": "greenhouse",
+    "url": "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4000749101",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Software Engineer",
+    "company": "Payhawk",
+    "location": "Sofia",
+    "text": "Company Mission\nPayhawk is one AI-powered spend management platform for scaling businesses — corporate cards, expense management, procurement, and accounts payable, unified in one place. We serve finance teams across 32+ countries, cutting month-end close time and reconciling 99.7% of transactions with zero manual touch. AI runs through the platform as core infrastructure, not a bolted-on feature — and we hire the top 1% of talent in every function to keep building it that way.\nWhy Payhawk\nPayhawk, where the bold builders make an impact.\nWe're not a family, we're a high-performance team — and that's deliberate. We debate, ideate, and push each other to be better, because the best ideas come from direct feedback. We've already made history as Bulgaria's first unicorn, but the ambition doesn't stop there: if you want to grow fast - own it; do not wait for it.\nGive: Honest opinions, real ownership, a focus on outcomes.\nGet: A front-row seat to a market leader in one of the fastest-moving industries.\nThe role, in one line\nYou will ship entire, highly complex features to production across a product built on many services and more than one technology, picking up new tools as the work needs them.\nWhat you will own\n• Contribute to implementing new features and resolving bugs in your domain area, with high-quality, maintainable code that meets team standards.\n• Take part in the complete product development lifecycle: planning, implementation, code reviews, testing, deployments, and post-release support.\n• Write modular, clean, testable code that avoids language and structure-related mistakes.\n• Apply the right testing strategy (unit, integration, e2e) for strong coverage and reliability.\n• Own well-defined tasks and work on them autonomously. When something is uncertain, ask for input and confirm the scope and edge cases before you start.\n• Work with product managers, designers, and engineers to understand problems, weigh trade-offs, and deliver solutions that support business goals.\n• Review pull requests constructively. Communicate clearly about your work, and share updates, blockers, and risks early.\n• Build a strong understanding of the domain and the wider system, so you can give accurate estimates and deliver high-quality work.\nWhat you will need\nMust-have\n• Advanced programming experience and in-depth knowledge of Node.js, TypeScript, PostgreSQL, Kubernetes, Docker, Google Cloud, React, React Native, and Apache Kafka.\n• A Bachelor's degree in Computer Science or a related field.\n• 3+ years of relevant work experience.\n• Experience with agile processes, continuous delivery, and continuous integration.\n• The ability to multitask and organize your work.\n• The ability to prioritize.\n• Integrity and a strong work ethic.\nNice-to-have\n• Experience with LLMs, AI-driven architectures, and autonomous agents.\n• Experience with vector databases, embedding models, and MLOps practices.\nWhat you will get\n• Recharge properly — 30 days of paid holiday\n• Change the view — a week-long exchange to London, Amsterdam, Paris, Munich, Vilnius, Berlin, Sofia, or Barcelona\n• Win together, celebrate together — regular team-wide events that are actually worth showing up to\n• Covered, properly — additional medical care\n• Stay in the game — a sports card, fully funded, for the gym, classes, or your sport of choice\n• Commute easily — a monthly travel allowance that covers getting to and from the office\n• Use what you build — hands-on access to the actual product you're hiring people to help build\nPayhawk is an Equal Employment Opportunity Employer. Qualified applicants will receive consideration for employment without regard to race, color, religion, sex, sexual orientation, gender perception or identity, national origin, age, marital status, protected veteran status, or disability status."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Node.js, TypeScript, PostgreSQL, Kubernetes, Docker, Google Cloud, React, React Native and Kafka",
+        "kind": "required"
+      },
+      {
+        "text": "Bachelor's degree in computer science or related",
+        "kind": "required"
+      },
+      {
+        "text": "3+ years of relevant experience",
+        "kind": "required"
+      },
+      {
+        "text": "Agile, continuous delivery and continuous integration",
+        "kind": "required"
+      },
+      {
+        "text": "Multitasking and organising work",
+        "kind": "required"
+      },
+      {
+        "text": "Prioritising",
+        "kind": "required"
+      },
+      {
+        "text": "Integrity and strong work ethic",
+        "kind": "required"
+      },
+      {
+        "text": "LLMs, AI-driven architectures and autonomous agents",
+        "kind": "preferred"
+      },
+      {
+        "text": "Vector databases, embedding models and MLOps",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 3,
+        "max": null,
+        "about": "relevant work experience",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}

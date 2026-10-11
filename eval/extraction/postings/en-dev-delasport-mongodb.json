@@ -1,0 +1,115 @@
+{
+  "id": "en-dev-delasport-mongodb",
+  "field": "dev",
+  "source": {
+    "kind": "greenhouse",
+    "url": "https://job-boards.eu.greenhouse.io/delasportbulgaria/jobs/4913009101",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "MongoDB Engineer",
+    "company": "Delasport",
+    "location": "Sofia or Plovdiv, Bulgaria",
+    "text": "About Us:\nDelasport is where technology meets the excitement of sports and gaming! As a proven innovator in iGaming software, we provide everything from platform development to player account management. Our platform is designed to make every player feel like the star of the show, with personalized experiences and cutting-edge technology at its heart.\nSince our founding in 2010, we have won multiple international awards and have established a proven track record of excellence, stability, and overall success. This achievement only drives us to reach even greater heights. Currently, we are proud to have over 500 experts across various business fields and several offices in Bulgaria (Sofia and Plovdiv), Ukraine, and Malta.\nAbout the role:\nThe MongoDB Application DBA is accountable for designing, optimizing, and operating MongoDB databases that power mission-critical applications. This role sits at the intersection of application development and database engineering, ensuring that data models, queries, indexes, and deployment patterns are efficient, scalable, and aligned with business requirements. The Application DBA partners closely with developers, DevOps, and infrastructure teams to deliver high-performance, secure, and resilient MongoDB environments.\nHow You'll make an impact:\nDatabase Design & Development:\n• Collaborate with application architects to design optimal MongoDB data models (schema design, document structure, embedding vs. referencing).\n• Review and optimize queries, aggregations, and indexing strategies.\n• Implement schema versioning, data migrations, and refactoring strategies.\n• Helps developers with MongoDB best practices, patterns, and anti-patterns.\nPerformance & Optimization:\n• Monitor and tune query performance, index usage, and execution plans.\n• Analyze slow queries using Profiler, Explain Plans, and performance metrics.\n• Optimize sharding strategies, partitioning, and data distribution.\n• Conduct capacity planning and workload forecasting.\nOperations & Administration\n• Manage MongoDB clusters (standalone, replica sets, sharded clusters) in on-prem or Atlas environments.\n• Perform backup/restore, disaster recovery planning, and failover testing.\n• Ensure high availability, replication health, and cluster stability.\n• Implement and maintain monitoring (Atlas, Ops Manager, Prometheus, PagerDuty, Grafana, ELK, PMM etc.).\n• Security & Compliance\n• Configure and enforce authentication, authorization, and role-based access control.\n• Implement encryption at rest and in transit, auditing, and compliance controls.\n• Enable secure deployment patterns and vulnerability remediation.\nTroubleshooting & Support\n• Diagnose and resolve issues related to:\n• Replication lag\n• Locking and contention\n• Memory/CPU bottlenecks\n• Storage performance\nWho you are:\nTechnical Skills\n• 5+ years of database administration, database engineering, or data platform experience.\n• Strong expertise in MongoDB (3 years) including replica sets and sharded clusters.\n• Deep knowledge of MongoDB query engine, indexing, and aggregation framework.\n• Proficiency with MongoDB Atlas, Ops Manager, or Cloud Manager.\n• Experience with Linux, shell scripting, and system-level performance tuning.\n• Familiarity with programming languages commonly used with MongoDB (Node.js, Python, Java).\n• Knowledge of networking, storage, and cloud platforms (AWS, Azure, GCP).\n• Experience supporting high-volume, business-critical production systems.\nSoft Skills\n• Strong communication and collaboration with developers and cross-functional teams.\n• Analytical mindset with a focus on performance and reliability.\n• Ability to work in fast-paced, distributed environments.\nPreferred Qualifications\n• MongoDB Certified DBA or Developer.\n• Experience with event-driven architectures (Kafka, RabbitMQ).\n• Background in SQL databases and migration from relational to NoSQL.\n• Experience in monitoring 24/7 highly available production environments.\n• Experience in gaming, betting, fintech, payments, e-commerce, or other transaction-intensive industries.\nSuccess Measures\n• Success in this role will be measured by:\n• Improved database and application performance.\n• Reduced query latency and resource consumption.\n• Increased scalability and reliability of MongoDB workloads.\n• Reduction in database-related production incidents.\n• Improved operational readiness and recovery capabilities.\n• Adoption of database best practices across engineering teams.\n• Successful delivery of performance optimization and capacity planning initiatives.\nWhat We Offer:\nWe’re not just about work, we are about creating a great place to grow, connect, and enjoy the journey. Here’s what you can expect when you join us:\n• Competitive Salary Package: We value your skills, dedication, and contributions\n• Time Off: Enjoy 21+ days of annual paid leave so you can rest, recharge, and come back inspired\n• Bonus: Performance-based annual bonuses\n• Health & Wellness: Additional Health insurance including dental care; Co-funding a Multisport/Coolfit card to help you stay active\n• Extra Benefits: Employee discounts at various retailers and a monthly allowance for public transportation\n• Great Office Locations: Central office location in Sofia and Plovdiv\n• Relax & Recharge Zone: Take a break with colleagues in our PlayStation and Pool Table - perfect for recharging during the day\nWait, there’s more:\n• Happy Hour Fridays: Every Friday we host themed Happy Hours with snacks, fun activities, and plenty of opportunities to connect and unwind with colleagues\n• Multicultural Days: Celebrate diversity and experience the traditions, food, and cultures of teammates from around the world\n• Massages at the Office: Weekly Free Recreational Massages to help relax during the workday\n• Sports & Football Team: We regularly participate in various sports events and have our own Delasport Football Team, taking part in the IT League\n• Bulgarian Language Lessons: Classes designed to facilitate smoother communication for non-native speakers.\n• Office Library: Enjoy access to technical literature to expand your knowledge\nReady to Be Part of Something Big?\nIf you’re excited to join a team that’s revolutionizing the iGaming world and want to make a real impact, apply today. We can’t wait to meet you!\n#LI-HYBRID"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years of database administration, engineering or data platform work",
+        "kind": "required"
+      },
+      {
+        "text": "3 years of MongoDB, including replica sets and sharded clusters",
+        "kind": "required"
+      },
+      {
+        "text": "MongoDB query engine, indexing and aggregation framework",
+        "kind": "required"
+      },
+      {
+        "text": "MongoDB Atlas, Ops Manager or Cloud Manager",
+        "kind": "required"
+      },
+      {
+        "text": "Linux, shell scripting and system performance tuning",
+        "kind": "required"
+      },
+      {
+        "text": "Node.js, Python or Java",
+        "kind": "required"
+      },
+      {
+        "text": "Networking, storage and cloud platforms (AWS, Azure, GCP)",
+        "kind": "required"
+      },
+      {
+        "text": "High-volume business-critical production systems",
+        "kind": "required"
+      },
+      {
+        "text": "Communication and collaboration with developers",
+        "kind": "required"
+      },
+      {
+        "text": "Analytical mindset focused on performance and reliability",
+        "kind": "required"
+      },
+      {
+        "text": "Fast-paced, distributed environments",
+        "kind": "required"
+      },
+      {
+        "text": "MongoDB Certified DBA or Developer",
+        "kind": "preferred"
+      },
+      {
+        "text": "Event-driven architectures (Kafka, RabbitMQ)",
+        "kind": "preferred"
+      },
+      {
+        "text": "SQL databases and migrating relational to NoSQL",
+        "kind": "preferred"
+      },
+      {
+        "text": "Monitoring 24/7 highly available production",
+        "kind": "preferred"
+      },
+      {
+        "text": "Gaming, betting, fintech, payments or e-commerce",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "database administration or engineering",
+        "kind": "required"
+      },
+      {
+        "min": 3,
+        "max": null,
+        "about": "MongoDB",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [
+      {
+        "name": "MongoDB Certified DBA or Developer",
+        "kind": "preferred"
+      }
+    ],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia",
+        "Plovdiv"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Hybrid comes only from the closing '#LI-HYBRID' tag. Bulgarian lessons for non-native speakers are a benefit, not a language ask."
+}

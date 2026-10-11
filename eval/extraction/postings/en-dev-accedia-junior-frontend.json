@@ -1,0 +1,57 @@
+{
+  "id": "en-dev-accedia-junior-frontend",
+  "field": "dev",
+  "source": {
+    "kind": "recruitee",
+    "url": "https://accedia.recruitee.com/o/junior-front-end-developer",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Junior Front-End Developer",
+    "company": "Accedia",
+    "location": "Sofia, Bulgaria · Hybrid",
+    "text": "We are looking for a Junior Front-end software developer who is eager to learn, thrives in a collaborative environment, and is motivated to grow and share knowledge.\nWhat to expect:\n• Join a team of smart engineers working on a project for an international client\n• Work closely with an experienced software developer who’ll be guiding and mentoring you\n• Contribute to the team goals and working on tasks covering the entire software development lifecycle (develop new and supporting existing features, troubleshoot issues, develop unit tests, prepare documentation, etc.)\n• Actively communicate tasks, requirements, issues and open questions with your mentor, the team and the client\n• Learn new technologies, attending technical and soft-skills trainings and taking professional certifications\nThe perfect candidate meets the following:\n• Practical experience in general web development - HTML5, CSS3, React/Angular/Vue\n• Solid understanding of JavaScript and particularly ES6(ES2015) features\n• Knowledge of AJAX, Promises and async programming patterns\n• Good understanding of web services\n• Fluency in English"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Web development (HTML5, CSS3, React/Angular/Vue)",
+        "kind": "required"
+      },
+      {
+        "text": "JavaScript, especially ES6",
+        "kind": "required"
+      },
+      {
+        "text": "AJAX, Promises and async programming",
+        "kind": "required"
+      },
+      {
+        "text": "Web services",
+        "kind": "required"
+      },
+      {
+        "text": "Fluent English",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [
+      {
+        "language": "English",
+        "level": "fluent",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}

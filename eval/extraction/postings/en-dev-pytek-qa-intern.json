@@ -1,0 +1,88 @@
+{
+  "id": "en-dev-pytek-qa-intern",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/pytek-intern-qa-manual/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Intern QA Manual",
+    "company": "Pytek",
+    "location": "София",
+    "text": "We need QAs to test next generation software solutions including responsive web sites and hybrid mobile applications. This is an excellent opportunity for ambitious and motivated candidates.\nPytek is one of the fastest growing companies on the Bulgarian IT market. Our goal is to recruit promising talented young people and invest in their professional development.\nWe have developed close professional connections with leading Bulgarian and international companies. More than fifty businesses from all over the world trust us with their IT projects.\nWe offer you:\n• Positive working environment;\n• Access to job assets and know-how;\n• Payment based on achieved results;\n• Professional development program;\n• Access to big variety of projects;\n• Continuous support and learning;\n• Monthly feedback;\n• A teammate always ready to help or share knowledge.\nJob requirements:\n• Bachelor’s degree in STEM fields;\n• Basic understanding of HTML, CSS, and JavaScript;\n• Analyzing the requirements from clients;\n• Write test documentation such as test cases and scenarios;\n• Defect Tracking;\n• Conducting Review Meetings;\n• Comfortable working directly with developers;\n• Good understanding of Software Development Life Cycle;\n• A natural problem solver;\n• Verbal and written communication skills;\n• Responsible, highly motivated and team oriented person;\n• Attention to detail;\n• Coachable and motivated;\n• Time management.\nThe position is on site in our office in Sofia!\nIf this opportunity sounds appealing to you, apply now!"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Bachelor's degree in a STEM field",
+        "kind": "required"
+      },
+      {
+        "text": "Basic HTML, CSS and JavaScript",
+        "kind": "required"
+      },
+      {
+        "text": "Analysing client requirements",
+        "kind": "required"
+      },
+      {
+        "text": "Writing test cases and scenarios",
+        "kind": "required"
+      },
+      {
+        "text": "Defect tracking",
+        "kind": "required"
+      },
+      {
+        "text": "Conducting review meetings",
+        "kind": "required"
+      },
+      {
+        "text": "Working directly with developers",
+        "kind": "required"
+      },
+      {
+        "text": "Software development life cycle",
+        "kind": "required"
+      },
+      {
+        "text": "Natural problem solver",
+        "kind": "required"
+      },
+      {
+        "text": "Verbal and written communication",
+        "kind": "required"
+      },
+      {
+        "text": "Responsible, motivated and team-oriented",
+        "kind": "required"
+      },
+      {
+        "text": "Attention to detail",
+        "kind": "required"
+      },
+      {
+        "text": "Coachable and motivated",
+        "kind": "required"
+      },
+      {
+        "text": "Time management",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "on-site",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'Payment based on achieved results' is not a salary."
+}

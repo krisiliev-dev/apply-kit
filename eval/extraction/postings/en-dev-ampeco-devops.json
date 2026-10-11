@@ -1,0 +1,119 @@
+{
+  "id": "en-dev-ampeco-devops",
+  "field": "dev",
+  "source": {
+    "kind": "lever",
+    "url": "https://jobs.lever.co/ampeco-global/abb8eb6a-bf9b-41b1-a97d-3a8bc1d6d258",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "DevOps Engineer",
+    "company": "Ampeco Global",
+    "location": "Sofia, Bulgaria · Hybrid",
+    "text": "We are accelerating positive change and transformation to clean technologies in the mobility and energy sector. We do this by enabling businesses with innovative software solutions in the e-mobility and energy sector. Our product is a SaaS used by companies to manage their EV charging infrastructure, processes and efficient energy use. It’s offered as a white-label product and is already used by companies in the UK, continental Europe, South and North America, Australia and Asia.\nOur team is highly motivated, capable and committed to our mission. We are looking to end it with like-minded people, eager to give, learn and grow together with us.\nAbout the role\nBy delivering high-quality software solutions, we have been able to be ahead of our competitors and bring high value to our customers. We are continuously scaling the platform and we are now looking for a DevOps Engineer to join our engineering team and continue the enhancement of the solid cloud infrastructure that we have built from scratch.\nWe aim to advance the transformation of the mobility and energy sector with technology and smart software solutions. Read on if you believe that you can contribute to our mission.\nYour contribution\n• Design, Configure, deploy, manage and automate AWS cloud infrastructure\n• Take heavy part in administration and troubleshooting of MySQL databases (RDS)\n• Manage CI/CD pipelines, test, build and distribute applications to Google Play Store and AppStore\n• Identify roadblocks and inefficiencies in the current workflow, and work with teams to plan and remediate improvements\n• Participate in incident management\nMust have\n• 4+ years of experience with linux administration\n• Strong knowledge of MySQL optimisation, administration and maintenance\n• 2+ years of experience with AWS: ECS, EC2, RDS (MySQL), CloudWatch, VPC\n• Experience with Terraform, Shell scripting\n• Experience building and running Docker containers\n• Self-motivation and willingness to dig deeper to find out the best solution\n• Desire to engage in continuous learning to ensure knowledge of latest DevOps technologies and AWS product updates\n• Good communication and collaboration skills\n• Excellent time management and personal organisation skills\n• Fluent English (written and verbal)\nConsidered an advantage\n• Experience with Python and/or Ruby\n• Experience with building and administering Nginx, PHP based web servers\n• Experience with container orchestrators like Kubernetes, Docker Swarm\n• Network administration (IPv4, IPv6, Dynamic routing, IPSec, etc.)\n• Development background with PHP/Laravel/NodeJS/ReactNative\n• CI/CD tools like Gitlab and Bitrise\n• Knowledge of or keen interest in the e-mobility sector\nWhat we offer\n• Opportunity to join a fast-growing company on the path to become a global industry leader\n• Opportunity to work with amazing, highly experienced people\n• Flexible work hours\n• Bonus day-off to celebrate your birthday\n• 5 additional vacation days, after your first year with the company\n• Health insurance for you and for your family, with premium coverage\n• Monthly shared mobility allowance (covers Spark and GOeGO)\n• EV week – option to use a company electric car for a week every 1-2 months\n• Social events and awesome team buildings\nOur team at AMPECO is deeply committed to our mission and we're looking for like-minded individuals eager to give, learn and grow with us. If you're passionate about innovative technology and want to make a real impact in the e-mobility sector, we want to hear from you. Join AMPECO in building the future of EV charging!\nOnly shortlisted candidates will be contacted."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "4+ years of Linux administration",
+        "kind": "required"
+      },
+      {
+        "text": "MySQL optimisation, administration and maintenance",
+        "kind": "required"
+      },
+      {
+        "text": "2+ years of AWS (ECS, EC2, RDS, CloudWatch, VPC)",
+        "kind": "required"
+      },
+      {
+        "text": "Terraform and shell scripting",
+        "kind": "required"
+      },
+      {
+        "text": "Building and running Docker containers",
+        "kind": "required"
+      },
+      {
+        "text": "Self-motivation, digging deeper for the best solution",
+        "kind": "required"
+      },
+      {
+        "text": "Continuous learning of DevOps technologies and AWS",
+        "kind": "required"
+      },
+      {
+        "text": "Communication and collaboration",
+        "kind": "required"
+      },
+      {
+        "text": "Time management and personal organisation",
+        "kind": "required"
+      },
+      {
+        "text": "Fluent English, written and verbal",
+        "kind": "required"
+      },
+      {
+        "text": "Python and/or Ruby",
+        "kind": "preferred"
+      },
+      {
+        "text": "Nginx and PHP web servers",
+        "kind": "preferred"
+      },
+      {
+        "text": "Kubernetes or Docker Swarm",
+        "kind": "preferred"
+      },
+      {
+        "text": "Network administration (IPv4, IPv6, dynamic routing, IPSec)",
+        "kind": "preferred"
+      },
+      {
+        "text": "PHP/Laravel/Node.js/React Native development",
+        "kind": "preferred"
+      },
+      {
+        "text": "GitLab and Bitrise CI/CD",
+        "kind": "preferred"
+      },
+      {
+        "text": "Interest in the e-mobility sector",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 4,
+        "max": null,
+        "about": "Linux administration",
+        "kind": "required"
+      },
+      {
+        "min": 2,
+        "max": null,
+        "about": "AWS",
+        "kind": "required"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "level": "fluent",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Hybrid comes from the listed location ('Sofia, Bulgaria · Hybrid'); flexible hours alone wouldn't be a remote rule."
+}
