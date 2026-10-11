@@ -57,3 +57,22 @@ describe("email alerts: no duplicates", () => {
     expect(feed.jobs.every((j) => j.postingCount === 1)).toBe(true);
   });
 });
+
+describe("email alerts: jobs.bg", () => {
+  it("reads company, location and pay from each card, following tracking links to the job", async () => {
+    const { engine, mailbox, source } = await withEmailSource("jobsbg");
+    mailbox.deliver(alertEmail("email-jobsbg.html", {
+      id: "<sub-1@jobs.bg.example>", receivedAt: "2026-10-11T15:40:00Z",
+      from: "JOBS.BG <noreply@jobs.bg>", subject: "2 нови обяви по абонамента ти „Информационна сигурност, София“",
+    }));
+
+    await engine.checkAll();
+    const feed = await engine.queryFeed({ view: "new" });
+
+    expect(source.name).toBe("jobs.bg alerts");
+    expect(feed.jobs.map(({ title, company, location, salary, url }) => ({ title, company, location, salary, url }))).toEqual([
+      { title: "Специалист Информационна сигурност", company: "Примерна Банка АД", location: "София; Хибридна работа", salary: "Заплата от 3500 до 5000 BGN (Бруто)", url: "https://www.jobs.bg/job/8000001" },
+      { title: "Junior SOC Analyst", company: "Тестова Технологии ЕООД", location: "Пловдив", salary: null, url: "https://www.jobs.bg/job/8000002" },
+    ]);
+  });
+});

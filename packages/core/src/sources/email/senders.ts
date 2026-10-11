@@ -3,6 +3,7 @@
 // and how to read company, location and pay from the lines under each job.
 import type { AlertEmail } from "../../ports.ts";
 import { type JobCard, type JobLink, salaryLine, splitCompanyLine } from "./cards.ts";
+import { unwrapRedirect } from "./html.ts";
 
 export interface CardFacts {
   company: string | null;
@@ -31,7 +32,22 @@ const linkedin: AlertSender = {
   },
 };
 
-export const senders = { linkedin } satisfies Record<string, AlertSender>;
+const jobsbg: AlertSender = {
+  name: "jobs.bg alerts",
+  isFrom: ({ address }) => /@(\w+\.)*jobs\.bg$/i.test(address),
+  jobLink(href) {
+    const m = /^https?:\/\/(?:www\.)?jobs\.bg\/job\/(\d{4,})/i.exec(unwrapRedirect(href));
+    return m ? { id: m[1]!, url: `https://www.jobs.bg/job/${m[1]}` } : null;
+  },
+  // Card: company, then location, then pay when stated.
+  readCard({ lines }) {
+    const salary = salaryLine(lines);
+    const rest = lines.filter((l) => l !== salary);
+    return { company: rest[0] ?? null, location: rest[1] ?? null, salary };
+  },
+};
+
+export const senders = { linkedin, jobsbg } satisfies Record<string, AlertSender>;
 
 export type SenderKey = keyof typeof senders;
 

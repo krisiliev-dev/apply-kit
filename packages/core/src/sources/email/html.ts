@@ -54,7 +54,7 @@ function clean(s: string): string {
 
 const named: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " ", middot: "·", euro: "€", pound: "£",
-  copy: "©", ndash: "–", mdash: "—", bull: "•", hellip: "…", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", zwnj: "",
+  copy: "©", ndash: "–", mdash: "—", bull: "•", hellip: "…", rsquo: "’", lsquo: "‘", rdquo: "”", ldquo: "“", bdquo: "„", zwnj: "",
 };
 
 export function decodeEntities(s: string): string {
