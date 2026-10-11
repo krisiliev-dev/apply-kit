@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
 import type { EngineDeps, SqlDatabase } from "./ports.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
-import { feedRequirements, jobReading, type FeedRequirement, type JobRequirement, type KeyFact } from "./extraction/reading.ts";
+import {
+  jobReading, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
+} from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
 import type { FoundPosting } from "./sources/adapter.ts";
 import { adapterFor } from "./sources/registry.ts";
@@ -40,6 +42,8 @@ export interface FeedJob {
   reading: ReadingState;
   /** Every requirement read from the posting (empty until it is read). */
   requirements: FeedRequirement[];
+  /** How many low-confidence facts wait for Kris ("N facts need you"). */
+  needsYou: number;
 }
 
 /** One Job in full, for the Job page. */
@@ -59,6 +63,10 @@ export interface JobDetail {
   postingText: string;
   requirements: JobRequirement[];
   keyFacts: KeyFact[];
+  /** Low-confidence facts for Kris to confirm; the cautious reading is used until he does. */
+  needsYou: NeedsYouItem[];
+  /** The reading dealbreakers and Fit use, or null until the posting is read. */
+  screening: Screening | null;
   /** The Fit check (Fit, closest angle, gaps) arrives with Fit; null until then. */
   fit: null;
 }
@@ -261,6 +269,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         firstRun: sources === 0,
         jobs: rows.map((r) => {
           const reading = readingOf(String(r.posting_id));
+          const read = reading.facts ? jobReading(reading.facts, reading.text) : null;
           return {
           id: String(r.id),
           title: String(r.title),
@@ -271,7 +280,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           postingCount: Number(r.n),
           url: String(r.url),
           reading: reading.state,
-          requirements: reading.facts ? feedRequirements(reading.facts, reading.text) : [],
+          requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
+          needsYou: read ? read.needsYou.length : 0,
           };
         }),
         counts: {
@@ -308,7 +318,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
       ).all(id);
       const reading = readingOf(String(j.posting_id));
-      const read = reading.facts ? jobReading(reading.facts, reading.text) : { requirements: [], keyFacts: [] };
+      const read = reading.facts ? jobReading(reading.facts, reading.text) : null;
       return {
         id: String(j.id),
         title: String(j.title),
@@ -321,8 +331,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         postings: postings.map((p) => ({ id: String(p.id), source: String(p.name), url: String(p.url), firstSeenAt: String(p.first_seen_at) })),
         reading: { state: reading.state, error: reading.error },
         postingText: reading.text,
-        requirements: read.requirements,
-        keyFacts: read.keyFacts,
+        requirements: read?.requirements ?? [],
+        keyFacts: read?.keyFacts ?? [],
+        needsYou: read?.needsYou ?? [],
+        screening: read?.screening ?? null,
         fit: null,
       };
     },

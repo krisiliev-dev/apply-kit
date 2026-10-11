@@ -8,7 +8,7 @@ export type {
   PostingFacts, SourceQuote, ExtractedRequirement, ExtractedYears, ExtractedLanguage, ExtractedCertificate,
   ExtractedWorkAuthorisation, ExtractedRemote, ExtractedSalary, ExtractionInput, ExtractionResult,
 } from "./extraction/facts.ts";
-export type { FeedRequirement, RequirementStatus, JobRequirement, KeyFact, FactSource } from "./extraction/reading.ts";
+export type { FeedRequirement, RequirementStatus, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening } from "./extraction/reading.ts";
 export type { EngineDeps, Clock, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader } from "./ports.ts";
 export type { SourceAdapter, FoundPosting, AdapterContext } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";

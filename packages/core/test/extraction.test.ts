@@ -89,3 +89,69 @@ describe("reading postings: the Job view", () => {
     expect(await t.engine.getJob("job:nope")).toBeNull();
   });
 });
+
+/** The same posting read less confidently: an unclear salary, two year counts, one requirement of doubtful kind. */
+const unsure: PostingFacts = {
+  ...securityEngineer,
+  requirements: securityEngineer.requirements.map((r) => (r.text === "Kubernetes security" ? { ...r, confidence: 0.5 } : r)),
+  years: [
+    ...securityEngineer.years,
+    { min: 5, max: null, about: "a SOC or CERT", kind: "required", source: q("Ideally 5+ years working in a SOC or CERT"), confidence: 0.4 },
+  ],
+  salary: { stated: true, min: 5500, max: 7000, currency: "BGN", period: "month", basis: "gross", source: q("Package: 5.5–7k + annual bonus, paid monthly."), confidence: 0.3 },
+};
+
+describe("reading postings: low-confidence facts", () => {
+  it("asks Kris about low-confidence facts and screens with the cautious reading meanwhile", async () => {
+    const t = await checked(kestrelEngine(fakeExtractor({ "Security Engineer": unsure })));
+    await t.engine.readPending();
+    const id = await jobId(t, "Security Engineer");
+
+    const job = (await t.engine.getJob(id))!;
+    const row = (await t.engine.queryFeed({ view: "new" })).jobs.find((j) => j.id === id)!;
+
+    expect(job.needsYou).toEqual([
+      { key: "requirements:2", label: "Requirement", question: "Is \"Kubernetes security\" required?",
+        extracted: "Required: Kubernetes security", cautious: "Preferred: Kubernetes security",
+        source: { quote: "Experience securing Kubernetes workloads", translation: null, line: 5 } },
+      { key: "years:1", label: "Experience", question: "Years of experience: is this one required?",
+        extracted: "Required: 5+ years in a SOC or CERT", cautious: "Preferred: 5+ years in a SOC or CERT",
+        source: { quote: "Ideally 5+ years working in a SOC or CERT", translation: null, line: 9 } },
+      { key: "salary", label: "Salary", question: "Salary: couldn't read it reliably",
+        extracted: "5,500–7,000 BGN gross/month", cautious: "Not stated",
+        source: { quote: "Package: 5.5–7k + annual bonus, paid monthly.", translation: null, line: 11 } },
+    ]);
+    // Meanwhile: the doubtful requirement can't count against the job, the lower year count is the
+    // requirement, and the salary counts as not stated.
+    expect(job.requirements[2]).toMatchObject({ askedAs: "Unclear", kind: "preferred", needsYou: true });
+    expect(job.keyFacts.find((f) => f.key === "salary")).toMatchObject({ value: "Not stated", needsYou: true });
+    expect(job.screening).toEqual({
+      yearsRequired: 3,
+      languagesRequired: ["English"],
+      certificatesRequired: [],
+      salary: null,
+      remote: { mode: "hybrid", locations: ["Sofia"] },
+      visaSponsorship: "not-offered",
+      provisional: true,
+    });
+    expect(row.needsYou).toBe(3);
+    expect(row.requirements[2]).toEqual({ text: "Kubernetes security", kind: "preferred", status: "unknown", needsYou: true });
+  });
+
+  it("flags a fact whose quote can't be found in the posting, however confident the model was", async () => {
+    const invented: PostingFacts = {
+      ...securityEngineer,
+      certificates: [{ name: "OSCP", kind: "required", source: q("OSCP certification is mandatory"), confidence: 0.99 }],
+    };
+    const t = await checked(kestrelEngine(fakeExtractor({ "Security Engineer": invented })));
+    await t.engine.readPending();
+
+    const job = (await t.engine.getJob(await jobId(t, "Security Engineer")))!;
+
+    expect(job.keyFacts.find((f) => f.key === "certificates:0")).toMatchObject({
+      value: "OSCP (preferred)", needsYou: true, source: { line: null },
+    });
+    expect(job.needsYou.map((n) => n.key)).toEqual(["certificates:0"]);
+    expect(job.screening!.certificatesRequired).toEqual([]);
+  });
+});
