@@ -1,0 +1,458 @@
+<meta charset="utf-8">
+<title>apply-kit Design System</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<style>
+/* Layout: specimen document — left-aligned sections, each a heading, a one-line rule of use, then live examples */
+* { box-sizing: border-box }
+[hidden] { display: none !important }
+body { background: var(--ground); color: var(--ink); font-family: var(--font-text); font-size: var(--fs-body); line-height: var(--lh-body); padding-inline: 16px; padding-block: 32px 64px; margin: 0 }
+.page { max-width: 1120px; margin: 0 auto; display: grid; gap: var(--s-10) }
+h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; margin: 0; line-height: var(--lh-tight) }
+h1 { font-size: var(--fs-display); font-weight: 700 }
+h2 { font-size: var(--fs-h2); font-weight: 700 }
+h3 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+p { margin: 0 }
+.lede { font-size: var(--fs-title); color: var(--ink-2); max-width: 62ch; line-height: var(--lh-snug) }
+.rule-of-use { color: var(--ink-2); max-width: 70ch }
+.meta { color: var(--ink-3); font-size: var(--fs-small) }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+section { display: grid; gap: var(--s-6); min-width: 0 }
+.sec-head { display: grid; gap: var(--s-3) }
+.grid { display: grid; gap: var(--s-5); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)) }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: var(--s-6); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
+.panel h3 + p { margin-top: calc(var(--s-3) * -1) }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.stack { display: grid; gap: var(--s-3); min-width: 0 }
+.state-label { font-size: var(--fs-caption); color: var(--ink-3); min-width: 72px }
+.principles { display: grid; gap: var(--s-5); grid-template-columns: repeat(2, minmax(0, 1fr)) }
+@media (min-width: 1000px) { .principles { grid-template-columns: repeat(4, minmax(0, 1fr)) } }
+@media (max-width: 560px) { .principles { grid-template-columns: minmax(0, 1fr) } }
+.principles div { border-top: 2px solid var(--action); padding-top: var(--s-3) }
+.principles b { display: block; font-family: var(--font-display); font-size: var(--fs-title); font-weight: 600; margin-bottom: var(--s-2) }
+.principles p { color: var(--ink-2) }
+
+/* swatches */
+.swatches { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)) }
+.swatch { display: grid; gap: var(--s-2); font-size: var(--fs-small) }
+.swatch i { height: 56px; border-radius: var(--r-small); border: 1px solid var(--rule); display: block }
+.swatch b { font-weight: 600 }
+.swatch span { color: var(--ink-3); font-variant-numeric: tabular-nums }
+
+/* type specimen */
+.type-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: var(--s-4); align-items: baseline; padding-block: var(--s-3); border-bottom: 1px solid var(--rule) }
+.type-row .meta { font-variant-numeric: tabular-nums }
+
+/* scale strips */
+.space-strip { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--s-4) }
+.space-strip div { display: grid; gap: var(--s-2); justify-items: center; font-size: var(--fs-caption); color: var(--ink-3) }
+.space-strip i { display: block; background: var(--action); border-radius: 2px; width: 16px }
+.radius-strip { display: flex; flex-wrap: wrap; gap: var(--s-4) }
+.radius-strip div { width: 88px; height: 64px; border: 1px solid var(--border-control); background: var(--surface-sunken); display: grid; place-items: center; font-size: var(--fs-caption); color: var(--ink-2) }
+
+/* ===== components ===== */
+.btn { font: inherit; font-size: var(--fs-small); font-weight: 600; display: inline-flex; align-items: center; gap: var(--s-3); min-height: 36px; padding: 0 var(--s-5); border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); cursor: pointer; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard) }
+.btn:hover, .btn.is-hover { border-color: var(--ink-2) }
+.btn.primary { background: var(--action); border-color: var(--action); color: var(--on-action) }
+.btn.primary:hover, .btn.primary.is-hover { background: var(--action-hover); border-color: var(--action-hover) }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2) }
+.btn.ghost:hover, .btn.ghost.is-hover { background: var(--surface-sunken) }
+.btn.danger { color: var(--gap); border-color: var(--gap) }
+.btn.is-focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.btn[disabled] { opacity: .45; cursor: not-allowed }
+.btn .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent }
+@media (prefers-reduced-motion: no-preference) { .btn .spin { animation: spin .8s linear infinite } @keyframes spin { to { transform: rotate(360deg) } } }
+
+.chip { display: inline-flex; align-items: center; gap: var(--s-2); padding: 1px var(--s-3); border-radius: var(--r-pill); font-size: var(--fs-small); font-weight: 500; white-space: nowrap }
+.chip.met { background: var(--met-soft); color: var(--met) }
+.chip.partly { background: var(--partly-soft); color: var(--partly) }
+.chip.gap { background: var(--gap-soft); color: var(--gap) }
+.chip.hidden-reason { background: var(--surface-sunken); color: var(--ink-2); border: 1px dashed var(--border-control) }
+.chip svg { width: 12px; height: 12px; flex: none }
+
+.status { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-small); font-weight: 600; padding: 2px var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--rule); color: var(--ink-2); background: var(--surface) }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none }
+.status.applied { color: var(--ink) }
+.status.screening { color: var(--action); border-color: var(--action) }
+.status.interviewing { color: var(--on-action); background: var(--action); border-color: var(--action) }
+.status.offer { color: var(--bloom); border-color: var(--bloom); background: var(--bloom-soft) }
+.status.accepted { color: var(--on-action); background: var(--bloom); border-color: var(--bloom) }
+.status.rejected, .status.withdrawn { color: var(--ink-3) }
+.status.rejected i, .status.withdrawn i { background: transparent; border: 1.5px solid currentColor }
+
+.scroll { overflow-x: auto }
+.feed { width: 100%; border-collapse: collapse; font-size: var(--fs-small); font-variant-numeric: tabular-nums; background: var(--surface) }
+.feed th { text-align: left; font-weight: 600; color: var(--ink-3); font-size: var(--fs-caption); padding: var(--s-3); border-bottom: 1px solid var(--rule); white-space: nowrap }
+.feed td { padding: var(--s-4) var(--s-3); border-bottom: 1px solid var(--rule); vertical-align: top }
+.feed .t { font-weight: 600; font-size: var(--fs-body); color: var(--ink) }
+.feed .why { color: var(--ink-3); font-size: var(--fs-caption) }
+.feed .fit { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-title) }
+.feed tr.is-focused td { background: var(--met-soft) }
+.feed tr.is-focused td:first-child { box-shadow: inset 3px 0 0 var(--action) }
+.feed tr.is-selected td { background: var(--surface-sunken) }
+.feed tr.is-hidden td { background: var(--surface-sunken); color: var(--ink-2) }
+.feed tr.is-hidden .t { color: var(--ink-2); font-weight: 500 }
+.table-wrap { border: 1px solid var(--rule); border-radius: var(--r-control); overflow: hidden }
+
+.needs { display: grid; grid-template-columns: 4px minmax(0, 1fr) auto; gap: var(--s-2) var(--s-4); align-items: center; padding: var(--s-4) var(--s-5) var(--s-4) var(--s-4); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control) }
+.needs::before { content: ""; align-self: stretch; border-radius: 2px; background: var(--bloom) }
+.needs b { font-weight: 600 }
+.needs.is-done { opacity: .6 }
+.needs.is-done::before { background: var(--rule) }
+
+.stepper { display: flex; flex-wrap: wrap; gap: var(--s-2) }
+.step { display: inline-flex; align-items: center; gap: var(--s-3); padding: var(--s-2) var(--s-4) var(--s-2) var(--s-2); border-radius: var(--r-pill); font-size: var(--fs-small); color: var(--ink-3); border: 1px solid var(--rule); background: var(--surface) }
+.step b { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-sunken); color: var(--ink-2); font-size: var(--fs-caption); font-weight: 600 }
+.step.done { color: var(--met) } .step.done b { background: var(--met-soft); color: var(--met) }
+.step.current { color: var(--ink); border-color: var(--action); font-weight: 600 } .step.current b { background: var(--action); color: var(--on-action) }
+.step.flag { color: var(--bloom); border-color: var(--bloom) } .step.flag b { background: var(--bloom-soft); color: var(--bloom) }
+
+.banner { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); padding: var(--s-4) var(--s-5); border-radius: var(--r-control); font-size: var(--fs-small); border: 1px solid transparent }
+.banner b { font-weight: 600 }
+.banner .grow { flex: 1 1 260px; min-width: 0 }
+.banner.info { background: var(--surface-sunken); color: var(--ink) }
+.banner.success { background: var(--met-soft); color: var(--met) }
+.banner.warning { background: var(--partly-soft); color: var(--partly) }
+.banner.error { background: var(--gap-soft); color: var(--gap) }
+
+.field { display: grid; gap: var(--s-2) }
+.field label, .field legend { font-weight: 600; font-size: var(--fs-small) }
+.field .help { font-size: var(--fs-caption); color: var(--ink-3) }
+.field .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
+.input { font: inherit; font-size: var(--fs-body); width: 100%; min-height: 40px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink) }
+.input:focus, .input.is-focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--met-soft) }
+.input[aria-invalid="true"] { border-color: var(--gap); box-shadow: 0 0 0 3px var(--gap-soft) }
+.input:disabled { background: var(--surface-sunken); color: var(--ink-3) }
+textarea.input { min-height: 96px; resize: vertical }
+.count { font-size: var(--fs-caption); color: var(--ink-3); justify-self: end; font-variant-numeric: tabular-nums }
+fieldset.field { border: 0; padding: 0; margin: 0 }
+.check { display: flex; align-items: center; gap: var(--s-3); font-size: var(--fs-small) }
+.check input { accent-color: var(--action); width: 16px; height: 16px }
+
+.segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-sunken); border-radius: var(--r-pill) }
+.segmented button { font: inherit; font-size: var(--fs-small); font-weight: 500; border: 0; background: transparent; color: var(--ink-2); padding: var(--s-2) var(--s-4); border-radius: var(--r-pill); cursor: pointer }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised) }
+
+.stat { display: grid; gap: var(--s-1) }
+.stat .num { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h2); font-variant-numeric: tabular-nums; line-height: 1 }
+.ascent { width: 100%; height: 96px; display: block }
+
+.empty { display: grid; gap: var(--s-3); justify-items: start; padding: var(--s-8) var(--s-6); border: 1px dashed var(--border-control); border-radius: var(--r-card); background: var(--surface) }
+
+.toast { display: inline-flex; flex-wrap: wrap; align-items: center; gap: var(--s-4); padding: var(--s-3) var(--s-3) var(--s-3) var(--s-5); border-radius: var(--r-pill); background: var(--ink); color: var(--ground); box-shadow: var(--shadow-overlay); font-size: var(--fs-small) }
+.toast .btn.ghost { color: var(--ground) }
+
+/* ===== documents (CV, letter): always white paper, print-faithful ===== */
+.docs { display: grid; gap: var(--s-7); grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start }
+.sheet { background: var(--doc-paper); color: var(--doc-text); aspect-ratio: 210 / 297; max-width: 100%; border-radius: var(--r-sheet); box-shadow: 0 1px 2px #0000001a, 0 8px 24px #00000014; padding: 8.5% 9%; font-family: var(--font-text); font-size: clamp(7px, 1.25vw, 10px); line-height: 1.38; font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0; display: grid; align-content: start; gap: 0.9em; overflow: hidden }
+.sheet .hd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1em; align-items: start }
+.sheet .name { font-family: var(--font-display); font-weight: 700; font-size: 2.3em; color: var(--doc-accent); letter-spacing: -0.015em; line-height: 1.05 }
+.sheet .role { font-size: 1.15em; color: var(--doc-text); margin-top: 0.15em }
+.sheet .contact { color: var(--doc-muted); margin-top: 0.3em }
+.sheet .photo { width: 6.2em; aspect-ratio: 4 / 5; border-radius: 0.5em; background: #e1e8e3; display: grid; place-items: center; color: #5a6962; font-size: 0.8em }
+.sheet .h { font-family: var(--font-display); font-weight: 600; font-size: 1.15em; color: var(--doc-accent); border-bottom: 1px solid var(--doc-rule); padding-bottom: 0.2em; margin-top: 0.5em }
+.sheet .job { display: flex; justify-content: space-between; gap: 1em; font-weight: 600 }
+.sheet .job span { font-weight: 400; color: var(--doc-muted); white-space: nowrap }
+.sheet .org { color: var(--doc-muted); margin-top: -0.6em }
+.sheet ul { margin: 0; padding-left: 1.2em; display: grid; gap: 0.2em }
+.sheet .skills { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.25em 1em }
+.sheet .skills b { font-weight: 600 }
+.sheet .letter p { margin-bottom: 0.8em }
+.doc-controls { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center }
+.doc-notes { display: grid; gap: var(--s-2); color: var(--ink-2); font-size: var(--fs-small) }
+.doc-notes li { margin-left: var(--s-5) }
+</style>
+
+<div class="page">
+  <header class="sec-head">
+    <p class="meta">apply-kit · design step 5 · direction Vitosha</p>
+    <h1>Design system</h1>
+    <p class="lede">Calm and encouraging for a search that involves rejection. Mountain stone and pine, soft surfaces, and one alpine-pink accent that only ever means "needs you" or "something went well".</p>
+  </header>
+
+  <section>
+    <div class="principles">
+      <div><b>Pink is a signal, not a colour</b><p>Alpine pink appears only for things that need you and for wins (an offer, a streak). Everywhere else, pine and stone do the work.</p></div>
+      <div><b>Progress is an ascent</b><p>Momentum is drawn as a climbing line, because volume and consistency are what you control when replies are out of your hands.</p></div>
+      <div><b>Calm density</b><p>Tables stay information-dense at a 15px body; air goes between groups, not inside rows. Soft surfaces, never fluffy layouts.</p></div>
+      <div><b>Documents stay documents</b><p>CVs and letters always print on white with one pine accent, in a fixed ATS-safe template. The app's theme never touches them.</p></div>
+    </div>
+  </section>
+
+  <!-- COLOUR -->
+  <section aria-labelledby="c-h">
+    <div class="sec-head"><h2 id="c-h">Colour</h2><p class="rule-of-use">Use alias tokens only (surface, ink, action…), never raw hex. Every text pairing meets WCAG AA (4.5:1) and every control border meets 3:1, in both themes. Switch your system theme to see dark mode.</p></div>
+    <div class="panel">
+      <h3>Base</h3>
+      <div class="swatches">
+        <div class="swatch"><i style="background:var(--ground)"></i><b>ground</b><span>Stone mist</span></div>
+        <div class="swatch"><i style="background:var(--surface)"></i><b>surface</b><span>Cards, tables</span></div>
+        <div class="swatch"><i style="background:var(--surface-sunken)"></i><b>surface-sunken</b><span>Wells, hidden rows</span></div>
+        <div class="swatch"><i style="background:var(--rule)"></i><b>rule</b><span>Lichen hairlines</span></div>
+        <div class="swatch"><i style="background:var(--border-control)"></i><b>border-control</b><span>3.1:1 on surface</span></div>
+      </div>
+      <h3>Text</h3>
+      <div class="swatches">
+        <div class="swatch"><i style="background:var(--ink)"></i><b>ink</b><span>14.7:1</span></div>
+        <div class="swatch"><i style="background:var(--ink-2)"></i><b>ink-2</b><span>7.9:1 secondary</span></div>
+        <div class="swatch"><i style="background:var(--ink-3)"></i><b>ink-3</b><span>5.8:1 meta, why-lines</span></div>
+      </div>
+      <h3>Action and signal</h3>
+      <div class="swatches">
+        <div class="swatch"><i style="background:var(--action)"></i><b>action</b><span>Pine · 6.7:1</span></div>
+        <div class="swatch"><i style="background:var(--action-hover)"></i><b>action-hover</b><span>Pine deep</span></div>
+        <div class="swatch"><i style="background:var(--bloom)"></i><b>bloom</b><span>Needs you, wins</span></div>
+        <div class="swatch"><i style="background:var(--bloom-soft)"></i><b>bloom-soft</b><span>Offer background</span></div>
+      </div>
+      <h3>Requirement states</h3>
+      <div class="swatches">
+        <div class="swatch"><i style="background:var(--met-soft); box-shadow: inset 0 -14px 0 var(--met)"></i><b>met</b><span>5.6:1 on soft</span></div>
+        <div class="swatch"><i style="background:var(--partly-soft); box-shadow: inset 0 -14px 0 var(--partly)"></i><b>partly</b><span>5.8:1 on soft</span></div>
+        <div class="swatch"><i style="background:var(--gap-soft); box-shadow: inset 0 -14px 0 var(--gap)"></i><b>gap</b><span>5.1:1 on soft</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- TYPE -->
+  <section aria-labelledby="t-h">
+    <div class="sec-head"><h2 id="t-h">Type</h2><p class="rule-of-use">Geologica for headings and numbers, Onest for everything else. Both carry full Cyrillic, so Bulgarian applications use the same fonts. Ratio 1.25 from a 15px body; hierarchy comes from weight and colour before size.</p></div>
+    <div class="panel">
+      <div class="type-row"><span class="meta">Display 44 / 700</span><span style="font-family:var(--font-display);font-size:var(--fs-display);font-weight:700;letter-spacing:var(--track-display);line-height:1.1">Your applications</span></div>
+      <div class="type-row"><span class="meta">H1 35 / 700</span><span style="font-family:var(--font-display);font-size:var(--fs-h1);font-weight:700;letter-spacing:var(--track-display);line-height:1.1">23 new since yesterday</span></div>
+      <div class="type-row"><span class="meta">H2 28 / 700</span><span style="font-family:var(--font-display);font-size:var(--fs-h2);font-weight:700;letter-spacing:var(--track-display)">Security Engineer</span></div>
+      <div class="type-row"><span class="meta">H3 22 / 600</span><span style="font-family:var(--font-display);font-size:var(--fs-h3);font-weight:600">Инженер по киберсигурност</span></div>
+      <div class="type-row"><span class="meta">Title 18 / 600</span><span style="font-size:var(--fs-title);font-weight:600">Follow up with Kestrel Payments</span></div>
+      <div class="type-row"><span class="meta">Body 15 / 400</span><span>Applied 7 days ago with no reply. A short, specific follow-up is ready for you to review and send from your own mail.</span></div>
+      <div class="type-row"><span class="meta">Small 13 / 500</span><span style="font-size:var(--fs-small);font-weight:500">Kestrel Payments · Sofia · hybrid · €2,800–3,600</span></div>
+      <div class="type-row"><span class="meta">Caption 12 / 400</span><span style="font-size:var(--fs-caption);color:var(--ink-3)">2 of 3 requirements met · above your salary floor · checked 07:30</span></div>
+      <div class="type-row"><span class="meta">Numbers</span><span style="font-family:var(--font-display);font-size:var(--fs-h2);font-weight:600;font-variant-numeric:tabular-nums">91 · 18% · 1,240</span></div>
+    </div>
+  </section>
+
+  <!-- SPACE / RADIUS / ELEVATION / MOTION -->
+  <section aria-labelledby="s-h">
+    <div class="sec-head"><h2 id="s-h">Space, shape and motion</h2><p class="rule-of-use">A 4px base. Controls pad 8–12px, panels 20px, sections 56px apart. Pills for anything you press or that labels state; 10px for inputs and tables; 14px for panels; documents keep near-square corners.</p></div>
+    <div class="grid">
+      <div class="panel"><h3>Spacing</h3><div class="space-strip">
+        <div><i style="height:2px"></i>1</div><div><i style="height:4px"></i>2</div><div><i style="height:8px"></i>3</div><div><i style="height:12px"></i>4</div><div><i style="height:16px"></i>5</div><div><i style="height:20px"></i>6</div><div><i style="height:24px"></i>7</div><div><i style="height:32px"></i>8</div><div><i style="height:40px"></i>9</div><div><i style="height:56px"></i>10</div>
+      </div><p class="meta">2 · 4 · 8 · 12 · 16 · 20 · 24 · 32 · 40 · 56 px</p></div>
+      <div class="panel"><h3>Radius</h3><div class="radius-strip">
+        <div style="border-radius:var(--r-sheet)">sheet 3</div><div style="border-radius:var(--r-control)">control 10</div><div style="border-radius:var(--r-card)">card 14</div><div style="border-radius:var(--r-pill)">pill</div>
+      </div></div>
+      <div class="panel"><h3>Elevation and motion</h3>
+        <p class="meta">Raised: a soft two-layer shadow in light mode; dark mode uses rules instead. Overlay: menus, dialogs, toasts.</p>
+        <p class="meta">Motion only answers your actions: 120ms for hovers, 200ms for opening and expanding, 320ms for page-level changes. Standard easing in, faster easing out. All motion respects reduced-motion.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- COMPONENTS -->
+  <section aria-labelledby="k-h">
+    <div class="sec-head"><h2 id="k-h">Components</h2><p class="rule-of-use">Twelve core components, each shown in the states it can be in. Static examples of hover and focus are labelled; the live controls respond too.</p></div>
+
+    <div class="panel">
+      <h3>Button</h3>
+      <p class="rule-of-use">One primary per view: the action the screen exists for. Labels say exactly what happens.</p>
+      <div class="stack">
+        <div class="row"><span class="state-label">Default</span><button class="btn primary">Prepare package</button><button class="btn">Save</button><button class="btn ghost">Pass</button><button class="btn danger">Remove source</button></div>
+        <div class="row"><span class="state-label">Hover</span><button class="btn primary is-hover">Prepare package</button><button class="btn is-hover">Save</button><button class="btn ghost is-hover">Pass</button></div>
+        <div class="row"><span class="state-label">Focus</span><button class="btn primary is-focus">Prepare package</button><button class="btn is-focus">Save</button></div>
+        <div class="row"><span class="state-label">Disabled</span><button class="btn primary" disabled>Approve package</button><span class="meta">Always paired with a written reason nearby: "Resolve 1 flag first".</span></div>
+        <div class="row"><span class="state-label">Working</span><button class="btn primary" aria-busy="true"><span class="spin" aria-hidden="true"></span>Writing your cover letter</button></div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:var(--s-5)">
+      <div class="panel">
+        <h3>Requirement chip</h3>
+        <p class="rule-of-use">Shape plus colour, never colour alone: each state has its own icon.</p>
+        <div class="row">
+          <span class="chip met"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>3+ years</span>
+          <span class="chip partly"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>CISSP preferred</span>
+          <span class="chip gap"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Kubernetes</span>
+          <span class="chip hidden-reason">Hidden: requires German</span>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Status</h3>
+        <p class="rule-of-use">Filled means momentum; pink is reserved for offers and acceptance; closed statuses fade back.</p>
+        <div class="row">
+          <span class="status applied"><i></i>Applied</span><span class="status screening"><i></i>Screening</span><span class="status interviewing"><i></i>Interviewing</span>
+          <span class="status offer"><i></i>Offer</span><span class="status accepted"><i></i>Accepted</span><span class="status rejected"><i></i>Rejected</span><span class="status withdrawn"><i></i>Withdrawn</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:var(--s-5)">
+      <h3>Feed row</h3>
+      <p class="rule-of-use">Title leads; the why-line explains the rank; fit is the only big number. Keyboard focus gets a pine edge, selection a sunken fill, hidden rows keep their reason.</p>
+      <div class="table-wrap scroll">
+        <table class="feed">
+          <thead><tr><th>Job</th><th>Requirements</th><th>Salary</th><th>Fit</th></tr></thead>
+          <tbody>
+            <tr class="is-focused"><td><div class="t">Security Engineer</div><div>Kestrel Payments · Sofia, hybrid</div><div class="why">Focused · 2 of 3 requirements met, above your floor</div></td><td><span class="chip met">3+ yrs</span> <span class="chip partly">CISSP pref.</span></td><td>€2,800–3,600</td><td class="fit">91</td></tr>
+            <tr><td><div class="t">Full-stack Developer</div><div>Brightwave · Remote EU</div><div class="why">Default · every requirement met</div></td><td><span class="chip met">TypeScript</span> <span class="chip met">2+ yrs</span></td><td>€3,200–4,200</td><td class="fit">88</td></tr>
+            <tr class="is-selected"><td><div class="t">Cloud Security Engineer</div><div>Halden Systems · Remote EU</div><div class="why">Selected · one gap you could answer</div></td><td><span class="chip met">AWS</span> <span class="chip gap">Kubernetes</span></td><td>€4,000–5,000</td><td class="fit">76</td></tr>
+            <tr class="is-hidden"><td><div class="t">Penetration Tester</div><div>Vollmer GmbH · Remote DE</div></td><td colspan="3"><span class="chip hidden-reason">Hidden: requires fluent German</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:var(--s-5)">
+      <div class="panel">
+        <h3>Needs-you item</h3>
+        <p class="rule-of-use">The pink edge is the only pink in a list. When it's handled it fades, then leaves.</p>
+        <div class="needs"><div><b>Follow up with Kestrel Payments</b><div class="meta">Applied 7 days ago. Draft ready.</div></div><button class="btn">Review draft</button></div>
+        <div class="needs"><div><b>Confirm an email</b><div class="meta">"Thank you for applying" from Ardent Labs</div></div><button class="btn">Confirm</button></div>
+        <div class="needs is-done"><div><b>Lesson added</b><div class="meta">Product Designer · Lumen Health</div></div><button class="btn ghost">Undo</button></div>
+      </div>
+      <div class="panel">
+        <h3>Stepper</h3>
+        <p class="rule-of-use">For the package's guided steps. A flagged step turns pink and can't be approved until resolved.</p>
+        <div class="stepper">
+          <span class="step done"><b>✓</b>Target posting</span><span class="step flag"><b>!</b>CV · 1 flag</span><span class="step current"><b>3</b>Cover letter</span><span class="step"><b>4</b>Screening answers</span><span class="step"><b>5</b>ATS check</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" style="margin-top:var(--s-5)">
+      <h3>Banner</h3>
+      <p class="rule-of-use">What happened, what it means, what you can do. Never an apology, never vague.</p>
+      <div class="banner info"><span class="grow"><b>That's a lot.</b> 212 new jobs after a week away; the top 25 by fit are first.</span><button class="btn">Save top 10</button></div>
+      <div class="banner success"><span class="grow"><b>Package approved.</b> Open the company's page and the extension fills it.</span><button class="btn">Open posting</button></div>
+      <div class="banner warning"><span class="grow"><b>SumUp returned 0 jobs.</b> It usually has about 30, so its jobs stay open until the next check.</span><button class="btn">Check their site</button></div>
+      <div class="banner error"><span class="grow"><b>dev.bg didn't respond at 07:30.</b> Its 12 jobs are kept as they were. Next try at 08:00.</span><button class="btn">Try now</button></div>
+    </div>
+
+    <div class="grid" style="margin-top:var(--s-5)">
+      <div class="panel">
+        <h3>Form fields</h3>
+        <p class="rule-of-use">Labels above, help under the label, errors under the field, checked when you leave it.</p>
+        <div class="field"><label for="f1">Minimum monthly salary</label><span class="help" id="f1h">Gross, in euros. Jobs below it are hidden with the reason.</span><input class="input" id="f1" value="2300" aria-describedby="f1h"></div>
+        <div class="field"><label for="f2">Notice period</label><input class="input is-focus" id="f2" value="1 month"></div>
+        <div class="field"><label for="f3">Where does this number come from?</label><input class="input" id="f3" value="" aria-invalid="true" aria-describedby="f3e"><span class="err" id="f3e">Add the source so this claim survives an interview question.</span></div>
+        <div class="field"><label for="f4">Job mailbox</label><input class="input" id="f4" value="kris.jobs.inbox@fastmail.com" disabled></div>
+      </div>
+      <div class="panel">
+        <h3>Choices and long text</h3>
+        <p class="rule-of-use">Radios for up to five options, select for more, live counts where portals set limits.</p>
+        <div class="field"><label for="f5">Why Kestrel Payments?</label><textarea class="input" id="f5" aria-describedby="f5c">Your fraud team publishes its detection work openly, and the SOC role sits close to it.</textarea><span class="count" id="f5c">86 / 500</span></div>
+        <fieldset class="field"><legend>Locations</legend>
+          <label class="check"><input type="checkbox" checked> Sofia, on-site or hybrid</label>
+          <label class="check"><input type="checkbox" checked> Remote, European time zones</label>
+          <label class="check"><input type="checkbox"> Relocation: Switzerland, Spain</label>
+        </fieldset>
+        <div class="field"><label for="f6">Angle</label><select class="input" id="f6"><option>Security</option><option>Developer</option><option>Design</option></select></div>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:var(--s-5)">
+      <div class="panel">
+        <h3>Segmented control</h3>
+        <p class="rule-of-use">Switches a view in place; never navigates.</p>
+        <div class="segmented" role="group" aria-label="CV view"><button aria-pressed="true">Preview</button><button aria-pressed="false">Changes</button></div>
+        <div class="segmented" role="group" aria-label="Language"><button aria-pressed="true">English</button><button aria-pressed="false">Български</button></div>
+      </div>
+      <div class="panel">
+        <h3>Stats and the ascent</h3>
+        <p class="rule-of-use">The signature: cumulative applications as a climb. The endpoint is pink only on a week you beat your pace.</p>
+        <div class="row" style="gap:var(--s-7)">
+          <div class="stat"><span class="meta">This week</span><span class="num">11</span></div>
+          <div class="stat"><span class="meta">Response rate</span><span class="num">18%</span></div>
+          <div class="stat"><span class="meta">Interviews</span><span class="num">2</span></div>
+        </div>
+        <svg class="ascent" viewBox="0 0 320 96" role="img" aria-label="Applications sent, cumulative over 8 weeks: 3, 8, 12, 20, 26, 35, 42, 53">
+          <line x1="0" y1="88" x2="320" y2="88" stroke="var(--rule)"/>
+          <line x1="0" y1="48" x2="320" y2="48" stroke="var(--rule)" stroke-dasharray="2 4"/>
+          <text x="0" y="44" font-size="10" fill="var(--ink-3)" font-family="Onest, sans-serif">27</text>
+          <polygon points="0,86 45.7,78 91.4,72 137.1,59 182.9,49 228.6,34 274.3,23 320,4 320,88 0,88" fill="var(--met-soft)"/>
+          <polyline points="0,86 45.7,78 91.4,72 137.1,59 182.9,49 228.6,34 274.3,23 320,4" fill="none" stroke="var(--action)" stroke-width="2" stroke-linejoin="round"/>
+          <circle cx="316" cy="6" r="4" fill="var(--bloom)"/>
+        </svg>
+        <p class="meta">53 sent in 8 weeks · 8 weeks ago → this week</p>
+      </div>
+    </div>
+
+    <div class="grid" style="margin-top:var(--s-5)">
+      <div class="panel">
+        <h3>Empty state</h3>
+        <p class="rule-of-use">Says what will appear and offers the first step.</p>
+        <div class="empty"><h3>Applications appear here on their own</h3><p class="meta">Mark a package as submitted in the extension and it becomes an application, with its follow-up date set.</p><button class="btn primary">Open the feed</button></div>
+      </div>
+      <div class="panel">
+        <h3>Toast</h3>
+        <p class="rule-of-use">Confirms an action in its own words, with undo where it can be undone.</p>
+        <div><span class="toast" role="status">Passed Ostrava Bank · not my level <button class="btn ghost">Undo</button></span></div>
+        <div><span class="toast" role="status">Saved to your answer bank</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOCUMENTS -->
+  <section aria-labelledby="d-h">
+    <div class="sec-head"><h2 id="d-h">CV and cover letter</h2><p class="rule-of-use">One fixed template, filled by the AI and never redesigned by it. A4, single column, reverse-chronological, standard headings, one page, one pine accent on the name and section titles. Fonts embedded, ligatures off, real text throughout, so applicant tracking systems read it correctly.</p></div>
+    <div class="doc-controls">
+      <div class="segmented" role="group" aria-label="Document language"><button aria-pressed="true" data-lang="en">English</button><button aria-pressed="false" data-lang="bg">Български</button></div>
+      <div class="segmented" role="group" aria-label="Photo"><button aria-pressed="true" data-photo="off">No photo</button><button aria-pressed="false" data-photo="on">With photo</button></div>
+    </div>
+    <div class="docs">
+      <div class="sheet" aria-label="CV template">
+        <div class="hd">
+          <div><div class="name">Kris Marinov</div><div class="role" data-en="Security Analyst" data-bg="Анализатор по информационна сигурност">Security Analyst</div><div class="contact">Sofia · kris@krisiliev.dev · +359 88 000 0000 · github.com/krismarinov</div></div>
+          <div class="photo" hidden>photo</div>
+        </div>
+        <p data-en="Security analyst with two years in a bank SOC, focused on detection engineering. Built and tuned SIEM detections end to end, and still writes full-stack code to automate the boring parts." data-bg="Анализатор по сигурност с две години опит в банков SOC, с фокус върху разработката на детекции. Изграждал и настройвал SIEM детекции от край до край; пише и full-stack код, за да автоматизира рутинната работа.">Security analyst with two years in a bank SOC, focused on detection engineering. Built and tuned SIEM detections end to end, and still writes full-stack code to automate the boring parts.</p>
+        <div class="h" data-en="Experience" data-bg="Професионален опит">Experience</div>
+        <div class="job"><span style="color:inherit;font-weight:600" data-en="Junior Security Analyst" data-bg="Младши анализатор по сигурност">Junior Security Analyst</span><span>2023 – 2025</span></div>
+        <div class="org">Orbital Bank · Sofia</div>
+        <ul>
+          <li data-en="Built 40 Splunk detections that cut false-positive alerts by about a third" data-bg="Изгради 40 детекции в Splunk, които намалиха фалшивите тревоги с около една трета">Built 40 Splunk detections that cut false-positive alerts by about a third</li>
+          <li data-en="Triaged about 25 alerts a day in a 6-person SOC" data-bg="Обработваше около 25 сигнала на ден в екип от 6 души">Triaged about 25 alerts a day in a 6-person SOC</li>
+          <li data-en="Took part in the response to 3 phishing incidents, from triage to report" data-bg="Участва в реакцията при 3 фишинг инцидента, от анализа до доклада">Took part in the response to 3 phishing incidents, from triage to report</li>
+        </ul>
+        <div class="job"><span style="color:inherit;font-weight:600" data-en="SOC Intern" data-bg="Стажант в SOC">SOC Intern</span><span>Summer 2022</span></div>
+        <div class="org">Varna Telecom · Varna</div>
+        <div class="job"><span style="color:inherit;font-weight:600" data-en="Freelance Full-stack Developer" data-bg="Full-stack разработчик на свободна практика">Freelance Full-stack Developer</span><span>2021 – 2023</span></div>
+        <ul><li data-en="Built booking and payment flows for 4 small businesses in React and Node" data-bg="Разработи системи за резервации и плащания за 4 малки бизнеса с React и Node">Built booking and payment flows for 4 small businesses in React and Node</li></ul>
+        <div class="h" data-en="Skills" data-bg="Умения">Skills</div>
+        <div class="skills"><b data-en="Security" data-bg="Сигурност">Security</b><span data-en="Splunk, Elastic, incident response, phishing analysis" data-bg="Splunk, Elastic, реакция при инциденти, анализ на фишинг">Splunk, Elastic, incident response, phishing analysis</span><b data-en="Code" data-bg="Програмиране">Code</b><span>TypeScript, React, Node, Python, SQL</span></div>
+        <div class="h" data-en="Education" data-bg="Образование">Education</div>
+        <div class="job"><span style="color:inherit;font-weight:600" data-en="BSc Computer Science" data-bg="Бакалавър, Компютърни науки">BSc Computer Science</span><span>2022</span></div>
+      </div>
+
+      <div class="sheet letter" aria-label="Cover letter template">
+        <div class="hd"><div><div class="name">Kris Marinov</div><div class="contact">Sofia · kris@krisiliev.dev · +359 88 000 0000</div></div></div>
+        <div style="margin-top:1.5em;color:var(--doc-muted)" data-en="11 October 2026" data-bg="11 октомври 2026 г.">11 October 2026</div>
+        <div>Kestrel Payments<br>Sofia</div>
+        <div style="font-weight:600" data-en="Security Engineer application" data-bg="Кандидатура за Инженер по сигурност">Security Engineer application</div>
+        <p data-en="Dear Kestrel hiring team," data-bg="Уважаеми екип на Kestrel,">Dear Kestrel hiring team,</p>
+        <p data-en="Your fraud team writes openly about how it builds detections, and that is the work I want to do more of. For the last two years I have built and tuned SIEM detections in a bank SOC." data-bg="Екипът ви по измамите пише открито за това как изгражда детекции и именно с това искам да се занимавам повече. През последните две години изграждах и настройвах SIEM детекции в банков SOC.">Your fraud team writes openly about how it builds detections, and that is the work I want to do more of. For the last two years I have built and tuned SIEM detections in a bank SOC.</p>
+        <p data-en="At Orbital Bank I rewrote 40 Splunk detections and cut false positives by about a third, which gave our six analysts real time back each shift. I also took part in three phishing responses, from first alert to the written report." data-bg="В Orbital Bank пренаписах 40 детекции в Splunk и намалих фалшивите тревоги с около една трета, което върна реално време на шестимата анализатори всяка смяна. Участвах и в реакцията при три фишинг инцидента, от първия сигнал до писмения доклад.">At Orbital Bank I rewrote 40 Splunk detections and cut false positives by about a third, which gave our six analysts real time back each shift. I also took part in three phishing responses, from first alert to the written report.</p>
+        <p data-en="I would like to bring that to Kestrel's payments platform. I am happy to walk you through any of the detections in an interview." data-bg="Бих искал да приложа този опит в платформата за плащания на Kestrel и с удоволствие ще разкажа подробно за всяка от детекциите на интервю.">I would like to bring that to Kestrel's payments platform. I am happy to walk you through any of the detections in an interview.</p>
+        <p data-en="Kind regards,<br>Kris Marinov" data-bg="С уважение,<br>Kris Marinov">Kind regards,<br>Kris Marinov</p>
+      </div>
+    </div>
+    <ul class="doc-notes">
+      <li>Accent pine (8.2:1 on white) on name and section titles only; everything else in near-black and one muted grey.</li>
+      <li>Photo slot is off by default, switchable per package, suggested for local Bulgarian employers.</li>
+      <li>Must fit one page: the package warns and offers to tighten if it spills over. Margins 18mm; body 9.5–10pt.</li>
+      <li>Bulgarian packages use the same template and fonts; dates and headings localise.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+(function () {
+  const groups = document.querySelectorAll(".segmented");
+  groups.forEach(g => g.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    g.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    if (b.dataset.lang) {
+      document.querySelectorAll("[data-en]").forEach(el => el.innerHTML = el.dataset[b.dataset.lang]);
+      document.querySelectorAll(".sheet").forEach(s => s.lang = b.dataset.lang);
+    }
+    if (b.dataset.photo) document.querySelectorAll(".sheet .photo").forEach(p => p.hidden = b.dataset.photo === "off");
+  }));
+})();
+</script>
