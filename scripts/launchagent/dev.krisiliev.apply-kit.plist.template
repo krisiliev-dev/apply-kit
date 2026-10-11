@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Written by scripts/launchagent.sh install. Edit the template, not the installed copy. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>dev.krisiliev.apply-kit</string>
+  <key>ProgramArguments</key>
+  <array>
+    <!-- launchd has no shell PATH: absolute Node 22 path, recorded at install time. -->
+    <string>__NODE__</string>
+    <string>__REPO__/app/node_modules/tsx/dist/cli.mjs</string>
+    <string>__REPO__/app/src/main.ts</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>EnvironmentVariables</key>
+  <dict><key>NODE_ENV</key><string>production</string></dict>
+  <!-- Start at login; restart after a crash but not after a clean stop. -->
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>30</integer>
+  <key>ProcessType</key><string>Background</string>
+  <key>StandardOutPath</key><string>__HOME__/Library/Logs/apply-kit/service.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/Library/Logs/apply-kit/service.err.log</string>
+</dict>
+</plist>

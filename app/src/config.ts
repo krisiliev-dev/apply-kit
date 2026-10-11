@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseSchedule } from "@apply-kit/core";
 
 export const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -20,6 +21,11 @@ export function readConfig() {
     dbPath: process.env.APPLY_KIT_DB_PATH || join(dataDir, "apply-kit.db"),
     uiDir: fileURLToPath(new URL("../ui/dist/", import.meta.url)),
     sources: parseSources(process.env.APPLY_KIT_SOURCES ?? ""),
+    // Defaults: every 30 minutes, 07:00-23:00 local time.
+    schedule: parseSchedule({
+      every: process.env.APPLY_KIT_CHECK_EVERY_MINUTES,
+      window: process.env.APPLY_KIT_CHECK_WINDOW,
+    }),
   };
 }
 
