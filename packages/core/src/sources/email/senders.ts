@@ -47,7 +47,18 @@ const jobsbg: AlertSender = {
   },
 };
 
-export const senders = { linkedin, jobsbg } satisfies Record<string, AlertSender>;
+const google: AlertSender = {
+  name: "Google Careers alerts",
+  // Only the careers alerts: Google sends plenty of other mail (security alerts, account notices).
+  isFrom: ({ address, name }) => /@(\w+\.)*google\.com$/i.test(address) && /careers/i.test(`${name} ${address}`),
+  jobLink(href) {
+    const m = /^https?:\/\/(?:www\.)?google\.com\/about\/careers\/applications\/jobs\/results\/((\d+)[\w-]*)/i.exec(unwrapRedirect(href));
+    return m ? { id: m[2]!, url: `https://www.google.com/about/careers/applications/jobs/results/${m[1]}` } : null;
+  },
+  readCard: ({ lines }) => ({ ...splitCompanyLine(lines[0]), salary: salaryLine(lines.slice(1)) }),
+};
+
+export const senders = { linkedin, jobsbg, google } satisfies Record<string, AlertSender>;
 
 export type SenderKey = keyof typeof senders;
 
