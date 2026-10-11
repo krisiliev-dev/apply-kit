@@ -1,5 +1,5 @@
 import type {
-  CheckResult, FactAnswer, FeedResult, FeedView, HealthReport, JobDetail, SchedulerStatus, SourceCheck,
+  CheckResult, Decision, FactAnswer, FeedResult, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
 export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<FeedResult> {
@@ -48,6 +48,18 @@ export async function checkSource(sourceId: string): Promise<SourceCheck> {
   return (await res.json()) as SourceCheck;
 }
 
+async function post<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`The service answered ${res.status}`);
+  return (await res.json()) as T;
+}
+
+export const saveJobs = (jobIds: string[]) => post<Decision>("/api/jobs/save", { jobIds });
+export const passJobs = (jobIds: string[], input: PassInput) => post<Decision>("/api/jobs/pass", { jobIds, ...input });
+export const reopenJobs = (jobIds: string[]) => post<Decision>("/api/jobs/reopen", { jobIds });
+export const undoDecision = (id: string, jobIds?: string[]) =>
+  post<{ jobIds: string[] }>(`/api/decisions/${encodeURIComponent(id)}/undo`, jobIds ? { jobIds } : {});
+
 const jobPath = (id: string) => `/api/jobs/${encodeURIComponent(id)}`;
 
 async function json<T>(res: Response): Promise<T> {
@@ -58,7 +70,7 @@ async function json<T>(res: Response): Promise<T> {
   return (await res.json()) as T;
 }
 
-const post = (url: string, body: unknown = {}) =>
+const postJson = (url: string, body: unknown = {}) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
 export async function fetchJob(id: string, signal?: AbortSignal): Promise<JobDetail> {
@@ -67,9 +79,9 @@ export async function fetchJob(id: string, signal?: AbortSignal): Promise<JobDet
 
 /** Asks the service to read the Job's posting now; resolves when the read has finished or failed. */
 export async function readJob(id: string): Promise<JobDetail> {
-  return json(await post(`${jobPath(id)}/read`));
+  return json(await postJson(`${jobPath(id)}/read`));
 }
 
 export async function confirmFact(id: string, key: string, answer: FactAnswer): Promise<JobDetail> {
-  return json(await post(`${jobPath(id)}/facts/${encodeURIComponent(key)}`, { answer }));
+  return json(await postJson(`${jobPath(id)}/facts/${encodeURIComponent(key)}`, { answer }));
 }

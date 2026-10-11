@@ -1,0 +1,28 @@
+{
+  "totalCount": 2,
+  "jobs": [
+    {
+      "title": "Security Operations Analyst",
+      "location": "Sofia, Bulgaria",
+      "snippet": "&nbsp;...monitor <b>security</b> events in our SOC and respond to incidents...&nbsp;",
+      "salary": "4000 - 5500 BGN",
+      "source": "example-board.bg",
+      "type": "Full-time",
+      "link": "https://jooble.org/desc/-1111111111111111111?ckey=security&rgn=-1&pos=1&elckey=0&age=48&relb=100&brelb=100&bscr=1&scr=1&iid=1",
+      "company": "Synthetic Systems",
+      "updated": "2026-10-09T00:00:00.0000000",
+      "id": -1111111111111111111
+    },
+    {
+      "title": "Penetration Tester",
+      "location": "Bulgaria",
+      "snippet": "Remote within Bulgaria. Web application <b>security</b> testing...",
+      "salary": "",
+      "source": "example-agency.com",
+      "type": "",
+      "link": "https://jooble.org/desc/2222222222222222222?ckey=security&rgn=-1&pos=2",
+      "company": "",
+      "updated": "2026-10-07T14:30:00.0000000"
+    }
+  ]
+}

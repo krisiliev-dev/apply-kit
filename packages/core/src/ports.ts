@@ -52,12 +52,19 @@ export interface MailReader {
   fetchSince(since: Date): Promise<{ id: string; from: string; subject: string; receivedAt: Date; html: string; text: string }[]>;
 }
 
+/** Named settings (the service reads them from .env). Values are secrets: never log them. */
+export interface Settings {
+  get(name: string): string | undefined;
+}
+
 export interface EngineDeps {
   db: SqlDatabase;
   clock: Clock;
   fetch: typeof fetch;
   extractor: Extractor;
   mailReader: MailReader;
+  /** Settings some Sources need, such as API keys. Missing means every setting is unset. */
+  settings?: Settings;
   /**
    * Hard monthly cap on AI spending in USD (AI_MONTHLY_CAP_USD). Reading stops before a call
    * would cross it; Postings then stay in the Feed unscreened. Unset or 0 means no AI spending.

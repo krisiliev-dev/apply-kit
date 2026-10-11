@@ -26,6 +26,8 @@ const engine = createEngine({
   aiMonthlyCapUsd: config.ai.monthlyCapUsd,
   // The IMAP mail reader arrives with its ticket.
   mailReader: { fetchSince: async () => [] },
+  // Sources read their keys (JOOBLE_API_KEY, REED_API_KEY) by name; values are never logged.
+  settings: { get: (name) => process.env[name] },
 });
 
 // Sources from config are added on every start; adding one that exists changes nothing.

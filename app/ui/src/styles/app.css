@@ -55,6 +55,33 @@
 @media (max-width: 1100px) { .table .c-type { display: none } }
 @media (max-width: 560px) { .table .c-last { display: none } }
 
+/* Triage (from the Feed and Job hi-fi): bulk bar, shortcuts toggle, row actions, real-focus rows */
+.bulk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--surface); font-size: var(--fs-small); color: var(--ink-2) }
+.bulk .keys { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; font-size: var(--fs-caption) }
+.linkish { font: inherit; background: none; border: 0; padding: 0 var(--s-1); color: var(--action); text-decoration: underline; cursor: pointer; font-weight: 600 }
+.jobs tbody tr[data-id]:focus-within td { background: var(--met-soft) }
+.jobs tbody tr[data-id]:focus-within td:first-child { box-shadow: inset 3px 0 0 var(--action) }
+.jobs tbody tr[data-id]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
+.jobs .saved-chip { margin-left: var(--s-2); vertical-align: 1px }
+.row-acts { display: flex; gap: var(--s-2); margin-top: var(--s-2) }
+@media (hover: hover) and (min-width: 761px) {
+  .row-acts { opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard) }
+  .jobs tbody tr:hover .row-acts, .jobs tbody tr:focus-within .row-acts { opacity: 1 }
+}
+.panel:focus { outline: none }
+.sec-pad { padding: var(--s-5) var(--s-5) var(--s-3) }
+.sec-pad h2:focus { outline: none }
+.reason { color: var(--ink-2) }
+.learned { display: block; margin-top: var(--s-1); font-size: var(--fs-caption); color: var(--ink-3) }
+.table td.acts { text-align: right }
+.toast .x { min-width: 30px; padding: 0 var(--s-3) }
+.toast .cd { font-variant-numeric: tabular-nums; opacity: .85 }
+.pass-dialog { width: min(520px, calc(100vw - 32px)); padding: var(--s-6); background: var(--surface); border-radius: var(--r-card); border: 1px solid var(--rule); color: var(--ink); box-shadow: var(--shadow-overlay) }
+.pass-dialog::backdrop { background: color-mix(in srgb, var(--ink) 35%, transparent) }
+.pass-dialog fieldset { border: 0; margin: 0; padding: 0 }
+.toast .btn { white-space: nowrap }
+.pass-dialog input[type="radio"] { accent-color: var(--action); width: 16px; height: 16px; margin: 0 }
+
 /* Job page (from the Job hi-fi). Tokens only. */
 .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-3) }
 .crumbs a { color: var(--ink-2); text-decoration: none; font-weight: 500 }
