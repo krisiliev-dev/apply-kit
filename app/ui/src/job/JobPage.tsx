@@ -1,10 +1,12 @@
 // The Job page (hi-fi: docs/design/hifi/job.html): Fit check area, requirements with evidence,
 // key facts with "Show where", low-confidence facts for Kris to confirm, the reading,
 // couldn't-read and unscreened states, the Postings merged into the Job (target, split), and
-// Bulgarian postings shown in English with the original one click away.
-import type { FactAnswer, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
+// Bulgarian postings shown in English with the original one click away, and a closed Job: how it
+// closed, Prepare disabled with the reason, reopen (with Undo) and similar open Jobs.
+import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { confirmFact, fetchJob, fetchSources, readJob } from "../api.ts";
+import { confirmFact, fetchJob, fetchSources, readJob, reopenJobs, undoDecision } from "../api.ts";
+import { useToaster } from "../feed/toast.tsx";
 import { Chevron, Icon } from "../icons.tsx";
 import { AskChip, StatusChip } from "../requirements.tsx";
 import { PostingsPanel } from "./PostingsPanel.tsx";
@@ -17,6 +19,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [said, say] = useState("");
+  const toaster = useToaster();
 
   // The top bar shows source health on every screen.
   useEffect(() => {
@@ -87,6 +90,18 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
     readJob(id).then((j) => { setLoad({ state: "ready", job: j }); say(doneText(j)); }).catch((err: unknown) => say(`Couldn't read the posting: ${message(err)}`));
   };
   const answered = (j: JobDetail, text: string) => { setLoad({ state: "ready", job: j }); say(text); };
+  const refresh = () => fetchJob(job.id).then((j) => setLoad({ state: "ready", job: j }));
+  const reopen = () => {
+    reopenJobs([job.id])
+      .then(async (decision) => {
+        await refresh();
+        toaster.show({
+          message: `Reopened · ${titleOf(job)} at ${job.company}. It's back in All open.`,
+          undo: () => { undoDecision(decision.id).then(refresh).then(() => toaster.announce("Undone. The job is closed again.")).catch((err: unknown) => say(`Couldn't undo: ${message(err)}`)); },
+        });
+      })
+      .catch((err: unknown) => say(`Couldn't reopen the job: ${message(err)}`));
+  };
 
   return (
     <section className="stack job-page" style={{ gap: "var(--s-6)" }}>
@@ -94,6 +109,13 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         <a href="/">Feed</a><span aria-hidden="true">/</span><span aria-current="page">{titleOf(job)}</span>
       </nav>
 
+      {job.closed && (
+        <div className="banner info">
+          <span className="text">
+            <b>This job closed on {shortDate(job.closed.at)}: {job.closed.how}.</b> It stays here so nothing you saved or noted is lost, and you can find it later in <a href="/">Feed › Passed &amp; closed</a>.
+          </span>
+        </div>
+      )}
       {job.language === "bg" && <BulgarianBanner job={job} />}
 
       {state === "failed" && (
@@ -117,6 +139,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
 
       <div className="cols">
         <div className="col">
+          {job.closed && <SimilarJobs jobs={job.similar} />}
           {(state === "unread" || state === "reading") && <ReadingPanel />}
           {state === "read" && (
             <>
@@ -135,11 +158,12 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
           {state !== "read" && <FitCheck job={job} />}
         </div>
         <div className="col side">
-          <Decide job={job} />
+          <Decide job={job} onReopen={reopen} />
           <PostingsPanel job={job} onChanged={answered} />
         </div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">{said}</p>
+      {toaster.element}
     </section>
   );
 }
@@ -459,9 +483,41 @@ function FullPosting({ job, open }: { job: JobDetail; open: boolean }) {
   );
 }
 
-function Decide({ job }: { job: JobDetail }) {
+const shortDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+
+/** On a closed Job: open Jobs with the same closest angle, best Fit first. */
+function SimilarJobs({ jobs }: { jobs: FeedJob[] }) {
+  return (
+    <div className="panel flush o1">
+      <div className="sec-head"><h2>Similar open jobs</h2><span className="meta">Same angle, best fit first</span></div>
+      {jobs.length === 0
+        ? <p className="meta" style={{ padding: "0 var(--s-5) var(--s-5)" }}>No open jobs share this job's angle right now.</p>
+        : (
+          <div className="table-wrap">
+            <table className="table" aria-label="Similar open jobs">
+              <thead><tr><th scope="col">Job</th><th scope="col">Where</th><th scope="col">Salary</th><th scope="col" className="r">Fit</th></tr></thead>
+              <tbody>
+                {jobs.map((j) => (
+                  <tr key={j.id}>
+                    <td><a href={`/jobs/${encodeURIComponent(j.id)}`}>{j.titleTranslation ?? j.title}</a><span className="src-id">{j.company}</span></td>
+                    <td>{j.location ?? "Not stated"}</td>
+                    <td className="num">{j.salary ?? "Not stated"}</td>
+                    <td className="r num">{j.fit.provisional ? "~" : ""}{j.fit.value}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+    </div>
+  );
+}
+
+function Decide({ job, onReopen }: { job: JobDetail; onReopen: () => void }) {
   const [language, setLanguage] = useState(job.packageLanguage);
-  const why = job.reading.state === "read"
+  const why = job.closed
+    ? `Can't prepare a package: this job is closed (${job.closed.how.charAt(0).toLowerCase()}${job.closed.how.slice(1)}), so the posting may no longer accept applications. If it's still open, reopen it first.`
+    : job.reading.state === "read"
     ? "Packages arrive with a later part of the rebuild."
     : "A package needs the requirements first, and packages arrive with a later part of the rebuild.";
   const inOriginal = job.packageLanguage !== "en";
@@ -471,6 +527,7 @@ function Decide({ job }: { job: JobDetail }) {
         Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}
       </button>
       <p className="why-off" id="prep-why">{why}</p>
+      {job.closed && <button className="btn ghost" type="button" onClick={onReopen}>It's still open: reopen</button>}
       <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
       {inOriginal && (
         <div className="lang">

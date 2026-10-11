@@ -93,6 +93,8 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     }
   });
   app.post("/api/sources/:id/remove", (c) => onSource(c, (id) => engine.removeSource(id)));
+  // Kris confirms an unusual drop is real: closes the count it stated. Undo with POST /api/decisions/:id/undo.
+  app.post("/api/sources/:id/confirm-drop", (c) => onSource(c, (id) => engine.confirmDrop(id)));
 
   // One Job with its Postings (target marked) and its reading. A merged-away id answers with the
   // Job it lives in now (check the returned id).

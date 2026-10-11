@@ -7,3 +7,6 @@
 - After a Source is removed, its postings still show on the Job page and can be picked as target in merging.ts — filter removed Sources out (from #8)
 - Feed query builds all live Jobs and filters in memory (for relocation-free counts) — fine at personal scale, revisit if large (from #13)
 - Package language switch is page-local; persist it when Packages exist (from #13)
+- A Job also listed by a capped search (or an email alert) never closes by absence, even when the company's own ATS stops listing it; consider letting the ATS close it, or the 30-day 'unverified' rule for captured/emailed postings (from #16)
+- dev.bg is treated as listing everything; if a category ever exceeds its maxPages, postings past the cap would close. Consider failing the check instead of truncating (from #16)
+- Drop UI: 'Keep them open and wait', 'Check their site' and 'Detect their job system again' from the Sources hi-fi aren't built; the history chart (#4 follow-up) should mark unusual checks (CheckRecord.unusual) (from #16)

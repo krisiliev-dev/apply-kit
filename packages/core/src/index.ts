@@ -5,7 +5,8 @@ export type {
   Decision, JobState, PassReason, PassInput,
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort,
 } from "./engine.ts";
-export { sourceRemovedHow } from "./engine.ts";
+export { sourceRemovedHow, noLongerListedBy } from "./engine.ts";
+export type { UnusualDrop, NormalVolume, DropWording } from "./drops.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {

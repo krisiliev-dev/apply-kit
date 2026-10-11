@@ -138,6 +138,20 @@ const migrations: string[] = [
   `ALTER TABLE source ADD COLUMN paused_at TEXT;
    ALTER TABLE source ADD COLUMN removed_at TEXT;
    ALTER TABLE source ADD COLUMN removed_decision_id TEXT;`,
+  // #16: closing rules. A Posting its Source no longer lists is gone (when, and the Decision that
+  // marked it, so undoing that Decision brings it back). A Check far below the Source's normal volume
+  // is unusual: nothing is marked gone. Kris confirming an unusual drop is remembered until undone.
+  `ALTER TABLE posting ADD COLUMN gone_at TEXT;
+   ALTER TABLE posting ADD COLUMN gone_decision_id TEXT;
+   ALTER TABLE source_check ADD COLUMN unusual INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE drop_confirmation (
+     decision_id TEXT PRIMARY KEY REFERENCES decision(id),
+     source_id TEXT NOT NULL REFERENCES source(id),
+     check_id INTEGER NOT NULL REFERENCES source_check(id),
+     confirmed_at TEXT NOT NULL,
+     undone_at TEXT
+   );
+   CREATE INDEX drop_confirmation_source ON drop_confirmation(source_id);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

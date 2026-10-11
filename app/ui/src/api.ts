@@ -145,6 +145,11 @@ export async function removeSource(id: string): Promise<{ sourceId: string; deci
   return json(await postJson(`${sourcePath(id)}/remove`));
 }
 
+/** "Close 34 SumUp jobs": Kris confirms a Source's unusual drop. Undo with undoDecision. */
+export async function confirmDrop(id: string): Promise<Decision> {
+  return json(await postJson(`${sourcePath(id)}/confirm-drop`));
+}
+
 /** "Make target": one of the Job's Postings becomes the one Kris applies through. */
 export async function makeTarget(jobId: string, postingId: string): Promise<JobDetail> {
   return json(await postJson(`${jobPath(jobId)}/target`, { postingId }));

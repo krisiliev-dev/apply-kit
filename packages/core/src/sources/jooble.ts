@@ -25,6 +25,8 @@ const maxPages = 5;
 export const jooble: SourceAdapter<JoobleConfig> = {
   kind: "jooble",
   category: "aggregator",
+  // A keyword search capped at its top results: missing from one Check never means gone.
+  capped: true,
   label: "Jooble",
 
   parseConfig: (raw) => parseSearch(raw, "Jooble", "security|Bulgaria"),
