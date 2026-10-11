@@ -35,3 +35,25 @@ describe("email alerts: LinkedIn", () => {
     expect(feed.jobs).toHaveLength(3);
   });
 });
+
+describe("email alerts: no duplicates", () => {
+  it("adds nothing for a re-delivered alert, a repeat of the same jobs in a later alert, or a re-read", async () => {
+    const { engine, mailbox, clock } = await withEmailSource("linkedin");
+    mailbox.deliver(linkedin("<alert-1@linkedin.example>", "2026-10-12T06:12:00Z"));
+    await engine.checkAll();
+
+    // The iCloud forward delivers the same email twice, and the next day's alert repeats the same jobs.
+    mailbox.deliver(linkedin("<alert-1@linkedin.example>", "2026-10-12T06:13:00Z"));
+    clock.set("2026-10-13T07:30:00Z");
+    mailbox.deliver(linkedin("<alert-2@linkedin.example>", "2026-10-13T06:12:00Z"));
+    const second = await engine.checkAll();
+    clock.set("2026-10-13T08:00:00Z");
+    const third = await engine.checkAll();
+
+    expect(second.sources).toEqual([expect.objectContaining({ ok: true, newPostings: 0 })]);
+    expect(third.sources).toEqual([expect.objectContaining({ ok: true, newPostings: 0 })]);
+    const feed = await engine.queryFeed({ view: "new" });
+    expect(feed.jobs).toHaveLength(3);
+    expect(feed.jobs.every((j) => j.postingCount === 1)).toBe(true);
+  });
+});
