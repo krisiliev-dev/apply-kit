@@ -96,6 +96,42 @@ describe("Workday source", () => {
     expect(check.sources[0]).toMatchObject({ ok: false, error: expect.stringMatching(/lists 5000 jobs.*add a country/) });
   });
 
+  describe("a tenant without a country filter (HPE, Mastercard)", () => {
+    const hpeSearch = "https://hpe.wd5.myworkdayjobs.com/wday/cxs/hpe/Jobsathpe/jobs";
+    // The three "…, Bulgaria" values of HPE's locations facet on 2026-10-11 (recorded).
+    const hpeBulgaria = ["e69f9781661b1021919e5d08a61cb2a1", "2e0d9cc9554b012c8fc1f6e7442cc059", "acac3e510b1701a9848fb5cfdd2b6b61"];
+
+    it("applies the country through every location in it, read from the locations facet", async () => {
+      const http = routedFetch((r) => {
+        if (r.url !== hpeSearch || r.method !== "POST") return undefined;
+        const facets = body(r).appliedFacets;
+        if (Object.keys(facets).length === 0) return { fixture: "workday-hpe-first-page.json" };
+        if ([...(facets.locations ?? [])].sort().join() === [...hpeBulgaria].sort().join()) return { fixture: "workday-hpe-bulgaria.json" };
+        return new Response("unexpected facets", { status: 400 });
+      });
+      const { engine } = createTestEngine({ fetch: http.fetch });
+      await engine.addSource({ kind: "workday", config: { url: "https://hpe.wd5.myworkdayjobs.com/Jobsathpe", country: "Bulgaria", company: "HPE" } });
+
+      const check = await engine.checkAll();
+
+      expect(check.sources[0]).toMatchObject({ ok: true, found: 17 });
+      const feed = await engine.queryFeed({ view: "new" });
+      expect(feed.jobs.map((j) => j.title)).toContain("Junior Security Analyst");
+      expect(feed.jobs.every((j) => j.company === "HPE")).toBe(true);
+    });
+
+    it("finds nothing (rather than failing) when the tenant has no location in that country", async () => {
+      const http = routedFetch((r) => (r.url === hpeSearch ? { fixture: "workday-hpe-first-page.json" } : undefined));
+      const { engine } = createTestEngine({ fetch: http.fetch });
+      await engine.addSource({ kind: "workday", config: { url: "https://hpe.wd5.myworkdayjobs.com/Jobsathpe", country: "Iceland" } });
+
+      const check = await engine.checkAll();
+
+      expect(check.sources[0]).toMatchObject({ ok: true, found: 0 });
+      expect(http.requests).toHaveLength(1);
+    });
+  });
+
   it("rejects a Workday source that isn't a myworkdayjobs.com careers link", async () => {
     const { engine } = createTestEngine();
     await expect(engine.addSource({ kind: "workday", config: "https://evil.example/DXCJobs" })).rejects.toThrow(/myworkdayjobs\.com/);

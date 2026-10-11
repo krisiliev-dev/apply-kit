@@ -1,5 +1,6 @@
 import type {
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  WatchlistSeed,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -127,6 +128,16 @@ export async function detectCompany(input: string, onProgress: (d: CompanyDetect
 
 export async function addSource(source: NewSource): Promise<SourceInfo> {
   return json(await postJson("/api/sources", source));
+}
+
+/** The Sofia starter watchlist against the watchlist: feeds on it or not, and companies without a feed. */
+export async function fetchStarterWatchlist(signal?: AbortSignal): Promise<WatchlistSeed> {
+  return json(await fetch("/api/watchlist/starter", { signal }));
+}
+
+/** Adds every starter-watchlist feed not added before, in one step. */
+export async function seedStarterWatchlist(): Promise<WatchlistSeed> {
+  return json(await postJson("/api/watchlist/starter"));
 }
 
 export async function pauseSource(id: string): Promise<SourceInfo> {

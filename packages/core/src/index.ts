@@ -5,9 +5,12 @@ export type {
   Decision, JobState, PassReason, PassInput,
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort,
   AddLinkResult, LinkProblem, PastedPosting,
+  SeedStatus, SeededSource, CompanyWithoutFeed, WatchlistSeed,
 } from "./engine.ts";
 export { sourceRemovedHow } from "./engine.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
+export { sofiaWatchlist } from "./watchlist.ts";
+export type { WatchlistEntry, WatchlistFeedEntry, WatchlistAlertEntry, WatchlistGroup, WatchlistField, AlertRoute } from "./watchlist.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {
   PostingFacts, SourceQuote, ExtractedRequirement, ExtractedYears, ExtractedLanguage, ExtractedCertificate,
