@@ -7,3 +7,7 @@
 - After a Source is removed, its postings still show on the Job page and can be picked as target in merging.ts — filter removed Sources out (from #8)
 - Feed query builds all live Jobs and filters in memory (for relocation-free counts) — fine at personal scale, revisit if large (from #13)
 - Package language switch is page-local; persist it when Packages exist (from #13)
+- Location dealbreaker: "Plovdiv, Bulgaria" reads as "Bulgaria, city not stated" (unknown), so it is never hidden; only a bare non-Sofia city or a foreign place is. Teach locations.ts other Bulgarian cities (from #12)
+- Salary dealbreaker skips net salaries (a net figure below a gross minimum may be above it gross); add a net→gross estimate if Bulgarian net-only postings slip through (from #12)
+- Dealbreakers apply only once a posting is read, so a job outside the locations shows until it is read, then moves to the hidden pile (from #12)
+- Unhides don't yet create learned ranking adjustments; #15 hooks in at engine.unhide (from #12)

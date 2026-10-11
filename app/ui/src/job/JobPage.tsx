@@ -94,6 +94,8 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         <a href="/">Feed</a><span aria-hidden="true">/</span><span aria-current="page">{titleOf(job)}</span>
       </nav>
 
+      <PastedLinkNote />
+
       {job.language === "bg" && <BulgarianBanner job={job} />}
 
       {state === "failed" && (
@@ -313,6 +315,20 @@ function FitCheck({ job }: { job: JobDetail }) {
           <dd>{fit.angle ? parts.find((r) => r.factor === "angle")!.text : "None of developer, security or design, going by the title and requirements"}</dd>
           <dt>Where</dt>
           <dd>{fit.place.label}{fit.place.tier === "relocation" && <span className="meta"> · shown with the Relocation filter</span>}</dd>
+          <dt>Dealbreakers</dt>
+          <dd>
+            {!read ? <span className="meta">Checked once the posting is read. Until then the job is never hidden.</span>
+              : job.dealbreakers.length === 0 ? <span className="meta">None apply</span>
+              : (
+                <>
+                  <div className="chips">{job.dealbreakers.map((d) => <span key={d.key} className="chip hidden-reason">{d.text}</span>)}</div>
+                  <span className="meta">
+                    {job.hidden ? "Hidden from the Feed: it's in the hidden pile." : job.shownByYou ? "Shown in the Feed because you chose Show this job." : "Shown in the Feed because you decided on it."}
+                    {" "}<a href="/profile/search">Edit dealbreakers</a>
+                  </span>
+                </>
+              )}
+          </dd>
           <dt>Gaps</dt>
           <dd>
             {fit.gaps.length > 0
@@ -484,6 +500,30 @@ function Decide({ job }: { job: JobDetail }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * After "Paste a job link" opened this page: says whether the link was already in the Feed or joined
+ * a Job found elsewhere, so a pasted link never silently lands on an older Job.
+ */
+function PastedLinkNote() {
+  const [outcome] = useState(() => new URLSearchParams(window.location.search).get("link"));
+  useEffect(() => {
+    if (!outcome) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("link");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  }, [outcome]);
+  const text = outcome === "existing" ? "This job was already in your Feed, so it opened here instead of being added twice."
+    : outcome === "merged" ? "This job was already in your Feed from another site. The link you pasted is now one of its postings."
+    : outcome === "added" ? "Added to your Feed from the link you pasted."
+    : null;
+  if (!text) return null;
+  return (
+    <div className="banner info" role="status">
+      <span className="text">{text}</span>
     </div>
   );
 }

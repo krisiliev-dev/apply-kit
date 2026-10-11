@@ -10,7 +10,8 @@ import { computeFit, type Fit } from "./fit/fit.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
-import { defaultSearchSettings, type SearchSettings } from "./search-settings.ts";
+import { defaultSearchSettings, parseSearchSettings, type SearchSettings } from "./search-settings.ts";
+import { dealbreakersOf, monthlyEur, type DealbreakerRule, type HiddenReason } from "./dealbreakers.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
@@ -22,8 +23,15 @@ import {
   totalsOf, unreadableResultsPage, whereFound, whyMissing,
   type CompanySource, type CoverageHistory, type CoverageInput, type CoverageResult, type CoverageResultListing,
 } from "./coverage.ts";
+import { jobLinkFrom, linkKey, protectedSite, robotsAllows } from "./capture/links.ts";
+import { readJobPage } from "./capture/page.ts";
+import { escapeHtml } from "./sources/shared.ts";
 
-export type FeedView = "new" | "saved" | "open" | "passed";
+/**
+ * New, Saved, All open, Passed & closed, and the hidden pile: New Jobs kept out of the main Feed by
+ * a dealbreaker, each with its reasons. Saved, passed and closed Jobs are never hidden.
+ */
+export type FeedView = "new" | "saved" | "open" | "passed" | "hidden";
 
 export interface FeedQuery {
   view: FeedView;
@@ -83,6 +91,15 @@ export interface FeedJob {
   needsYou: number;
   /** Fit with its reasons and the why-line. Always present: before a read it is provisional, from the title and location. */
   fit: Fit;
+  /**
+   * Kris's dealbreakers this Job breaks, each with its reason in plain words. Empty until the
+   * posting is read (an unread or unscreened Job is never hidden).
+   */
+  dealbreakers: HiddenReason[];
+  /** True when it is in the hidden pile: a New Job with a dealbreaker that Kris hasn't chosen to show. */
+  hidden: boolean;
+  /** True when Kris chose "Show this job" despite its dealbreakers. */
+  shownByYou: boolean;
 }
 
 /** One Posting of a Job, as the Job page lists it. */
@@ -150,6 +167,36 @@ export interface JobDetail {
   fit: Fit;
   /** This month's AI budget, so an unscreened Job can say why. */
   budget: BudgetInfo;
+  /** The dealbreaker check: the rules this Job breaks (empty when none apply or it isn't read yet). */
+  dealbreakers: HiddenReason[];
+  /** In the hidden pile (see FeedJob.hidden). */
+  hidden: boolean;
+  /** Kris chose "Show this job" despite its dealbreakers. */
+  shownByYou: boolean;
+}
+
+/** A rule Kris changed with "Not a dealbreaker for me", kept so it can be listed and undone. */
+export interface RuleChange {
+  id: string;
+  rule: DealbreakerRule;
+  /** What changed, in plain words: "German removed from the languages you don't speak". */
+  text: string;
+  /** The Job it was changed from, and the reason that Job was hidden. */
+  job: { id: string; title: string; company: string };
+  reason: string;
+  at: string;
+  /** When it was undone, or null. */
+  undoneAt: string | null;
+}
+
+/** Why the list is empty although Jobs exist in this view: which filter holds them back. */
+export interface FilteredToNothing {
+  /** Relocation Jobs left out because the Relocation filter is off. */
+  relocation: number;
+  /** Jobs in the hidden pile, per rule (a Job breaking two rules counts under each). */
+  hidden: { total: number; byRule: { rule: DealbreakerRule; jobs: number }[] };
+  /** The explanation in plain words, naming each filter responsible. */
+  text: string;
 }
 
 /** The pass reasons Kris can choose from. None is ever chosen for him. */
@@ -214,7 +261,7 @@ export interface FeedResult {
   view: FeedView;
   /** When this answer was computed, from the injected clock (ISO 8601). */
   asOf: string;
-  /** True until the first source is connected: the UI shows the first-run state. */
+  /** True until the first source is connected or the first job added (a pasted link): the UI shows the first-run state. */
   firstRun: boolean;
   jobs: FeedJob[];
   /**
@@ -222,6 +269,11 @@ export interface FeedResult {
    * in this view (0 for Passed & closed), whether or not the Relocation filter is on.
    */
   counts: { new: number; saved: number; open: number; passed: number; hidden: number; relocation: number };
+  /**
+   * Set when this view shows no Jobs but some are held back by a filter (Relocation off, or the
+   * hidden pile): which filters, and how many each holds back. Null otherwise.
+   */
+  filteredToNothing: FilteredToNothing | null;
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
   budget: BudgetInfo;
@@ -354,7 +406,8 @@ export interface CheckResult {
 /** A save, pass, close or reopen. Its id undoes it. */
 export interface Decision {
   id: string;
-  kind: "save" | "pass" | "close" | "reopen";
+  /** "unhide": "Show this job" on a hidden Job; undoing it hides the Job again. */
+  kind: "save" | "pass" | "close" | "reopen" | "unhide";
   /** The Jobs it changed. Jobs it didn't apply to (say, saving a closed job) are left out. */
   jobIds: string[];
 }
@@ -453,7 +506,81 @@ export interface DiscoveryEngine {
   coverageHistory(): Promise<CoverageHistory>;
   /** One coverage check as it was recorded (missing listings that have arrived since point at their Job), or null. */
   getCoverageCheck(id: string): Promise<CoverageResult | null>;
+  /** Kris's search settings, which Fit and dealbreakers are measured against. */
+  getSearchSettings(): Promise<SearchSettings>;
+  /** Saves Kris's search settings (the settings form). Throws with a plain message when invalid. */
+  saveSearchSettings(settings: unknown): Promise<SearchSettings>;
+  /**
+   * "Show this job": brings hidden Jobs back to New and changes nothing else (the rule stays).
+   * Jobs that aren't hidden are left out of the Decision. Undoing it hides them again.
+   */
+  unhide(jobIds: string[]): Promise<Decision>;
+  /**
+   * "Not a dealbreaker for me" on one of a Job's hidden reasons (its key): changes the rule behind it
+   * so it no longer hides this Job or future ones like it. A language is removed from the languages
+   * Kris doesn't speak, the years limit is raised to what the Job asks, the salary minimum is lowered
+   * to the Job's salary, and the location rule stops hiding. Returns the change and the new settings.
+   */
+  notADealbreaker(jobId: string, reasonKey: string): Promise<{ change: RuleChange; settings: SearchSettings }>;
+  /** Every rule changed with "Not a dealbreaker for me", newest first. */
+  ruleChanges(): Promise<RuleChange[]>;
+  /** Puts a changed rule back as it was before that change. */
+  undoRuleChange(changeId: string): Promise<{ change: RuleChange; settings: SearchSettings }>;
+  /**
+   * "Paste a job link": adds the job at a link to the Feed like any other Posting (merged with a Job
+   * already there, ranked, read later within the budget). A link already in the Feed answers with its
+   * Job and fetches nothing. The page is fetched once, politely, only where the site allows apps;
+   * protected or unreadable pages answer "unreadable" with the link kept, and Kris can then pass the
+   * posting's text himself (`pasted`), which is never fetched.
+   */
+  addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult>;
 }
+
+/** What Kris can paste along with a link, when the page can't be read (or he'd rather paste it). */
+export interface PastedPosting {
+  /** The posting's text as copied from the page. */
+  text: string;
+  title: string;
+  /** The company, when he gives one. */
+  company?: string | null;
+  location?: string | null;
+}
+
+/** Why a pasted link couldn't be read. In every case the link is kept and Kris can paste the text. */
+export type LinkProblem =
+  /** A site that forbids apps reading it, or blocks them (LinkedIn, jobs.bg, big-tech careers). Never fetched. */
+  | "protected"
+  /** The site's robots.txt asks apps not to read this page. */
+  | "robots"
+  /** The site answered with bot protection (a challenge page or a refusal). Not retried. */
+  | "blocked"
+  | "not-found"
+  | "timeout"
+  | "error"
+  /** The page was read but doesn't describe one job (a careers index, a page without the posting). */
+  | "no-posting";
+
+export type AddLinkResult =
+  /** A new Job, read from the page (JSON-LD, or the page itself) or from the text Kris pasted. */
+  | { outcome: "added"; jobId: string; via: "json-ld" | "page" | "text" }
+  /** The link is already in the Feed: nothing was fetched; open this Job. */
+  | { outcome: "existing"; jobId: string }
+  /** The page describes a Job already in the Feed from another Source: the link joined it. */
+  | { outcome: "merged"; jobId: string }
+  /** The text isn't a web link. */
+  | { outcome: "invalid"; message: string }
+  | {
+      outcome: "unreadable";
+      /** The link as it will be kept (tracking parameters dropped). */
+      link: string;
+      problem: LinkProblem;
+      /** What happened and what to do, in plain words. */
+      message: string;
+      /** The page's title, when one was read, to start the pasted job from. */
+      pageTitle: string | null;
+      /** For a protected site that sends job alerts: the email Source that covers it ("linkedin"). */
+      alertSender: string | null;
+    };
 
 export interface ReadResult {
   read: number;
@@ -484,11 +611,18 @@ interface StateFields {
 
 const sqlText = (v: unknown): string | null => (v == null ? null : String(v));
 
+/**
+ * SQL condition for Sources on the watchlist: every Source but the ones Kris adds jobs through himself
+ * (pasted links), which are never checked and have no health to show.
+ */
+const onWatchlist = `kind NOT IN (${Object.entries(adapters).filter(([, a]) => a.category === "capture").map(([k]) => `'${k}'`).join(", ")})`;
+
 const viewStates: Record<FeedView, JobState[]> = {
   new: ["new"],
   saved: ["saved"],
   open: ["new", "saved"],
   passed: ["passed", "closed"],
+  hidden: ["new"],
 };
 
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
@@ -497,8 +631,28 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   backfillMatchKeys(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
-  /** Kris's search settings (#12 stores and edits them; until then the defaults). */
-  const searchSettings = (): SearchSettings => deps.searchSettings ?? defaultSearchSettings;
+  /** Kris's search settings: as he saved them, else the ones the engine was given, else the defaults. */
+  const searchSettings = (): SearchSettings => {
+    const stored = db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
+    return stored ? (JSON.parse(String(stored.value)) as SearchSettings) : (deps.searchSettings ?? defaultSearchSettings);
+  };
+  function storeSettings(settings: SearchSettings): SearchSettings {
+    db.prepare(
+      `INSERT INTO search_settings (id, value, updated_at) VALUES (1, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).run(JSON.stringify(settings), clock.now().toISOString());
+    return settings;
+  }
+
+  /** The dealbreakers a read Job breaks. An unread, failed or unscreened Job breaks none: it is never hidden. */
+  function dealbreakersFor(read: ReturnType<typeof readOf>, facts: PostingFacts | null, fit: Fit): HiddenReason[] {
+    if (!read || !facts) return [];
+    const levels = Object.fromEntries(facts.languages.map((l) => [l.language, l.level]));
+    return dealbreakersOf(read.screening, fit.place, searchSettings(), levels);
+  }
+
+  const shownByYou = (jobId: string) => db.prepare("SELECT 1 AS y FROM job_unhidden WHERE job_id = ?").get(jobId) != null;
+  const isHidden = (state: string, dealbreakers: HiddenReason[], shown: boolean) => state === "new" && dealbreakers.length > 0 && !shown;
 
   /** Fit for one Job from what is known about it now. Learned adjustments (#15) plug in here. */
   function fitOf(job: { title: string; location: string | null; postedAt: string | null }, read: ReturnType<typeof readOf>, facts: PostingFacts | null): Fit {
@@ -786,6 +940,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
            VALUES (?, ?, ?, ?, ?, ?, ?)`,
         ).run(id, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
         setState(jobId, to, now, fields);
+        if (kind === "unhide") {
+          db.prepare("INSERT OR REPLACE INTO job_unhidden (job_id, decision_id, unhidden_at) VALUES (?, ?, ?)").run(jobId, id, now);
+        }
         out.push(jobId);
       }
       return out;
@@ -813,6 +970,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const reading = readingOf(links.targetId, money.reached);
     const read = readOf(links.targetId, reading);
     const base = { title: String(r.title), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
+    const fit = fitOf(base, read, reading.facts);
+    const dealbreakers = dealbreakersFor(read, reading.facts, fit);
+    const shown = shownByYou(String(r.id));
     return {
       id: String(r.id),
       title: base.title,
@@ -828,7 +988,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       reading: reading.state,
       requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
       needsYou: read ? read.needsYou.length : 0,
-      fit: fitOf(base, read, reading.facts),
+      fit,
+      dealbreakers,
+      hidden: isHidden(String(r.state), dealbreakers, shown),
+      shownByYou: shown,
       state: String(r.state) as JobState,
       ...(r.state === "passed" && {
         passed: {
@@ -881,6 +1044,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const read = readOf(target.postingId, reading);
     const base = { title: String(row.title), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
     const language = reading.facts?.language ?? null;
+    const fit = fitOf(base, read, reading.facts);
+    const dealbreakers = dealbreakersFor(read, reading.facts, fit);
+    const shown = shownByYou(jobId);
     return {
       id: jobId,
       title: base.title,
@@ -903,8 +1069,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       keyFacts: read?.keyFacts ?? [],
       needsYou: read?.needsYou ?? [],
       screening: read?.screening ?? null,
-      fit: fitOf(base, read, reading.facts),
+      fit,
       budget: money,
+      dealbreakers,
+      hidden: isHidden(String(row.state), dealbreakers, shown),
+      shownByYou: shown,
     };
   }
 
@@ -920,7 +1089,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   function allSourceHealth(): SourceHealth[] {
-    const rows = db.prepare("SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL ORDER BY created_at, id").all();
+    const rows = db.prepare(`SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL AND ${onWatchlist} ORDER BY created_at, id`).all();
     const history = db.prepare(
       `SELECT checked_at, outcome, in_locations, total, error FROM source_check
        WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
@@ -930,7 +1099,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** A Source on the watchlist (paused or not), or throws. Removed Sources are gone as far as Kris can tell. */
   function liveSource(sourceId: string): Record<string, unknown> {
-    const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ? AND removed_at IS NULL").get(sourceId);
+    const row = db.prepare(`SELECT id, name, kind, config FROM source WHERE id = ? AND removed_at IS NULL AND ${onWatchlist}`).get(sourceId);
     if (!row) throw new Error(`No source "${sourceId}"`);
     return row;
   }
@@ -997,7 +1166,122 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return [...watched, ...removed];
   }
 
+  function ruleChange(id: string): RuleChange {
+    const r = db.prepare(
+      `SELECT c.*, p.title, p.company FROM rule_change c JOIN job j ON j.id = c.job_id
+       JOIN posting p ON p.id = ${targetPostingSql("j.id")} WHERE c.id = ?`,
+    ).get(id)!;
+    return {
+      id, rule: String(r.rule) as DealbreakerRule, text: String(r.change_text),
+      job: { id: String(r.job_id), title: String(r.title), company: String(r.company) },
+      reason: String(r.reason_text), at: String(r.created_at), undoneAt: sqlText(r.undone_at),
+    };
+  }
+
+  /** The Source pasted links belong to, created the first time Kris pastes one. */
+  function pastedLinksSource(): string {
+    const adapter = adapterFor("capture");
+    const config = adapter.parseConfig("link");
+    const id = `capture:${adapter.key(config)}`;
+    db.prepare("INSERT OR IGNORE INTO source (id, name, kind, config, created_at) VALUES (?, ?, 'capture', ?, ?)").run(
+      id, adapter.defaultName(config), JSON.stringify(config), clock.now().toISOString(),
+    );
+    return id;
+  }
+
+  /** The live Job holding a Posting at this link (any state), or undefined. */
+  function jobWithLink(link: string): string | undefined {
+    const key = linkKey(link);
+    for (const r of db.prepare("SELECT job_id, url FROM posting ORDER BY first_seen_at, id").all()) {
+      if (linkKey(String(r.url)) === key) return liveJobId(db, String(r.job_id));
+    }
+    return undefined;
+  }
+
+  /** Stores a Posting found at a pasted link; it merges with a Job already in the Feed like any other. */
+  function storePasted(found: Omit<FoundPosting, "externalId">, via: "json-ld" | "page" | "text"): AddLinkResult {
+    const sourceId = pastedLinksSource();
+    const externalId = createHash("sha256").update(linkKey(found.url)).digest("hex").slice(0, 16);
+    const now = clock.now().toISOString();
+    transaction(db, () => storePosting(db, sourceId, { ...found, externalId }, now));
+    const own = `job:${sourceId}:${externalId}`;
+    const jobId = liveJobId(db, own) ?? own;
+    const postings = count("SELECT COUNT(*) AS n FROM posting WHERE job_id = ?", jobId);
+    return postings > 1 ? { outcome: "merged", jobId } : { outcome: "added", jobId, via };
+  }
+
+  async function addJobLink(text: string, pasted?: PastedPosting): Promise<AddLinkResult> {
+    const link = jobLinkFrom(text);
+    if (!link) return { outcome: "invalid", message: "That isn't a web link. Paste the job's address, starting with https://" };
+    const existing = jobWithLink(link.href);
+    if (existing) return { outcome: "existing", jobId: existing };
+
+    if (pasted) {
+      const title = pasted.title.trim();
+      const body = pasted.text.trim();
+      if (!title || !body) throw new Error("A pasted job needs its title and text");
+      return storePasted({
+        url: link.href, title, company: pasted.company?.trim() || "Company not stated", location: pasted.location?.trim() || null,
+        salary: null, postedAt: null, descriptionHtml: textToHtml(body),
+      }, "text");
+    }
+
+    const page = await fetchJobPage(link);
+    if ("problem" in page) return { outcome: "unreadable", link: link.href, alertSender: null, pageTitle: null, ...page };
+    const { posting, via, pageTitle } = readJobPage(page.html, page.url);
+    if (!posting || !via) {
+      return {
+        outcome: "unreadable", link: link.href, problem: "no-posting", pageTitle, alertSender: null,
+        message: "This page doesn't look like one job posting. Check it's the job's own page, or paste the job's text.",
+      };
+    }
+    // The page may name its own link for the job: if that is in the Feed, it's the same job.
+    const known = jobWithLink(posting.url);
+    if (known) return { outcome: "existing", jobId: known };
+    return storePasted({
+      url: link.href, title: posting.title, company: posting.company ?? siteOf(link.href), location: posting.location,
+      salary: posting.salary, postedAt: posting.postedAt, descriptionHtml: posting.descriptionHtml,
+    }, via);
+  }
+
+  /** One polite GET of a pasted job page, or why it couldn't (or mustn't) be read. */
+  async function fetchJobPage(link: URL): Promise<{ html: string; url: string } | { problem: LinkProblem; message: string; alertSender?: string | null }> {
+    const site = protectedSite(link);
+    if (site) {
+      return {
+        problem: "protected", alertSender: site.alertSender,
+        message: `${site.name} doesn't allow apps to read its pages, so apply-kit won't open this link. Paste the job's text${site.alertSender ? `, or let its job alert emails bring it in` : ""}.`,
+      };
+    }
+    let timedOut = false;
+    const get = fetchFor("capture", { failed: (err) => { if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true; } });
+    const host = link.hostname.replace(/^www\./, "");
+    const robots = await get(`${link.origin}/robots.txt`).then((r) => (r.ok ? r.text() : ""), () => "");
+    if (!robotsAllows(robots, `${link.pathname}${link.search}`, "apply-kit")) {
+      return { problem: "robots", message: `${host} asks apps not to read this page (its robots.txt). Paste the job's text instead.` };
+    }
+    let res: Response;
+    try {
+      res = await get(link.href, { headers: { accept: "text/html,application/xhtml+xml" } });
+    } catch {
+      return timedOut
+        ? { problem: "timeout", message: `${host} didn't answer in time. Try again later, or paste the job's text.` }
+        : { problem: "error", message: `Couldn't reach ${host}. Check the link, or paste the job's text.` };
+    }
+    const html = await res.text().catch(() => "");
+    if (looksBlocked(res, html)) {
+      return { problem: "blocked", message: `${host} blocks apps from reading its pages. Paste the job's text instead.` };
+    }
+    if (res.status === 404 || res.status === 410) {
+      return { problem: "not-found", message: `${host} says this page doesn't exist (${res.status}). The job may have closed, or the link may be cut short.` };
+    }
+    if (!res.ok) return { problem: "error", message: `${host} answered ${res.status}. Try again later, or paste the job's text.` };
+    return { html, url: res.url || link.href };
+  }
+
   return {
+    addJobLink,
+
     async save(jobIds) {
       return decide("save", jobIds, ["new"], "saved");
     },
@@ -1034,6 +1318,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
             passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
           });
           db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
+          db.prepare("DELETE FROM job_unhidden WHERE job_id = ? AND decision_id = ?").run(jobId, decisionId);
           out.push(jobId);
         }
         return out;
@@ -1058,7 +1343,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
 
     async queryFeed(query) {
-      const sources = count("SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL");
+      const sources = count(`SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL AND ${onWatchlist}`);
       const money = budget();
       // Every Job is built (with its Fit) so counts can leave relocation Jobs out; a personal Feed is small.
       const rows = db.prepare(
@@ -1068,8 +1353,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       ).all();
       const all = rows.map((r) => ({ job: toFeedJob(r, money), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
-      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state);
-      const countView = (v: FeedView) => all.filter(({ job }) => inView(v, job) && (v === "passed" || !relocating(job))).length;
+      // The hidden pile holds hidden Jobs only; every other view leaves them out.
+      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");
+      const countView = (v: FeedView) =>
+        all.filter(({ job }) => inView(v, job) && (v === "passed" || v === "hidden" || !relocating(job))).length;
 
       let jobs: FeedJob[];
       if (query.view === "passed") {
@@ -1081,21 +1368,29 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         const byFit = (a: FeedJob, b: FeedJob) => b.fit.value - a.fit.value;
         if ((query.sort ?? "fit") === "fit") listed.sort(byFit);
         const main = listed.filter((j) => !relocating(j));
-        jobs = query.relocation ? [...main, ...listed.filter(relocating)] : main;
+        jobs = query.view === "hidden" || query.relocation ? [...main, ...listed.filter(relocating)] : main;
       }
+      const ranked = query.view !== "passed" && query.view !== "hidden";
+      // Jobs of this view's states that a filter holds back: relocation ones (filter off) and hidden ones.
+      const heldBack = ranked ? all.map(({ job }) => job).filter((j) => viewStates[query.view].includes(j.state)) : [];
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
-        firstRun: sources === 0,
+        firstRun: sources === 0 && rows.length === 0,
         jobs,
         counts: {
           new: countView("new"),
           saved: countView("saved"),
           open: countView("open"),
           passed: countView("passed"),
-          hidden: 0,
+          hidden: countView("hidden"),
           relocation: query.view === "passed" ? 0 : all.filter(({ job }) => inView(query.view, job) && relocating(job)).length,
         },
+        filteredToNothing: jobs.length > 0 || !ranked ? null : filteredToNothing(
+          query.view,
+          query.relocation ? 0 : heldBack.filter((j) => !j.hidden && relocating(j)).length,
+          heldBack.filter((j) => j.hidden),
+        ),
         health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
         budget: money,
@@ -1180,7 +1475,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare(
-        "SELECT id, name, kind, config FROM source WHERE removed_at IS NULL AND paused_at IS NULL ORDER BY created_at, id",
+        `SELECT id, name, kind, config FROM source WHERE removed_at IS NULL AND paused_at IS NULL AND ${onWatchlist} ORDER BY created_at, id`,
       ).all();
       options.onStart?.(rows.length);
       const mail = mailboxRead();
@@ -1209,7 +1504,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           ).all(monthAgo);
           const bySource = new Map<string, { id: string; name: string; jobs: number }>();
           for (const r of rows) {
-            if ((adapters[String(r.kind)]?.category ?? "ats") === "ats") continue;
+            if ((adapters[String(r.kind)]?.category ?? "ats") === "ats" || adapters[String(r.kind)]?.category === "capture") continue;
             const company = slugFor(String(r.company));
             if (!slug || !(company === slug || (slug.length >= 4 && company.startsWith(slug)))) continue;
             const entry = bySource.get(String(r.id)) ?? { id: String(r.id), name: String(r.name), jobs: 0 };
@@ -1280,11 +1575,138 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return loadCoverageCheck(db, id, liveJob);
     },
 
+    async getSearchSettings() {
+      return searchSettings();
+    },
+
+    async saveSearchSettings(input) {
+      return storeSettings(parseSearchSettings(input));
+    },
+
+    async unhide(jobIds) {
+      const hidden = jobIds.filter((id) => {
+        const row = db.prepare(`${jobSelect} WHERE j.id = ? AND j.merged_into IS NULL`).get(id);
+        return row != null && toFeedJob(row).hidden;
+      });
+      return decide("unhide", hidden, ["new"], "new");
+    },
+
+    async notADealbreaker(jobId, reasonKey) {
+      const job = await getJob(jobId);
+      if (!job) throw new Error(`No job with id "${jobId}"`);
+      const reason = job.dealbreakers.find((d) => d.key === reasonKey);
+      if (!reason) throw new Error(`"${reasonKey}" isn't a dealbreaker on this job`);
+      const before = searchSettings();
+      const { after, text } = relaxRule(before, reason, job.screening);
+      const id = `rule-change:${crypto.randomUUID()}`;
+      transaction(db, () => {
+        storeSettings(after);
+        db.prepare(
+          `INSERT INTO rule_change (id, job_id, rule, reason_key, reason_text, change_text, before_value, after_value, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, job.id, reason.rule, reason.key, reason.text, text, JSON.stringify(before), JSON.stringify(after), clock.now().toISOString());
+      });
+      return { change: ruleChange(id), settings: after };
+    },
+
+    async ruleChanges() {
+      return db.prepare("SELECT id FROM rule_change ORDER BY created_at DESC, rowid DESC").all().map((r) => ruleChange(String(r.id)));
+    },
+
+    async undoRuleChange(changeId) {
+      const row = db.prepare("SELECT rule, reason_key, before_value, undone_at FROM rule_change WHERE id = ?").get(changeId);
+      if (!row) throw new Error(`No rule change "${changeId}"`);
+      if (row.undone_at != null) return { change: ruleChange(changeId), settings: searchSettings() };
+      const restored = restoreRule(searchSettings(), String(row.rule) as DealbreakerRule, String(row.reason_key),
+        JSON.parse(String(row.before_value)) as SearchSettings);
+      transaction(db, () => {
+        storeSettings(restored);
+        db.prepare("UPDATE rule_change SET undone_at = ? WHERE id = ?").run(clock.now().toISOString(), changeId);
+      });
+      return { change: ruleChange(changeId), settings: restored };
+    },
+
     async sourceHealth() {
       const sources = allSourceHealth();
       return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
     },
   };
+}
+
+const ruleLabel: Record<DealbreakerRule, string> = {
+  language: "a language you don't speak",
+  years: "your years limit",
+  salary: "your salary minimum",
+  location: "your locations",
+};
+const ruleOrder: DealbreakerRule[] = ["language", "years", "salary", "location"];
+const jobsWord = (n: number) => `${n} ${n === 1 ? "job" : "jobs"}`;
+
+/** Why a view is empty: the Relocation filter and the hidden pile, each with how many it holds back. */
+function filteredToNothing(view: FeedView, relocation: number, hidden: FeedJob[]): FilteredToNothing | null {
+  if (relocation === 0 && hidden.length === 0) return null;
+  const byRule = ruleOrder
+    .map((rule) => ({ rule, jobs: hidden.filter((j) => j.dealbreakers.some((d) => d.rule === rule)).length }))
+    .filter((r) => r.jobs > 0);
+  const viewName = { new: "new jobs", saved: "saved jobs", open: "open jobs", passed: "jobs", hidden: "jobs" }[view];
+  const parts = [`No ${viewName} to show.`];
+  if (relocation > 0) {
+    parts.push(`${jobsWord(relocation)} ${relocation === 1 ? "is a relocation job" : "are relocation jobs"}, left out while the Relocation filter is off.`);
+  }
+  if (hidden.length > 0) {
+    const rules = byRule.map((r) => `${r.jobs} by ${ruleLabel[r.rule]}`).join(", ");
+    parts.push(`${jobsWord(hidden.length)} ${hidden.length === 1 ? "is" : "are"} hidden by your dealbreakers: ${rules}.`);
+  }
+  return { relocation, hidden: { total: hidden.length, byRule }, text: parts.join(" ") };
+}
+
+const euros = (n: number) => `€${Math.round(n).toLocaleString("en-GB")}`;
+const copySettings = (s: SearchSettings): SearchSettings => JSON.parse(JSON.stringify(s)) as SearchSettings;
+
+/** "Not a dealbreaker for me": the settings with the rule behind `reason` relaxed so it no longer hides this Job. */
+function relaxRule(before: SearchSettings, reason: HiddenReason, screening: Screening | null): { after: SearchSettings; text: string } {
+  const after = copySettings(before);
+  const rules = after.dealbreakers;
+  switch (reason.rule) {
+    case "language": {
+      const language = reason.key.slice("language:".length);
+      rules.languagesNotSpoken = rules.languagesNotSpoken.filter((l) => l.toLowerCase() !== language.toLowerCase());
+      return { after, text: `${language} removed from the languages you don't speak` };
+    }
+    case "years": {
+      const years = screening?.yearsRequired ?? rules.maxYearsRequired;
+      const was = rules.maxYearsRequired;
+      rules.maxYearsRequired = years;
+      return { after, text: `Years limit raised from ${was} to ${years}` };
+    }
+    case "salary": {
+      const money = screening?.salary ? monthlyEur(screening.salary) : null;
+      const floor = money ? Math.floor(money.high) : before.minMonthlySalaryEur;
+      after.minMonthlySalaryEur = floor;
+      return { after, text: `Salary minimum lowered from ${euros(before.minMonthlySalaryEur)} to ${euros(floor)} a month` };
+    }
+    case "location":
+      rules.outsideLocations = false;
+      return { after, text: "Jobs outside your locations are no longer hidden (they stay ranked lower)" };
+  }
+}
+
+/** Undoing a rule change: only that rule goes back to how it was; later changes to other rules stay. */
+function restoreRule(current: SearchSettings, rule: DealbreakerRule, key: string, before: SearchSettings): SearchSettings {
+  const out = copySettings(current);
+  switch (rule) {
+    case "language": {
+      const language = key.slice("language:".length);
+      if (!out.dealbreakers.languagesNotSpoken.some((l) => l.toLowerCase() === language.toLowerCase())) {
+        out.dealbreakers.languagesNotSpoken.push(language);
+      }
+      break;
+    }
+    case "years": out.dealbreakers.maxYearsRequired = before.dealbreakers.maxYearsRequired; break;
+    case "salary": out.minMonthlySalaryEur = before.minMonthlySalaryEur; break;
+    case "location": out.dealbreakers.outsideLocations = before.dealbreakers.outsideLocations; break;
+  }
+  return out;
 }
 
 function startNow(start: () => Promise<Response>): Promise<Response> {
@@ -1293,6 +1715,23 @@ function startNow(start: () => Promise<Response>): Promise<Response> {
   } catch (err) {
     return Promise.reject(err);
   }
+}
+
+/**
+ * Whether an answer is bot protection rather than the page: a challenge (Cloudflare marks it), a
+ * refusal of automated readers, or a captcha page. The app never tries to get past one.
+ */
+function looksBlocked(res: Response, html: string): boolean {
+  if (res.headers.get("cf-mitigated") === "challenge") return true;
+  const title = /<title[^>]*>([^<]*)<\/title>/i.exec(html)?.[1] ?? "";
+  const challenge = /just a moment|attention required|are you a (human|robot)|verify you are human|captcha|access denied|pardon our interruption/i;
+  if (challenge.test(title)) return true;
+  return (res.status === 403 || res.status === 429 || res.status === 503) && /captcha|challenge|bot|automated/i.test(html.slice(0, 20_000));
+}
+
+/** Pasted plain text as HTML: one paragraph per line, so the posting reads like any other. */
+function textToHtml(text: string): string {
+  return text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map((l) => `<p>${escapeHtml(l)}</p>`).join("\n");
 }
 
 /** The site a link is on, "www." aside ("dev.bg", "job-boards.eu.greenhouse.io"). */

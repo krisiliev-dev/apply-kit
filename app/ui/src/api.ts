@@ -1,5 +1,6 @@
 import type {
-  CheckResult, CompanyDetection, CoverageHistory, CoverageInput, CoverageResult, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult,
+  AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -163,7 +164,39 @@ export async function makeTarget(jobId: string, postingId: string): Promise<JobD
   return json(await postJson(`${jobPath(jobId)}/target`, { postingId }));
 }
 
+/** Kris's search settings (the dealbreakers form). */
+export async function fetchSearchSettings(signal?: AbortSignal): Promise<SearchSettings> {
+  return json(await fetch("/api/settings/search", { signal }));
+}
+
+export async function saveSearchSettings(settings: SearchSettings): Promise<SearchSettings> {
+  return json(await fetch("/api/settings/search", {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(settings),
+  }));
+}
+
+/** "Show this job": hidden Jobs back to New; undo the Decision to hide them again. */
+export const unhideJobs = (jobIds: string[]) => post<Decision>("/api/jobs/unhide", { jobIds });
+
+/** "Not a dealbreaker for me" on one hidden reason (its key): changes the rule behind it. */
+export async function notADealbreaker(jobId: string, reason: string): Promise<{ change: RuleChange; settings: SearchSettings }> {
+  return json(await postJson(`${jobPath(jobId)}/not-a-dealbreaker`, { reason }));
+}
+
+export async function fetchRuleChanges(signal?: AbortSignal): Promise<RuleChange[]> {
+  return json(await fetch("/api/rule-changes", { signal }));
+}
+
+export async function undoRuleChange(id: string): Promise<{ change: RuleChange; settings: SearchSettings }> {
+  return json(await postJson(`/api/rule-changes/${encodeURIComponent(id)}/undo`));
+}
+
 /** "Not the same job? Split": the Posting leaves the Job; answers with both Jobs' ids (this one first). */
 export async function splitPosting(jobId: string, postingId: string): Promise<{ jobIds: [string, string] }> {
   return json(await postJson(`${jobPath(jobId)}/split`, { postingId }));
+}
+
+/** "Paste a job link", optionally with the job's text Kris pasted when the page couldn't be read. */
+export async function addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult> {
+  return json(await postJson("/api/jobs/link", pasted ? { link, pasted } : { link }));
 }

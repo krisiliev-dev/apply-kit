@@ -3,8 +3,10 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { checkNow, fetchCheckStatus, fetchFeed, type FeedOptions } from "../api.ts";
 import { JobsTable } from "./JobsTable.tsx";
 import { PassedClosed } from "./PassedClosed.tsx";
+import { HiddenPile } from "./HiddenPile.tsx";
 import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
 import { useToaster } from "./toast.tsx";
+import { PasteLink } from "./PasteLink.tsx";
 import { FailedSourceBanner, MailboxBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
@@ -20,7 +22,8 @@ type Load =
   | { state: "ready"; feed: FeedResult; rows: ShownFeed };
 
 export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => void }) {
-  const [view, setView] = useState<FeedView>("new");
+  // "/?view=hidden" opens the hidden pile (the link from the search settings).
+  const [view, setView] = useState<FeedView>(initialView);
   // "?relocation=1" opens the Feed with the Relocation filter on (a coverage check's "Turn on Relocation").
   const [options, setOptions] = useState<FeedOptions>(() => ({ sort: "fit", relocation: new URLSearchParams(window.location.search).get("relocation") === "1" }));
   const [load, setLoad] = useState<Load>({ state: "loading" });
@@ -140,7 +143,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
           waiting={rows.queued.length}
         />
         <Toolbar feed={feed} view={view} onView={setView} options={options} onOptions={setOptions} />
-        {!seenFitHint && view !== "passed" && options.sort === "fit" && rows.shown.length > 0 && (
+        {!seenFitHint && view !== "passed" && view !== "hidden" && options.sort === "fit" && rows.shown.length > 0 && (
           <div className="banner info hint">
             <span className="text"><b>New here? Fit</b> is how well a job matches your profile and preferences, 0–100. The grey line under each title says why it ranks there.</span>
             <button className="btn sm" type="button" onClick={dismissFitHint}>Got it</button>
@@ -149,7 +152,9 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
         <div ref={tableRef}>
           {view === "passed"
             ? <PassedClosed feed={{ ...feed, jobs: rows.shown }} toaster={toaster} onChanged={afterTriage} />
-            : (
+            : view === "hidden"
+              ? <HiddenPile feed={{ ...feed, jobs: rows.shown }} toaster={toaster} onChanged={afterTriage} />
+              : (
               <JobsTable
                 feed={{ ...feed, jobs: rows.shown }}
                 view={view}
@@ -159,6 +164,8 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
                 queued={rows.queued.length}
                 onShowQueued={showThem}
                 checking={check.status?.checking != null}
+                onShowRelocation={() => setOptions({ ...options, relocation: true })}
+                onShowHidden={() => setView("hidden")}
               />
             )}
         </div>
@@ -169,7 +176,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
 }
 
 function viewTitle(view: FeedView, n: number): string {
-  const label = { new: "new", saved: "saved", open: "open", passed: "passed or closed" }[view];
+  const label = { new: "new", saved: "saved", open: "open", passed: "passed or closed", hidden: "hidden by your dealbreakers" }[view];
   return `${n} ${label}`;
 }
 
@@ -287,7 +294,7 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
   onOptions: (o: FeedOptions) => void;
 }) {
   const { counts, ranking } = feed;
-  const ranked = view !== "passed";
+  const ranked = view !== "passed" && view !== "hidden";
   return (
     <div className="toolbar">
       <div className="segmented" role="group" aria-label="View">
@@ -297,9 +304,16 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
           </button>
         ))}
       </div>
-      <button className="filter" type="button" aria-pressed="false">
+      <button
+        className="filter"
+        type="button"
+        aria-pressed={view === "hidden"}
+        aria-describedby="hidden-why"
+        onClick={() => onView(view === "hidden" ? "new" : "hidden")}
+      >
         Hidden <span className="n num">{counts.hidden}</span>
       </button>
+      <span className="sr-only" id="hidden-why">Jobs your dealbreakers keep out of the Feed, each with its reason. Never deleted.</span>
       {ranked && (
         <>
           <span className="sep" aria-hidden="true" />
@@ -320,6 +334,7 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
           {ranking.learnedAdjustments === 0 ? "Ranking: nothing learned yet" : `Ranking: ${ranking.learnedAdjustments} learned adjustments`}
         </span>
         {ranked && <SortMenu sort={options.sort} onSort={(sort) => onOptions({ ...options, sort })} />}
+        {!feed.firstRun && <AddJobMenu />}
       </span>
     </div>
   );
@@ -371,7 +386,6 @@ function useFitHint(): [boolean, () => void] {
 }
 
 function FirstRun() {
-  const [note, setNote] = useState("");
   return (
     <div className="empty">
       <svg viewBox="0 0 120 48" width="120" height="48" aria-hidden="true"><path d="M2 46 32 12l18 20 14-14 26 28z" fill="var(--met-soft)" stroke="var(--action)" strokeWidth="2" strokeLinejoin="round" /><circle cx="96" cy="10" r="5" fill="var(--bloom)" /></svg>
@@ -381,18 +395,44 @@ function FirstRun() {
         <a className="btn primary" href="/settings/sources">Choose companies</a>
         <a className="btn" href="/settings/mailbox">Connect mailbox</a>
       </div>
-      <form
-        className="field"
-        style={{ width: "min(460px, 100%)" }}
-        onSubmit={(e) => { e.preventDefault(); setNote("Adding a job from a link isn't available yet."); }}
-      >
-        <label htmlFor="paste-job">Or start with one job</label>
-        <div className="row" style={{ flexWrap: "nowrap" }}>
-          <input className="input" id="paste-job" name="job-link" type="url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="Paste a job link…" />
-          <button className="btn" type="submit">Add</button>
-        </div>
-        <p className="meta" role="status">{note}</p>
-      </form>
+      <div className="paste-first">
+        <PasteLink label="Or start with one job" />
+      </div>
     </div>
+  );
+}
+
+function initialView(): FeedView {
+  try {
+    return new URLSearchParams(window.location.search).get("view") === "hidden" ? "hidden" : "new";
+  } catch {
+    return "new";
+  }
+}
+
+/** The toolbar's "Add job": the paste-a-link field in a popover. Escape or a click elsewhere closes it. */
+function AddJobMenu() {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const wrap = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  return (
+    <span
+      className="pop-wrap"
+      ref={wrap}
+      onKeyDown={(e) => { if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); wrap.current?.querySelector<HTMLElement>("button")?.focus(); } }}
+    >
+      <button className="filter" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        Add job<span aria-hidden="true"> ▾</span>
+      </button>
+      <span className="pop end-align add-job-pop" id={id} hidden={!open}>
+        {open && <PasteLink label="Paste a job link" autoFocus />}
+      </span>
+    </span>
   );
 }

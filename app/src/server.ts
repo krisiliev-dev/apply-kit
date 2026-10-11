@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, Scheduler } from "@apply-kit/core";
+import type { CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
 
-const views: FeedView[] = ["new", "saved", "open", "passed"];
+const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
 
 export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEngine; scheduler: Scheduler; uiDir: string }) {
@@ -119,6 +119,26 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     }
   });
 
+  // "Paste a job link": { link, pasted?: { title, company?, location?, text } }. Answers with the
+  // outcome: added, existing or merged (open jobId), invalid, or unreadable (with the link kept).
+  app.post("/api/jobs/link", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    if (typeof body.link !== "string" || !body.link.trim()) return c.json({ error: "Paste a link to the job" }, 400);
+    const p = body.pasted;
+    let pasted: PastedPosting | undefined;
+    if (p !== undefined) {
+      const o = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+      const text = typeof o.text === "string" ? o.text.trim() : "";
+      const title = typeof o.title === "string" ? o.title.trim() : "";
+      if (!text || !title) return c.json({ error: "A pasted job needs its title and text" }, 400);
+      const opt = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+      pasted = { text, title, company: opt(o.company), location: opt(o.location) };
+    }
+    const result = await engine.addJobLink(body.link, pasted);
+    return c.json(result, result.outcome === "added" || result.outcome === "merged" ? 201 : 200);
+  });
+
   // Triage. Each answers with the Decision (or the Jobs restored, for undo).
   app.post("/api/jobs/save", (c) => withIds(c, (body, ids) => engine.save(ids)));
   app.post("/api/jobs/pass", (c) =>
@@ -130,6 +150,41 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     const ids = body.jobIds === undefined ? undefined : stringArray(body.jobIds);
     if (ids === null) return c.json({ error: "jobIds must be a list of job ids" }, 400);
     return c.json(await engine.undo(c.req.param("id"), ids));
+  });
+
+  // Dealbreakers. "Show this job" is a Decision like the others (undo hides it again).
+  app.post("/api/jobs/unhide", (c) => withIds(c, (body, ids) => engine.unhide(ids)));
+  // "Not a dealbreaker for me": { "reason": "<the hidden reason's key>" }; changes the rule behind it.
+  app.post("/api/jobs/:id/not-a-dealbreaker", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    if (typeof body.reason !== "string") return c.json({ error: "reason must be a hidden reason's key" }, 400);
+    try {
+      return c.json(await engine.notADealbreaker(c.req.param("id"), body.reason));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  });
+  app.get("/api/rule-changes", async (c) => c.json(await engine.ruleChanges()));
+  app.post("/api/rule-changes/:id/undo", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    try {
+      return c.json(await engine.undoRuleChange(c.req.param("id")));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+    }
+  });
+
+  // Kris's search settings (the settings form): what Fit and dealbreakers are measured against.
+  app.get("/api/settings/search", async (c) => c.json(await engine.getSearchSettings()));
+  app.put("/api/settings/search", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    try {
+      return c.json(await engine.saveSearchSettings(body));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
   });
 
   app.post("/api/jobs/:id/target", (c) => withPosting(c, (jobId, postingId) => engine.setTarget(jobId, postingId)));

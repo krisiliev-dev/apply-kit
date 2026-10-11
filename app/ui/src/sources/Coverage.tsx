@@ -227,7 +227,7 @@ function CoverageForm({ onRecorded }: { onRecorded: (r: CoverageResult) => void 
         <label htmlFor="cv-list">Listings you saw <span className="meta">(optional)</span></label>
         <span className="help" id="cv-list-help">One per line: title · company · location, or a link to the job. With listings, apply-kit says exactly which are missing and why.</span>
         <textarea
-          className="input" id="cv-list" rows={5} spellCheck={false} aria-describedby="cv-list-help"
+          className="input cv-list" id="cv-list" rows={5} spellCheck={false} aria-describedby="cv-list-help"
           placeholder={"Security Engineer · Acme · Sofia\nhttps://…"}
           value={listings} onChange={(e) => setListings(e.target.value)}
         />
@@ -362,8 +362,8 @@ function fixLink(f: CoverageFix): string | null {
   switch (f.kind) {
     case "add-company": return `/settings/sources/add?company=${encodeURIComponent(f.company)}`;
     case "show-relocation": return "/?relocation=1";
-    // The search settings form arrives with dealbreakers (#12).
-    case "adjust-locations": return "/settings/search";
+    // Kris's search settings (locations, dealbreakers).
+    case "adjust-locations": return "/profile/search";
     default: return null;
   }
 }
