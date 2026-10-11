@@ -357,6 +357,9 @@ export function whyMissing(
   const connectAlerts: CoverageFix[] = sender && !ctx.alertSenders.has(sender)
     ? [{ kind: "add-source", source: { kind: "email", config: sender, name: senders[sender].name }, label: `Connect ${senders[sender].name}` }]
     : [];
+  if (!l.company) {
+    return { reason: { kind: "not-covered", text: "None of your sources listed this job. Paste its title and company to see why." }, fixes: connectAlerts };
+  }
   return {
     reason: { kind: "not-covered", text: `${company} isn't on your watchlist, and none of your sources listed this job.` },
     fixes: [...addCompany, ...connectAlerts],

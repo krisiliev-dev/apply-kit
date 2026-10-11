@@ -1,5 +1,5 @@
 import type {
-  CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  CheckResult, CompanyDetection, CoverageHistory, CoverageInput, CoverageResult, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -143,6 +143,19 @@ export async function previewRemoval(id: string, signal?: AbortSignal): Promise<
 
 export async function removeSource(id: string): Promise<{ sourceId: string; decision: Decision }> {
   return json(await postJson(`${sourcePath(id)}/remove`));
+}
+
+/** Records a coverage check and answers with what was found and missing; a refused check throws its reason. */
+export async function recordCoverageCheck(input: CoverageInput): Promise<CoverageResult> {
+  return json(await postJson("/api/coverage", input));
+}
+
+export async function fetchCoverageHistory(signal?: AbortSignal): Promise<CoverageHistory> {
+  return json(await fetch("/api/coverage", { signal }));
+}
+
+export async function fetchCoverageCheck(id: string, signal?: AbortSignal): Promise<CoverageResult> {
+  return json(await fetch(`/api/coverage/${encodeURIComponent(id)}`, { signal }));
 }
 
 /** "Make target": one of the Job's Postings becomes the one Kris applies through. */

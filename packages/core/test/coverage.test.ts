@@ -301,6 +301,17 @@ describe("coverage check: what Kris can give", () => {
     ]);
     expect(result.totals).toMatchObject({ saw: 5, listed: 5, appHad: 3, found: 3, missing: 2 });
   });
+
+  it("a pasted link apply-kit doesn't know is missing, described by its link", async () => {
+    const { engine } = acme();
+
+    const result = await engine.recordCoverageCheck({ site: "LinkedIn", query: "security", listings: "https://www.linkedin.com/jobs/view/4100000001/" });
+
+    expect(result.listings[0]).toMatchObject({
+      title: "https://www.linkedin.com/jobs/view/4100000001/", company: "", status: "missing",
+      reason: { kind: "not-covered", text: "None of your sources listed this job. Paste its title and company to see why." },
+    });
+  });
 });
 
 describe("coverage check: what it needs", () => {

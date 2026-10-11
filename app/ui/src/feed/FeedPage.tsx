@@ -21,7 +21,8 @@ type Load =
 
 export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => void }) {
   const [view, setView] = useState<FeedView>("new");
-  const [options, setOptions] = useState<FeedOptions>({ sort: "fit", relocation: false });
+  // "?relocation=1" opens the Feed with the Relocation filter on (a coverage check's "Turn on Relocation").
+  const [options, setOptions] = useState<FeedOptions>(() => ({ sort: "fit", relocation: new URLSearchParams(window.location.search).get("relocation") === "1" }));
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const check = useCheckStatus();

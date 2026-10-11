@@ -32,6 +32,10 @@ _Avoid_: Posting, vacancy, role (when meaning the opportunity)
 The unified, de-duplicated list of jobs the user browses.
 _Avoid_: Inbox, results, dashboard
 
+**Coverage check**:
+A comparison of a search the user ran by hand on a site against what the app has: each job seen there is in the Feed, kept out of the main list (with the reason), or missing (with the likely reason and a fix). Kept as history.
+_Avoid_: Audit, sync check
+
 ## Judging fit
 
 **Requirement**:
