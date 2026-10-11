@@ -42,8 +42,6 @@ interface JobRow {
 
 const postingCols = "id, source_id, job_id, url, location, match_key, first_seen_at";
 
-const str = (v: unknown) => (v == null ? null : String(v));
-
 function postingsOf(db: SqlDatabase, jobId: string): PostingRow[] {
   return db.prepare(`SELECT ${postingCols} FROM posting WHERE job_id = ? ORDER BY first_seen_at, id`).all(jobId) as unknown as PostingRow[];
 }
@@ -223,16 +221,21 @@ export interface TargetChoice {
   chosenBy: "default" | "you";
 }
 
+const atsKinds = Object.entries(adapters).filter(([, a]) => a.category === "ats").map(([kind]) => `'${kind}'`).join(", ");
+
 /**
- * The target posting: Kris's choice, else the company's own page (a Posting from an ATS Source,
- * the company's own system), else the first Posting seen.
+ * SQL for a Job's target posting id, given SQL for the Job's id: Kris's choice, else the company's
+ * own page (the first Posting from an ATS Source, the company's own system), else the first Posting seen.
  */
+export const targetPostingSql = (jobIdSql: string) => `COALESCE(
+  (SELECT p.id FROM posting p JOIN job tj ON tj.id = p.job_id WHERE tj.id = ${jobIdSql} AND p.id = tj.target_posting_id),
+  (SELECT p.id FROM posting p JOIN source s ON s.id = p.source_id
+    WHERE p.job_id = ${jobIdSql} AND s.kind IN (${atsKinds}) ORDER BY p.first_seen_at, p.id LIMIT 1),
+  (SELECT id FROM posting WHERE job_id = ${jobIdSql} ORDER BY first_seen_at, id LIMIT 1))`;
+
+/** The target posting (see targetPostingSql) and whether Kris chose it. */
 export function targetOf(db: SqlDatabase, jobId: string): TargetChoice {
-  const chosen = str(db.prepare("SELECT target_posting_id FROM job WHERE id = ?").get(jobId)?.target_posting_id);
-  const rows = db.prepare(
-    `SELECT p.id, s.kind FROM posting p JOIN source s ON s.id = p.source_id WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
-  ).all(jobId);
-  if (chosen && rows.some((r) => r.id === chosen)) return { postingId: chosen, chosenBy: "you" };
-  const own = rows.find((r) => adapters[String(r.kind)]?.category === "ats") ?? rows[0];
-  return { postingId: String(own?.id), chosenBy: "default" };
+  const row = db.prepare(`SELECT ${targetPostingSql("?1")} AS id, target_posting_id AS chosen FROM job WHERE id = ?1`).get(jobId);
+  const postingId = String(row?.id);
+  return { postingId, chosenBy: row?.chosen != null && row.chosen === row.id ? "you" : "default" };
 }

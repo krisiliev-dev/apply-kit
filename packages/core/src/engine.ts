@@ -11,7 +11,7 @@ import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts"
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters } from "./sources/registry.ts";
-import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf } from "./merging.ts";
+import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
 import { describeMergeReason, type MergeReason } from "./matching.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
@@ -568,7 +568,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   async function readAllPending(): Promise<ReadResult> {
     const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
     const jobIds = db.prepare(
-      `SELECT j.id FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")}
+      `SELECT j.id FROM job j JOIN posting p ON p.id = ${targetPostingSql("j.id")}
        WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved') ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
     ).all().map((r) => String(r.id));
     for (const jobId of jobIds) {
@@ -675,14 +675,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     );
   }
 
-  // A Job's display fields come from its earliest-seen Posting.
+  // A Job's display fields come from its target posting (the company's own page by default).
   const jobSelect = `SELECT j.id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
                 p.title, p.company, p.location, p.salary, p.posted_at, p.url,
                 (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
                 (SELECT decision_id FROM decision_job
                   WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
          FROM job j
-         JOIN posting p ON p.id = ${representativePosting("j.id")}`;
+         JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
 
   function toFeedJob(r: Record<string, unknown>, money = budget()): FeedJob {
     const links = linksOf(String(r.id));
@@ -1085,10 +1085,6 @@ function readSalary(keyFacts: KeyFact[] | undefined): string | null {
 
 /** Longest posting text sent to the extractor; longer texts are cut (bounds the cost of one read). */
 const MAX_TEXT_CHARS = 24_000;
-
-/** SQL for the Posting a Job's display fields come from: the first one seen (ordering only; reads use the target). */
-const representativePosting = (jobIdSql: string) =>
-  `(SELECT id FROM posting WHERE job_id = ${jobIdSql} ORDER BY first_seen_at, id LIMIT 1)`;
 
 const postingText = (html: unknown) => (html == null ? "" : htmlToText(String(html)));
 const hashText = (text: string) => createHash("sha256").update(text).digest("hex");

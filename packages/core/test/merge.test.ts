@@ -298,4 +298,19 @@ describe("merging postings into jobs", () => {
     const row = (await engine.queryFeed({ view: "new" })).jobs.find((j) => j.id === devbgFirst)!;
     expect(row.reading).toBe("read");
   });
+
+  it("a merged Job shows its target posting's details in the Feed, even when another site listed it first", async () => {
+    const { engine, clock, addAll } = threeSources([apmCard], []);
+    await addAll();
+    await engine.checkSource("devbg:product-management");
+    await clock.advance(60_000);
+    await engine.checkSource("greenhouse:payhawkio");
+
+    const row = (await engine.queryFeed({ view: "new" })).jobs.find((j) => j.postingCount === 2)!;
+
+    expect(row).toMatchObject({
+      id: "job:devbg:product-management:570001", title: "Associate Product Manager", company: "Payhawk",
+      location: "Sofia", postedAt: "2026-10-06T08:33:36.000Z", url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4998241101",
+    });
+  });
 });
