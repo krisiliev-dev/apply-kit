@@ -1,0 +1,47 @@
+{
+  "id": "bg-dev-electrohold-mobile-devices-admin",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/electrohold-administrator-mobilni-ustroystva-i-uslugi/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Администратор мобилни устройства и услуги",
+    "company": "Electrohold",
+    "location": "София",
+    "text": "Търсим колега, който да се присъедини към ИТ екипа и да подпомага ежедневната поддръжка и администриране на корпоративните мобилни устройства и услуги.\nОсновни задължения:\n• Поддържа и администрира корпоративни мобилни устройства с Android/iOS, SIM карти и свързаните с тях мобилни услуги;\n• Приема, обработва и проследява заявки и инциденти чрез Service Desk/ITSM система;\n• Извършва настройка и работни задачи с Microsoft Intune / Company Portal и Microsoft Office 365;\n• Диагностицира и разрешава технически казуси, осъществява координация с потребители, вътрешни ИТ екипи, мобилни оператори и сервизни партньори;\n• Поддържа актуална база знания, техническа документация и потребителски инструкции.\nИзисквания:\n• Добри познания и практически опит с Android/iOS, Microsoft Intune / Company Portal, Microsoft Office 365 и AI инструменти;\n• Опит с Jira Service Management / Service Desk или друга ITSM система;\n• Аналитично мислене и умение за ефективно разрешаване на технически казуси;\n• Добри комуникационни способности и готовност за работа в екип.\nНие ви предлагаме:\n• Богат пакет от социални придобивки;\n• Възможност за вътрешни обучения;\n• Добри възможности за кариерно развитие;\n• Динамична работна среда.\nМясто на работа:\n• гр. София"
+  },
+  "expected": {
+    "language": "bg",
+    "requirements": [
+      {
+        "text": "Android/iOS, Microsoft Intune / Company Portal, Office 365 and AI tools",
+        "kind": "required"
+      },
+      {
+        "text": "Jira Service Management or another ITSM system",
+        "kind": "required"
+      },
+      {
+        "text": "Analytical thinking and solving technical issues",
+        "kind": "required"
+      },
+      {
+        "text": "Communication skills and teamwork",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}
