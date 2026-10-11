@@ -166,3 +166,19 @@ describe("source health: try one Source now", () => {
     await expect(engine.checkSource("greenhouse:nope")).rejects.toThrow(/No source "greenhouse:nope"/);
   });
 });
+
+describe("source health: count in your locations", () => {
+  it("counts Sofia in either script and remote within Europe, using whole words only", async () => {
+    const located = (name: string, i: number) => ({ id: i, title: `Job ${i}`, absolute_url: `https://example.test/${i}`, location: { name } });
+    const board = {
+      jobs: ["Sofia, Bulgaria", "София", "Remote - Europe", "Remote (EMEA)", "Ukraine", "London, UK", "Remote, US", "Plovdiv"].map(located),
+    };
+    const { engine } = createTestEngine({ fetch: async () => Response.json(board) });
+    await engine.addSource({ kind: "greenhouse", config: "mixed" });
+    await engine.checkAll();
+
+    const [source] = (await engine.sourceHealth()).sources;
+
+    expect(source!.history[0]).toMatchObject({ inLocations: 4, total: 8 });
+  });
+});
