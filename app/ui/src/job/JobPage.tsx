@@ -4,7 +4,7 @@
 // Bulgarian postings shown in English with the original one click away.
 import type { FactAnswer, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { confirmFact, fetchJob, fetchSources, readJob } from "../api.ts";
+import { boostJob, confirmFact, fetchJob, fetchSources, readJob, undoAdjustment } from "../api.ts";
 import { Chevron, Icon } from "../icons.tsx";
 import { AskChip, StatusChip } from "../requirements.tsx";
 import { PostingsPanel } from "./PostingsPanel.tsx";
@@ -138,6 +138,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         </div>
         <div className="col side">
           <Decide job={job} />
+          <Boost job={job} onChanged={answered} />
           <PostingsPanel job={job} onChanged={answered} />
         </div>
       </div>
@@ -306,7 +307,10 @@ function FitCheck({ job }: { job: JobDetail }) {
                 </div>
               ))}
               <dt>Learned adjustments</dt>
-              <dd>{adjustments.length === 0 ? "None affect this job" : adjustments.map((a) => `${a.text} (${points(a.points)})`).join(" · ")}</dd>
+              <dd>
+                {adjustments.length === 0 ? "None affect this job" : adjustments.map((a) => `${a.text} (${points(a.points)})`).join(" · ")}
+                {" · "}<a href="/profile/search#ranking">review or undo</a>
+              </dd>
             </dl>
           </div>
         </div>
@@ -500,6 +504,55 @@ function Decide({ job }: { job: JobDetail }) {
           </button>
         </div>
       )}
+    </div>
+  );
+}
+
+const angleNames = { developer: "developer", security: "security", design: "design" } as const;
+
+/**
+ * "Boost new {company} {angle} jobs in the Feed": off unless Kris turns it on. Turning it on is a
+ * learned adjustment like any other (listed and undoable under Dealbreakers and search); turning it
+ * off here undoes it.
+ */
+function Boost({ job, onChanged }: { job: JobDetail; onChanged: (j: JobDetail, said: string) => void }) {
+  const [boostId, setBoostId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const what = `new ${job.company}${job.fit.angle ? ` ${angleNames[job.fit.angle]}` : ""} jobs`;
+
+  async function toggle(on: boolean) {
+    setBusy(true);
+    try {
+      let said: string;
+      if (on) {
+        const a = await boostJob(job.id);
+        setBoostId(a.id);
+        said = `Boost on: ${a.applies} rank higher. Listed under Dealbreakers and search.`;
+      } else {
+        await undoAdjustment(boostId!);
+        setBoostId(null);
+        said = "Boost off.";
+      }
+      setError(null);
+      onChanged(await fetchJob(job.id), said);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel o2 field">
+      <label className="check">
+        <input type="checkbox" checked={boostId != null} disabled={busy} onChange={(e) => void toggle(e.target.checked)} aria-describedby="boost-help" />
+        Boost {what} in the Feed
+      </label>
+      <span className="help" id="boost-help">
+        Off unless you turn it on. A boost is listed under <a href="/profile/search#ranking">Dealbreakers and search</a>, where you can undo it, and why-lines say when it moved a job.
+      </span>
+      {error && <span className="err" role="alert">Couldn't change the boost: {error}</span>}
     </div>
   );
 }

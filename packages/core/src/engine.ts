@@ -8,7 +8,7 @@ import {
 import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
-import { isInYourLocations } from "./locations.ts";
+import { isInYourLocations, NOT_STATED } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
 import { defaultSearchSettings, parseSearchSettings, type SearchSettings } from "./search-settings.ts";
 import { dealbreakersOf, monthlyEur, type DealbreakerRule, type HiddenReason } from "./dealbreakers.ts";
@@ -20,6 +20,7 @@ import { describeMergeReason, type MergeReason } from "./matching.ts";
 import { jobLinkFrom, linkKey, protectedSite, robotsAllows } from "./capture/links.ts";
 import { readJobPage } from "./capture/page.ts";
 import { escapeHtml } from "./sources/shared.ts";
+import { appliesTo, companyMatcher, matcherKey, matches, pointsFor, whyText, type AdjustableJob, type AdjustmentMatcher, type AdjustmentOrigin } from "./learned.ts";
 
 /**
  * New, Saved, All open, Passed & closed, and the hidden pile: New Jobs kept out of the main Feed by
@@ -183,6 +184,35 @@ export interface RuleChange {
   undoneAt: string | null;
 }
 
+/**
+ * Something the ranking learned from Kris, only ever because he opted in: a pass reason with "rank
+ * lower" ticked, "Show this job" with "rank higher" ticked, or a boost. Listed with what created it,
+ * and undoable.
+ */
+export interface LearnedAdjustment {
+  id: string;
+  /** What created it: a pass (with its reason), "Show this job" on a hidden job, or a boost. */
+  origin: AdjustmentOrigin;
+  effect: "lower" | "higher";
+  /** Fit points it adds (or, when negative, takes) from each Job it applies to. */
+  points: number;
+  /** Which Jobs it moves, in plain words: "Jobs at Unity Bank", "Jobs that require Kubernetes". */
+  applies: string;
+  /** How a why-line names it: "ranked lower: you passed a job at Unity Bank". */
+  text: string;
+  /** What created it, in plain words: "You passed Security Analyst at Unity Bank: Not interested in this company". */
+  createdBy: string;
+  /** The Job it was learned from. */
+  job: { id: string; title: string; company: string };
+  /** The pass, unhide or boost Decision it came with (undoing that Decision undoes it too); null for a boost. */
+  decisionId: string | null;
+  at: string;
+  /** When it was undone, or null while it is in effect. */
+  undoneAt: string | null;
+  /** Open Jobs whose Fit it changes right now (0 once undone). */
+  jobsAffected: number;
+}
+
 /** Why the list is empty although Jobs exist in this view: which filter holds them back. */
 export interface FilteredToNothing {
   /** Relocation Jobs left out because the Relocation filter is off. */
@@ -197,9 +227,32 @@ export interface FilteredToNothing {
 export const passReasons = ["skills-gap", "salary", "location", "company", "other"] as const;
 export type PassReason = (typeof passReasons)[number];
 
+/** Each pass reason in plain words, as the pass form offers it. */
+export const passReasonLabel: Record<PassReason, string> = {
+  "skills-gap": "Skills gap too big",
+  salary: "Salary too low",
+  location: "Location or remote rules",
+  company: "Not interested in this company",
+  other: "Other",
+};
+
 export interface PassInput {
   reason?: PassReason | null;
   note?: string | null;
+  /**
+   * "Rank jobs like this lower from now on" (off unless Kris ticks it). With a reason it creates a
+   * learned adjustment: company or salary → jobs at that company; location → jobs at that place;
+   * skills gap → jobs that require `requirement` (else each of the job's known gaps). Other learns nothing.
+   */
+  learn?: boolean;
+  /** For a skills-gap pass with `learn`: the required item to rank lower, one of the job's requirements. */
+  requirement?: string | null;
+}
+
+/** "Show this job" options. */
+export interface UnhideInput {
+  /** "Rank jobs at this company higher from now on" (off unless Kris ticks it). */
+  learn?: boolean;
 }
 
 export type HealthState = "no-sources" | "working" | "failing";
@@ -404,6 +457,8 @@ export interface Decision {
   kind: "save" | "pass" | "close" | "reopen" | "unhide";
   /** The Jobs it changed. Jobs it didn't apply to (say, saving a closed job) are left out. */
   jobIds: string[];
+  /** Ranking adjustments learned with it (a pass or unhide Kris opted in on); undoing the Decision undoes them. */
+  learned?: LearnedAdjustment[];
 }
 
 export interface CheckOptions {
@@ -498,7 +553,7 @@ export interface DiscoveryEngine {
    * "Show this job": brings hidden Jobs back to New and changes nothing else (the rule stays).
    * Jobs that aren't hidden are left out of the Decision. Undoing it hides them again.
    */
-  unhide(jobIds: string[]): Promise<Decision>;
+  unhide(jobIds: string[], input?: UnhideInput): Promise<Decision>;
   /**
    * "Not a dealbreaker for me" on one of a Job's hidden reasons (its key): changes the rule behind it
    * so it no longer hides this Job or future ones like it. A language is removed from the languages
@@ -510,6 +565,15 @@ export interface DiscoveryEngine {
   ruleChanges(): Promise<RuleChange[]>;
   /** Puts a changed rule back as it was before that change. */
   undoRuleChange(changeId: string): Promise<{ change: RuleChange; settings: SearchSettings }>;
+  /** Every learned ranking adjustment (in effect or undone), newest first, with what created it. */
+  learnedAdjustments(): Promise<LearnedAdjustment[]>;
+  /** Undoes one learned adjustment: the Jobs it moved go back to the Fit (and rank) they had without it. */
+  undoAdjustment(adjustmentId: string): Promise<LearnedAdjustment>;
+  /**
+   * "Boost new {company} {angle} jobs": ranks Jobs at this Job's company (of its Angle, when it has
+   * one) higher. A boost is itself the opt-in; it is listed and undoable like any adjustment.
+   */
+  boost(jobId: string): Promise<LearnedAdjustment>;
   /**
    * "Paste a job link": adds the job at a link to the Feed like any other Posting (merged with a Job
    * already there, ranked, read later within the budget). A link already in the Feed answers with its
@@ -638,9 +702,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const shownByYou = (jobId: string) => db.prepare("SELECT 1 AS y FROM job_unhidden WHERE job_id = ?").get(jobId) != null;
   const isHidden = (state: string, dealbreakers: HiddenReason[], shown: boolean) => state === "new" && dealbreakers.length > 0 && !shown;
 
-  /** Fit for one Job from what is known about it now. Learned adjustments (#15) plug in here. */
-  function fitOf(job: { title: string; location: string | null; postedAt: string | null }, read: ReturnType<typeof readOf>, facts: PostingFacts | null): Fit {
-    return computeFit({
+  /**
+   * Fit for one Job from what is known about it now, with the learned adjustments that apply to it.
+   * An adjustment is named only when it changed the Fit (the number the Feed ranks by).
+   */
+  function fitOf(
+    job: { title: string; company: string; location: string | null; postedAt: string | null },
+    read: ReturnType<typeof readOf>, facts: PostingFacts | null, active = activeAdjustments(),
+  ): Fit {
+    const input = {
       title: job.title,
       titleTranslation: facts?.titleTranslation ?? null,
       location: job.location,
@@ -651,8 +721,104 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       needsYou: read?.needsYou.length ?? 0,
       settings: searchSettings(),
       now: clock.now(),
-      adjustments: [],
-    });
+    };
+    const base = computeFit(input);
+    if (active.length === 0) return base;
+    const target: AdjustableJob = {
+      company: job.company, angle: base.angle, place: base.place.label,
+      required: (read?.requirements ?? []).filter((r) => r.kind === "required").map((r) => r.text),
+    };
+    const applying = active.filter((a) => matches(a.matcher, target));
+    if (applying.length === 0) return base;
+    const adjusted = computeFit({ ...input, adjustments: applying.map((a) => ({ id: a.id, text: a.text, points: a.points })) });
+    return adjusted.value === base.value ? base : adjusted;
+  }
+
+  interface StoredAdjustment { id: string; matcher: AdjustmentMatcher; text: string; points: number }
+  function activeAdjustments(): StoredAdjustment[] {
+    return db.prepare("SELECT id, origin, matcher, points, pass_reason FROM learned_adjustment WHERE undone_at IS NULL ORDER BY created_at, rowid").all()
+      .map((r) => {
+        const matcher = JSON.parse(String(r.matcher)) as AdjustmentMatcher;
+        return { id: String(r.id), matcher, points: Number(r.points), text: whyText(String(r.origin) as AdjustmentOrigin, matcher, sqlText(r.pass_reason)) };
+      });
+  }
+
+  /**
+   * Stores a learned adjustment, unless the same lesson (same Jobs, same direction) is already in
+   * effect: then that one is returned and nothing new is learned.
+   */
+  function learn(origin: AdjustmentOrigin, matcher: AdjustmentMatcher, jobId: string, decisionId: string | null, passReason: string | null): string {
+    const points = pointsFor(origin);
+    const same = db.prepare("SELECT id, matcher, points FROM learned_adjustment WHERE undone_at IS NULL").all()
+      .find((r) => matcherKey(JSON.parse(String(r.matcher)) as AdjustmentMatcher) === matcherKey(matcher) && Math.sign(Number(r.points)) === Math.sign(points));
+    if (same) return String(same.id);
+    const id = `adjustment:${crypto.randomUUID()}`;
+    db.prepare(
+      `INSERT INTO learned_adjustment (id, origin, matcher, points, job_id, decision_id, pass_reason, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, origin, JSON.stringify(matcher), points, jobId, decisionId, passReason, clock.now().toISOString());
+    return id;
+  }
+
+  /** The Jobs a pass with "rank lower" ticked ranks lower, by reason (see PassInput.learn). */
+  function passLessons(job: FeedJob, reason: PassReason, requirement: string | null): AdjustmentMatcher[] {
+    switch (reason) {
+      case "company":
+      case "salary":
+        return [companyMatcher(job.company)];
+      case "location":
+        return job.fit.place.label === NOT_STATED ? [] : [{ by: "place", place: job.fit.place.label }];
+      case "skills-gap": {
+        const items = requirement?.trim() ? [requirement.trim()] : job.fit.gaps;
+        return items.map((r) => ({ by: "requirement", requirement: r }));
+      }
+      case "other":
+        return [];
+    }
+  }
+
+  /** One live Job as a Feed row (any state), or undefined. */
+  function feedJob(jobId: string): FeedJob | undefined {
+    const row = db.prepare(`${jobSelect} WHERE j.id = ? AND j.merged_into IS NULL`).get(jobId);
+    return row ? toFeedJob(row) : undefined;
+  }
+
+  /** How many open Jobs each adjustment currently changes the Fit of. */
+  function affectedCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    const active = activeAdjustments();
+    if (active.length === 0) return counts;
+    const money = budget();
+    for (const r of db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved')`).all()) {
+      for (const reason of toFeedJob(r, money, active).fit.reasons) {
+        if (reason.adjustmentId) counts.set(reason.adjustmentId, (counts.get(reason.adjustmentId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }
+
+  function adjustment(id: string, affected: Map<string, number> = affectedCounts()): LearnedAdjustment {
+    const r = db.prepare(
+      `SELECT a.*, p.title, p.company FROM learned_adjustment a JOIN job j ON j.id = a.job_id
+       JOIN posting p ON p.id = ${targetPostingSql("j.id")} WHERE a.id = ?`,
+    ).get(id);
+    if (!r) throw new Error(`No learned adjustment "${id}"`);
+    const origin = String(r.origin) as AdjustmentOrigin;
+    const matcher = JSON.parse(String(r.matcher)) as AdjustmentMatcher;
+    const passReason = sqlText(r.pass_reason);
+    const job = { id: String(r.job_id), title: String(r.title), company: String(r.company) };
+    const points = Number(r.points);
+    const undoneAt = sqlText(r.undone_at);
+    return {
+      id, origin, effect: points < 0 ? "lower" : "higher", points,
+      applies: appliesTo(matcher),
+      text: whyText(origin, matcher, passReason),
+      createdBy: origin === "pass" ? `You passed ${job.title} at ${job.company}: ${passReasonLabel[passReason as PassReason] ?? "no reason"}`
+        : origin === "unhide" ? `You showed ${job.title} at ${job.company} from the hidden pile`
+        : `You boosted it from ${job.title} at ${job.company}`,
+      job, decisionId: sqlText(r.decision_id), at: String(r.created_at), undoneAt,
+      jobsAffected: undoneAt ? 0 : (affected.get(id) ?? 0),
+    };
   }
 
   // Polite polling: one request at a time per host, across every Source and Check, spaced by the
@@ -949,12 +1115,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          FROM job j
          JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
 
-  function toFeedJob(r: Record<string, unknown>, money = budget()): FeedJob {
+  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments()): FeedJob {
     const links = linksOf(String(r.id));
     const reading = readingOf(links.targetId, money.reached);
     const read = readOf(links.targetId, reading);
-    const base = { title: String(r.title), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
-    const fit = fitOf(base, read, reading.facts);
+    const base = { title: String(r.title), company: String(r.company), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
+    const fit = fitOf(base, read, reading.facts, active);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
     const shown = shownByYou(String(r.id));
     return {
@@ -1026,7 +1192,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const money = budget();
     const reading = readingOf(target.postingId, money.reached);
     const read = readOf(target.postingId, reading);
-    const base = { title: String(row.title), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
+    const base = { title: String(row.title), company: String(row.company), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
     const language = reading.facts?.language ?? null;
     const fit = fitOf(base, read, reading.facts);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
@@ -1255,7 +1421,16 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const reason = input.reason ?? null;
       if (reason !== null && !passReasons.includes(reason)) throw new Error(`Unknown pass reason "${String(reason)}"`);
       const note = input.note?.trim() || null;
-      return decide("pass", jobIds, ["new", "saved"], "passed", { passReason: reason, passNote: note });
+      // What would be learned is worked out before the pass, from the Jobs as they are now.
+      const lessons = input.learn && reason
+        ? jobIds.map((id) => feedJob(id)).filter((j): j is FeedJob => j != null && (j.state === "new" || j.state === "saved"))
+            .map((j) => ({ jobId: j.id, matchers: passLessons(j, reason, input.requirement ?? null) }))
+        : [];
+      const decision = decide("pass", jobIds, ["new", "saved"], "passed", { passReason: reason, passNote: note });
+      if (!input.learn) return decision;
+      const ids = transaction(db, () => lessons.flatMap((l) => l.matchers.map((m) => learn("pass", m, l.jobId, decision.id, reason))));
+      const affected = affectedCounts();
+      return { ...decision, learned: [...new Set(ids)].map((id) => adjustment(id, affected)) };
     },
 
     async close(jobIds, how) {
@@ -1284,6 +1459,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           });
           db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
           db.prepare("DELETE FROM job_unhidden WHERE job_id = ? AND decision_id = ?").run(jobId, decisionId);
+          // What the ranking learned with this Decision goes with it.
+          db.prepare("UPDATE learned_adjustment SET undone_at = ? WHERE decision_id = ? AND job_id = ? AND undone_at IS NULL").run(now, decisionId, jobId);
           out.push(jobId);
         }
         return out;
@@ -1316,7 +1493,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          WHERE j.merged_into IS NULL
          ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all();
-      const all = rows.map((r) => ({ job: toFeedJob(r, money), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const active = activeAdjustments();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money, active), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
       const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");
@@ -1357,7 +1535,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           heldBack.filter((j) => j.hidden),
         ),
         health: summary(allSourceHealth()),
-        ranking: { learnedAdjustments: 0 },
+        ranking: { learnedAdjustments: active.length },
         budget: money,
       };
     },
@@ -1489,12 +1667,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return storeSettings(parseSearchSettings(input));
     },
 
-    async unhide(jobIds) {
-      const hidden = jobIds.filter((id) => {
-        const row = db.prepare(`${jobSelect} WHERE j.id = ? AND j.merged_into IS NULL`).get(id);
-        return row != null && toFeedJob(row).hidden;
-      });
-      return decide("unhide", hidden, ["new"], "new");
+    async unhide(jobIds, input = {}) {
+      const hidden = jobIds.map((id) => feedJob(id)).filter((j): j is FeedJob => j?.hidden === true);
+      const decision = decide("unhide", hidden.map((j) => j.id), ["new"], "new");
+      if (!input.learn) return decision;
+      const ids = transaction(db, () => hidden.map((j) => learn("unhide", companyMatcher(j.company), j.id, decision.id, null)));
+      const affected = affectedCounts();
+      return { ...decision, learned: [...new Set(ids)].map((id) => adjustment(id, affected)) };
     },
 
     async notADealbreaker(jobId, reasonKey) {
@@ -1530,6 +1709,23 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         db.prepare("UPDATE rule_change SET undone_at = ? WHERE id = ?").run(clock.now().toISOString(), changeId);
       });
       return { change: ruleChange(changeId), settings: restored };
+    },
+
+    async learnedAdjustments() {
+      const affected = affectedCounts();
+      return db.prepare("SELECT id FROM learned_adjustment ORDER BY created_at DESC, rowid DESC").all().map((r) => adjustment(String(r.id), affected));
+    },
+
+    async undoAdjustment(adjustmentId) {
+      db.prepare("UPDATE learned_adjustment SET undone_at = COALESCE(undone_at, ?) WHERE id = ?").run(clock.now().toISOString(), adjustmentId);
+      return adjustment(adjustmentId);
+    },
+
+    async boost(jobId) {
+      const live = liveJobId(db, jobId);
+      const job = live && feedJob(live);
+      if (!job) throw new Error(`No job with id "${jobId}"`);
+      return adjustment(learn("boost", companyMatcher(job.company, job.fit.angle), job.id, null, null));
     },
 
     async sourceHealth() {

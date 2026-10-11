@@ -10,4 +10,7 @@
 - Location dealbreaker: "Plovdiv, Bulgaria" reads as "Bulgaria, city not stated" (unknown), so it is never hidden; only a bare non-Sofia city or a foreign place is. Teach locations.ts other Bulgarian cities (from #12)
 - Salary dealbreaker skips net salaries (a net figure below a gross minimum may be above it gross); add a net→gross estimate if Bulgarian net-only postings slip through (from #12)
 - Dealbreakers apply only once a posting is read, so a job outside the locations shows until it is read, then moves to the hidden pile (from #12)
-- Unhides don't yet create learned ranking adjustments; #15 hooks in at engine.unhide (from #12)
+- Learned adjustments use fixed sizes (pass −8, Show this job +5, boost +8 Fit points, in fit/weights.ts) and an identical lesson is learned once; tune once there's real use. A skills-gap pass learns only from the requirement Kris picks (one job at a time) until the master profile marks gaps (from #15)
+- The Job page's boost checkbox doesn't know about a boost made earlier (it starts off each visit; ticking again reuses the same adjustment). Show existing boosts there once JobDetail carries them (from #15)
+- "Why-line names an adjustment when it affected the rank" is read as "when it changed the Fit" (the sort key); an adjustment that leaves a clamped Fit at 0 or 100 isn't named (from #15)
+- Every Fit now reads the active learned adjustments; affectedCounts rebuilds every open Job's Fit per listing. Fine at personal scale (from #15)

@@ -35,6 +35,13 @@ export const fitWeights = {
   /** Freshness: full score up to `freshDays` old, falling to zero at `staleDays`. */
   freshness: { freshDays: 3, staleDays: 30 },
 
+  /**
+   * Learned ranking adjustments (only ever created when Kris opts in): Fit points taken from Jobs like
+   * one he passed with "rank lower" ticked, and added to Jobs like one he showed from the hidden pile
+   * ("rank higher" ticked) or boosted. Each adjustment counts once, however many Jobs it matches.
+   */
+  learned: { lower: 8, higher: 5, boost: 8 },
+
   /** Bands named on the Job page: strong is 85 and up, good 70–84, stretch below 70. */
   bands: { strong: 85, good: 70 },
 } as const;

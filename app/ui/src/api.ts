@@ -1,5 +1,5 @@
 import type {
-  RuleChange, SearchSettings,
+  LearnedAdjustment, RuleChange, SearchSettings,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
@@ -163,7 +163,21 @@ export async function saveSearchSettings(settings: SearchSettings): Promise<Sear
 }
 
 /** "Show this job": hidden Jobs back to New; undo the Decision to hide them again. */
-export const unhideJobs = (jobIds: string[]) => post<Decision>("/api/jobs/unhide", { jobIds });
+export const unhideJobs = (jobIds: string[], learn = false) => post<Decision>("/api/jobs/unhide", { jobIds, learn });
+
+/** Every learned ranking adjustment, newest first (undone ones marked). */
+export async function fetchAdjustments(signal?: AbortSignal): Promise<LearnedAdjustment[]> {
+  return json(await fetch("/api/adjustments", { signal }));
+}
+
+export async function undoAdjustment(id: string): Promise<LearnedAdjustment> {
+  return json(await postJson(`/api/adjustments/${encodeURIComponent(id)}/undo`));
+}
+
+/** "Boost new {company} {angle} jobs" from a Job. */
+export async function boostJob(jobId: string): Promise<LearnedAdjustment> {
+  return json(await postJson(`${jobPath(jobId)}/boost`));
+}
 
 /** "Not a dealbreaker for me" on one hidden reason (its key): changes the rule behind it. */
 export async function notADealbreaker(jobId: string, reason: string): Promise<{ change: RuleChange; settings: SearchSettings }> {

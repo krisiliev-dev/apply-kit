@@ -164,6 +164,20 @@ const migrations: string[] = [
      created_at TEXT NOT NULL,
      undone_at TEXT
    );`,
+  // #15: learned ranking adjustments, created only when Kris opts in (a pass reason with the box
+  // ticked, "Show this job" with the box ticked, or a boost). `matcher` (JSON) says which Jobs it
+  // moves; `points` is added to their Fit. Kept after undo (undone_at) so the list can say so.
+  `CREATE TABLE learned_adjustment (
+     id TEXT PRIMARY KEY,
+     origin TEXT NOT NULL,
+     matcher TEXT NOT NULL,
+     points REAL NOT NULL,
+     job_id TEXT NOT NULL REFERENCES job(id),
+     decision_id TEXT REFERENCES decision(id),
+     pass_reason TEXT,
+     created_at TEXT NOT NULL,
+     undone_at TEXT
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
