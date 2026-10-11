@@ -14,8 +14,8 @@ export interface CardFacts {
 export interface AlertSender {
   /** Default Source name. */
   name: string;
-  /** Whether an email came from this sender, by its From header ("Name <address>"). */
-  isFrom(from: { address: string; name: string }): boolean;
+  /** Whether an email is this sender's job alert, by its From header ("Name <address>") and subject. */
+  isFrom(from: { address: string; name: string }, subject: string): boolean;
   jobLink: JobLink;
   readCard(card: JobCard, email: AlertEmail): CardFacts;
 }
@@ -76,7 +76,28 @@ const workday: AlertSender = {
   },
 };
 
-export const senders = { linkedin, jobsbg, google, workday } satisfies Record<string, AlertSender>;
+const mygreenhouse: AlertSender = {
+  name: "MyGreenhouse alerts",
+  // Greenhouse also sends application receipts for employers; only MyGreenhouse job alerts count.
+  isFrom: ({ address, name }, subject) =>
+    /@(\w+\.)*greenhouse(-mail)?\.io$/i.test(address) && (/mygreenhouse/i.test(name) || /\b(job alert|alert|new jobs)\b/i.test(subject)),
+  jobLink(href) {
+    const target = unwrapRedirect(href);
+    const board = /^https?:\/\/((?:job-boards|boards)(?:\.eu)?\.greenhouse\.io)\/([\w-]+)\/jobs\/(\d+)/i.exec(target);
+    if (board) return { id: board[3]!, url: `https://${board[1]!.toLowerCase()}/${board[2]}/jobs/${board[3]}` };
+    let url: URL;
+    try { url = new URL(target); } catch { return null; }
+    const id = url.searchParams.get("gh_jid");
+    return id && /^\d+$/.test(id) ? { id, url: `${url.origin}${url.pathname}?gh_jid=${id}` } : null;
+  },
+  readCard({ lines }) {
+    const salary = salaryLine(lines);
+    const rest = lines.filter((l) => l !== salary);
+    return { company: rest[0] ?? null, location: rest[1] ?? null, salary };
+  },
+};
+
+export const senders = { linkedin, jobsbg, google, workday, mygreenhouse } satisfies Record<string, AlertSender>;
 
 export type SenderKey = keyof typeof senders;
 

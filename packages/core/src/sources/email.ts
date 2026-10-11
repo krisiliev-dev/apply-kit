@@ -29,7 +29,7 @@ export const emailAlerts: EmailAlertAdapter<EmailAlertConfig> = {
   key: (c) => c.sender,
   defaultName: (c) => senders[c.sender].name,
 
-  isFrom: (c, email) => senders[c.sender].isFrom(parseFrom(email.from)),
+  isFrom: (c, email) => senders[c.sender].isFrom(parseFrom(email.from), email.subject),
 
   parseEmail(c, email) {
     const sender = senders[c.sender];

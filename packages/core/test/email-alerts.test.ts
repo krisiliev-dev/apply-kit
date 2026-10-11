@@ -130,3 +130,48 @@ describe("email alerts: Workday", () => {
     ]);
   });
 });
+
+describe("email alerts: MyGreenhouse", () => {
+  it("reads jobs linked through MyGreenhouse redirects and company career pages (gh_jid)", async () => {
+    const { engine, mailbox, source } = await withEmailSource("mygreenhouse");
+    mailbox.deliver(alertEmail("email-mygreenhouse.html", {
+      id: "<alert-m1@greenhouse.example>", receivedAt: "2026-10-12T04:00:00Z",
+      from: "MyGreenhouse <no-reply@us.greenhouse-mail.io>", subject: "New jobs for your alert: Security engineer",
+    }));
+
+    await engine.checkAll();
+
+    expect(source.name).toBe("MyGreenhouse alerts");
+    expect(await feedFacts(engine)).toEqual([
+      { title: "Product Security Engineer", company: "Woodgrove Bank", location: "Remote - Europe", salary: null, url: "https://job-boards.greenhouse.io/woodgrovebank/jobs/7100000001" },
+      { title: "Cloud Security Architect", company: "Adatum", location: "Sofia, Bulgaria", salary: "€70,000 - €90,000 per year", url: "https://careers.adatum.example/jobs?gh_jid=7100000002" },
+    ]);
+  });
+});
+
+describe("email alerts: one mailbox, many senders", () => {
+  it("reads the mailbox once per check and gives each Source only its sender's alerts", async () => {
+    const mailbox = fakeMailbox();
+    const { engine } = createTestEngine({ mailReader: mailbox });
+    await engine.addSource({ kind: "email", config: "linkedin" });
+    await engine.addSource({ kind: "email", config: { sender: "jobsbg" } });
+    mailbox.deliver(linkedin("<alert-1@linkedin.example>", "2026-10-12T06:12:00Z"));
+    mailbox.deliver(alertEmail("email-jobsbg.html", {
+      id: "<sub-1@jobs.bg.example>", receivedAt: "2026-10-11T15:40:00Z", from: "JOBS.BG <noreply@jobs.bg>", subject: "Нови обяви",
+    }));
+
+    const check = await engine.checkAll();
+
+    expect(mailbox.reads).toHaveLength(1);
+    expect(check.sources).toHaveLength(2);
+    expect(check.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ sourceId: "email:linkedin", found: 3 }),
+      expect.objectContaining({ sourceId: "email:jobsbg", found: 2 }),
+    ]));
+  });
+
+  it("rejects an unknown sender with the list of known ones", async () => {
+    const { engine } = createTestEngine();
+    await expect(engine.addSource({ kind: "email", config: "monster" })).rejects.toThrow(/linkedin, jobsbg, google, workday, mygreenhouse/);
+  });
+});
