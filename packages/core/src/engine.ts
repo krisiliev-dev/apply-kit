@@ -1,5 +1,9 @@
+import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
 import type { EngineDeps, SqlDatabase } from "./ports.ts";
+import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
+import { feedRequirements, type FeedRequirement } from "./extraction/reading.ts";
+import { htmlToText } from "./extraction/text.ts";
 import type { FoundPosting } from "./sources/adapter.ts";
 import { adapterFor } from "./sources/registry.ts";
 
@@ -9,7 +13,17 @@ export interface FeedQuery {
   view: FeedView;
 }
 
-/** One row of the Feed. Fit, requirements and the why-line arrive with their tickets. */
+/**
+ * Whether a Job's posting has been read by the extractor:
+ * - unread: not read yet (it will be at the next read);
+ * - reading: being read right now;
+ * - read: requirements and facts are available;
+ * - failed: the last read failed (retried at the next read);
+ * - unscreened: not read because this month's AI budget is used up. Never hidden because of it.
+ */
+export type ReadingState = "unread" | "reading" | "read" | "failed" | "unscreened";
+
+/** One row of the Feed. Fit and the why-line arrive with their tickets. */
 export interface FeedJob {
   id: string;
   title: string;
@@ -23,6 +37,9 @@ export interface FeedJob {
   postingCount: number;
   /** Link to the job's posting. */
   url: string;
+  reading: ReadingState;
+  /** Every requirement read from the posting (empty until it is read). */
+  requirements: FeedRequirement[];
 }
 
 export type HealthState = "no-sources" | "working";
@@ -69,6 +86,18 @@ export interface DiscoveryEngine {
   addSource(source: NewSource): Promise<SourceInfo>;
   /** Checks every Source now. A failing Source is reported, never thrown, and changes nothing. */
   checkAll(): Promise<CheckResult>;
+  /**
+   * Reads every open Job's posting that hasn't been read (or whose text changed, or whose last read
+   * failed), newest first, within the monthly AI budget. Never throws for a single posting.
+   */
+  readPending(): Promise<ReadResult>;
+}
+
+export interface ReadResult {
+  read: number;
+  failed: number;
+  /** Left unread because the monthly AI budget would be crossed. */
+  unscreened: number;
 }
 
 const viewStates: Record<FeedView, string[]> = {
@@ -100,15 +129,105 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     }
   }
 
+  /** Postings being read right now (by id), so a second read doesn't start. */
+  const inFlight = new Set<string>();
+  let pendingRun: Promise<ReadResult> | null = null;
+
+  const month = () => clock.now().toISOString().slice(0, 7);
+  const spentThisMonth = () =>
+    Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
+  const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
+
+  function readingOf(postingId: string): { state: ReadingState; facts: PostingFacts | null; error: string | null } {
+    if (inFlight.has(postingId)) return { state: "reading", facts: null, error: null };
+    const p = db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
+    const e = db.prepare("SELECT status, text_hash, facts, error FROM extraction WHERE posting_id = ?").get(postingId);
+    const current = e && e.text_hash === hashText(postingText(p?.description_html));
+    if (current && e.status === "read") return { state: "read", facts: JSON.parse(String(e.facts)) as PostingFacts, error: null };
+    if (current && e.status === "failed") return { state: "failed", facts: null, error: String(e.error) };
+    return { state: "unread", facts: null, error: null };
+  }
+
+  async function readAllPending(): Promise<ReadResult> {
+    const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
+    const rows = db.prepare(
+      `SELECT p.id, p.title, p.company, p.location, p.description_html
+       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")}
+       WHERE j.state IN ('new', 'saved')
+       ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+    ).all();
+    for (const row of rows) {
+      const state = readingOf(String(row.id)).state;
+      if (state === "read" || state === "reading") continue;
+      const outcome = await readPosting(row);
+      result[outcome]++;
+    }
+    return result;
+  }
+
+  async function readPosting(row: Record<string, unknown>): Promise<keyof ReadResult> {
+    const postingId = String(row.id);
+    const text = postingText(row.description_html);
+    const hash = hashText(text);
+    const now = () => clock.now().toISOString();
+    const store = (status: "read" | "failed", facts: PostingFacts | null, model: string | null, error: string | null) => {
+      db.prepare(
+        `INSERT INTO extraction (posting_id, text_hash, status, facts, model, error, attempts, read_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+         ON CONFLICT (posting_id) DO UPDATE SET text_hash = excluded.text_hash, status = excluded.status,
+           facts = excluded.facts, model = excluded.model, error = excluded.error,
+           attempts = extraction.attempts + 1, read_at = excluded.read_at`,
+      ).run(postingId, hash, status, facts ? JSON.stringify(facts) : null, model, error, now());
+    };
+    if (text === "") {
+      store("failed", null, null, "The posting has no text to read");
+      return "failed";
+    }
+    const input: ExtractionInput = {
+      title: String(row.title),
+      company: String(row.company),
+      location: row.location == null ? null : String(row.location),
+      text: text.slice(0, MAX_TEXT_CHARS),
+    };
+    const estimate = deps.extractor.estimateCostUsd(input);
+    if (spentThisMonth() + estimate > cap()) return "unscreened";
+
+    inFlight.add(postingId);
+    try {
+      const out = await deps.extractor.extract(input);
+      recordSpend(postingId, Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      const parsed = postingFactsSchema.safeParse(out.facts);
+      if (!parsed.success) {
+        store("failed", null, out.model, "The model's answer didn't have the expected shape");
+        return "failed";
+      }
+      store("read", parsed.data, out.model, null);
+      return "read";
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) recordSpend(postingId, billed);
+      store("failed", null, null, err instanceof Error ? err.message : String(err));
+      return "failed";
+    } finally {
+      inFlight.delete(postingId);
+    }
+  }
+
+  function recordSpend(postingId: string, costUsd: number) {
+    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'extraction', ?, ?)").run(
+      clock.now().toISOString(), month(), postingId, costUsd,
+    );
+  }
+
   return {
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source");
       const states = viewStates[query.view];
       const rows = db.prepare(
-        `SELECT j.id, p.title, p.company, p.location, p.salary, p.posted_at, p.url,
+        `SELECT j.id, p.id AS posting_id, p.title, p.company, p.location, p.salary, p.posted_at, p.url,
                 (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n
          FROM job j
-         JOIN posting p ON p.id = (SELECT id FROM posting WHERE job_id = j.id ORDER BY first_seen_at, id LIMIT 1)
+         JOIN posting p ON p.id = ${representativePosting("j.id")}
          WHERE j.state IN (${states.map(() => "?").join(",")})
          ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all(...states);
@@ -116,7 +235,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         view: query.view,
         asOf: clock.now().toISOString(),
         firstRun: sources === 0,
-        jobs: rows.map((r) => ({
+        jobs: rows.map((r) => {
+          const reading = readingOf(String(r.posting_id));
+          return {
           id: String(r.id),
           title: String(r.title),
           company: String(r.company),
@@ -125,7 +246,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           postedAt: r.posted_at == null ? null : String(r.posted_at),
           postingCount: Number(r.n),
           url: String(r.url),
-        })),
+          reading: reading.state,
+          requirements: reading.facts ? feedRequirements(reading.facts) : [],
+          };
+        }),
         counts: {
           new: countStates(viewStates.new),
           saved: countStates(viewStates.saved),
@@ -149,6 +273,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
     },
 
+    readPending() {
+      pendingRun ??= readAllPending().finally(() => { pendingRun = null; });
+      return pendingRun;
+    },
+
     async checkAll() {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
@@ -157,6 +286,16 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
   };
 }
+
+/** Longest posting text sent to the extractor; longer texts are cut (bounds the cost of one read). */
+const MAX_TEXT_CHARS = 24_000;
+
+/** SQL for the Posting that stands for a Job (the first one seen) until merging picks a Target posting. */
+const representativePosting = (jobIdSql: string) =>
+  `(SELECT id FROM posting WHERE job_id = ${jobIdSql} ORDER BY first_seen_at, id LIMIT 1)`;
+
+const postingText = (html: unknown) => (html == null ? "" : htmlToText(String(html)));
+const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
 
 /**
  * Upserts one Posting by its stable identity (source id + the Source's own id). A Posting seen for

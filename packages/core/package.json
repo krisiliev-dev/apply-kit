@@ -5,5 +5,8 @@
   "description": "Discovery engine and domain rules. Dependencies (fetch, clock, db, extractor, mail reader) are injected.",
   "exports": {
     ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "zod": "4.6.5"
   }
 }

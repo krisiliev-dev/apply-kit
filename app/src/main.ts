@@ -13,7 +13,7 @@ const engine = createEngine({
   clock: { now: () => new Date() },
   fetch: globalThis.fetch,
   // Real extractor (OpenRouter) and IMAP mail reader arrive with their tickets.
-  extractor: { extract: async () => { throw new Error("Extractor not configured yet"); } },
+  extractor: { estimateCostUsd: () => 0, extract: async () => { throw new Error("Extractor not configured yet"); } },
   mailReader: { fetchSince: async () => [] },
 });
 

@@ -35,6 +35,34 @@ const migrations: string[] = [
      UNIQUE (source_id, external_id)
    );
    CREATE INDEX posting_job ON posting(job_id);`,
+  // #10: reading postings. One extraction per Posting (re-read when its text changes), the AI
+  // spending ledger the monthly cap is checked against, and Kris's answers to low-confidence facts.
+  `CREATE TABLE extraction (
+     posting_id TEXT PRIMARY KEY REFERENCES posting(id),
+     text_hash TEXT NOT NULL,
+     status TEXT NOT NULL,
+     facts TEXT,
+     model TEXT,
+     error TEXT,
+     attempts INTEGER NOT NULL DEFAULT 1,
+     read_at TEXT NOT NULL
+   );
+   CREATE TABLE ai_spend (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     at TEXT NOT NULL,
+     month TEXT NOT NULL,
+     task TEXT NOT NULL,
+     posting_id TEXT,
+     cost_usd REAL NOT NULL
+   );
+   CREATE INDEX ai_spend_month ON ai_spend(month);
+   CREATE TABLE fact_confirmation (
+     posting_id TEXT NOT NULL REFERENCES posting(id),
+     fact_key TEXT NOT NULL,
+     choice TEXT NOT NULL,
+     confirmed_at TEXT NOT NULL,
+     PRIMARY KEY (posting_id, fact_key)
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

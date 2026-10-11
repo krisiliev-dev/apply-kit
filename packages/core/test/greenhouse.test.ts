@@ -22,9 +22,9 @@ describe("Greenhouse source", () => {
     expect(feed.counts.new).toBe(3);
     // Newest first until Fit exists.
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Associate Product Manager", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-10-06T08:33:36.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4998241101" },
-      { id: expect.any(String), title: "Customer Support Specialist", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-04-21T08:19:01.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4512588101" },
-      { id: expect.any(String), title: "Account Executive", company: "Payhawk", location: "London", salary: null, postedAt: "2023-12-07T14:16:04.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4258713101" },
+      { id: expect.any(String), title: "Associate Product Manager", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-10-06T08:33:36.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4998241101", reading: "unread", requirements: [] },
+      { id: expect.any(String), title: "Customer Support Specialist", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-04-21T08:19:01.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4512588101", reading: "unread", requirements: [] },
+      { id: expect.any(String), title: "Account Executive", company: "Payhawk", location: "London", salary: null, postedAt: "2023-12-07T14:16:04.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4258713101", reading: "unread", requirements: [] },
     ]);
   });
 
