@@ -49,6 +49,7 @@ function asFacts(e: ExpectedFacts): PostingFacts {
   const q = { quote: "", translation: null }, c = 1;
   return {
     language: e.language,
+    titleTranslation: null,
     requirements: e.requirements.map((r) => ({ ...r, category: "other" as const, source: q, confidence: c })),
     years: e.years.map((y) => ({ min: y.min, max: y.max, about: y.about ?? "", kind: y.kind, source: q, confidence: c })),
     languages: e.languages.map((l) => ({ language: l.language, level: l.level ?? null, kind: l.kind, source: q, confidence: c })),

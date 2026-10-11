@@ -6,7 +6,7 @@ import type { EvaluationCase, Extractor, ExtractionInput, PostingFacts } from "@
 import { runExtractionEvaluation, type EvaluationCliDeps } from "./cli.ts";
 
 const nothing: PostingFacts = {
-  language: "en", requirements: [], years: [], languages: [], certificates: [],
+  language: "en", titleTranslation: null, requirements: [], years: [], languages: [], certificates: [],
   workAuthorisation: { summary: "Not stated", visaSponsorship: "not-stated", source: null, confidence: 1 },
   remote: { mode: "not-stated", summary: "Not stated", locations: [], source: null, confidence: 1 },
   salary: { stated: false, min: null, max: null, currency: null, period: null, basis: "not-stated", source: null, confidence: 1 },
