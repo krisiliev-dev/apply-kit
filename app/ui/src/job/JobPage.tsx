@@ -282,7 +282,7 @@ function Quote({ source }: { source: FactSource }) {
 function KeyFacts({ facts }: { facts: KeyFact[] }) {
   return (
     <div className="panel o3">
-      <div className="sec-head"><h2>Key facts</h2><span className="meta">From the posting. Each one shows the line it came from.</span></div>
+      <div className="sec-head"><h2>Key facts</h2><span className="meta">From the target posting. Each one shows the line it came from.</span></div>
       <dl className="facts">{facts.map((f) => <Fact key={f.key} fact={f} />)}</dl>
     </div>
   );
