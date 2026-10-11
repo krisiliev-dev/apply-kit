@@ -30,6 +30,9 @@ const engine = createEngine({
 // Sources from config are added on every start; adding one that exists changes nothing.
 for (const source of config.sources) await engine.addSource(source);
 
+// Read postings left unread when the service last stopped (within the monthly budget).
+engine.readPending().catch((err: unknown) => console.error("Reading postings failed:", err));
+
 const app = createServer({ engine, uiDir: config.uiDir });
 
 // localhost only: the extension and UI talk to this, nothing else should.

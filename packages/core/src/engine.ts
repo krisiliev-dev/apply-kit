@@ -69,6 +69,8 @@ export interface JobDetail {
   screening: Screening | null;
   /** The Fit check (Fit, closest angle, gaps) arrives with Fit; null until then. */
   fit: null;
+  /** This month's AI budget, so an unscreened Job can say why. */
+  budget: BudgetInfo;
 }
 
 export type HealthState = "no-sources" | "working";
@@ -368,7 +370,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         `SELECT p.id, s.name, p.url, p.first_seen_at FROM posting p JOIN source s ON s.id = p.source_id
          WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
       ).all(id);
-      const reading = readingOf(String(j.posting_id));
+      const money = budget();
+      const reading = readingOf(String(j.posting_id), money.reached);
       const read = readOf(String(j.posting_id), reading);
       return {
         id: String(j.id),
@@ -387,6 +390,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         needsYou: read?.needsYou ?? [],
         screening: read?.screening ?? null,
         fit: null,
+        budget: money,
       };
     },
 

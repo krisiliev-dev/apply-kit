@@ -220,6 +220,7 @@ describe("reading postings: the monthly AI budget", () => {
     expect(extractor.calls).toHaveLength(0);
     expect(feed.jobs.map((j) => j.reading)).toEqual(["unscreened", "unscreened", "failed"]);
     expect(feed.budget).toMatchObject({ capUsd: 0, reached: true });
+    expect((await t.engine.getJob(feed.jobs[0]!.id))!).toMatchObject({ reading: { state: "unscreened" }, budget: { capUsd: 0, reached: true } });
   });
 
   it("starts reading again when a new month begins", async () => {
