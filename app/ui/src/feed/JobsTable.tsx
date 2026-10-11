@@ -1,5 +1,5 @@
 import type { FeedJob, FeedResult, FeedSort, FeedView, PassInput } from "@apply-kit/core";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { passJobs, saveJobs, undoDecision } from "../api.ts";
 import { PassDialog } from "./PassDialog.tsx";
 import { useShortcutsSetting } from "./shortcuts.ts";
@@ -223,20 +223,24 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
             </tr>
           </thead>
           <tbody onKeyDown={onKeyDown}>
-            {jobs.map((j) => (
-              <JobRow
-                key={j.id}
-                job={j}
-                asOf={feed.asOf}
-                active={j.id === current}
-                checked={selected.has(j.id)}
-                showSavedChip={view !== "saved"}
-                rowRef={(el) => { if (el) rowRefs.current.set(j.id, el); else rowRefs.current.delete(j.id); }}
-                onFocus={() => setActiveId(j.id)}
-                onCheck={(on) => setSelected((s) => { const n = new Set(s); if (on) n.add(j.id); else n.delete(j.id); return n; })}
-                onSave={() => void save([j.id])}
-                onPass={() => askPass([j.id])}
-              />
+            {jobs.map((j, i) => (
+              <Fragment key={j.id}>
+                {j.fit.place.tier === "relocation" && jobs[i - 1]?.fit.place.tier !== "relocation" && (
+                  <tr className="group"><th colSpan={7} scope="colgroup">Relocation · a separate, lower-priority list</th></tr>
+                )}
+                <JobRow
+                  job={j}
+                  asOf={feed.asOf}
+                  active={j.id === current}
+                  checked={selected.has(j.id)}
+                  showSavedChip={view !== "saved"}
+                  rowRef={(el) => { if (el) rowRefs.current.set(j.id, el); else rowRefs.current.delete(j.id); }}
+                  onFocus={() => setActiveId(j.id)}
+                  onCheck={(on) => setSelected((s) => { const n = new Set(s); if (on) n.add(j.id); else n.delete(j.id); return n; })}
+                  onSave={() => void save([j.id])}
+                  onPass={() => askPass([j.id])}
+                />
+              </Fragment>
             ))}
           </tbody>
         </table>

@@ -190,3 +190,4 @@
 .fit-why .kv { padding: 0; border: 0 }
 .fitcheck .kv { grid-column: 1 / -1; padding-top: var(--s-5); border-top: 1px solid var(--rule) }
 @media (max-width: 520px) { .fitcheck .kv { grid-template-columns: minmax(0, 1fr) } .fitcheck .kv dd { margin-bottom: var(--s-3) } }
+.jobs tr.group th { background: var(--surface-sunken); color: var(--ink-2); font-weight: 600; text-align: left }
