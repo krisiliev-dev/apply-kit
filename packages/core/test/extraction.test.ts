@@ -155,3 +155,34 @@ describe("reading postings: low-confidence facts", () => {
     expect(job.screening!.certificatesRequired).toEqual([]);
   });
 });
+
+describe("reading postings: Kris confirms a fact", () => {
+  it("uses Kris's answer for that job and stops asking", async () => {
+    const t = await checked(kestrelEngine(fakeExtractor({ "Security Engineer": unsure })));
+    await t.engine.readPending();
+    const id = await jobId(t, "Security Engineer");
+
+    await t.engine.confirmFact(id, "salary", "extracted");
+    await t.engine.confirmFact(id, "years:1", "cautious");
+    await t.engine.confirmFact(id, "requirements:2", "extracted");
+    await t.clock.advance(30 * 60_000);
+    await t.engine.checkAll();
+    const job = (await t.engine.getJob(id))!;
+
+    expect(job.needsYou).toEqual([]);
+    expect(job.keyFacts.find((f) => f.key === "salary")).toMatchObject({ value: "5,500–7,000 BGN gross/month", needsYou: false });
+    expect(job.keyFacts.find((f) => f.key === "years:1")).toMatchObject({ value: "5+ years in a SOC or CERT (preferred)", needsYou: false });
+    expect(job.requirements[2]).toMatchObject({ askedAs: "Required", kind: "required", needsYou: false });
+    expect(job.screening).toMatchObject({ yearsRequired: 3, salary: { min: 5500, max: 7000, currency: "BGN" }, provisional: false });
+    expect((await t.engine.queryFeed({ view: "new" })).jobs.find((j) => j.id === id)!.needsYou).toBe(0);
+  });
+
+  it("refuses an answer for a fact that isn't waiting for Kris", async () => {
+    const t = await checked(kestrelEngine(fakeExtractor({ "Security Engineer": unsure })));
+    await t.engine.readPending();
+    const id = await jobId(t, "Security Engineer");
+
+    await expect(t.engine.confirmFact(id, "remote", "extracted")).rejects.toThrow(/doesn't need/);
+    await expect(t.engine.confirmFact("job:nope", "salary", "extracted")).rejects.toThrow(/No job/);
+  });
+});

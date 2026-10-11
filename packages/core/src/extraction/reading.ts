@@ -86,7 +86,11 @@ const UNFOUND_CONFIDENCE = 0.5;
 
 type Kind = "required" | "preferred";
 
-export function jobReading(facts: PostingFacts, text: string): JobReading {
+/** Kris's answer to a Needs-you item: keep the model's reading, or keep the cautious one. */
+export type FactAnswer = "extracted" | "cautious";
+
+/** `answers` are Kris's answers by fact key; an answered fact is no longer asked about. */
+export function jobReading(facts: PostingFacts, text: string, answers: Record<string, FactAnswer> = {}): JobReading {
   const needsYou: NeedsYouItem[] = [];
   const src = (s: SourceQuote): FactSource => ({ quote: s.quote, translation: s.translation, line: lineOf(text, s.quote) });
   /** Confidence clamped to 0..1, and capped when the quoted words aren't in the posting. */
@@ -100,16 +104,18 @@ export function jobReading(facts: PostingFacts, text: string): JobReading {
   const kinded = (key: string, label: string, question: string, base: string, kind: Kind, confidence: number, quote: SourceQuote) => {
     const source = src(quote);
     const c = trust(confidence, source);
-    const low = c < LOW_CONFIDENCE;
+    const answer = answers[key];
+    const low = c < LOW_CONFIDENCE && !answer;
     const cap = (k: Kind) => (k === "required" ? "Required" : "Preferred");
     const needs = low && ask({ key, label, question, extracted: `${cap(kind)}: ${base}`, cautious: `Preferred: ${base}`, source });
-    return { key, source, confidence: c, needsYou: needs, kind: (low ? "preferred" : kind) as Kind, low };
+    const useKind: Kind = low || answer === "cautious" ? "preferred" : kind;
+    return { key, source, confidence: c, needsYou: needs, kind: useKind, low };
   };
 
   const requirements: JobRequirement[] = facts.requirements.map((r, i) => {
     const k = kinded(`requirements:${i}`, "Requirement", `Is "${r.text}" required?`, r.text, r.kind, r.confidence, r.source);
     return {
-      key: k.key, text: r.text, askedAs: k.low ? "Unclear" : r.kind === "required" ? "Required" : "Preferred",
+      key: k.key, text: r.text, askedAs: k.low ? "Unclear" : k.kind === "required" ? "Required" : "Preferred",
       kind: k.kind, status: "unknown", needsYou: k.needsYou, confidence: k.confidence, source: k.source,
     };
   });
@@ -141,10 +147,12 @@ export function jobReading(facts: PostingFacts, text: string): JobReading {
   const single = (key: string, label: string, question: string, read: string, confidence: number, quote: SourceQuote | null) => {
     const source = quote ? src(quote) : null;
     const c = trust(confidence, source);
-    const low = c < LOW_CONFIDENCE && read !== "Not stated";
+    const answer = answers[key];
+    const low = c < LOW_CONFIDENCE && read !== "Not stated" && !answer;
     if (low) ask({ key, label, question, extracted: read, cautious: "Not stated", source });
-    keyFacts.push({ key, label, value: low ? "Not stated" : read, confidence: c, needsYou: low, source });
-    return !low;
+    const use = !low && answer !== "cautious";
+    keyFacts.push({ key, label, value: use ? read : "Not stated", confidence: c, needsYou: low, source });
+    return use;
   };
 
   const remoteRead = facts.remote.mode === "not-stated" ? "Not stated" : facts.remote.summary;

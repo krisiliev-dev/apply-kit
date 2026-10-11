@@ -3,7 +3,7 @@ import { migrate } from "./schema.ts";
 import type { EngineDeps, SqlDatabase } from "./ports.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
 import {
-  jobReading, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
+  jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
 import type { FoundPosting } from "./sources/adapter.ts";
@@ -122,6 +122,11 @@ export interface DiscoveryEngine {
   readPending(): Promise<ReadResult>;
   /** One Job in full, or null if there is no such Job. */
   getJob(id: string): Promise<JobDetail | null>;
+  /**
+   * Kris's answer to one Needs-you item on a Job: keep the model's reading ("extracted") or the
+   * cautious one. Applies to this Job only; the posting isn't changed. Throws if the fact isn't waiting.
+   */
+  confirmFact(jobId: string, factKey: string, answer: FactAnswer): Promise<JobDetail>;
 }
 
 export interface ReadResult {
@@ -180,6 +185,17 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return { state: "unread", facts: null, error: null, text };
   }
 
+  const answersFor = (postingId: string): Record<string, FactAnswer> =>
+    Object.fromEntries(
+      db.prepare("SELECT fact_key, choice FROM fact_confirmation WHERE posting_id = ?").all(postingId)
+        .map((r) => [String(r.fact_key), String(r.choice) as FactAnswer]),
+    );
+
+  /** The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is read. */
+  function readOf(postingId: string, reading: ReturnType<typeof readingOf>) {
+    return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
+  }
+
   async function readAllPending(): Promise<ReadResult> {
     const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
     const rows = db.prepare(
@@ -203,6 +219,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const hash = hashText(text);
     const now = () => clock.now().toISOString();
     const store = (status: "read" | "failed", facts: PostingFacts | null, model: string | null, error: string | null) => {
+      // Answers belong to one reading of one text: a changed posting is asked about afresh.
+      db.prepare("DELETE FROM fact_confirmation WHERE posting_id = ?").run(postingId);
       db.prepare(
         `INSERT INTO extraction (posting_id, text_hash, status, facts, model, error, attempts, read_at)
          VALUES (?, ?, ?, ?, ?, ?, 1, ?)
@@ -269,7 +287,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         firstRun: sources === 0,
         jobs: rows.map((r) => {
           const reading = readingOf(String(r.posting_id));
-          const read = reading.facts ? jobReading(reading.facts, reading.text) : null;
+          const read = readOf(String(r.posting_id), reading);
           return {
           id: String(r.id),
           title: String(r.title),
@@ -318,7 +336,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
       ).all(id);
       const reading = readingOf(String(j.posting_id));
-      const read = reading.facts ? jobReading(reading.facts, reading.text) : null;
+      const read = readOf(String(j.posting_id), reading);
       return {
         id: String(j.id),
         title: String(j.title),
@@ -337,6 +355,19 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         screening: read?.screening ?? null,
         fit: null,
       };
+    },
+
+    async confirmFact(jobId, factKey, answer) {
+      const posting = db.prepare(`SELECT ${representativePosting("?")} AS id`).get(jobId)?.id;
+      if (posting == null) throw new Error(`No job with id "${jobId}"`);
+      const postingId = String(posting);
+      const read = readOf(postingId, readingOf(postingId));
+      if (!read?.needsYou.some((n) => n.key === factKey)) throw new Error(`"${factKey}" doesn't need an answer on this job`);
+      if (answer !== "extracted" && answer !== "cautious") throw new Error(`Unknown answer "${String(answer)}"`);
+      db.prepare("INSERT OR REPLACE INTO fact_confirmation (posting_id, fact_key, choice, confirmed_at) VALUES (?, ?, ?, ?)").run(
+        postingId, factKey, answer, clock.now().toISOString(),
+      );
+      return (await this.getJob(jobId))!;
     },
 
     readPending() {
