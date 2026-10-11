@@ -89,6 +89,13 @@ Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that 
 | `pnpm test` | Runs the tests (Vitest) |
 | `pnpm lint` | ESLint across the workspace |
 | `pnpm typecheck` | TypeScript project build, no output files |
+| `pnpm eval:extraction` | Checks how well postings are read (see below). Costs money; not part of `pnpm test` |
+
+### Extraction accuracy check
+
+`pnpm eval:extraction` runs the real extractor over 50 hand-labelled postings in `eval/extraction/postings/` (English and Bulgarian; dev, security, design) and prints accuracy per fact type: F1 for requirements, years, languages, certificates and locations; accuracy for the remote rule, work authorisation, salary and posting language; then the same per language and field. It reads the same `.env` settings as the service (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_PROVIDERS`) and refuses to run without the key or without `AI_MONTHLY_CAP_USD`. Its spending is booked in the service's monthly ledger, and it won't start if its estimate (about $0.35 at most; usually far less) is more than what is left of this month's cap.
+
+Each run saves a report to `eval/extraction/reports/` (gitignored) with every posting's extracted facts and scores; the next run shows the change against the newest report, so a new model (`OPENROUTER_MODEL`) or prompt can be compared. Labelling rules for adding or fixing postings: `eval/extraction/labelling-rules.md`.
 
 ## Rules carried forward
 

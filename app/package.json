@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "concurrently -k -n api,ui -c green,magenta \"tsx watch --clear-screen=false src/main.ts\" \"vite\"",
     "build": "vite build",
-    "start": "vite build && tsx src/main.ts"
+    "start": "vite build && tsx src/main.ts",
+    "eval:extraction": "tsx src/evaluation/main.ts"
   },
   "dependencies": {
     "@apply-kit/core": "workspace:*",
