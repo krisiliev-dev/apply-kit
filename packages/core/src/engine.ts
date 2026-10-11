@@ -153,6 +153,32 @@ export interface SourceInfo {
   name: string;
 }
 
+export interface AddSourceOptions {
+  /**
+   * Add it only if it was never added before: a Source Kris paused or removed stays that way. Used for
+   * Sources from the APPLY_KIT_SOURCES setting, which seed the watchlist once on each start.
+   */
+  onlyIfNew?: boolean;
+}
+
+/** What removing a Source would do to its open Jobs (Packages and Applications are never touched). */
+export interface RemovalPreview {
+  sourceId: string;
+  name: string;
+  label: string;
+  /** Open (new or saved) Jobs this Source lists. */
+  openJobs: number;
+  /** Open Jobs only this Source covers: they close with "Source removed". */
+  closing: number;
+  /** Open Jobs another Source also covers: they stay open. */
+  stayingOpen: number;
+  /** The other Sources keeping them open, with how many each covers. */
+  stayingVia: { sourceId: string; name: string; jobs: number }[];
+}
+
+/** How "Source removed" reads on a closed Job. */
+export const sourceRemovedHow = "Source removed";
+
 /** Why a Check failed: the Source errored, didn't answer in time, or asked us to slow down. */
 export type CheckFailure = "error" | "timeout" | "rate-limited";
 
@@ -172,7 +198,8 @@ export interface CheckRecord {
   error: string | null;
 }
 
-export type SourceStatus = "not-checked" | "working" | "failing";
+/** Paused: Kris stopped its checks; its Jobs stay as they are. */
+export type SourceStatus = "not-checked" | "working" | "failing" | "paused";
 
 export interface SourceHealth {
   id: string;
@@ -220,8 +247,23 @@ export interface CheckOptions {
 
 export interface DiscoveryEngine {
   queryFeed(query: FeedQuery): Promise<FeedResult>;
-  /** Adds a Source. Adding the same Source again (same kind and key) changes nothing. */
-  addSource(source: NewSource): Promise<SourceInfo>;
+  /**
+   * Adds a Source. Adding the same Source again (same kind and key) changes nothing, except that a
+   * removed or paused one comes back and is checked again (unless `onlyIfNew`).
+   */
+  addSource(source: NewSource, options?: AddSourceOptions): Promise<SourceInfo>;
+  /** Stops checking a Source. Nothing closes: its Jobs stay as they are. */
+  pauseSource(sourceId: string): Promise<SourceInfo>;
+  /** Checks a paused Source again from the next Check. */
+  resumeSource(sourceId: string): Promise<SourceInfo>;
+  /** What removing a Source would close and what stays open through other Sources. */
+  previewRemoval(sourceId: string): Promise<RemovalPreview>;
+  /**
+   * Removes a Source from the watchlist: it's no longer checked or listed, and its open Jobs that no
+   * other Source covers close with "Source removed" (Passed & closed, reopenable). Passed Jobs,
+   * Packages and Applications are untouched. Undoing the returned Decision brings the Source back.
+   */
+  removeSource(sourceId: string): Promise<{ sourceId: string; decision: Decision }>;
   /**
    * Checks every Source now. A failing Source is reported, never thrown, and changes nothing.
    * Each Source's results are stored as soon as it finishes, so the Feed fills while slower ones run.
@@ -237,9 +279,10 @@ export interface DiscoveryEngine {
   pass(jobIds: string[], input?: PassInput): Promise<Decision>;
   /**
    * Undoes a Decision, for all its Jobs or only the given ones, at any time: each Job goes back to
-   * its state before. A Job Kris has decided on again since is left alone. Returns the Jobs restored.
+   * its state before. A Job Kris has decided on again since is left alone. Undoing a whole removal
+   * also brings its Source back. Returns the Jobs (and Sources) restored.
    */
-  undo(decisionId: string, jobIds?: string[]): Promise<{ jobIds: string[] }>;
+  undo(decisionId: string, jobIds?: string[]): Promise<{ jobIds: string[]; sourceIds: string[] }>;
   /** Closes Jobs that aren't closed yet, saying how in plain words ("No longer listed by Greenhouse"). */
   close(jobIds: string[], how: string): Promise<Decision>;
   /** Reopens closed Jobs: they go back to New. */
@@ -540,12 +583,41 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   function allSourceHealth(): SourceHealth[] {
-    const rows = db.prepare("SELECT id, name, kind FROM source ORDER BY created_at, id").all();
+    const rows = db.prepare("SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL ORDER BY created_at, id").all();
     const history = db.prepare(
       `SELECT checked_at, outcome, in_locations, total, error FROM source_check
        WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
     );
     return rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord)));
+  }
+
+  /** A Source on the watchlist (paused or not), or throws. Removed Sources are gone as far as Kris can tell. */
+  function liveSource(sourceId: string): Record<string, unknown> {
+    const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ? AND removed_at IS NULL").get(sourceId);
+    if (!row) throw new Error(`No source "${sourceId}"`);
+    return row;
+  }
+
+  function sourceInfo(id: string): SourceInfo {
+    const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
+    return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
+  }
+
+  /** Other watchlist Sources (paused ones included) with a Posting in this Job. */
+  function coveringSources(jobId: string, exceptSourceId: string) {
+    return db.prepare(
+      `SELECT DISTINCT s.id, s.name FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? AND s.id != ? AND s.removed_at IS NULL ORDER BY s.created_at, s.id`,
+    ).all(jobId, exceptSourceId);
+  }
+
+  /** A Source's open Jobs, and those of them no other Source covers. */
+  function removalImpact(sourceId: string): { open: string[]; closing: string[] } {
+    const open = db.prepare(
+      `SELECT DISTINCT j.id FROM job j JOIN posting p ON p.job_id = j.id
+       WHERE p.source_id = ? AND j.state IN ('new', 'saved') ORDER BY j.id`,
+    ).all(sourceId).map((r) => String(r.id));
+    return { open, closing: open.filter((id) => coveringSources(id, sourceId).length === 0) };
   }
 
   function describeSource(r: Record<string, unknown>, history: CheckRecord[]): SourceHealth {
@@ -554,7 +626,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const lastGood = db.prepare("SELECT MAX(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome = 'ok'").get(id)?.at;
     const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
     const latest = history[0];
-    const status: SourceStatus = !latest ? "not-checked" : latest.outcome === "ok" ? "working" : "failing";
+    const status: SourceStatus = r.paused_at != null ? "paused" : !latest ? "not-checked" : latest.outcome === "ok" ? "working" : "failing";
     const failingSince = status !== "failing" ? null : String(db.prepare(
       "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
     ).get(id, lastGoodCheckAt ?? "")!.at);
@@ -643,11 +715,18 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         }
         return out;
       });
-      return { jobIds: restored };
+      const sourceIds: string[] = [];
+      if (!only) {
+        for (const r of db.prepare("SELECT id FROM source WHERE removed_decision_id = ? AND removed_at IS NOT NULL").all(decisionId)) {
+          db.prepare("UPDATE source SET removed_at = NULL, removed_decision_id = NULL WHERE id = ?").run(String(r.id));
+          sourceIds.push(String(r.id));
+        }
+      }
+      return { jobIds: restored, sourceIds };
     },
 
     async queryFeed(query) {
-      const sources = count("SELECT COUNT(*) AS n FROM source");
+      const sources = count("SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL");
       const money = budget();
       const states = viewStates[query.view];
       const rows = db.prepare(
@@ -707,15 +786,51 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       };
     },
 
-    async addSource({ kind, config, name }) {
+    async addSource({ kind, config, name }, options = {}) {
       const adapter = adapterFor(kind);
       const parsed = adapter.parseConfig(config);
       const id = `${kind}:${adapter.key(parsed)}`;
       db.prepare("INSERT OR IGNORE INTO source (id, name, kind, config, created_at) VALUES (?, ?, ?, ?, ?)").run(
         id, name ?? adapter.defaultName(parsed), kind, JSON.stringify(parsed), clock.now().toISOString(),
       );
-      const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
-      return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
+      if (!options.onlyIfNew) db.prepare("UPDATE source SET removed_at = NULL, removed_decision_id = NULL, paused_at = NULL WHERE id = ?").run(id);
+      return sourceInfo(id);
+    },
+
+    async pauseSource(sourceId) {
+      liveSource(sourceId);
+      db.prepare("UPDATE source SET paused_at = COALESCE(paused_at, ?) WHERE id = ?").run(clock.now().toISOString(), sourceId);
+      return sourceInfo(sourceId);
+    },
+
+    async resumeSource(sourceId) {
+      liveSource(sourceId);
+      db.prepare("UPDATE source SET paused_at = NULL WHERE id = ?").run(sourceId);
+      return sourceInfo(sourceId);
+    },
+
+    async previewRemoval(sourceId) {
+      const source = liveSource(sourceId);
+      const { open, closing } = removalImpact(sourceId);
+      const via = new Map<string, { sourceId: string; name: string; jobs: number }>();
+      for (const job of open) {
+        for (const other of coveringSources(job, sourceId)) {
+          const entry = via.get(String(other.id)) ?? { sourceId: String(other.id), name: String(other.name), jobs: 0 };
+          entry.jobs++;
+          via.set(entry.sourceId, entry);
+        }
+      }
+      return {
+        sourceId, name: String(source.name), label: kindLabel(String(source.kind)),
+        openJobs: open.length, closing: closing.length, stayingOpen: open.length - closing.length, stayingVia: [...via.values()],
+      };
+    },
+
+    async removeSource(sourceId) {
+      liveSource(sourceId);
+      const decision = decide("close", removalImpact(sourceId).closing, ["new", "saved"], "closed", { closedHow: sourceRemovedHow });
+      db.prepare("UPDATE source SET removed_at = ?, removed_decision_id = ? WHERE id = ?").run(clock.now().toISOString(), decision.id, sourceId);
+      return { sourceId, decision };
     },
 
     getJob,
@@ -747,7 +862,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
     async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
-      const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
+      const rows = db.prepare(
+        "SELECT id, name, kind, config FROM source WHERE removed_at IS NULL AND paused_at IS NULL ORDER BY created_at, id",
+      ).all();
       options.onStart?.(rows.length);
       const sources = await Promise.all(rows.map(async (r) => {
         const result = await checkOne(r, startedAt);
@@ -758,9 +875,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
 
     async checkSource(sourceId) {
-      const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ?").get(sourceId);
-      if (!row) throw new Error(`No source "${sourceId}"`);
-      return checkOne(row, clock.now().toISOString());
+      return checkOne(liveSource(sourceId), clock.now().toISOString());
     },
 
     async detectCompany(input, options) {
@@ -768,11 +883,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return detectCompany(input, {
         fetchFor: (kind) => fetchFor(kind),
         setting,
-        existingSource: (id) => (db.prepare("SELECT id FROM source WHERE id = ?").get(id) ? id : undefined),
+        existingSource: (id) => (db.prepare("SELECT id FROM source WHERE id = ? AND removed_at IS NULL").get(id) ? id : undefined),
         aggregatorJobs: (_company, slug) => {
           const rows = db.prepare(
             `SELECT s.id, s.name, s.kind, p.company, COUNT(DISTINCT p.job_id) AS n FROM posting p JOIN source s ON s.id = p.source_id
-             WHERE p.last_seen_at >= ? GROUP BY s.id, p.company ORDER BY s.created_at, s.id`,
+             WHERE p.last_seen_at >= ? AND s.removed_at IS NULL GROUP BY s.id, p.company ORDER BY s.created_at, s.id`,
           ).all(monthAgo);
           const bySource = new Map<string, { id: string; name: string; jobs: number }>();
           for (const r of rows) {
