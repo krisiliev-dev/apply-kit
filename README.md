@@ -25,7 +25,7 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Until the Sources screen exists, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start; use **Check now** on the Feed to fetch.
+Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start; use **Check now** on the Feed to fetch. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
 
 Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
 
