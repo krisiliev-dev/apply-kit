@@ -109,7 +109,7 @@ describe("source health: overall summary for the top bar and Feed", () => {
 
     const feed = await engine.queryFeed({ view: "new" });
 
-    expect(feed.health).toEqual({ state: "working", sources: 1, lastCheckAt: "2026-10-12T07:30:00.000Z", failing: [], quiet: [] });
+    expect(feed.health).toEqual({ state: "working", sources: 1, lastCheckAt: "2026-10-12T07:30:00.000Z", failing: [], quiet: [], mailbox: null });
   });
 
   it("is failing and names each failed Source with what it means for the Feed", async () => {
@@ -135,6 +135,7 @@ describe("source health: overall summary for the top bar and Feed", () => {
         jobsKept: 3,
       }],
       quiet: [],
+      mailbox: null,
     };
     expect(feed.health).toEqual(expected);
     expect(report.summary).toEqual(expected);

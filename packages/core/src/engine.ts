@@ -1,6 +1,7 @@
 import { migrate } from "./schema.ts";
 import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
 import { isInYourLocations } from "./locations.ts";
+import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters } from "./sources/registry.ts";
@@ -43,6 +44,23 @@ export interface FailingSource {
   jobsKept: number;
 }
 
+/** The job mailbox that feeds every email-alert Source, as Sources shows it. */
+export interface MailboxHealth {
+  /** "not-read" until the first read; "error" when the latest read failed. */
+  state: "not-read" | "connected" | "error";
+  problem: MailboxProblem | null;
+  /** The reader's own message for the latest failure. */
+  error: string | null;
+  /** What the user does about it, naming the settings involved. */
+  fix: string | null;
+  /** First failed read in the current run of failures. */
+  since: string | null;
+  /** The latest good read. */
+  lastReadAt: string | null;
+  /** The latest alert email any email Source received. */
+  lastEmailAt: string | null;
+}
+
 /** Overall source health: drives the top-bar pill and the Feed's failed-source banner. */
 export interface HealthSummary {
   state: HealthState;
@@ -52,6 +70,11 @@ export interface HealthSummary {
   failing: FailingSource[];
   /** Email-alert Sources quiet longer than usual. Never closes jobs; the user checks the alert is still on. */
   quiet: QuietSource[];
+  /**
+   * The job mailbox, or null when no email-alert Source is connected. While it fails, its email
+   * Sources are reported here once instead of one by one in `failing`.
+   */
+  mailbox: MailboxHealth | null;
 }
 
 export interface FeedResult {
@@ -202,7 +225,42 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   /** One read of the job mailbox, shared by every email Source in a check and made only if one needs it. */
   function mailboxRead(): () => Promise<AlertEmail[]> {
     let read: Promise<AlertEmail[]> | null = null;
-    return () => (read ??= deps.mailReader.fetchSince(new Date(clock.now().getTime() - mailLookbackMs)));
+    return () => (read ??= readMailbox());
+  }
+
+  async function readMailbox(): Promise<AlertEmail[]> {
+    const at = clock.now().toISOString();
+    const record = db.prepare("INSERT INTO mailbox_read (read_at, outcome, reason, error, emails) VALUES (?, ?, ?, ?, ?)");
+    try {
+      const emails = await deps.mailReader.fetchSince(new Date(clock.now().getTime() - mailLookbackMs));
+      record.run(at, "ok", null, null, emails.length);
+      return emails;
+    } catch (err) {
+      record.run(at, "error", mailboxProblemOf(err), err instanceof Error ? err.message : String(err), null);
+      throw err;
+    }
+  }
+
+  function mailboxHealth(sources: SourceHealth[]): MailboxHealth | null {
+    if (!sources.some((s) => s.category === "email")) return null;
+    const latest = db.prepare("SELECT read_at, outcome, reason, error FROM mailbox_read ORDER BY id DESC LIMIT 1").get();
+    const lastOk = db.prepare("SELECT MAX(read_at) AS at FROM mailbox_read WHERE outcome = 'ok'").get()?.at;
+    const lastEmail = db.prepare("SELECT MAX(received_at) AS at FROM alert_email").get()?.at;
+    const lastReadAt = lastOk == null ? null : String(lastOk);
+    const lastEmailAt = lastEmail == null ? null : String(lastEmail);
+    if (!latest || latest.outcome === "ok") {
+      return { state: latest ? "connected" : "not-read", problem: null, error: null, fix: null, since: null, lastReadAt, lastEmailAt };
+    }
+    const problem = String(latest.reason) as MailboxProblem;
+    const since = String(db.prepare("SELECT MIN(read_at) AS at FROM mailbox_read WHERE outcome != 'ok' AND read_at > ?").get(lastReadAt ?? "")!.at);
+    return {
+      state: "error", problem, error: latest.error == null ? null : String(latest.error), fix: mailboxFix[problem] ?? mailboxFix.error,
+      since, lastReadAt, lastEmailAt,
+    };
+  }
+
+  function summary(sources: SourceHealth[]): HealthSummary {
+    return summarise(sources, mailboxHealth(sources), clock.now());
   }
 
   async function checkOne(row: Record<string, unknown>, startedAt: string, mail: () => Promise<AlertEmail[]>): Promise<SourceCheck> {
@@ -311,7 +369,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           passed: countStates(viewStates.passed),
           hidden: 0,
         },
-        health: summarise(allSourceHealth(), clock.now()),
+        health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
       };
     },
@@ -348,15 +406,17 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
     async sourceHealth() {
       const sources = allSourceHealth();
-      return { asOf: clock.now().toISOString(), summary: summarise(sources, clock.now()), sources };
+      return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
     },
   };
 }
 
-function summarise(sources: SourceHealth[], now: Date): HealthSummary {
+function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: Date): HealthSummary {
   const failing: FailingSource[] = sources.flatMap((s) => {
     const latest = s.history[0];
     if (s.status !== "failing" || !latest || latest.outcome === "ok") return [];
+    // A mailbox failure is shown once, on the mailbox, not once per email Source.
+    if (s.category === "email" && mailbox?.state === "error") return [];
     return [{
       sourceId: s.id, name: s.name, outcome: latest.outcome, error: latest.error ?? "",
       at: latest.at, since: s.failingSince ?? latest.at, jobsKept: s.jobsKept,
@@ -364,7 +424,7 @@ function summarise(sources: SourceHealth[], now: Date): HealthSummary {
   });
   const times = sources.map((s) => s.history[0]?.at).filter((t): t is string => t != null).sort();
   return {
-    state: sources.length === 0 ? "no-sources" : failing.length > 0 ? "failing" : "working",
+    state: sources.length === 0 ? "no-sources" : failing.length > 0 || mailbox?.state === "error" ? "failing" : "working",
     sources: sources.length,
     lastCheckAt: times.at(-1) ?? null,
     failing,
@@ -374,6 +434,7 @@ function summarise(sources: SourceHealth[], now: Date): HealthSummary {
       const silentHours = toHours(now.getTime() - Date.parse(a.lastEmailAt));
       return [{ sourceId: s.id, name: s.name, lastEmailAt: a.lastEmailAt, usualGapHours: a.usualGapHours, silentHours }];
     }),
+    mailbox,
   };
 }
 

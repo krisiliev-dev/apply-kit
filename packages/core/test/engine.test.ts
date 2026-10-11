@@ -13,7 +13,7 @@ describe("discovery engine: Feed query", () => {
       firstRun: true,
       jobs: [],
       counts: { new: 0, saved: 0, open: 0, passed: 0, hidden: 0 },
-      health: { state: "no-sources", sources: 0, lastCheckAt: null, failing: [], quiet: [] },
+      health: { state: "no-sources", sources: 0, lastCheckAt: null, failing: [], quiet: [], mailbox: null },
       ranking: { learnedAdjustments: 0 },
     });
   });
