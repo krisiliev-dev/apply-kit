@@ -50,6 +50,8 @@ export interface HealthSummary {
   /** The most recent Check of any Source, or null if nothing has been checked yet. */
   lastCheckAt: string | null;
   failing: FailingSource[];
+  /** Email-alert Sources quiet longer than usual. Never closes jobs; the user checks the alert is still on. */
+  quiet: QuietSource[];
 }
 
 export interface FeedResult {
@@ -97,7 +99,30 @@ export interface CheckRecord {
   error: string | null;
 }
 
-export type SourceStatus = "not-checked" | "working" | "failing";
+/** "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
+export type SourceStatus = "not-checked" | "working" | "failing" | "quiet";
+
+/** An email-alert Source's rhythm, learned from the emails it received in the last 6 weeks. */
+export interface AlertRhythm {
+  /** The latest alert email from this sender, or null if none has arrived yet. */
+  lastEmailAt: string | null;
+  /** The usual (median) gap between emails, or null until there are at least 4 emails to learn from. */
+  usualGapHours: number | null;
+  /** 3× the usual gap: a silence longer than this is "quiet longer than usual". */
+  warnAfterHours: number | null;
+  /** When the silence passed 3× the usual gap, or null if it hasn't. */
+  quietSince: string | null;
+}
+
+/** An email-alert Source that has been quiet longer than usual. */
+export interface QuietSource {
+  sourceId: string;
+  name: string;
+  lastEmailAt: string;
+  usualGapHours: number;
+  /** Hours since its latest email. */
+  silentHours: number;
+}
 
 export interface SourceHealth {
   id: string;
@@ -112,6 +137,8 @@ export interface SourceHealth {
   jobsKept: number;
   /** Recent Checks, newest first. */
   history: CheckRecord[];
+  /** Email-alert Sources only: their email rhythm. Null for every other Source. */
+  alerts: AlertRhythm | null;
 }
 
 export interface HealthReport {
@@ -197,11 +224,17 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
-      const found = isEmailAlertAdapter(adapter)
-        ? (await mail()).filter((e) => adapter.isFrom(config, e)).flatMap((e) => adapter.parseEmail(config, e))
-        : await adapter.fetchPostings(config, { fetch: watched, mail });
+      let emails: { email: AlertEmail; postings: FoundPosting[] }[] = [];
+      let found: FoundPosting[];
+      if (isEmailAlertAdapter(adapter)) {
+        emails = (await mail()).filter((e) => adapter.isFrom(config, e)).map((email) => ({ email, postings: adapter.parseEmail(config, email) }));
+        found = emails.flatMap((e) => e.postings);
+      } else {
+        found = await adapter.fetchPostings(config, { fetch: watched, mail });
+      }
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
+        for (const { email, postings } of emails) recordAlertEmail(db, sourceId, email, postings.length);
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
         recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null });
         return fresh;
@@ -230,7 +263,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const lastGood = db.prepare("SELECT MAX(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome = 'ok'").get(id)?.at;
     const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
     const latest = history[0];
-    const status: SourceStatus = !latest ? "not-checked" : latest.outcome === "ok" ? "working" : "failing";
+    const alerts = adapters[kind]?.category === "email" ? alertRhythm(db, id, clock.now()) : null;
+    const status: SourceStatus = !latest ? "not-checked" : latest.outcome !== "ok" ? "failing" : alerts?.quietSince ? "quiet" : "working";
     const failingSince = status !== "failing" ? null : String(db.prepare(
       "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
     ).get(id, lastGoodCheckAt ?? "")!.at);
@@ -240,7 +274,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     );
     return {
       id, name: String(r.name), kind, category: adapters[kind]?.category ?? "ats",
-      status, failingSince, lastGoodCheckAt, jobsKept, history,
+      status, failingSince, lastGoodCheckAt, jobsKept, history, alerts,
     };
   }
 
@@ -277,7 +311,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           passed: countStates(viewStates.passed),
           hidden: 0,
         },
-        health: summarise(allSourceHealth()),
+        health: summarise(allSourceHealth(), clock.now()),
         ranking: { learnedAdjustments: 0 },
       };
     },
@@ -314,12 +348,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
     async sourceHealth() {
       const sources = allSourceHealth();
-      return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
+      return { asOf: clock.now().toISOString(), summary: summarise(sources, clock.now()), sources };
     },
   };
 }
 
-function summarise(sources: SourceHealth[]): HealthSummary {
+function summarise(sources: SourceHealth[], now: Date): HealthSummary {
   const failing: FailingSource[] = sources.flatMap((s) => {
     const latest = s.history[0];
     if (s.status !== "failing" || !latest || latest.outcome === "ok") return [];
@@ -334,7 +368,64 @@ function summarise(sources: SourceHealth[]): HealthSummary {
     sources: sources.length,
     lastCheckAt: times.at(-1) ?? null,
     failing,
+    quiet: sources.flatMap((s) => {
+      const a = s.alerts;
+      if (s.status !== "quiet" || !a?.lastEmailAt || a.usualGapHours == null) return [];
+      const silentHours = toHours(now.getTime() - Date.parse(a.lastEmailAt));
+      return [{ sourceId: s.id, name: s.name, lastEmailAt: a.lastEmailAt, usualGapHours: a.usualGapHours, silentHours }];
+    }),
   };
+}
+
+function recordAlertEmail(db: SqlDatabase, sourceId: string, email: AlertEmail, postings: number): void {
+  db.prepare("INSERT OR IGNORE INTO alert_email (source_id, email_id, received_at, subject, postings) VALUES (?, ?, ?, ?, ?)")
+    .run(sourceId, email.id, email.receivedAt.toISOString(), email.subject, postings);
+}
+
+const hourMs = 60 * 60_000;
+const toHours = (ms: number) => Math.round((ms / hourMs) * 10) / 10;
+
+/** How far back an alert's rhythm is learned from. */
+const rhythmWindowMs = 42 * 24 * hourMs;
+/** Emails closer together than this count as one (a duplicate sent twice, two alerts in one batch). */
+const sameBatchMs = hourMs;
+/** Gaps needed before a rhythm is trusted: 4 emails. */
+const minGaps = 3;
+/** "Quiet longer than usual" is a silence of more than this many usual gaps (DESIGN.md). */
+const quietFactor = 3;
+
+/**
+ * An email-alert Source's rhythm: the median gap between its emails over the last 6 weeks, and
+ * whether the silence since the latest one is more than 3× that.
+ */
+function alertRhythm(db: SqlDatabase, sourceId: string, now: Date): AlertRhythm {
+  const last = db.prepare("SELECT MAX(received_at) AS at FROM alert_email WHERE source_id = ?").get(sourceId)?.at;
+  const lastEmailAt = last == null ? null : String(last);
+  const times = db.prepare("SELECT received_at FROM alert_email WHERE source_id = ? AND received_at >= ? ORDER BY received_at")
+    .all(sourceId, new Date(now.getTime() - rhythmWindowMs).toISOString())
+    .map((r) => Date.parse(String(r.received_at)));
+  const gaps: number[] = [];
+  let prev: number | null = null;
+  for (const t of times) {
+    if (prev !== null && t - prev < sameBatchMs) continue;
+    if (prev !== null) gaps.push(t - prev);
+    prev = t;
+  }
+  if (!lastEmailAt || gaps.length < minGaps) return { lastEmailAt, usualGapHours: null, warnAfterHours: null, quietSince: null };
+  const usualGap = median(gaps);
+  const quietAt = Date.parse(lastEmailAt) + quietFactor * usualGap;
+  return {
+    lastEmailAt,
+    usualGapHours: toHours(usualGap),
+    warnAfterHours: toHours(quietFactor * usualGap),
+    quietSince: now.getTime() > quietAt ? new Date(quietAt).toISOString() : null,
+  };
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
 function recordCheck(db: SqlDatabase, sourceId: string, c: CheckRecord): void {

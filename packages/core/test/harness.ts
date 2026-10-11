@@ -74,7 +74,8 @@ export type AlertEmail = Awaited<ReturnType<MailReader["fetchSince"]>>[number];
 
 /**
  * A job mailbox held in memory. `deliver` puts an email in it; `fail` makes every read throw
- * (an expired app password, say) until `recover`. Reads return the emails received since the asked time.
+ * (an expired app password, say) until `recover`. Reads return the emails received since the asked time;
+ * with a clock, emails dated in its future haven't arrived yet, so they can be delivered up front.
  */
 export interface FakeMailbox extends MailReader {
   deliver(email: AlertEmail): void;
@@ -83,7 +84,7 @@ export interface FakeMailbox extends MailReader {
   reads: Date[];
 }
 
-export function fakeMailbox(): FakeMailbox {
+export function fakeMailbox(clock?: Clock): FakeMailbox {
   const emails: AlertEmail[] = [];
   let failure: Error | null = null;
   const reads: Date[] = [];
@@ -95,7 +96,8 @@ export function fakeMailbox(): FakeMailbox {
     async fetchSince(since) {
       reads.push(since);
       if (failure) throw failure;
-      return emails.filter((e) => e.receivedAt.getTime() >= since.getTime());
+      const now = clock?.now().getTime() ?? Infinity;
+      return emails.filter((e) => e.receivedAt.getTime() >= since.getTime() && e.receivedAt.getTime() <= now);
     },
   };
 }
