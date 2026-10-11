@@ -125,3 +125,47 @@ describe("adding a company: every job system", () => {
     expect(found.systems.find((s) => s.kind === "lever")).toMatchObject({ status: "error", message: expect.stringContaining("nothing answers") });
   });
 });
+
+describe("adding a company: nothing found", () => {
+  const devbg = "https://dev.bg/company/jobs/it-security/";
+
+  it("offers the fallbacks in order: an email alert, the aggregators already listing its jobs, a different link", async () => {
+    const http = routedFetch((req) => (req.url === devbg ? { fixture: "devbg-it-security.html" } : notFound()));
+    const { engine, clock } = createTestEngine({ fetch: http.fetch });
+    await engine.addSource({ kind: "devbg", config: "it-security" });
+    await engine.checkAll();
+    await clock.advance(3 * 86_400_000);
+
+    const found = await engine.detectCompany("eMerchantPay");
+
+    expect(found.systems.filter((s) => s.status === "found")).toEqual([]);
+    expect(found.fallbacks).toEqual([
+      { kind: "email-alert", recommended: true },
+      { kind: "aggregators", jobs: 1, sources: [{ id: "devbg:it-security", name: "dev.bg · it-security", jobs: 1 }] },
+      { kind: "different-link" },
+    ]);
+  });
+
+  it("says when the careers link itself was a dead page", async () => {
+    const http = routedFetch(() => notFound());
+    const { engine } = createTestEngine({ fetch: http.fetch });
+
+    const found = await engine.detectCompany("https://nexo.io/careers");
+
+    expect(found.company).toBe("Nexo");
+    expect(found.careersPage).toEqual({ url: "https://nexo.io/careers", outcome: "not-found", message: "page not found" });
+    expect(found.fallbacks.map((f) => f.kind)).toEqual(["email-alert", "aggregators", "different-link"]);
+    expect(found.fallbacks[1]).toEqual({ kind: "aggregators", jobs: 0, sources: [] });
+  });
+
+  it("knows Microsoft and Amazon run their own careers search, added with search words", async () => {
+    const http = routedFetch(() => notFound());
+    const { engine } = createTestEngine({ fetch: http.fetch });
+
+    const found = await engine.detectCompany("Microsoft");
+
+    expect(found.systems.find((s) => s.kind === "microsoft")).toMatchObject({ status: "needs-search", label: "Microsoft" });
+    expect(found.systems.some((s) => s.kind === "amazon")).toBe(false);
+    expect(found.fallbacks).toEqual([]);
+  });
+});
