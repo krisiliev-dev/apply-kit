@@ -25,7 +25,20 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start; use **Check now** on the Feed to fetch. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
+Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start; use **Check now** on the Feed to fetch.
+
+| Kind | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token, e.g. `payhawkio` | |
+| `workday` | careers link, optionally `\|Country`, e.g. `https://dxctechnology.wd1.myworkdayjobs.com/DXCJobs\|Bulgaria` | the country uses the site's own location filter |
+| `microsoft` | `query\|place`, e.g. `security engineer\|Dublin` | newest 100 |
+| `amazon` | `query\|ISO3 country`, e.g. `security engineer\|BGR` | newest 100 |
+| `devbg` | dev.bg category, e.g. `it-security` | |
+| `jooble` | `keywords\|location`, e.g. `security\|Bulgaria` | needs `JOOBLE_API_KEY` |
+| `reed` | `keywords\|location`, e.g. `security\|London` | needs `REED_API_KEY` |
+| `eures` | `keywords\|ISO2 country`, e.g. `cyber\|bg` | cyber keywords search by ESCO occupation |
+
+A Source whose key setting is missing shows as failing on the Sources screen with the setting's name. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
 
 Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
 
