@@ -2,14 +2,15 @@
 // failed-source banners with Try now, the job mailbox (status, errors with how to fix them), email
 // alerts quiet longer than usual, the sources table, adding a company (AddCompany.tsx), pausing, and
 // removing with an impact preview and Undo (RemoveDialog.tsx), each source's normal volume and its
-// unusual drop (same banner as the Feed, close with the count, Undo). History charts and coverage
-// checks arrive with their tickets.
+// unusual drop (same banner as the Feed, close with the count, Undo), and coverage checks
+// (Coverage.tsx). History charts arrive with their ticket.
 import type { CheckRecord, HealthReport, HealthSummary, MailboxHealth, NormalVolume, QuietSource, SourceHealth, UnusualDrop } from "@apply-kit/core";
 import { useEffect, useState } from "react";
 import { checkAndWait, checkSource, fetchSources, pauseSource, removeSource, resumeSource, undoDecision } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { AddCompany, type Added } from "./AddCompany.tsx";
 import { RemoveDialog } from "./RemoveDialog.tsx";
+import { CoverageCard, CoveragePage } from "./Coverage.tsx";
 import {
   categoryLabel, Chip, clockTime, DropBanner, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useConfirmDrop, useTryNow,
 } from "../health.tsx";
@@ -23,7 +24,8 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
   const [said, say] = useState("");
   const { busy, tryNow } = useTryNow(reload, say);
   const [checkingAll, setCheckingAll] = useState(false);
-  const [adding, setAdding] = useState(() => window.location.pathname === "/settings/sources/add");
+  const [screen, setScreen] = useState<Screen>(screenOf);
+  const adding = screen === "add";
   const [removing, setRemoving] = useState<SourceHealth | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const toaster = useToaster();
@@ -31,12 +33,13 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
   const focusRow = (id: string) => () => document.getElementById(rowActId(id))?.focus();
   const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-  const openAdd = (open: boolean) => {
-    setAdding(open);
-    window.history.pushState(null, "", open ? "/settings/sources/add" : "/settings/sources");
+  const go = (to: Screen) => {
+    setScreen(to);
+    window.history.pushState(null, "", screenPath[to]);
   };
+  const openAdd = (open: boolean) => go(open ? "add" : "list");
   useEffect(() => {
-    const onPop = () => setAdding(window.location.pathname === "/settings/sources/add");
+    const onPop = () => setScreen(screenOf());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
@@ -94,7 +97,9 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
       .finally(() => setActing(null));
   };
 
-  useEffect(() => { document.title = `${adding ? "Add company" : "Sources & watchlist"} · apply-kit`; }, [adding]);
+  useEffect(() => {
+    if (screen !== "coverage") document.title = `${adding ? "Add company" : "Sources & watchlist"} · apply-kit`;
+  }, [adding, screen]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -141,7 +146,8 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
           </div>
         )}
         {adding && <AddCompany onAdded={added} onCancel={() => openAdd(false)} />}
-        {!adding && load.state === "ready" && (
+        {screen === "coverage" && <CoveragePage onClose={() => go("list")} onChanged={reload} />}
+        {screen === "list" && load.state === "ready" && (
           <Ready
             report={load.report}
             busy={busy}
@@ -149,6 +155,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
             checkingAll={checkingAll}
             onCheckAll={() => checkAll(load.report.sources.length)}
             onAdd={() => openAdd(true)}
+            onCoverage={() => go("coverage")}
             acting={acting}
             onPause={pause}
             onResume={resume}
@@ -180,13 +187,21 @@ interface RowActions {
 
 const rowActId = (sourceId: string) => `remove-${sourceId.replace(/[^a-z0-9_-]/gi, "_")}`;
 
-function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, closingDrop, onCloseDrop, ...actions }: {
+type Screen = "list" | "add" | "coverage";
+const screenPath: Record<Screen, string> = { list: "/settings/sources", add: "/settings/sources/add", coverage: "/settings/sources/coverage" };
+const screenOf = (): Screen => {
+  const path = window.location.pathname;
+  return path === screenPath.add ? "add" : path === screenPath.coverage ? "coverage" : "list";
+};
+
+function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage, closingDrop, onCloseDrop, ...actions }: {
   report: HealthReport;
   busy: string | null;
   onTry: (s: SourceHealth) => void;
   checkingAll: boolean;
   onCheckAll: () => void;
   onAdd: () => void;
+  onCoverage: () => void;
   closingDrop: string | null;
   onCloseDrop: (drop: UnusualDrop) => void;
 } & RowActions) {
@@ -272,6 +287,9 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, closingDro
         <p className="table-foot">
           <b>In your locations</b> counts postings in Sofia or remote within Europe at the last good check; the grey number is everything the source listed. A source that fails keeps all its jobs exactly as they were: a failure never closes anything. A job a source stops listing closes with "No longer listed", unless the source is a capped search (Jooble, Reed, EURES, Microsoft, Amazon), which never closes anything that way. <b>Unusual drop</b>: a check listing less than half of a source's usual count keeps every job open; after 2 more checks just as low you're asked to confirm, and only your confirmation closes them (with Undo). <b>Pause</b> stops checking a source and closes nothing; <b>Remove</b> first shows which jobs would close (only those no other source lists) and can be undone. <b>Email alerts</b> are read from the job mailbox (read-only) at each check; each learns its usual rhythm and is flagged when no email arrives for more than 3× its usual gap.
         </p>
+      </div>
+      <div className="two">
+        <CoverageCard onOpen={onCoverage} />
       </div>
     </>
   );

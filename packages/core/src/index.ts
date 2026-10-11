@@ -8,6 +8,10 @@ export type {
 } from "./engine.ts";
 export { sourceRemovedHow, noLongerListedBy } from "./engine.ts";
 export type { UnusualDrop, NormalVolume, DropWording } from "./drops.ts";
+export type {
+  CoverageInput, CoverageListing, CoverageResult, CoverageResultListing, CoverageReason, CoverageReasonKind, CoverageFix,
+  CoverageTotals, CoverageSummary, CoverageHistory,
+} from "./coverage.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {
