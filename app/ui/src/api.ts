@@ -1,5 +1,5 @@
 import type {
-  CheckResult, Decision, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -65,7 +65,7 @@ export const saveJobs = (jobIds: string[]) => post<Decision>("/api/jobs/save", {
 export const passJobs = (jobIds: string[], input: PassInput) => post<Decision>("/api/jobs/pass", { jobIds, ...input });
 export const reopenJobs = (jobIds: string[]) => post<Decision>("/api/jobs/reopen", { jobIds });
 export const undoDecision = (id: string, jobIds?: string[]) =>
-  post<{ jobIds: string[] }>(`/api/decisions/${encodeURIComponent(id)}/undo`, jobIds ? { jobIds } : {});
+  post<{ jobIds: string[]; sourceIds: string[] }>(`/api/decisions/${encodeURIComponent(id)}/undo`, jobIds ? { jobIds } : {});
 
 const jobPath = (id: string) => `/api/jobs/${encodeURIComponent(id)}`;
 
@@ -91,6 +91,58 @@ export async function readJob(id: string): Promise<JobDetail> {
 
 export async function confirmFact(id: string, key: string, answer: FactAnswer): Promise<JobDetail> {
   return json(await postJson(`${jobPath(id)}/facts/${encodeURIComponent(key)}`, { answer }));
+}
+
+const sourcePath = (id: string) => `/api/sources/${encodeURIComponent(id)}`;
+
+/**
+ * Finds which job system a company uses (a name or a careers link). `onProgress` gets a fresh
+ * snapshot as each job system answers; resolves with the finished detection.
+ */
+export async function detectCompany(input: string, onProgress: (d: CompanyDetection) => void, signal?: AbortSignal): Promise<CompanyDetection> {
+  const res = await fetch("/api/companies/detect", {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ input }), signal,
+  });
+  if (!res.ok || !res.body) return json(res);
+  const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+  let buffered = "";
+  let last: CompanyDetection | null = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buffered += value;
+    const lines = buffered.split("\n");
+    buffered = done ? "" : lines.pop()!;
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const msg = JSON.parse(line) as CompanyDetection | { error: string };
+      if ("error" in msg) throw new Error(msg.error);
+      last = msg;
+      onProgress(msg);
+    }
+    if (done) break;
+  }
+  if (!last?.finished) throw new Error("Detection stopped before it finished");
+  return last;
+}
+
+export async function addSource(source: NewSource): Promise<SourceInfo> {
+  return json(await postJson("/api/sources", source));
+}
+
+export async function pauseSource(id: string): Promise<SourceInfo> {
+  return json(await postJson(`${sourcePath(id)}/pause`));
+}
+
+export async function resumeSource(id: string): Promise<SourceInfo> {
+  return json(await postJson(`${sourcePath(id)}/resume`));
+}
+
+export async function previewRemoval(id: string, signal?: AbortSignal): Promise<RemovalPreview> {
+  return json(await fetch(`${sourcePath(id)}/removal`, { signal }));
+}
+
+export async function removeSource(id: string): Promise<{ sourceId: string; decision: Decision }> {
+  return json(await postJson(`${sourcePath(id)}/remove`));
 }
 
 /** "Make target": one of the Job's Postings becomes the one Kris applies through. */

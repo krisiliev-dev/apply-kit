@@ -133,6 +133,11 @@ const migrations: string[] = [
      created_at TEXT NOT NULL,
      PRIMARY KEY (a, b)
    );`,
+  // #8: pausing and removing Sources. Removal is a soft delete, so its Postings keep their Source
+  // and undoing the removal (the Decision that closed its Jobs) brings it back.
+  `ALTER TABLE source ADD COLUMN paused_at TEXT;
+   ALTER TABLE source ADD COLUMN removed_at TEXT;
+   ALTER TABLE source ADD COLUMN removed_decision_id TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

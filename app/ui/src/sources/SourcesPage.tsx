@@ -1,11 +1,15 @@
 // Settings › Sources & watchlist (hi-fi: docs/design/hifi/sources.html). Built so far: health summary,
 // failed-source banners with Try now, the job mailbox (status, errors with how to fix them), email
-// alerts quiet longer than usual, and the sources table. Normal volume, history charts, adding
-// companies and coverage checks arrive with their tickets.
+// alerts quiet longer than usual, the sources table, adding a company (AddCompany.tsx), pausing, and
+// removing with an impact preview and Undo (RemoveDialog.tsx). Normal volume, history charts and
+// coverage checks arrive with their tickets.
 import type { CheckRecord, HealthReport, HealthSummary, MailboxHealth, QuietSource, SourceHealth } from "@apply-kit/core";
 import { useEffect, useState } from "react";
-import { checkAndWait, fetchSources } from "../api.ts";
-import { categoryLabel, Chip, clockTime, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, useTryNow } from "../health.tsx";
+import { checkAndWait, checkSource, fetchSources, pauseSource, removeSource, resumeSource, undoDecision } from "../api.ts";
+import { useToaster } from "../feed/toast.tsx";
+import { AddCompany, type Added } from "./AddCompany.tsx";
+import { RemoveDialog } from "./RemoveDialog.tsx";
+import { categoryLabel, Chip, clockTime, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useTryNow } from "../health.tsx";
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; report: HealthReport };
 
@@ -16,8 +20,77 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
   const [said, say] = useState("");
   const { busy, tryNow } = useTryNow(reload, say);
   const [checkingAll, setCheckingAll] = useState(false);
+  const [adding, setAdding] = useState(() => window.location.pathname === "/settings/sources/add");
+  const [removing, setRemoving] = useState<SourceHealth | null>(null);
+  const [acting, setActing] = useState<string | null>(null);
+  const toaster = useToaster();
+  const focusRow = (id: string) => () => document.getElementById(rowActId(id))?.focus();
+  const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-  useEffect(() => { document.title = "Sources & watchlist · apply-kit"; }, []);
+  const openAdd = (open: boolean) => {
+    setAdding(open);
+    window.history.pushState(null, "", open ? "/settings/sources/add" : "/settings/sources");
+  };
+  useEffect(() => {
+    const onPop = () => setAdding(window.location.pathname === "/settings/sources/add");
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const added = ({ id, name, label }: Added) => {
+    openAdd(false);
+    reload();
+    toaster.show({ message: `Added ${name} (${label}) to your watchlist. Checking it now…` });
+    checkSource(id)
+      .then((r) => toaster.show({ message: r.ok ? tryResultText(r, 0) : `${name} couldn't be checked yet: ${r.error}. It's tried again at the next check.` }))
+      .catch((err: unknown) => toaster.show({ message: `Couldn't check ${name}: ${errorText(err)}` }))
+      .finally(reload);
+  };
+
+  const pause = (s: SourceHealth) => {
+    setActing(s.id);
+    pauseSource(s.id)
+      .then(() => {
+        reload();
+        toaster.show({
+          message: `${s.name} paused. ${s.jobsKept === 0 ? "Nothing closes." : `Its ${s.jobsKept} open ${s.jobsKept === 1 ? "job stays" : "jobs stay"} open, not being checked.`}`,
+          undo: () => { resumeSource(s.id).then(reload).catch((err: unknown) => say(`Couldn't resume ${s.name}: ${errorText(err)}`)); },
+          returnFocus: focusRow(s.id),
+        });
+      })
+      .catch((err: unknown) => say(`Couldn't pause ${s.name}: ${errorText(err)}`))
+      .finally(() => setActing(null));
+  };
+
+  const resume = (s: SourceHealth) => {
+    setActing(s.id);
+    resumeSource(s.id)
+      .then(() => { reload(); toaster.show({ message: `${s.name} resumed. It's checked again from the next check.` }); })
+      .catch((err: unknown) => say(`Couldn't resume ${s.name}: ${errorText(err)}`))
+      .finally(() => setActing(null));
+  };
+
+  const remove = (s: SourceHealth, closing: number) => {
+    setActing(s.id);
+    removeSource(s.id)
+      .then(({ decision }) => {
+        reload();
+        const closed = decision.jobIds.length;
+        toaster.show({
+          message: closed > 0 ? `${s.name} removed · ${closed} ${closed === 1 ? "job" : "jobs"} closed with "Source removed"` : `${s.name} removed · nothing closed`,
+          undo: () => {
+            undoDecision(decision.id)
+              .then((u) => { reload(); toaster.announce(`Undone. ${s.name} is back on your watchlist${u.jobIds.length ? ` and its ${u.jobIds.length} ${u.jobIds.length === 1 ? "job is" : "jobs are"} open` : ""}.`); })
+              .catch((err: unknown) => say(`Couldn't undo: ${errorText(err)}`));
+          },
+        });
+        if (closed !== closing) say(`${closed} closed instead of ${closing}: some changed since the preview.`);
+      })
+      .catch((err: unknown) => say(`Couldn't remove ${s.name}: ${errorText(err)}`))
+      .finally(() => setActing(null));
+  };
+
+  useEffect(() => { document.title = `${adding ? "Add company" : "Sources & watchlist"} · apply-kit`; }, [adding]);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -63,40 +136,67 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
             <button className="btn sm" type="button" onClick={() => { setLoad({ state: "loading" }); reload(); }}>Try again</button>
           </div>
         )}
-        {load.state === "ready" && (
+        {adding && <AddCompany onAdded={added} onCancel={() => openAdd(false)} />}
+        {!adding && load.state === "ready" && (
           <Ready
             report={load.report}
             busy={busy}
             onTry={(s) => tryNow(s.id, s.name, s.jobsKept)}
             checkingAll={checkingAll}
             onCheckAll={() => checkAll(load.report.sources.length)}
+            onAdd={() => openAdd(true)}
+            acting={acting}
+            onPause={pause}
+            onResume={resume}
+            onRemove={setRemoving}
           />
         )}
+        {removing && (
+          <RemoveDialog
+            source={removing}
+            onRemove={(p) => { setRemoving(null); remove(removing, p.closing); }}
+            onPause={() => { setRemoving(null); pause(removing); }}
+            onCancel={() => { const id = removing.id; setRemoving(null); focusRow(id)(); }}
+          />
+        )}
+        {toaster.element}
       </div>
     </div>
   );
 }
 
-function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
+interface RowActions {
+  acting: string | null;
+  onPause: (s: SourceHealth) => void;
+  onResume: (s: SourceHealth) => void;
+  onRemove: (s: SourceHealth) => void;
+}
+
+const rowActId = (sourceId: string) => `remove-${sourceId.replace(/[^a-z0-9_-]/gi, "_")}`;
+
+function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, ...actions }: {
   report: HealthReport;
   busy: string | null;
   onTry: (s: SourceHealth) => void;
   checkingAll: boolean;
   onCheckAll: () => void;
-}) {
+  onAdd: () => void;
+} & RowActions) {
   const { summary, sources } = report;
   if (sources.length === 0) {
     return (
       <div className="empty">
         <h1>No sources yet</h1>
-        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Until adding companies here is built, list them in the <code>APPLY_KIT_SOURCES</code> setting (for example <code>greenhouse:payhawkio,lever:siteground</code>; the README lists every type) and restart apply-kit.</p>
+        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Add a company by its name or careers link and apply-kit finds its job system. Job sites and alert emails are set in the <code>APPLY_KIT_SOURCES</code> setting (the README lists every type).</p>
+        <button className="btn primary" type="button" onClick={onAdd}>Add company</button>
       </div>
     );
   }
   const failing = sources.filter((s) => s.status === "failing").length;
   const unchecked = sources.filter((s) => s.status === "not-checked").length;
   const quiet = summary.quiet;
-  const working = sources.length - failing - unchecked - quiet.length;
+  const paused = sources.filter((s) => s.status === "paused");
+  const working = sources.length - failing - unchecked - quiet.length - paused.length;
   const byId = new Map(sources.map((s) => [s.id, s]));
   const mailboxDown = summary.mailbox?.state === "error";
 
@@ -108,7 +208,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
       ))}
       <div className="page-head">
         <div className="lead">
-          <h1>{headline(sources.length, working, failing, quiet.length)}</h1>
+          <h1>{headline(sources.length - paused.length, working, failing, quiet.length)}</h1>
           <p className="meta">
             {summary.lastCheckAt ? `Last check ${clockTime(summary.lastCheckAt)}` : "Not checked yet"}
             {" · "}checked when you press Check now; automatic checks arrive soon
@@ -119,6 +219,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
           <button className="btn" type="button" onClick={onCheckAll} disabled={checkingAll}>
             {checkingAll ? "Checking…" : "Check all now"}
           </button>
+          <button className="btn primary" type="button" onClick={onAdd}>Add company</button>
         </div>
       </div>
       <div className="board" role="group" aria-label={`Source health summary, ${sources.length} sources`}>
@@ -130,6 +231,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
             <span className="l">quiet longer than usual: {quiet.map((q) => q.name).join(", ")}</span>
           </div>
         )}
+        {paused.length > 0 && <div className="tile"><span className="n">{paused.length}</span><span className="l">paused: {paused.map((s) => s.name).join(", ")}</span></div>}
         {unchecked > 0 && <div className="tile"><span className="n">{unchecked}</span><span className="l">not checked yet</span></div>}
         {summary.mailbox && <MailboxTile mailbox={summary.mailbox} />}
       </div>
@@ -147,12 +249,12 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
               </tr>
             </thead>
             <tbody>
-              {sources.map((s) => <SourceRow key={s.id} source={s} busy={busy === s.id} onTry={() => onTry(s)} mailboxDown={mailboxDown} quiet={quiet.find((q) => q.sourceId === s.id)} />)}
+              {sources.map((s) => <SourceRow key={s.id} source={s} busy={busy === s.id} onTry={() => onTry(s)} mailboxDown={mailboxDown} quiet={quiet.find((q) => q.sourceId === s.id)} {...actions} />)}
             </tbody>
           </table>
         </div>
         <p className="table-foot">
-          <b>In your locations</b> counts postings in Sofia or remote within Europe at the last good check; the grey number is everything the source listed. A source that fails keeps all its jobs exactly as they were: a failure never closes anything. <b>Email alerts</b> are read from the job mailbox (read-only) at each check; each learns its usual rhythm and is flagged when no email arrives for more than 3× its usual gap.
+          <b>In your locations</b> counts postings in Sofia or remote within Europe at the last good check; the grey number is everything the source listed. A source that fails keeps all its jobs exactly as they were: a failure never closes anything. <b>Pause</b> stops checking a source and closes nothing; <b>Remove</b> first shows which jobs would close (only those no other source lists) and can be undone. <b>Email alerts</b> are read from the job mailbox (read-only) at each check; each learns its usual rhythm and is flagged when no email arrives for more than 3× its usual gap.
         </p>
       </div>
     </>
@@ -167,19 +269,20 @@ function headline(total: number, working: number, failing: number, quiet: number
   return `${working} of ${total} sources working`;
 }
 
-function SourceRow({ source: s, busy, onTry, mailboxDown, quiet }: {
+function SourceRow({ source: s, busy, onTry, mailboxDown, quiet, acting, onPause, onResume, onRemove }: {
   source: SourceHealth;
   busy: boolean;
   onTry: () => void;
   mailboxDown: boolean;
   quiet: QuietSource | undefined;
-}) {
+} & RowActions) {
   const latest = s.history[0];
   const lastGood = s.history.find((c) => c.outcome === "ok");
   const status = s.status === "failing"
     ? <Chip tone="bad">{s.category === "email" && mailboxDown ? "Mailbox not read" : `Failing since ${clockTime(s.failingSince!)}`}</Chip>
     : s.status === "quiet" ? <Chip tone="warn">Quiet longer than usual</Chip>
-    : s.status === "working" ? <Chip tone="ok">Working</Chip> : <Chip tone="none">Not checked yet</Chip>;
+    : s.status === "working" ? <Chip tone="ok">Working</Chip>
+    : s.status === "paused" ? <Chip tone="none">Paused</Chip> : <Chip tone="none">Not checked yet</Chip>;
   const lastEmail = s.alerts ? (s.alerts.lastEmailAt ? `email ${clockTime(s.alerts.lastEmailAt)}` : "no email yet") : null;
   const last = !latest ? "Never" : latest.outcome === "ok" ? lastEmail ?? clockTime(latest.at) : `${clockTime(latest.at)} · ${failureShort[latest.outcome]}`;
   return (
@@ -190,6 +293,11 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet }: {
         {quiet && (
           <div className="note quiet-note">
             {quietText(quiet.silentHours, quiet.usualGapHours)} Check the alert is still on, and that the iCloud forward still sends this sender's mail. Its jobs stay open.
+          </div>
+        )}
+        {s.status === "paused" && (
+          <div className="note">
+            Not being checked. {s.jobsKept === 0 ? "Nothing in your Feed depends on it." : `Its ${s.jobsKept} open ${s.jobsKept === 1 ? "job stays" : "jobs stay"} open.`}
           </div>
         )}
         {s.status === "failing" && s.category === "email" && mailboxDown && (
@@ -213,6 +321,10 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet }: {
             {busy ? "Checking…" : s.category === "email" ? "Check mailbox" : "Try now"}<span className="sr-only">: {s.name}</span>
           </button>
         )}
+        {s.status === "paused"
+          ? <button className="btn ghost sm" type="button" disabled={acting === s.id} onClick={() => onResume(s)}>Resume<span className="sr-only"> {s.name}</span></button>
+          : <button className="btn ghost sm" type="button" disabled={acting === s.id} onClick={() => onPause(s)}>Pause<span className="sr-only"> {s.name}</span></button>}
+        <button className="btn ghost sm" type="button" id={rowActId(s.id)} disabled={acting === s.id} onClick={() => onRemove(s)}>Remove…<span className="sr-only"> {s.name}</span></button>
       </td>
     </tr>
   );
