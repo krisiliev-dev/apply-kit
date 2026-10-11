@@ -102,6 +102,8 @@ export interface SourceHealth {
   id: string;
   name: string;
   kind: string;
+  /** The Source type's display name ("Greenhouse", "dev.bg"). */
+  label: string;
   category: SourceCategory;
   status: SourceStatus;
   /** First failed Check in the current run of failures; null unless failing. */
@@ -154,6 +156,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
 
+  const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
   const countStates = (states: string[]) =>
     count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
@@ -177,7 +180,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
-      const found = await adapter.fetchPostings(config, { fetch: watched });
+      const found = await adapter.fetchPostings(config, { fetch: watched, setting });
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
@@ -217,7 +220,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
        WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
     );
     return {
-      id, name: String(r.name), kind, category: adapters[kind]?.category ?? "ats",
+      id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
       status, failingSince, lastGoodCheckAt, jobsKept, history,
     };
   }
@@ -289,6 +292,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
     },
   };
+}
+
+function kindLabel(kind: string): string {
+  return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function summarise(sources: SourceHealth[]): HealthSummary {
