@@ -88,7 +88,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
     return (
       <div className="empty">
         <h1>No sources yet</h1>
-        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Until adding companies here is built, list them in the <code>APPLY_KIT_SOURCES</code> setting (for example <code>greenhouse:payhawkio</code>) and restart apply-kit.</p>
+        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Until adding companies here is built, list them in the <code>APPLY_KIT_SOURCES</code> setting (for example <code>greenhouse:payhawkio,lever:siteground</code>; the README lists every type) and restart apply-kit.</p>
       </div>
     );
   }
