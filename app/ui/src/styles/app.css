@@ -17,3 +17,40 @@
   .jobs .narrow { display: block }
 }
 .foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small); color: var(--ink-2) }
+
+/* Checking sources (from the Feed hi-fi): progress head and the new-jobs queue bar */
+.progress-head { display: grid; gap: var(--s-3) }
+.queue { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--met-soft); color: var(--met); font-size: var(--fs-small); font-weight: 600 }
+
+/* Settings layout and the Sources screen (from the Sources hi-fi). Tokens only. */
+.set { display: grid; grid-template-columns: 184px minmax(0, 1fr); gap: var(--s-7); align-items: start }
+.rail { display: grid; gap: var(--s-1); position: sticky; top: 84px }
+.rail .rail-h { font-size: var(--fs-caption); font-weight: 600; color: var(--ink-3); padding: 0 var(--s-4) var(--s-3) }
+.rail a { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-control); color: var(--ink-2); text-decoration: none; font-size: var(--fs-small); font-weight: 500 }
+.rail a:hover { background: var(--surface-sunken) }
+.rail a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised); outline: 1px solid var(--border-control); outline-offset: -1px }
+@media (max-width: 760px) {
+  .set { grid-template-columns: minmax(0, 1fr); gap: var(--s-5) }
+  .rail { position: static; display: flex; overflow-x: auto; gap: var(--s-2); padding-bottom: var(--s-3); border-bottom: 1px solid var(--rule) }
+  .rail .rail-h { display: none }
+  .rail a { white-space: nowrap }
+}
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--s-4) }
+.tile { display: grid; gap: var(--s-2); align-content: start; padding: var(--s-5); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); min-width: 0 }
+.tile .n { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h2); line-height: 1; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: var(--s-3) }
+.tile .n svg { width: 18px; height: 18px }
+.tile.ok .n svg { color: var(--met) }
+.tile.bad { border-color: var(--gap) }
+.tile.bad .n { color: var(--gap) }
+.tile .l { font-size: var(--fs-small); color: var(--ink-2) }
+.src-name { font-weight: 600; color: var(--ink); display: block }
+.src-id { color: var(--ink-3); font-size: var(--fs-caption); white-space: nowrap }
+.note { color: var(--ink-3); font-size: var(--fs-caption); margin-top: var(--s-1); max-width: 40ch; white-space: normal }
+.quiet-note { color: var(--partly); font-weight: 500 }
+.table td.r, .table th.r { text-align: right }
+.table .total { color: var(--ink-3) }
+.table .act { text-align: right; padding-block: var(--s-3); white-space: nowrap }
+.table .c-last { white-space: nowrap }
+.table-foot { padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-caption); color: var(--ink-3) }
+@media (max-width: 1100px) { .table .c-type { display: none } }
+@media (max-width: 560px) { .table .c-last { display: none } }

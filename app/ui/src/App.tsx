@@ -1,6 +1,9 @@
-import type { FeedResult } from "@apply-kit/core";
-import { useState } from "react";
+import type { HealthSummary } from "@apply-kit/core";
+import { useEffect, useState } from "react";
+import { fetchSources } from "./api.ts";
 import { FeedPage } from "./feed/FeedPage.tsx";
+import { healthPill } from "./health.tsx";
+import { SourcesPage } from "./sources/SourcesPage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -9,15 +12,11 @@ const nav = [
   { href: "/settings", label: "Settings" },
 ];
 
-const healthText: Record<FeedResult["health"]["state"], [cls: string, text: string]> = {
-  "no-sources": ["warn", "No sources yet"],
-  working: ["", "All sources working"],
-};
-
 export function App() {
   const path = window.location.pathname;
-  const [health, setHealth] = useState<FeedResult["health"] | null>(null);
-  const [cls, text] = health ? healthText[health.state] : ["", "Checking…"];
+  const [health, setHealth] = useState<HealthSummary | null>(null);
+  const [cls, text] = health ? healthPill(health) : ["", "Checking…"];
+  const settings = path.startsWith("/settings");
 
   return (
     <>
@@ -30,24 +29,33 @@ export function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.href} href={n.href} aria-current={n.href === path ? "page" : undefined}>{n.label}</a>
+              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) ? "page" : undefined}>{n.label}</a>
             ))}
           </nav>
           <span className="grow" />
           <a className={`health ${cls}`} href="/settings/sources" aria-live="polite">
             <i aria-hidden="true" />
             <span>{text}</span>
+            <span className="sr-only"> · open source health</span>
           </a>
         </header>
         <main className="main" id="main" tabIndex={-1}>
-          {path === "/" ? <FeedPage onHealth={setHealth} /> : <NotBuilt />}
+          {path === "/" ? <FeedPage onHealth={setHealth} />
+            : path === "/settings/sources" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
+            : <NotBuilt onHealth={setHealth} />}
         </main>
       </div>
     </>
   );
 }
 
-function NotBuilt() {
+function NotBuilt({ onHealth }: { onHealth: (h: HealthSummary) => void }) {
+  // The top bar shows source health on every screen.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchSources(ctrl.signal).then((r) => onHealth(r.summary)).catch(() => {});
+    return () => ctrl.abort();
+  }, [onHealth]);
   return (
     <div className="empty">
       <h1>This screen isn't built yet</h1>

@@ -1,11 +1,10 @@
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
-import type { Context } from "hono";
-import type { DiscoveryEngine, FactAnswer, FeedView } from "@apply-kit/core";
+import type { DiscoveryEngine, FactAnswer, FeedView, Scheduler } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed"];
 
-export function createServer({ engine, uiDir }: { engine: DiscoveryEngine; uiDir: string }) {
+export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEngine; scheduler: Scheduler; uiDir: string }) {
   const app = new Hono();
 
   app.get("/api/feed", async (c) => {
@@ -14,16 +13,31 @@ export function createServer({ engine, uiDir }: { engine: DiscoveryEngine; uiDir
     return c.json(await engine.queryFeed({ view: v as FeedView }));
   });
 
-  // Requiring a JSON body type means a web page can't trigger these without a CORS preflight,
+  // Requiring a JSON body type means a web page can't trigger a POST without a CORS preflight,
   // which this service never grants.
-  const notJson = (c: Context) =>
-    c.req.header("content-type")?.startsWith("application/json") ? null : c.json({ error: "Send Content-Type: application/json" }, 415);
+  const jsonOnly = (ct: string | undefined) => ct?.startsWith("application/json");
 
+  // Whether a check is running (with progress and a time estimate) and how the last one went.
+  app.get("/api/check", (c) => c.json(scheduler.status()));
+
+  // Starts a check, or joins the one running, and answers straight away with its status;
+  // the UI follows progress through GET /api/check.
   app.post("/api/check", async (c) => {
-    const refused = notJson(c);
-    if (refused) return refused;
-    const result = await engine.checkAll();
-    // Read new postings in the background, within the monthly budget; the Feed shows progress per row.
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    scheduler.checkNow().catch(() => {});
+    return c.json(scheduler.status(), 202);
+  });
+
+  app.get("/api/sources", async (c) => c.json(await engine.sourceHealth()));
+
+  // "Try now": checks one Source. Same JSON-only rule as /api/check.
+  app.post("/api/sources/:id/check", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    const id = c.req.param("id");
+    const known = (await engine.sourceHealth()).sources.some((s) => s.id === id);
+    if (!known) return c.json({ error: `No source "${id}"` }, 404);
+    const result = await engine.checkSource(id);
+    // Read its new postings in the background, within the monthly AI budget.
     engine.readPending().catch((err: unknown) => console.error("Reading postings failed:", err));
     return c.json(result);
   });
@@ -33,16 +47,16 @@ export function createServer({ engine, uiDir }: { engine: DiscoveryEngine; uiDir
     return job ? c.json(job) : c.json({ error: "No such job" }, 404);
   });
 
+  // Reads one Job's posting now (the Job page asks when it opens an unread Job).
   app.post("/api/jobs/:id/read", async (c) => {
-    const refused = notJson(c);
-    if (refused) return refused;
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     if (!(await engine.getJob(c.req.param("id")))) return c.json({ error: "No such job" }, 404);
     return c.json(await engine.readJob(c.req.param("id")));
   });
 
+  // Kris's answer to a low-confidence fact: { "answer": "extracted" | "cautious" }.
   app.post("/api/jobs/:id/facts/:key", async (c) => {
-    const refused = notJson(c);
-    if (refused) return refused;
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     const { answer } = (await c.req.json().catch(() => ({}))) as { answer?: FactAnswer };
     try {
       return c.json(await engine.confirmFact(c.req.param("id"), c.req.param("key"), answer as FactAnswer));

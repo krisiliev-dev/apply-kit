@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseSchedule } from "@apply-kit/core";
 
 export const repoRoot = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -30,6 +31,11 @@ export function readConfig() {
       /** AI_MONTHLY_CAP_USD: hard monthly cap. Unset means no AI spending at all. */
       monthlyCapUsd: parseCap(process.env.AI_MONTHLY_CAP_USD),
     },
+    // Defaults: every 30 minutes, 07:00-23:00 local time.
+    schedule: parseSchedule({
+      every: process.env.APPLY_KIT_CHECK_EVERY_MINUTES,
+      window: process.env.APPLY_KIT_CHECK_WINDOW,
+    }),
   };
 }
 

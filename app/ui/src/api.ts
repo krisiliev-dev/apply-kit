@@ -1,4 +1,6 @@
-import type { CheckResult, FactAnswer, FeedResult, FeedView, JobDetail } from "@apply-kit/core";
+import type {
+  CheckResult, FactAnswer, FeedResult, FeedView, HealthReport, JobDetail, SchedulerStatus, SourceCheck,
+} from "@apply-kit/core";
 
 export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<FeedResult> {
   const res = await fetch(`/api/feed?view=${view}`, { signal });
@@ -6,10 +8,44 @@ export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<F
   return (await res.json()) as FeedResult;
 }
 
-export async function checkNow(): Promise<CheckResult> {
+/** Whether a check is running (progress, time estimate) and how the last one went. */
+export async function fetchCheckStatus(signal?: AbortSignal): Promise<SchedulerStatus> {
+  const res = await fetch("/api/check", { signal });
+  if (!res.ok) throw new Error(`The service answered ${res.status}`);
+  return (await res.json()) as SchedulerStatus;
+}
+
+/** Starts a check (or joins the running one) and returns its status straight away. */
+export async function checkNow(): Promise<SchedulerStatus> {
   const res = await fetch("/api/check", { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
   if (!res.ok) throw new Error(`The service answered ${res.status}`);
-  return (await res.json()) as CheckResult;
+  return (await res.json()) as SchedulerStatus;
+}
+
+/** Starts (or joins) a check and resolves with its result once every Source has finished. */
+export async function checkAndWait(pollMs = 1_000): Promise<CheckResult> {
+  let status = await checkNow();
+  while (status.checking) {
+    await new Promise((r) => setTimeout(r, pollMs));
+    status = await fetchCheckStatus();
+  }
+  if (!status.lastCheck) throw new Error("The check finished without a result");
+  return status.lastCheck;
+}
+
+export async function fetchSources(signal?: AbortSignal): Promise<HealthReport> {
+  const res = await fetch("/api/sources", { signal });
+  if (!res.ok) throw new Error(`The service answered ${res.status}`);
+  return (await res.json()) as HealthReport;
+}
+
+/** "Try now" for one Source. */
+export async function checkSource(sourceId: string): Promise<SourceCheck> {
+  const res = await fetch(`/api/sources/${encodeURIComponent(sourceId)}/check`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+  });
+  if (!res.ok) throw new Error(`The service answered ${res.status}`);
+  return (await res.json()) as SourceCheck;
 }
 
 const jobPath = (id: string) => `/api/jobs/${encodeURIComponent(id)}`;
