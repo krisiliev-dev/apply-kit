@@ -164,6 +164,45 @@ const migrations: string[] = [
      created_at TEXT NOT NULL,
      undone_at TEXT
    );`,
+  // #16: closing rules. A Posting its Source no longer lists is gone (when, and the Decision that
+  // marked it, so undoing that Decision brings it back). A Check far below the Source's normal volume
+  // is unusual: nothing is marked gone. Kris confirming an unusual drop is remembered until undone.
+  `ALTER TABLE posting ADD COLUMN gone_at TEXT;
+   ALTER TABLE posting ADD COLUMN gone_decision_id TEXT;
+   ALTER TABLE source_check ADD COLUMN unusual INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE drop_confirmation (
+     decision_id TEXT PRIMARY KEY REFERENCES decision(id),
+     source_id TEXT NOT NULL REFERENCES source(id),
+     check_id INTEGER NOT NULL REFERENCES source_check(id),
+     confirmed_at TEXT NOT NULL,
+     undone_at TEXT
+   );
+   CREATE INDEX drop_confirmation_source ON drop_confirmation(source_id);`,
+  // #20: coverage checks. Each manual search Kris recorded (site, words, location, how many results he
+  // saw) and every listing he gave, with what it was when checked: found (and as which Job) or
+  // missing, with the reason and fixes offered then.
+  `CREATE TABLE coverage_check (
+     id TEXT PRIMARY KEY,
+     checked_at TEXT NOT NULL,
+     site TEXT NOT NULL,
+     query TEXT NOT NULL,
+     location TEXT,
+     result_count INTEGER NOT NULL,
+     app_had INTEGER NOT NULL
+   );
+   CREATE INDEX coverage_check_at ON coverage_check(checked_at);
+   CREATE TABLE coverage_listing (
+     check_id TEXT NOT NULL REFERENCES coverage_check(id),
+     position INTEGER NOT NULL,
+     title TEXT NOT NULL,
+     company TEXT NOT NULL,
+     location TEXT,
+     url TEXT,
+     status TEXT NOT NULL,
+     job_id TEXT,
+     reason TEXT,
+     PRIMARY KEY (check_id, position)
+   );`,
   // #15: learned ranking adjustments, created only when Kris opts in (a pass reason with the box
   // ticked, "Show this job" with the box ticked, or a boost). `matcher` (JSON) says which Jobs it
   // moves; `points` is added to their Fit. Kept after undo (undone_at) so the list can say so.

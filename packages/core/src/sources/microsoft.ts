@@ -30,6 +30,8 @@ const pageSize = 10;
 export const microsoft: SourceAdapter<MicrosoftConfig> = {
   kind: "microsoft",
   category: "api",
+  // A keyword search capped at its top results: missing from one Check never means gone.
+  capped: true,
   label: "Microsoft",
 
   parseConfig(raw) {

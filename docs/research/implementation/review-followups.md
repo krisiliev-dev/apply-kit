@@ -14,3 +14,6 @@
 - The Job page's boost checkbox doesn't know about a boost made earlier (it starts off each visit; ticking again reuses the same adjustment). Show existing boosts there once JobDetail carries them (from #15)
 - "Why-line names an adjustment when it affected the rank" is read as "when it changed the Fit" (the sort key); an adjustment that leaves a clamped Fit at 0 or 100 isn't named (from #15)
 - Every Fit now reads the active learned adjustments; affectedCounts rebuilds every open Job's Fit per listing. Fine at personal scale (from #15)
+- A Job also listed by a capped search (or an email alert) never closes by absence, even when the company's own ATS stops listing it; consider letting the ATS close it, or the 30-day 'unverified' rule for captured/emailed postings (from #16)
+- dev.bg is treated as listing everything; if a category ever exceeds its maxPages, postings past the cap would close. Consider failing the check instead of truncating (from #16)
+- Drop UI: 'Keep them open and wait', 'Check their site' and 'Detect their job system again' from the Sources hi-fi aren't built; the history chart (#4 follow-up) should mark unusual checks (CheckRecord.unusual) (from #16)

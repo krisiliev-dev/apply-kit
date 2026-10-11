@@ -12,6 +12,18 @@ _Avoid_: Feed (when meaning a single source), board, provider
 One look at a source for the postings it lists right now, recorded with its time, outcome (worked, error, timeout or rate limited), the count in the user's locations and the total. A failed check never changes the source's postings.
 _Avoid_: Sync, crawl, refresh
 
+**Normal volume**:
+How many postings a source usually lists per check (median and range), learned from its recent good checks.
+_Avoid_: Baseline, average
+
+**Unusual drop**:
+A check that lists less than half of a source's normal volume. Its jobs stay open; after two more checks just as low the user is asked to confirm, and only that confirmation closes them.
+_Avoid_: Outage, failure (a drop is a check that worked)
+
+**Capped search**:
+A source that returns only its top results for a query (Jooble, Reed, EURES, Microsoft, Amazon), so a posting missing from one check never counts as gone.
+_Avoid_: Partial source
+
 **Company**:
 An employer that posts jobs.
 _Avoid_: Employer, organisation, client
@@ -31,6 +43,10 @@ _Avoid_: Posting, vacancy, role (when meaning the opportunity)
 **Feed**:
 The unified, de-duplicated list of jobs the user browses.
 _Avoid_: Inbox, results, dashboard
+
+**Coverage check**:
+A comparison of a search the user ran by hand on a site against what the app has: each job seen there is in the Feed, kept out of the main list (with the reason), or missing (with the likely reason and a fix). Kept as history.
+_Avoid_: Audit, sync check
 
 ## Judging fit
 

@@ -30,6 +30,8 @@ const months = ["january", "february", "march", "april", "may", "june", "july", 
 export const amazon: SourceAdapter<AmazonConfig> = {
   kind: "amazon",
   category: "api",
+  // A keyword search capped at its top results: missing from one Check never means gone.
+  capped: true,
   label: "Amazon",
 
   parseConfig(raw) {

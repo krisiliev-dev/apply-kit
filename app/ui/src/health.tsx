@@ -1,8 +1,9 @@
 // Shared source-health wording and pieces: the top-bar pill, the failed-source banner, status chips
 // and the polite "Try now" announcement. Wording follows the Feed and Sources hi-fi screens.
-import type { CheckFailure, FailingSource, HealthSummary, MailboxHealth, MailboxProblem, SourceCategory, SourceCheck } from "@apply-kit/core";
+import type { CheckFailure, FailingSource, HealthSummary, MailboxHealth, MailboxProblem, SourceCategory, SourceCheck, UnusualDrop } from "@apply-kit/core";
 import { useState, type ReactNode } from "react";
-import { checkSource } from "./api.ts";
+import { checkSource, confirmDrop, undoDecision } from "./api.ts";
+import type { Toaster } from "./feed/toast.tsx";
 
 /** "07:30" today, "11 Oct, 07:30" on another day. */
 export function clockTime(iso: string, now = new Date()): string {
@@ -17,14 +18,17 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 export function healthPill(h: HealthSummary): [cls: string, text: string] {
   if (h.state === "no-sources") return ["warn", "No sources yet"];
   const when = h.lastCheckAt ? ` · ${clockTime(h.lastCheckAt)}` : "";
+  const unusual = h.unusual.length > 0 ? [`${h.unusual.length} unusual`] : [];
   if (h.state === "failing") {
     const parts = [
       ...(h.failing.length > 0 ? [`${plural(h.failing.length, "source")} failing`] : []),
       ...(h.mailbox?.state === "error" ? ["job mailbox not read"] : []),
+      ...unusual,
     ];
     const text = parts.join(", ");
     return ["bad", `${text[0]!.toUpperCase()}${text.slice(1)}${when}`];
   }
+  if (h.state === "unusual") return ["warn", `${plural(h.unusual.length, "source")} unusual${when}`];
   if (!h.lastCheckAt) return ["", "Not checked yet"];
   if (h.quiet.length > 0) return ["warn", `${plural(h.quiet.length, "alert")} quiet longer than usual${when}`];
   return ["", `All sources working${when}`];
@@ -134,6 +138,69 @@ export function useTryNow(onDone: () => void, say: (message: string) => void) {
 /** A polite status line: visible while it has something to say, always mounted so it's announced. */
 export function StatusLine({ message }: { message: string }) {
   return <p className={message ? "meta" : "sr-only"} role="status" aria-live="polite">{message}</p>;
+}
+
+/**
+ * Unusual-drop banner, the same on the Feed and on Sources: the engine's words, the time of the
+ * latest Check, and the close button with its count. Once Kris is asked (after two more Checks just
+ * as low), it becomes a Needs-you item.
+ */
+export function DropBanner({ drop, busy, onClose, showHealthLink }: {
+  drop: UnusualDrop;
+  busy: boolean;
+  onClose: () => void;
+  showHealthLink?: boolean;
+}) {
+  const w = drop.wording;
+  const at = ` Latest check ${clockTime(drop.latestAt)}${drop.checksSince > 0 ? `; first seen ${clockTime(drop.since)}` : ""}.`;
+  const close = drop.closing > 0 && (
+    <button className="btn sm" type="button" onClick={onClose} disabled={busy}>{busy ? "Closing…" : w.close}</button>
+  );
+  const details = showHealthLink && <a className="btn sm" href="/settings/sources">Details<span className="sr-only">: {drop.name}</span></a>;
+  if (drop.needsYou) {
+    return (
+      <section className="needs" aria-label={`Needs you: ${drop.name}`}>
+        <div className="text">
+          <b>{w.question}</b> {w.headline}{at} {w.next} {w.kept}
+        </div>
+        <div className="row">{details}{close}</div>
+      </section>
+    );
+  }
+  return (
+    <div className="banner warning">
+      <span className="text"><b>{w.headline}</b>{at} {w.kept} {w.next}</span>
+      {details}
+      {close}
+    </div>
+  );
+}
+
+/**
+ * "Close 34 SumUp jobs": confirms the drop, then offers Undo in a toast. Closed jobs move to Passed
+ * & closed, where each can be reopened later.
+ */
+export function useConfirmDrop(toaster: Toaster, onDone: (jobIds: string[]) => void, say: (message: string) => void) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const confirm = (drop: UnusualDrop) => {
+    setBusy(drop.sourceId);
+    confirmDrop(drop.sourceId)
+      .then((decision) => {
+        onDone(decision.jobIds);
+        const n = decision.jobIds.length;
+        toaster.show({
+          message: `Closed ${plural(n, `${drop.name} job`)} · "No longer listed by ${drop.name}". They're in Passed & closed.`,
+          undo: () => {
+            undoDecision(decision.id)
+              .then((u) => { onDone(u.jobIds); toaster.announce(`Undone. ${plural(u.jobIds.length, "job")} open again.`); })
+              .catch((err: unknown) => say(`Couldn't undo: ${err instanceof Error ? err.message : String(err)}`));
+          },
+        });
+      })
+      .catch((err: unknown) => say(`Couldn't close ${drop.name}'s jobs: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => setBusy(null));
+  };
+  return { busy, confirm };
 }
 
 /** Failed-source banner (Feed and Sources): what happened, what it means, what to do. */
