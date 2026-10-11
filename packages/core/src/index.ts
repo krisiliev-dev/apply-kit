@@ -1,8 +1,9 @@
-export { createEngine, passReasons } from "./engine.ts";
+export { createEngine, passReasons, passReasonLabel } from "./engine.ts";
+export type { AdjustmentOrigin, AdjustmentMatcher } from "./learned.ts";
 export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
-  Decision, JobState, PassReason, PassInput,
+  Decision, JobState, PassReason, PassInput, UnhideInput, LearnedAdjustment,
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
   AddLinkResult, LinkProblem, PastedPosting,
   SeedStatus, SeededSource, CompanyWithoutFeed, WatchlistSeed,

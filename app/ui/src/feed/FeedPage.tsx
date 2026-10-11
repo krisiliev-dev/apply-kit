@@ -335,9 +335,13 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
         </>
       )}
       <span className="end">
-        <span className="meta">
-          {ranking.learnedAdjustments === 0 ? "Ranking: nothing learned yet" : `Ranking: ${ranking.learnedAdjustments} learned adjustments`}
-        </span>
+        {ranking.learnedAdjustments === 0
+          ? <span className="meta">Ranking: nothing learned yet</span>
+          : (
+            <a className="rank-link" href="/profile/search#ranking">
+              Ranking: {ranking.learnedAdjustments} learned {ranking.learnedAdjustments === 1 ? "adjustment" : "adjustments"} · review
+            </a>
+          )}
         {ranked && <SortMenu sort={options.sort} onSort={(sort) => onOptions({ ...options, sort })} />}
         {!feed.firstRun && <AddJobMenu />}
       </span>

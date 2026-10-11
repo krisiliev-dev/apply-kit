@@ -152,7 +152,13 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
   // Triage. Each answers with the Decision (or the Jobs restored, for undo).
   app.post("/api/jobs/save", (c) => withIds(c, (body, ids) => engine.save(ids)));
   app.post("/api/jobs/pass", (c) =>
-    withIds(c, (body, ids) => engine.pass(ids, { reason: body.reason as PassReason | null, note: typeof body.note === "string" ? body.note : null })));
+    withIds(c, (body, ids) => engine.pass(ids, {
+      reason: body.reason as PassReason | null,
+      note: typeof body.note === "string" ? body.note : null,
+      // "Rank jobs like this lower": only when Kris ticked it (exactly true).
+      learn: body.learn === true,
+      requirement: typeof body.requirement === "string" ? body.requirement : null,
+    })));
   app.post("/api/jobs/reopen", (c) => withIds(c, (body, ids) => engine.reopen(ids)));
   app.post("/api/decisions/:id/undo", async (c) => {
     const body = await jsonBody(c);
@@ -163,7 +169,27 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
   });
 
   // Dealbreakers. "Show this job" is a Decision like the others (undo hides it again).
-  app.post("/api/jobs/unhide", (c) => withIds(c, (body, ids) => engine.unhide(ids)));
+  app.post("/api/jobs/unhide", (c) => withIds(c, (body, ids) => engine.unhide(ids, { learn: body.learn === true })));
+
+  // Learned ranking adjustments: listed with what created each, undoable one by one. A boost is
+  // created from a Job ("Boost new Kestrel security jobs").
+  app.get("/api/adjustments", async (c) => c.json(await engine.learnedAdjustments()));
+  app.post("/api/adjustments/:id/undo", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    try {
+      return c.json(await engine.undoAdjustment(c.req.param("id")));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+    }
+  });
+  app.post("/api/jobs/:id/boost", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    try {
+      return c.json(await engine.boost(c.req.param("id")), 201);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+    }
+  });
   // "Not a dealbreaker for me": { "reason": "<the hidden reason's key>" }; changes the rule behind it.
   app.post("/api/jobs/:id/not-a-dealbreaker", async (c) => {
     const body = await jsonBody(c);

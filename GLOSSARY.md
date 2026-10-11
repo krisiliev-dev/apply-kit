@@ -70,6 +70,14 @@ _Avoid_: Score, match rating
 A 0–100 number for how well a job matches the user's profile and preferences, always shown with the reasons behind it; it orders the feed.
 _Avoid_: Score, match %, rating
 
+**Learned adjustment**:
+A few Fit points added to or taken from jobs like one the user passed (with "rank lower" ticked), showed from the hidden pile (with "rank higher" ticked) or boosted. Created only when the user opts in, listed with what created it, named in the why-line of every job it moves, and undoable. It never hides a job.
+_Avoid_: Penalty, training, learned rule
+
+**Boost**:
+A learned adjustment the user asks for directly: new jobs at a company (of one angle) rank higher.
+_Avoid_: Favourite, pin
+
 ## Preparing
 
 **Master profile**:

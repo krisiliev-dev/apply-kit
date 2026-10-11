@@ -1,7 +1,8 @@
 import type { FeedJob, FeedResult, HiddenReason } from "@apply-kit/core";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { notADealbreaker, undoDecision, undoRuleChange, unhideJobs } from "../api.ts";
 import type { Toaster } from "./toast.tsx";
+import { learnedText } from "./JobsTable.tsx";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const titleOf = (j: FeedJob) => j.titleTranslation ?? j.title;
@@ -14,6 +15,8 @@ const named = (j: FeedJob) => `${titleOf(j)} at ${j.company}`;
  */
 export function HiddenPile({ feed, toaster, onChanged }: { feed: FeedResult; toaster: Toaster; onChanged: (touched?: string[]) => void }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  // "Rank its company higher": off every time the pile opens, so showing a job learns nothing by default.
+  const [learn, setLearn] = useState(false);
   const jobs = feed.jobs;
 
   /** After a row leaves, focus the next row's first button, else the heading. */
@@ -28,14 +31,14 @@ export function HiddenPile({ feed, toaster, onChanged }: { feed: FeedResult; toa
 
   async function show(job: FeedJob) {
     try {
-      const d = await unhideJobs([job.id]);
+      const d = await unhideJobs([job.id], learn);
       focusAfter(job.id);
       onChanged();
       toaster.show({
-        message: `Shown in New · ${named(job)}. Your dealbreakers are unchanged.`,
+        message: `Shown in New · ${named(job)}. Your dealbreakers are unchanged.${learnedText(d.learned)}`,
         undo: () => {
           undoDecision(d.id)
-            .then(() => { onChanged(); toaster.announce("Hidden again."); })
+            .then(() => { onChanged(); toaster.announce(d.learned?.length ? "Hidden again, and the ranking change is undone." : "Hidden again."); })
             .catch((err: unknown) => toaster.show({ message: `Couldn't hide it again: ${message(err)}` }));
         },
       });
@@ -71,6 +74,13 @@ export function HiddenPile({ feed, toaster, onChanged }: { feed: FeedResult; toa
         </p>
         <span className="grow" />
         <a className="btn sm" href="/profile/search">Edit dealbreakers</a>
+      </div>
+      <div className="field">
+        <label className="check">
+          <input type="checkbox" checked={learn} onChange={(e) => setLearn(e.target.checked)} aria-describedby="unhide-learn-help" />
+          When I show a job, rank other jobs at its company higher
+        </label>
+        <span className="help" id="unhide-learn-help">Off unless you tick it. Each change is listed under <a href="/profile/search#ranking">Dealbreakers and search</a>, where you can undo it, and why-lines say when it moved a job.</span>
       </div>
       <section className="panel flush" aria-labelledby="hidden-h">
         <h2 className="sr-only" id="hidden-h" tabIndex={-1}>Hidden jobs</h2>

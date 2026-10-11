@@ -14,7 +14,7 @@ import { eurPer, fitWeights, perMonth } from "./weights.ts";
 export type FitPart = "requirements" | "angle" | "location" | "salary" | "freshness";
 
 export interface FitReason {
-  /** Which part of the Fit this is; "adjustment" is a learned ranking adjustment (#15). */
+  /** Which part of the Fit this is; "adjustment" is a learned ranking adjustment. */
   factor: FitPart | "adjustment";
   /** Short name of the part, e.g. "Requirements", "Angle". */
   label: string;
@@ -26,9 +26,11 @@ export interface FitReason {
   weight: number;
   /** What this reason adds to the Fit. The points of all reasons add up to the Fit. */
   points: number;
+  /** On a learned adjustment: its id, to review or undo it. */
+  adjustmentId?: string;
 }
 
-/** A learned ranking adjustment that applies to a Job (#15 creates them; none exist yet). */
+/** A learned ranking adjustment that applies to a Job (see learned.ts). */
 export interface FitAdjustment {
   id: string;
   /** Said in the why-line and the reasons, e.g. "ranked lower: you passed 2 similar bank roles". */
@@ -72,7 +74,7 @@ export interface FitInput {
   needsYou: number;
   settings: SearchSettings;
   now: Date;
-  /** Learned adjustments that apply to this Job; the hook for #15. */
+  /** Learned adjustments that apply to this Job. */
   adjustments?: FitAdjustment[];
 }
 
@@ -94,7 +96,7 @@ export function computeFit(input: FitInput): Fit {
 
   const known = parts.reduce((n, p) => n + (p.score == null ? 0 : p.weight), 0);
   const reasons: FitReason[] = parts.map((p) => ({ ...p, points: p.score == null || known === 0 ? 0 : (100 * p.weight * p.score) / known }));
-  for (const a of input.adjustments ?? []) reasons.push({ factor: "adjustment", label: "Learned adjustment", text: a.text, score: null, weight: 0, points: a.points });
+  for (const a of input.adjustments ?? []) reasons.push({ factor: "adjustment", label: "Learned adjustment", text: a.text, score: null, weight: 0, points: a.points, adjustmentId: a.id });
 
   const value = Math.round(Math.min(100, Math.max(0, reasons.reduce((n, r) => n + r.points, 0))));
   const provisional = !input.read || input.needsYou > 0 || input.screening?.provisional === true;
