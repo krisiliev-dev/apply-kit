@@ -88,6 +88,23 @@ describe("removing a Source", () => {
     expect((await engine.queryFeed({ view: "saved" })).jobs.map((j) => j.title)).toEqual(["Customer Support Specialist"]);
     expect((await engine.sourceHealth()).sources.map((s) => s.id)).toEqual([payhawk.id, "greenhouse:payhawkmirror"]);
   });
+  it("undoing a removal that closed nothing still brings the Source back", async () => {
+    const { engine, mirror } = await twoSources();
+    await engine.pass((await engine.queryFeed({ view: "open" })).jobs.filter((j) => j.id.includes("payhawkmirror")).map((j) => j.id));
+    const removal = await engine.removeSource(mirror.id);
+    expect(removal.decision.jobIds).toEqual([]);
+
+    expect(await engine.undo(removal.decision.id)).toEqual({ jobIds: [], sourceIds: [mirror.id] });
+    expect((await engine.sourceHealth()).sources.map((s) => s.id)).toContain(mirror.id);
+  });
+
+  it("refuses to preview or remove a Source that isn't on the watchlist", async () => {
+    const { engine, payhawk } = await twoSources();
+    await engine.removeSource(payhawk.id);
+
+    await expect(engine.previewRemoval(payhawk.id)).rejects.toThrow(/No source/);
+    await expect(engine.removeSource(payhawk.id)).rejects.toThrow(/No source/);
+  });
 });
 
 describe("pausing a Source", () => {
