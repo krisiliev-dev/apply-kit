@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Applications · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+/* page-local: stats strip, action queue, grouped list. Tokens only, so both themes work. */
+.screen > section, .screen .stack > *, .cols > * { min-width: 0 } /* grid items would otherwise grow to the widest table */
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr)); gap: 10px }
+.strip .stat b.big { font-size: 1.6rem; line-height: 1.2 }
+.chart { width: 100%; height: 90px; display: block }
+.angles { width: 100%; height: 66px; display: block }
+.queue { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px }
+.q { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; padding: 12px 14px; border-top: 1px solid var(--line); align-items: center }
+.q:first-child { border-top: 0 }
+.q .why { font-size: 0.82rem; color: var(--ink-3) }
+@media (max-width: 640px) { .q { grid-template-columns: minmax(0, 1fr) } }
+.quote { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; color: var(--ink-2); font-size: 0.85rem }
+.grp { border-top: 1px solid var(--line) }
+.grp .group-h .faint { font-weight: 400 }
+.grp table { margin-bottom: 4px }
+.grp td select { width: auto; min-width: 128px; padding: 4px 8px; font-size: 0.85rem }
+.by { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em }
+.due { color: var(--warn); font-weight: 600 }
+.calm { display: grid; gap: 8px; justify-items: start; padding: 22px 20px; border: 1px solid var(--line); border-radius: 8px }
+.toolbar input[type="search"] { max-width: 280px }
+.toolbar select { width: auto; padding: 5px 8px; font-size: 0.85rem }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html" aria-current="page">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Applications</h1>
+    <p class="lede">Concept B on top of A: a short "Needs you" queue first, then every Application grouped by Status. The Stats strip with the weekly chart sits above both. Applications are created by submitting a Package and moved mostly by matched emails.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a href="feed.html">Feed</a><a class="on" href="applications.html" aria-current="page">Applications</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health" id="health">Mail <b>synced 07:30</b></span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ NORMAL ============ -->
+      <section data-state="normal" data-state-name="Normal">
+        <div class="stack" style="gap:16px">
+          <div data-stats></div>
+
+          <div class="stack">
+            <div class="row"><h2 id="needs-h">Needs you · 4</h2><span class="faint small">Sunday 11 Oct · oldest first</span><span class="spacer"></span><span class="small muted">Coming up: Halden thank-you note due tomorrow</span></div>
+            <ol class="queue" aria-labelledby="needs-h">
+              <li class="q">
+                <div class="stack" style="gap:2px">
+                  <span class="label">Follow-up due today</span>
+                  <a href="application.html#followup"><b>Security Engineer · Kestrel Payments</b></a>
+                  <span class="why">Applied 7 days ago (Sun 4 Oct), no reply. A follow-up draft is ready: 86 words, in your voice.</span>
+                </div>
+                <div class="row"><a class="btn sm primary" href="application.html#followup">Review draft</a><button class="btn sm">Snooze 3 days</button><button class="btn ghost sm">I sent one</button></div>
+              </li>
+              <li class="q">
+                <div class="stack" style="gap:4px">
+                  <span class="label">Email to confirm</span>
+                  <b>Detection Engineer · Ardent Labs</b>
+                  <p class="quote">"Thank you for applying to Ardent Labs. We've received your application for Detection Engineer…" · careers@ardentlabs.eu · today 06:52</p>
+                  <span class="why">You approved this Package on Friday but never marked it submitted. This email says you did. Mark it Applied, dated Fri 9 Oct?</span>
+                </div>
+                <div class="row"><button class="btn sm primary">Mark Applied</button><button class="btn sm">Not this one…</button></div>
+              </li>
+              <li class="q">
+                <div class="stack" style="gap:2px">
+                  <span class="label">Interview Thu 15 Oct · 14:00</span>
+                  <a href="application.html#interviewing"><b>Full-stack Developer · Brightwave</b></a>
+                  <span class="why">Video call with the engineering manager. Prep sheet ready: 8 likely questions, 6 matched to your stories, 2 to prepare.</span>
+                </div>
+                <div class="row"><a class="btn sm primary" href="application.html#interviewing">Open prep sheet</a><button class="btn sm">Add to calendar</button></div>
+              </li>
+              <li class="q">
+                <div class="stack" style="gap:6px">
+                  <span class="label">Rejection logged · yesterday</span>
+                  <a href="application.html#rejected"><b>Product Designer · Lumen Health</b></a>
+                  <span class="why">Form letter after 9 days, no interview. The fit check had flagged "3+ years" as a stretch.</span>
+                  <div class="row" style="width:100%"><label class="small" for="lesson-n" style="font-weight:600">One-line lesson</label>
+                    <input type="text" id="lesson-n" placeholder="e.g. Design roles asking 3+ years: lead with the shipped case study" style="flex:1;min-width:200px"></div>
+                </div>
+                <div class="row"><button class="btn sm primary">Save lesson</button><button class="btn ghost sm">Skip</button></div>
+              </li>
+            </ol>
+          </div>
+
+          <div class="stack" style="gap:0">
+            <div class="row" style="padding-bottom:8px"><h2>All applications · 39</h2><span class="spacer"></span><input type="search" id="q-n" placeholder="Search job or company" aria-label="Search applications" style="max-width:240px"></div>
+            <div data-list="normal"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ LOADING ============ -->
+      <section data-state="loading" data-state-name="Loading" hidden>
+        <div class="stack" style="gap:16px" aria-busy="true" aria-label="Loading applications">
+          <div class="strip">
+            <div class="stat"><div class="skel w40"></div><div class="skel w60" style="height:22px;margin-top:6px"></div><div class="skel" style="height:56px;margin-top:8px"></div></div>
+            <div class="stat"><div class="skel w40"></div><div class="skel w30" style="height:22px;margin-top:6px"></div><div class="skel w60" style="margin-top:6px"></div></div>
+            <div class="stat"><div class="skel w40"></div><div class="skel w30" style="height:22px;margin-top:6px"></div><div class="skel w80" style="margin-top:6px"></div></div>
+            <div class="stat"><div class="skel w40"></div><div class="skel w90" style="margin-top:6px"></div><div class="skel w80" style="margin-top:6px"></div></div>
+          </div>
+          <div class="row"><h2>Needs you</h2><span class="small muted">Checking mail for new replies…</span></div>
+          <div class="queue">
+            <div class="q"><div class="lines"><div class="line w30 shimmer"></div><div class="line w60 shimmer"></div><div class="line w80 shimmer"></div></div><div class="skel" style="width:120px;height:28px"></div></div>
+            <div class="q"><div class="lines"><div class="line w30 shimmer"></div><div class="line w40 shimmer"></div><div class="line w90 shimmer"></div></div><div class="skel" style="width:120px;height:28px"></div></div>
+          </div>
+          <p class="small muted">The list below is from the last sync (07:30) and stays usable while mail is checked.</p>
+          <div data-list="loading"></div>
+        </div>
+      </section>
+
+      <!-- ============ EMPTY ============ -->
+      <section data-state="empty" data-state-name="Empty · first run" hidden>
+        <div class="empty">
+          <h2>No applications yet</h2>
+          <p class="muted" style="max-width:62ch">An Application appears here by itself the moment you mark a Package submitted, in the extension after you press Submit on the portal, or on the Package page. You never add one by hand.</p>
+          <p class="muted" style="max-width:62ch">From then on, replies to kris@krisiliev.dev are matched to it and move its Status. Follow-ups come due on their own.</p>
+          <div class="row"><a class="btn primary" href="feed.html">Find a job in the Feed</a><a class="btn" href="package.html">You have 2 approved Packages</a></div>
+          <p class="small faint">Applied somewhere before apply-kit? <button class="btn ghost sm" style="padding-inline:0;text-decoration:underline">Log a past application</button> so its emails can be matched.</p>
+        </div>
+      </section>
+
+      <!-- ============ ALL CAUGHT UP ============ -->
+      <section data-state="caught-up" data-state-name="All caught up" hidden>
+        <div class="stack" style="gap:16px">
+          <div data-stats></div>
+          <div class="calm" role="status">
+            <span class="label">Needs you · 0</span>
+            <h2>Nothing needs you today</h2>
+            <p class="muted">No follow-ups are due and every email is matched. The next thing is the Halden thank-you note, due Mon 12 Oct.</p>
+            <div class="row"><a class="btn" href="feed.html">Go to the Feed</a><span class="small faint">Mail checked 07:30 · next check 08:00</span></div>
+          </div>
+          <div class="stack" style="gap:0">
+            <div class="row" style="padding-bottom:8px"><h2>All applications · 39</h2></div>
+            <div data-list="caught"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ UNMATCHED EMAIL ============ -->
+      <section data-state="unmatched" data-state-name="Unmatched email" hidden>
+        <div class="stack" style="gap:16px">
+          <div data-stats></div>
+          <div class="stack">
+            <div class="row"><h2 id="needs-u">Needs you · 1</h2></div>
+            <div class="box flag" aria-labelledby="needs-u">
+              <div class="row"><span class="chip warn">Couldn't match</span><span class="label">Email · today 09:14</span></div>
+              <div class="stack" style="gap:4px">
+                <b>"Interview invitation" from talent@nimbus.io</b>
+                <p class="quote">"Hi Kris, thanks for your interest in the Platform Security Engineer role. We'd love to invite you to a 45-minute video interview. Could you share a few times that work next week?…"</p>
+              </div>
+              <p class="small muted">No Application is with Nimbus, and nimbus.io hasn't written before. It looks like an interview invitation, so it would move an Application to Interviewing. That's too important to guess, so nothing has changed yet.</p>
+              <fieldset class="stack" style="border:0;padding:0;margin:0">
+                <legend class="small" style="font-weight:600;margin-bottom:4px">Which application is this about?</legend>
+                <label class="row small"><input type="radio" name="match-u"> <span><b>Cloud Security Engineer · Halden Systems</b> <span class="faint">· closest guess: Halden's posting says "a Nimbus company"</span></span></label>
+                <label class="row small"><input type="radio" name="match-u"> <span><b>Security Engineer · Kestrel Payments</b> <span class="faint">· similar title, different domain</span></span></label>
+                <label class="row small"><input type="radio" name="match-u"> <span>Another one… <input type="search" id="pick-u" placeholder="Search your 39 applications" aria-label="Search applications to match" style="max-width:240px;margin-left:4px"></span></label>
+                <label class="row small"><input type="radio" name="match-u"> <span>Create a new Application: <b>Platform Security Engineer · Nimbus</b> <span class="faint">(applied outside apply-kit, or via a recruiter)</span></span></label>
+                <label class="row small"><input type="radio" name="match-u"> <span>Not about an application · keep it, change nothing</span></label>
+              </fieldset>
+              <div class="row"><button class="btn primary">Match and move to Interviewing</button><button class="btn">Match, keep the Status</button><span class="spacer"></span><button class="btn ghost sm">Open full email</button></div>
+              <p class="small faint">Your choice teaches the matcher: next time, mail from nimbus.io goes to the same place without asking.</p>
+            </div>
+          </div>
+          <div class="stack" style="gap:0">
+            <div class="row" style="padding-bottom:8px"><h2>All applications · 39</h2></div>
+            <div data-list="unmatched"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ OVERFLOW ============ -->
+      <section data-state="overflow" data-state-name="Overflow · 214" hidden>
+        <div class="stack" style="gap:16px">
+          <div class="strip">
+            <div class="stat"><span class="label">This week</span><b class="big">14 sent</b><span class="small muted">214 since 3 Jun</span></div>
+            <div class="stat"><span class="label">Response rate</span><b class="big">17%</b><span class="small muted">36 of 214 replied</span></div>
+            <div class="stat"><span class="label">Interviews</span><b class="big">3</b><span class="small muted">11 in total</span></div>
+            <div class="stat"><span class="label">What's working</span><b style="font-size:1rem">Security angle</b><span class="small muted">24% reply rate vs 12% developer</span></div>
+          </div>
+          <div class="row"><h2>Needs you · 9</h2><span class="spacer"></span><button class="btn sm" data-toggle-local="ovq" aria-expanded="false">▸ Show all 9</button></div>
+          <ol class="queue">
+            <li class="q"><div class="stack" style="gap:2px"><span class="label">Follow-up due · 6 applications</span><b>6 follow-ups are due, oldest from Tue 6 Oct</b><span class="why">Drafts are ready for all six. Review them one by one; nothing is sent for you.</span></div><div class="row"><button class="btn sm primary">Review 6 drafts</button><button class="btn sm">Snooze all 3 days</button></div></li>
+          </ol>
+          <div id="ovq" hidden><p class="small muted">… plus 2 emails to confirm and 1 interview this week.</p></div>
+
+          <div class="stack toolbar">
+            <div class="row"><h2>All applications · 214</h2><span class="spacer"></span><input type="search" id="q-o" value="security" aria-label="Search applications"></div>
+            <div class="row" role="group" aria-label="Filter by Status">
+              <span class="chip solid">Open · 35</span><span class="chip">Offer · 1</span><span class="chip">Interviewing · 2</span><span class="chip">Screening · 3</span><span class="chip">Applied · 29</span><span class="chip">Closed · 3</span><span class="small faint">counts follow the filters</span>
+            </div>
+            <div class="row">
+              <label class="small muted" for="f-angle">Angle</label><select id="f-angle"><option>All angles</option><option>Developer</option><option selected>Security</option><option>Design</option></select>
+              <label class="small muted" for="f-date">Sent</label><select id="f-date"><option>Any time</option><option selected>Last 30 days</option><option>Last 90 days</option><option>Before Sep 2026</option></select>
+              <span class="spacer"></span><span class="small muted">38 match "security" · Security angle · last 30 days</span><button class="btn ghost sm">Clear</button>
+            </div>
+          </div>
+          <div data-list="overflow"></div>
+          <div class="pager"><span>Applied: 1–25 of 29</span><span class="spacer"></span><button class="btn sm" disabled>Previous</button><button class="btn sm">Next</button></div>
+        </div>
+      </section>
+
+      <!-- ============ EMAIL SYNC ERROR ============ -->
+      <section data-state="sync-error" data-state-name="Error · mail sign-in expired" hidden>
+        <div class="stack" style="gap:16px">
+          <div class="banner bad" role="alert">
+            <b>apply-kit can't read the job mailbox. Its sign-in expired on Sat 10 Oct at 21:00.</b>
+            <span>Nothing is lost: iCloud keeps forwarding mail there, and apply-kit will read everything since 21:00 once you reconnect.</span>
+            <span class="spacer"></span><a class="btn sm" href="settings.html">Reconnect mailbox</a>
+          </div>
+          <details class="box">
+            <summary><b>How to fix it (about 2 minutes)</b></summary>
+            <ol class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+              <li>At appleid.apple.com, create a new app-specific password for the job mailbox. The old one was revoked or expired.</li>
+              <li>Go to Settings → Mailbox and paste it there. apply-kit only ever reads that one mailbox, never your personal iCloud mail.</li>
+              <li>apply-kit checks right away and catches up on mail since Sat 21:00. Replies it finds land in "Needs you" as usual.</li>
+            </ol>
+          </details>
+          <div class="box dashed">
+            <b class="small">Still works while mail is off</b>
+            <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:2px">
+              <li>Follow-ups come due on time. They run on dates, not on email.</li>
+              <li>You can change any Status by hand. If a later email says the same, it won't be counted twice.</li>
+              <li>New Applications still appear when you mark a Package submitted.</li>
+            </ul>
+            <p class="small muted"><b>Paused:</b> matching replies, confirmations and rejections. Stats may be missing replies since Saturday evening.</p>
+          </div>
+          <div data-stats data-stale></div>
+          <div class="row"><h2>Needs you · 2</h2><span class="faint small">only date-based items until mail is back</span></div>
+          <ol class="queue">
+            <li class="q"><div class="stack" style="gap:2px"><span class="label">Follow-up due today</span><b>Security Engineer · Kestrel Payments</b><span class="why">Applied 7 days ago. Check your inbox for a reply first: apply-kit can't see mail right now.</span></div><div class="row"><a class="btn sm primary" href="application.html#followup">Review draft</a><button class="btn sm">Snooze 3 days</button></div></li>
+            <li class="q"><div class="stack" style="gap:2px"><span class="label">Interview Thu 15 Oct · 14:00</span><b>Full-stack Developer · Brightwave</b><span class="why">Prep sheet ready.</span></div><div class="row"><a class="btn sm" href="application.html#interviewing">Open prep sheet</a></div></li>
+          </ol>
+          <div data-list="error"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="normal"><span class="label">Design notes</span><ul>
+    <li>Focal point is the "Needs you" queue: at most a handful of items, each with one primary action and a grey "why it's here" line, like the Feed's why-line. Stats sit above it but stay small. They're for motivation, not for work.</li>
+    <li>Queue order: oldest first, so nothing rots. The four kinds are a due Follow-up, an email to confirm, an upcoming interview, and a logged rejection waiting for a lesson. Items that are only coming up (due tomorrow) get one quiet line, not a card.</li>
+    <li>Follow-up due dates are <b>starting defaults</b> from the old prototype's cadence: 7 days after Applied, 3 after Screening, 2 after Interviewing, 1 after Offer (a note to self). They can be changed in Settings. No source cites the numbers.</li>
+    <li>The email-to-confirm case matches a Package, not an Application. Kris approved it and probably submitted on his phone. The app asks; it never creates or moves anything on a low-confidence match.</li>
+    <li>Grouped list: Interviewing, Screening, Offer and Applied are open. Closed (Rejected and Withdrawn) is collapsed by default. Each row shows Status as an inline select, so a manual change is one action. The last Event says who caused it ("email" or "you").</li>
+    <li>Applied shows 5 of 31 by default (soonest due first), then "Show 26 more". A long tail of quiet Applications shouldn't push Closed off the screen.</li>
+    <li>Stats: "What's working" draws sent vs replied per angle to scale, so a 1-of-4 design result can't pass for a trend. The label says "too few to tell".</li></ul></aside>
+  <aside class="notes" data-notes-for="loading" hidden><span class="label">Design notes</span><ul>
+    <li>Reading local data is near-instant, so the skeleton only covers the Stats and the queue while new mail is checked (1–10 s). The cached list stays visible and usable underneath, and the layout doesn't jump.</li>
+    <li>One loading indicator only, the "Checking mail" text. No spinner on top of skeletons. Shimmer respects reduced motion (wf.css).</li></ul></aside>
+  <aside class="notes" data-notes-for="empty" hidden><span class="label">Design notes</span><ul>
+    <li>Explains the model in two sentences: Applications appear by themselves when a Package is marked submitted, and emails keep them up to date. That sets the "nothing to log by hand" expectation from day one.</li>
+    <li>The primary action leads back to the Feed. If approved Packages exist, the secondary button names how many, because those are the fastest way to the first Application.</li>
+    <li>"Log a past application" is the one manual entry point. It exists so replies to applications from before apply-kit don't end up unmatched.</li></ul></aside>
+  <aside class="notes" data-notes-for="caught-up" hidden><span class="label">Design notes</span><ul>
+    <li>Calm, not celebratory: a plain bordered box (not the dashed "empty" style), the next upcoming item, and when mail was last checked, so "nothing" reads as true and not as broken.</li>
+    <li>No confetti and no streak pressure. PRODUCT.md wants clarity and momentum at Track, not joy.</li></ul></aside>
+  <aside class="notes" data-notes-for="unmatched" hidden><span class="label">Design notes</span><ul>
+    <li>"Never guess silently": an email that would change a Status but doesn't match confidently becomes a queue item. Nothing moves until Kris picks.</li>
+    <li>The likeliest candidates are listed with a plain reason each, then search, then "create a new Application" (for recruiter or off-tool applications), then "not about an application".</li>
+    <li>Two commit buttons separate matching from moving. Kris can file the email without accepting the Status change the classifier suggests.</li>
+    <li>The choice is learned per sender domain, so the same question isn't asked twice.</li></ul></aside>
+  <aside class="notes" data-notes-for="overflow" hidden><span class="label">Design notes</span><ul>
+    <li>At 200+ the queue collapses same-kind items ("6 follow-ups are due"). Each one is still reviewed separately, because the user sends every message.</li>
+    <li>Status filter chips carry counts. Angle and date-sent are selects, and the result line names every active filter with one "Clear".</li>
+    <li>Closed (153) stays collapsed and is never auto-deleted. Paging happens inside a group (Applied 1–25 of 29), so group headers stay put. Long titles truncate with the full text on hover.</li>
+    <li>Search covers job, company, contact and email text. It's useful when a recruiter calls and Kris needs to find the Application fast.</li></ul></aside>
+  <aside class="notes" data-notes-for="sync-error" hidden><span class="label">Design notes</span><ul>
+    <li>Error format: what happened (sign-in expired, since when), why it's safe (mail is held and will be caught up), and the fix as three short steps that link to Settings → Mailbox.</li>
+    <li>"What still works" and what's paused are listed, so Kris doesn't stop trusting the whole screen. Stats are visibly marked as possibly incomplete.</li>
+    <li>The health indicator in the top bar turns red on every screen, not just here. The banner stays until the mailbox reconnects; it can't be dismissed.</li>
+    <li>The Follow-up card adds "check your inbox first": the app can't rule out a reply it can't see.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const STATUSES = ["Applied", "Screening", "Interviewing", "Offer", "Rejected", "Withdrawn"];
+
+  // ---- Stats strip (weekly chart drawn to scale: 5 px per application, baseline y=78) ----
+  const weeks = [2, 3, 5, 4, 6, 3, 5, 11];           // Aug 17 … this week (Mon 5 Oct); sums to 39
+  const bars = weeks.map((v, i) => {
+    const h = v * 5, x = 8 + i * 39, last = i === weeks.length - 1;
+    return `<rect x="${x}" y="${78 - h}" width="28" height="${h}" fill="var(${last ? "--ink" : "--fill-2"})"/>` +
+      (last ? `<text x="${x + 14}" y="${78 - h - 5}" text-anchor="middle" font-size="10" fill="var(--ink)" font-family="IBM Plex Mono, monospace">${v}</text>` : "");
+  }).join("");
+  const chart = `<svg class="chart" viewBox="0 0 320 90" role="img" aria-label="Applications sent per week, last 8 weeks: ${weeks.join(", ")}">${bars}
+    <line x1="0" y1="78" x2="320" y2="78" stroke="var(--line)"/>
+    <text x="8" y="88" font-size="9" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">Aug 17</text>
+    <text x="309" y="88" text-anchor="end" font-size="9" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">This week</text></svg>`;
+  // angles: sent bar length ∝ sent (21 → 150 px), replied part ∝ replies
+  const angles = [["Security", 21, 4, ""], ["Developer", 14, 2, ""], ["Design", 4, 1, " · too few"]];
+  const ang = `<svg class="angles" viewBox="0 0 300 66" role="img" aria-label="Replies by angle: security 4 of 21, developer 2 of 14, design 1 of 4 (too few to tell)">` +
+    angles.map(([n, s, r, t], i) => {
+      const y = 4 + i * 22, w = s / 21 * 150, rw = r / 21 * 150;
+      return `<text x="0" y="${y + 10}" font-size="10" fill="var(--ink-2)" font-family="IBM Plex Mono, monospace">${n}</text>
+        <rect x="70" y="${y + 1}" width="${w}" height="11" fill="var(--fill-2)"/><rect x="70" y="${y + 1}" width="${rw}" height="11" fill="var(--ink)"/>
+        <text x="${74 + w}" y="${y + 10}" font-size="10" fill="var(--ink-3)" font-family="IBM Plex Mono, monospace">${r}/${s}${t}</text>`;
+    }).join("") + `</svg>`;
+  const stats = stale => `<div class="strip"${stale ? ' style="opacity:.7"' : ""}>
+    <div class="stat"><span class="label">This week · Mon 5 – Sun 11 Oct</span><b class="big">11 sent</b>${chart}</div>
+    <div class="stat"><span class="label">Response rate</span><b class="big">18%</b><span class="small muted">7 of 39 replied, rejections included${stale ? " · may miss replies since Sat 21:00" : ""}</span></div>
+    <div class="stat"><span class="label">Interviews</span><b class="big">2</b><span class="small muted">Brightwave (Thu) and Ardent Labs (round 2)</span></div>
+    <div class="stat"><span class="label">What's working</span><b style="font-size:1rem">Security angle gets most replies</b>${ang}<span class="small faint">dark = replied, light = sent</span></div></div>`;
+  $$("[data-stats]").forEach(el => el.innerHTML = stats(el.hasAttribute("data-stale")));
+
+  // ---- Grouped list ----
+  // [job, company, status, last event, by, next step, next is due?]
+  const G = {
+    Interviewing: [
+      ["Full-stack Developer", "Brightwave", "Interviewing", "Interview invite matched · Fri", "email", "Interview Thu 15 Oct, 14:00", false, "application.html#interviewing"],
+      ["SOC Analyst L2", "Ardent Labs", "Interviewing", "Round 1 done · Wed", "you", "Waiting for round-2 slots · asked Thu", false, "application.html"],
+    ],
+    Screening: [
+      ["Cloud Security Engineer", "Halden Systems", "Screening", "Recruiter call done · Fri", "you", "Thank-you note due Mon 12 Oct", false, "application.html"],
+      ["IT Security Specialist", "Ostrava Bank", "Screening", "Call invite matched · Thu", "email", "Phone call Tue 13 Oct, 10:00", false, "application.html#by-email"],
+    ],
+    Applied: [
+      ["Security Engineer", "Kestrel Payments", "Applied", "Submitted · Sun 4 Oct", "you", "Follow-up due today", true, "application.html#followup"],
+      ["Junior Penetration Tester", "Redline Security", "Applied", "Confirmation matched · Tue 6 Oct", "email", "Follow-up Tue 13 Oct", false, "application.html"],
+      ["Backend Engineer", "Corvid Logistics", "Applied", "Submitted · Thu 8 Oct", "you", "Follow-up Thu 15 Oct", false, "application.html#applied"],
+      ["Application Security Engineer", "Verana", "Applied", "Submitted · Fri 9 Oct", "you", "Follow-up Fri 16 Oct", false, "application.html"],
+      ["React Developer", "Oakline Software", "Applied", "Submitted · Sat 10 Oct", "you", "Follow-up Sat 17 Oct", false, "application.html"],
+    ],
+    Closed: [
+      ["Product Designer", "Lumen Health", "Rejected", "Rejection matched · yesterday", "email", "Add a lesson", false, "application.html#rejected"],
+      ["Frontend Developer", "Tessel", "Rejected", "Rejection matched · 28 Sep", "email", "Lesson: missing Vue", false, "application.html"],
+      ["Threat Analyst", "Mirov Telecom", "Rejected", "Rejection matched · 12 Sep", "email", "Lesson: needed CCNA", false, "application.html"],
+      ["QA Automation Engineer", "Brindle", "Withdrawn", "Withdrawn · 2 Sep", "you", "Reason: on-site 5 days", false, "application.html"],
+    ],
+  };
+  const counts = { Interviewing: 2, Screening: 2, Applied: 31, Closed: 4 };
+  const row = (r, key, i) => `<tr${r[6] ? ' class="focused"' : ""}>
+    <td style="min-width:200px"><a href="${r[7]}"><b class="trunc" title="${r[0]}" style="display:block">${r[0]}</b></a><div class="small trunc" title="${r[1]}">${r[1]}</div></td>
+    <td><select aria-label="Status for ${r[0]}, ${r[1]}" id="st-${key}-${i}">${STATUSES.map(s => `<option${s === r[2] ? " selected" : ""}>${s}</option>`).join("")}</select></td>
+    <td style="min-width:170px">${r[3]}<div class="by">by ${r[4]}</div></td>
+    <td style="min-width:170px"${r[6] ? ' class="due"' : ""}>${r[5]}</td></tr>`;
+  const group = (key, name, items, total, open, more) => `<div class="grp">
+    <button class="group-h" type="button" data-toggle-local="g-${key}-${name}" aria-expanded="${open}" aria-controls="g-${key}-${name}">${open ? "▾" : "▸"} ${name} <span class="faint">· ${total}</span></button>
+    <div id="g-${key}-${name}"${open ? "" : " hidden"}><div class="scroll"><table>
+      <thead><tr><th>Job</th><th>Status</th><th>Last event</th><th>Next step</th></tr></thead>
+      <tbody>${items.map((r, i) => row(r, key + name, i)).join("")}</tbody></table></div>
+      ${more ? `<button class="btn ghost sm" type="button">Show ${more} more</button>` : ""}</div></div>`;
+  const list = key => Object.keys(G).map(n => group(key, n, G[n], counts[n], n !== "Closed", counts[n] - G[n].length)).join("");
+  ["normal", "loading", "caught", "unmatched", "error"].forEach(k => $$(`[data-list="${k}"]`).forEach(el => el.innerHTML = list(k)));
+
+  // overflow: long names, paging inside a group, Closed collapsed
+  const OG = {
+    Offer: [["Security Engineer II", "Fenwick Cloud", "Offer", "Offer email matched · Fri", "email", "Respond by Fri 23 Oct", false, "application.html#offer"]],
+    Interviewing: [["Senior Application Security Engineer, Payments Platform (Fraud & Risk Engineering)", "International Clearing & Settlement Services Bulgaria EAD", "Interviewing", "Round 2 invite matched · today", "email", "Pick a slot by Tue", true, "application.html"]],
+    Screening: [["Cloud Security Engineer", "Halden Systems", "Screening", "Recruiter call done · Fri", "you", "Thank-you note due Mon 12 Oct", false, "application.html"]],
+    Applied: G.Applied.slice(0, 3),
+    Closed: G.Closed.slice(1, 3),
+  };
+  const oc = { Offer: 1, Interviewing: 2, Screening: 3, Applied: 29, Closed: 3 };
+  $$('[data-list="overflow"]').forEach(el => el.innerHTML = Object.keys(OG).map(n =>
+    group("ov", n, OG[n], oc[n], n !== "Closed", n === "Applied" ? 0 : oc[n] - OG[n].length)).join(""));
+
+  // collapsible groups for generated markup (same behaviour as wf.js data-toggle)
+  $$("[data-toggle-local]").forEach(b => b.addEventListener("click", () => {
+    const el = document.getElementById(b.dataset.toggleLocal); if (!el) return;
+    el.hidden = !el.hidden; b.setAttribute("aria-expanded", String(!el.hidden));
+    b.innerHTML = b.innerHTML.replace(/^[▸▾]/, el.hidden ? "▸" : "▾");
+  }));
+
+  // health indicator follows the state
+  const health = document.getElementById("health");
+  const setHealth = () => {
+    const vis = $$("[data-state]").find(s => !s.hidden)?.dataset.state;
+    health.innerHTML = vis === "sync-error" ? 'Mail <b class="bad">sign-in expired · since Sat 21:00</b>'
+      : vis === "loading" ? "Mail <b>checking…</b>"
+      : vis === "empty" ? "Mail <b>connected</b> · nothing to match yet"
+      : vis === "unmatched" ? 'Mail <b>synced 09:15</b> · 1 unmatched' : "Mail <b>synced 07:30</b>";
+  };
+  $$(".state-tab").forEach(t => t.addEventListener("click", setHealth)); setHealth();
+})();
+</script>
+</body>
+</html>

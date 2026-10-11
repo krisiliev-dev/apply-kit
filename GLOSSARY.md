@@ -52,6 +52,10 @@ _Avoid_: Score, match rating
 The single source of truth for the user's experience, skills and education.
 _Avoid_: Base CV, resume, profile (unqualified)
 
+**Profile piece**:
+One unit of the master profile (a role, achievement, skill or education entry) with its tags, angle, source and whether the user has confirmed it.
+_Avoid_: Bullet, item, entry, fact
+
 **Angle**:
 One of the base framings of the master profile (developer, security, design) that tailoring starts from.
 _Avoid_: Variant, persona, template

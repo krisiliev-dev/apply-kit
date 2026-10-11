@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Profile · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+  /* page-local additions: tokens from wf.css only */
+  .subnav { display: flex; flex-wrap: wrap; gap: 4px 18px; border-bottom: 1px solid var(--line); padding-bottom: 8px; font-size: 0.92rem }
+  .subnav a { color: var(--ink-2); text-decoration: none; font-weight: 600 }
+  .subnav a[aria-current="page"] { color: var(--ink); text-decoration: underline; text-underline-offset: 6px; text-decoration-thickness: 2px }
+  .subnav .chip { margin-left: 4px }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px }
+  legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 2px }
+  .check { display: flex; align-items: flex-start; gap: 8px; font-size: 0.92rem }
+  .check input { margin-top: 4px; flex: none }
+  .pc { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: start }
+  .pc p { overflow-wrap: anywhere }
+  .pc .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center }
+  .grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; align-items: start }
+  .lead { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 0.9rem }
+  .lead li { padding-left: 2px }
+  select[aria-invalid="true"], textarea[aria-invalid="true"] { border-color: var(--bad) }
+  .errsum { border: 1px solid var(--bad); background: var(--bad-bg); color: var(--bad); border-radius: 8px; padding: 10px 14px; display: grid; gap: 4px }
+  .errsum ul { margin: 0; padding-left: 18px }
+  .narrow { max-width: 140px }
+  .quote { border-left: 3px solid var(--line); padding-left: 10px; color: var(--ink-2); font-size: 0.9rem }
+  td.ans { min-width: 220px; max-width: 360px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html" aria-current="page">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Profile</h1>
+    <p class="lede">Everything tailoring draws from: the master profile, the three angles, the answer bank, your voice and what the feed hides. One area with five sections; pieces learned during applications wait here for your OK.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a href="feed.html">Feed</a><a href="applications.html">Applications</a><a class="on" href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health" id="health">Sources <b>14/14 OK</b> · checked 07:30</span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ NORMAL: MASTER PROFILE ============ -->
+      <section data-state="normal" data-state-name="Master profile">
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="master"></nav>
+          <div class="row">
+            <h2>Master profile</h2><span class="faint small">· 52 pieces · all confirmed</span>
+            <span class="spacer"></span>
+            <input type="search" id="q-pieces" placeholder="Search pieces, tags" aria-label="Search pieces" style="max-width:240px">
+            <button class="btn sm">Add piece</button>
+          </div>
+          <div class="row">
+            <span class="chip solid">All</span><span class="chip">Achievements · 29</span><span class="chip">Skills · 15</span><span class="chip">Roles · 4</span><span class="chip">Education · 4</span>
+            <span class="faint">|</span>
+            <span class="chip">Angle: all ▾</span>
+          </div>
+
+          <div class="list">
+            <div class="item"><button class="group-h" data-toggle="r-orb" aria-expanded="true" aria-controls="r-orb">▾ Junior Security Analyst · Orbital Bank · 2023–2025</button><span class="small muted">21 pieces</span></div>
+            <div id="r-orb" data-pieces="orb"></div>
+            <button class="btn ghost sm" style="justify-self:start">Show 17 more from Orbital Bank</button>
+
+            <div class="item"><button class="group-h" data-toggle="r-var" aria-expanded="false" aria-controls="r-var">▸ SOC Intern · Varna Telecom · 2022</button><span class="small muted">7 pieces</span></div>
+            <div id="r-var" hidden data-pieces="var"></div>
+
+            <div class="item"><button class="group-h" data-toggle="r-fre" aria-expanded="false" aria-controls="r-fre">▸ Freelance full-stack developer · 2021–2023</button><span class="small muted">13 pieces</span></div>
+            <div id="r-fre" hidden data-pieces="fre"></div>
+
+            <div class="item"><button class="group-h" data-toggle="r-edu" aria-expanded="false" aria-controls="r-edu">▸ BSc Computer Science · 2018–2022</button><span class="small muted">4 pieces</span></div>
+            <div id="r-edu" hidden class="small muted" style="padding-bottom:8px">Thesis, modules, a hackathon win…</div>
+
+            <div class="item"><button class="group-h" data-toggle="r-sk" aria-expanded="false" aria-controls="r-sk">▸ Skills not tied to a role</button><span class="small muted">7 pieces</span></div>
+            <div id="r-sk" hidden class="small muted" style="padding-bottom:8px">Figma, Python, Bulgarian (native), English (C1)…</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ UNCONFIRMED WAITING ============ -->
+      <section data-state="unconfirmed" data-state-name="Unconfirmed pieces waiting" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="master" data-badge="3"></nav>
+          <div class="banner warn" role="status">
+            <b>3 pieces learned during applications are waiting for your OK.</b>
+            <span>Each was used only in the package where you gave it. Confirm to use it everywhere.</span>
+          </div>
+
+          <div class="stack">
+            <article class="box">
+              <div class="row"><span class="label">Achievement · Orbital Bank</span><span class="chip warn">Unconfirmed</span><span class="spacer"></span><span class="small faint">Learned from <a href="package.html">Kestrel Payments package</a> · 9 Oct</span></div>
+              <p>Worked with the fraud team to trace a card-testing pattern in payment alerts and wrote a Splunk detection for it.</p>
+              <div class="quote">Asked in the package: "The posting wants payments fraud experience. Have you seen any?" · You answered: "once, card testing, we built a detection for it with fraud"</div>
+              <div class="row"><span class="chip">fraud</span><span class="chip">payments</span><span class="chip">Splunk</span><span class="chip">angle: Security</span></div>
+              <div class="row"><button class="btn sm primary">Confirm</button><button class="btn sm" data-go="editing">Edit</button><button class="btn ghost sm">Discard</button><span class="small faint">Discarding doesn't change the Kestrel package already sent.</span></div>
+            </article>
+
+            <article class="box">
+              <div class="row"><span class="label">Achievement · Orbital Bank</span><span class="chip warn">Unconfirmed</span><span class="spacer"></span><span class="small faint">Learned from Halden Systems package · 7 Oct</span></div>
+              <p>Wrote Python scripts that added threat-intel lookups to Splunk alerts.</p>
+              <div class="row"><span class="chip">Python</span><span class="chip">threat intel</span><span class="chip">automation</span><span class="chip">angle: Security</span><span class="chip">angle: Developer</span></div>
+              <div class="row"><button class="btn sm primary">Confirm</button><button class="btn sm" data-go="editing">Edit</button><button class="btn ghost sm">Discard</button></div>
+            </article>
+
+            <article class="box flag">
+              <div class="row"><span class="label">Skill</span><span class="chip warn">Unconfirmed</span><span class="chip warn">Near the line</span><span class="spacer"></span><span class="small faint">Learned from Halden Systems package · 7 Oct</span></div>
+              <p>Kubernetes</p>
+              <div class="quote">You said: "played with k3s once for a side project".</div>
+              <p class="small" style="color:var(--warn)">A skill on your CV should hold up to 5 minutes of questions. "Kubernetes" alone suggests more than one try. Keep it as "Learning: Kubernetes (k3s, personal project)" or leave it out.</p>
+              <div class="row"><button class="btn sm">Keep as "Learning"</button><button class="btn sm">Confirm as a skill anyway</button><button class="btn ghost sm">Discard</button></div>
+            </article>
+          </div>
+          <div class="row"><button class="btn sm">Confirm the 2 unflagged</button><span class="small faint">The near-the-line one always needs its own decision.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ EDITING A PIECE ============ -->
+      <section data-state="editing" data-state-name="Editing a piece" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="master"></nav>
+          <div class="row"><a class="btn ghost sm" href="#normal" data-go="normal">← Master profile</a></div>
+          <form class="cols" onsubmit="return false" novalidate aria-labelledby="edit-h">
+            <div class="stack" style="gap:16px">
+              <h2 id="edit-h">Edit piece</h2>
+
+              <div class="errsum" role="alert" tabindex="-1">
+                <b>2 things to fix before saving</b>
+                <ul class="small"><li><a href="#e-text">The number goes beyond your source</a></li><li><a href="#e-src">Say where the number comes from</a></li></ul>
+              </div>
+
+              <fieldset>
+                <legend>Type</legend>
+                <div class="row">
+                  <label class="check"><input type="radio" name="ptype" checked> Achievement</label>
+                  <label class="check"><input type="radio" name="ptype"> Skill</label>
+                  <label class="check"><input type="radio" name="ptype"> Role</label>
+                  <label class="check"><input type="radio" name="ptype"> Education</label>
+                </div>
+              </fieldset>
+
+              <div class="field" style="max-width:420px">
+                <label for="e-role">Belongs to</label>
+                <select id="e-role"><option>Junior Security Analyst · Orbital Bank · 2023–2025</option><option>SOC Intern · Varna Telecom · 2022</option><option>Freelance full-stack developer · 2021–2023</option><option>BSc Computer Science · 2018–2022</option><option>No role (general skill)</option></select>
+              </div>
+
+              <div class="field">
+                <label for="e-text">What you did</label>
+                <span class="help" id="e-text-help">Start with a verb, say what changed because of you. One sentence.</span>
+                <textarea id="e-text" rows="2" aria-invalid="true" aria-describedby="e-text-help e-text-err e-text-count" style="min-height:64px">Built 40 Splunk detections that cut false-positive alerts by 50%.</textarea>
+                <div class="row small"><span class="err" id="e-text-err">Your source says "about a third". 50% is more than favourable rounding, and an interviewer asking how you measured it would catch it. Use "about a third" or "33%".</span><span class="spacer"></span><span class="faint" id="e-text-count">64 / 200</span></div>
+                <div class="row"><button type="button" class="btn sm">Use "about a third"</button><button type="button" class="btn sm">Use "33%"</button></div>
+              </div>
+
+              <div class="field" style="max-width:420px">
+                <label for="e-src">Where does the number come from?</label>
+                <span class="help" id="e-src-help">Tailoring states measured numbers plainly and estimates with "about".</span>
+                <select id="e-src" aria-invalid="true" aria-describedby="e-src-help e-src-err"><option value="">Choose one</option><option>Measured (dashboard, report)</option><option>An estimate I'd defend</option><option>Someone told me (lead, review)</option></select>
+                <span class="err" id="e-src-err">This piece has a number, so pick where it comes from.</span>
+              </div>
+
+              <div class="field">
+                <label for="e-tags">Tags</label>
+                <span class="help" id="e-tags-help">Used to match job requirements. Press Enter to add.</span>
+                <div class="row"><span class="chip">Splunk ✕</span><span class="chip">SIEM ✕</span><span class="chip">detection engineering ✕</span></div>
+                <input type="text" id="e-tags" placeholder="Add a tag" aria-describedby="e-tags-help" style="max-width:320px">
+              </div>
+
+              <fieldset>
+                <legend>Angles it belongs to</legend>
+                <div class="row">
+                  <label class="check"><input type="checkbox"> Developer</label>
+                  <label class="check"><input type="checkbox" checked> Security</label>
+                  <label class="check"><input type="checkbox"> Design</label>
+                </div>
+              </fieldset>
+
+              <div class="row"><button type="button" class="btn primary">Save</button><button type="button" class="btn" data-go="normal">Cancel</button><span class="spacer"></span><button type="button" class="btn ghost sm">Delete piece…</button></div>
+            </div>
+
+            <aside class="box" aria-label="About this piece">
+              <span class="label">Source</span>
+              <p class="small">CV-Kris-2025.pdf, page 1</p>
+              <div class="quote">"Built 40 Splunk detections, reducing false positives by about a third."</div>
+              <span class="label">The honesty line</span>
+              <p class="small muted">Allowed: stronger verbs, confident framing, plausible rounding. Not allowed: numbers with nothing behind them, skills you couldn't talk about for 5 minutes.</p>
+              <span class="label">Used in</span>
+              <p class="small">6 packages · last in Kestrel Payments, 9 Oct. Saving doesn't change packages already sent.</p>
+            </aside>
+          </form>
+        </div>
+      </section>
+
+      <!-- ============ ANGLES ============ -->
+      <section data-state="angles" data-state-name="Angles" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="angles"></nav>
+          <div class="stack"><h2>Angles</h2><p class="small muted">Each angle is a starting point for tailoring: a summary line and the pieces that lead. A package picks the closest angle, then tailors it for the job.</p></div>
+          <div class="grid3">
+            <article class="box">
+              <div class="row"><h3>Security</h3><span class="spacer"></span><span class="small faint">used in 11 packages</span></div>
+              <div class="field"><label for="sum-sec" class="small">Summary line</label><textarea id="sum-sec" rows="3" style="min-height:70px">Security analyst who built 40 Splunk detections that cut false positives by about a third. SOC triage and phishing response at a bank.</textarea></div>
+              <span class="label">Leads with</span>
+              <ol class="lead">
+                <li>Built 40 Splunk detections, about a third fewer false positives</li>
+                <li>Led the response to 1 phishing incident, supported 2 more</li>
+                <li>Triaged about 25 alerts a day in a 6-person SOC</li>
+                <li>SOC Intern, Varna Telecom</li>
+              </ol>
+              <div class="row small"><button class="btn sm">Reorder…</button><span class="faint">34 pieces available</span></div>
+            </article>
+            <article class="box">
+              <div class="row"><h3>Developer</h3><span class="spacer"></span><span class="small faint">used in 6 packages</span></div>
+              <div class="field"><label for="sum-dev" class="small">Summary line</label><textarea id="sum-dev" rows="3" style="min-height:70px">Full-stack developer (React, Node.js) with two years of client work and a security background that shows in the code.</textarea></div>
+              <span class="label">Leads with</span>
+              <ol class="lead">
+                <li>Freelance full-stack developer, 2021–2023</li>
+                <li>Booking site with Stripe deposits for a dental clinic</li>
+                <li>Python scripts adding threat intel to Splunk alerts</li>
+              </ol>
+              <div class="row small"><button class="btn sm">Reorder…</button><span class="faint">22 pieces available</span></div>
+            </article>
+            <article class="box flag">
+              <div class="row"><h3>Design</h3><span class="chip warn">Thin</span><span class="spacer"></span><span class="small faint">used in 1 package</span></div>
+              <div class="field"><label for="sum-des" class="small">Summary line</label><textarea id="sum-des" rows="3" style="min-height:70px">Designer-developer who designs and builds interfaces in Figma and React.</textarea></div>
+              <span class="label">Leads with</span>
+              <ol class="lead">
+                <li>Designed and built the clinic booking flow in Figma and React</li>
+                <li>Figma</li>
+              </ol>
+              <p class="small" style="color:var(--warn)">Only 6 pieces, and 1 has a result. Design jobs will tailor weakly.</p>
+              <div class="row small"><button class="btn sm primary">Let the coach ask about design work</button></div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ANSWER BANK ============ -->
+      <section data-state="answers" data-state-name="Answer bank" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="answers"></nav>
+          <div class="row">
+            <h2>Answer bank</h2><span class="faint small">· 34 answers</span>
+            <span class="spacer"></span>
+            <input type="search" id="q-ans" placeholder="Search questions" aria-label="Search answers" style="max-width:240px">
+            <button class="btn sm">Add answer</button>
+          </div>
+          <div class="banner warn" role="status"><b>1 answer changed in a portal.</b><span>You edited "Kubernetes experience" in the Halden Systems Workday form on 7 Oct. Keep the new version for next time?</span><span class="spacer"></span><button class="btn sm">Keep new</button><button class="btn ghost sm">Keep old</button></div>
+          <div class="row"><span class="chip solid">All</span><span class="chip">Standard · 14</span><span class="chip">Screening · 20</span><span class="chip">Not used in 90 days · 5</span></div>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Question</th><th>Answer</th><th>Type</th><th>Last used</th><th>Used</th><th></th></tr></thead>
+              <tbody data-rows="answers"></tbody>
+            </table>
+          </div>
+          <div class="pager"><span>1–8 of 34</span><span class="spacer"></span><button class="btn sm" disabled>Previous</button><button class="btn sm">Next</button></div>
+          <p class="small faint">"Why this company?" and cover-letter questions aren't stored: they're written fresh for each job.</p>
+        </div>
+      </section>
+
+      <!-- ============ VOICE ============ -->
+      <section data-state="voice" data-state-name="Voice samples" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="voice"></nav>
+          <div class="row"><h2>Voice</h2><span class="spacer"></span><span class="small muted" aria-live="polite">Updating from 3 new edits…</span></div>
+          <div class="banner info"><b>Local only.</b><span>Voice samples stay on this machine and are never committed. Drafting sends the rules below, not the samples.</span></div>
+          <div class="cols">
+            <div class="stack" style="gap:14px">
+              <span class="label">What it learned · from 4 samples and 47 edits</span>
+              <div class="list" data-rows="rules"></div>
+            </div>
+            <div class="stack">
+              <span class="label">Samples</span>
+              <div class="list">
+                <div class="item"><div><b class="trunc">cover-letter-orbital-2023.docx</b><div class="small faint">Cover letter · 310 words</div></div><button class="btn ghost sm" aria-label="Remove cover-letter-orbital-2023.docx">Remove</button></div>
+                <div class="item"><div><b class="trunc">cover-letter-varna-telecom.pdf</b><div class="small faint">Cover letter · 240 words</div></div><button class="btn ghost sm" aria-label="Remove cover-letter-varna-telecom.pdf">Remove</button></div>
+                <div class="item"><div><b class="trunc">portfolio-about-page.txt</b><div class="small faint">Personal writing · 180 words</div></div><button class="btn ghost sm" aria-label="Remove portfolio-about-page.txt">Remove</button></div>
+                <div class="item"><div><b class="trunc">linkedin-about.txt</b><div class="small faint">Personal writing · 90 words</div></div><button class="btn ghost sm" aria-label="Remove linkedin-about.txt">Remove</button></div>
+                <div class="item"><div><b class="trunc">cover-letter-2022.pages</b><div class="small" style="color:var(--bad)">Couldn't read a .pages file. Export it as PDF or DOCX from Pages.</div></div><button class="btn sm">Replace</button></div>
+                <div class="item"><div><b>Your edits to drafts</b><div class="small faint">47 edits from 9 packages · added automatically</div></div><button class="btn ghost sm">Pause</button></div>
+              </div>
+              <label class="btn sm" for="voice-add" style="justify-self:start">Add samples</label>
+              <input type="file" id="voice-add" multiple accept=".pdf,.docx,.txt" style="position:absolute;width:1px;height:1px;opacity:0">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ DEALBREAKERS & SEARCH ============ -->
+      <section data-state="search" data-state-name="Dealbreakers & search" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="search"></nav>
+          <div class="row"><h2>Dealbreakers and search</h2><span class="spacer"></span><a class="btn ghost sm" href="feed.html">See today's 7 hidden jobs</a></div>
+          <dl class="kv">
+            <dt>Where</dt><dd>Sofia (on-site or hybrid) and Remote EU (±2 h), ranked equally · <button class="btn ghost sm">Edit</button></dd>
+            <dt>Relocation</dt><dd>Off · Switzerland, Spain when on · <button class="btn ghost sm">Edit</button></dd>
+            <dt>Fields</dt><dd>Developer, Security, Design, other CS (ranked lower) · <button class="btn ghost sm">Edit</button></dd>
+          </dl>
+          <span class="label">Dealbreakers</span>
+          <div class="scroll">
+            <table>
+              <thead><tr><th>Rule</th><th>Hides today</th><th>Last changed</th><th></th></tr></thead>
+              <tbody>
+                <tr><td>Requires a language other than English or Bulgarian</td><td>3</td><td>11 Oct · setup</td><td><button class="btn sm">Edit</button></td></tr>
+                <tr><td>Asks for more than 4 years</td><td>2</td><td>11 Oct · setup</td><td><button class="btn sm">Edit</button></td></tr>
+                <tr><td>Salary stated and below €2,000 a month<div class="why">Jobs without a salary stay visible</div></td><td>1</td><td>11 Oct · setup</td><td><button class="btn sm">Edit</button></td></tr>
+                <tr><td>Location outside Sofia and Remote EU</td><td>1</td><td>11 Oct · setup</td><td><button class="btn sm">Edit</button></td></tr>
+                <tr class="dim"><td>Night shifts<div class="why">Turned off from the Feed: "Not a dealbreaker for me" on Ardent Labs, 6 Oct</div></td><td>—</td><td>6 Oct · Feed</td><td><button class="btn sm">Turn on</button></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="small faint">Companies on the watchlist and the job-alert mailbox are in <a href="settings.html">Settings</a>, next to source health.</p>
+        </div>
+      </section>
+
+      <!-- ============ EMPTY ============ -->
+      <section data-state="empty" data-state-name="Empty · before onboarding" hidden>
+        <div class="stack" style="gap:14px">
+          <nav class="subnav" aria-label="Profile sections" data-sub="master"></nav>
+          <div class="empty">
+            <h2>Your master profile is empty</h2>
+            <p class="muted">Every CV, cover letter and portal answer is built from it. Setup imports your old CVs, lets a coach question them, then sets up your search. About 30–45 minutes; you can stop any time.</p>
+            <div class="row"><a class="btn primary" href="onboarding.html">Start setup</a><button class="btn">Import one CV and start applying</button></div>
+            <p class="small faint">The quick start works, but your first packages will be thinner. The profile fills in from questions asked while you apply.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="normal"><span class="label">Design notes</span><ul>
+    <li>Pieces are grouped by role because that's how a CV reads and how you remember your work. Skills not tied to a role get their own group.</li>
+    <li>Each piece shows four things at a glance: tags (for matching requirements), angle, status and source. The source keeps the profile auditable: every line traces back to a file, the interview or a package.</li>
+    <li>The section tabs carry a count only when something needs you (see "Unconfirmed"), so the badge means something.</li>
+    <li>No loading state: the profile is a local file and opens instantly. Long groups show the first few pieces with "Show more".</li></ul></aside>
+  <aside class="notes" data-notes-for="unconfirmed" hidden><span class="label">Design notes</span><ul>
+    <li>Phase C of onboarding. Answers given to gap questions inside a package become unconfirmed pieces. They're used for that job only until you confirm them here.</li>
+    <li>Each card quotes the question and your original answer, so you can check that the rewrite didn't stretch it.</li>
+    <li>Near-the-line pieces get their own decision with a suggested honest version, and are never bulk-confirmed.</li>
+    <li>Discarding never changes a package already sent; it says so, so the action doesn't feel risky.</li></ul></aside>
+  <aside class="notes" data-notes-for="editing" hidden><span class="label">Design notes</span><ul>
+    <li>Single column, top-aligned labels, help text under each label. Fields are validated on blur; when you press Save, a summary at the top links to each field.</li>
+    <li>The honesty-line check compares the edit against the original source (shown on the right) and offers one-click honest fixes instead of only saying no.</li>
+    <li>"Where does the number come from?" decides how firmly tailoring states it. It's required only when the text contains a number.</li>
+    <li>Delete is a quiet link with a confirm step. Editing never changes packages already sent.</li></ul></aside>
+  <aside class="notes" data-notes-for="angles" hidden><span class="label">Design notes</span><ul>
+    <li>Three cards side by side so the angles can be compared; they stack at narrow widths. Each card has an editable summary line and an ordered "leads with" list.</li>
+    <li>A thin angle is flagged with the reason ("6 pieces, 1 with a result") and a fix: a short coach session about design work.</li></ul></aside>
+  <aside class="notes" data-notes-for="answers" hidden><span class="label">Design notes</span><ul>
+    <li>The table shows which answers are used and which are stale ("Last used", "Used"), so the bank stays trustworthy for the extension.</li>
+    <li>When an answer was changed in a portal, the extension notices and asks which version to keep. The bank learns without silently overwriting.</li>
+    <li>Long answers truncate to two lines; the full text shows on hover and in Edit. Questions that need a fresh answer per job aren't stored.</li></ul></aside>
+  <aside class="notes" data-notes-for="voice" hidden><span class="label">Design notes</span><ul>
+    <li>Voice is shown as readable rules with evidence, not a black box. Each rule can be removed if it's wrong.</li>
+    <li>"Local only" is stated at the top because these are the most personal files in the app.</li>
+    <li>Edits to drafts feed the voice automatically and can be paused. An unreadable sample says why and how to fix it; the rest still count.</li></ul></aside>
+  <aside class="notes" data-notes-for="search" hidden><span class="label">Design notes</span><ul>
+    <li>Each dealbreaker shows how many jobs it hides today and links to the hidden pile, so a rule that's too strict is easy to spot.</li>
+    <li>Rules changed from the Feed ("Not a dealbreaker for me") show up here with where and when, so the rules never drift without a record.</li></ul></aside>
+  <aside class="notes" data-notes-for="empty" hidden><span class="label">Design notes</span><ul>
+    <li>Explains what the profile is for, then gives the full setup and the concept-C quick start, with the cost of each.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  // section sub-nav
+  const subs = [["master", "Master profile", "normal"], ["angles", "Angles", "angles"], ["answers", "Answer bank", "answers"], ["voice", "Voice", "voice"], ["search", "Dealbreakers & search", "search"]];
+  document.querySelectorAll(".subnav[data-sub]").forEach(nav => {
+    nav.innerHTML = subs.map(([k, l, st]) => {
+      const badge = k === "master" && nav.dataset.badge ? ` <span class="chip warn" aria-label="${nav.dataset.badge} waiting">${nav.dataset.badge}</span>` : "";
+      return `<a href="#${st}" data-go="${st}"${nav.dataset.sub === k ? ' aria-current="page"' : ""}>${l}${badge}</a>`;
+    }).join("");
+  });
+
+  // master profile pieces
+  const P = {
+    orb: [
+      ["Role", "Junior Security Analyst, Orbital Bank, Sofia · Mar 2023 – Jun 2025", ["SOC", "banking"], ["Security"], "CV 2025 + CV 2023"],
+      ["Achievement", "Built 40 Splunk detections that cut false-positive alerts by about a third", ["Splunk", "SIEM", "detection engineering"], ["Security"], "CV 2025"],
+      ["Achievement", "Led the response to 1 phishing incident and supported 2 more", ["incident response", "phishing"], ["Security"], "interview · 11 Oct"],
+      ["Achievement", "Wrote Python scripts that added threat-intel lookups to Splunk alerts and cut the manual lookups each analyst did per shift", ["Python", "automation"], ["Security", "Developer"], "learned from Halden Systems package · confirmed 8 Oct"],
+    ],
+    var: [["Role", "SOC Intern, Varna Telecom · Jun–Sep 2022", ["SOC"], ["Security"], "CV 2023"]],
+    fre: [
+      ["Role", "Freelance full-stack developer · 2021–2023", ["React", "Node.js"], ["Developer"], "interview · 11 Oct"],
+      ["Achievement", "Built a booking site with Stripe deposits for a dental clinic in Varna", ["React", "Node.js", "Stripe"], ["Developer", "Design"], "interview · 11 Oct"],
+    ],
+  };
+  const pc = ([type, text, tags, angles, src]) => `<div class="pc"><p><span class="label">${type}</span><br>${text}</p>
+    <div class="row"><button class="btn ghost sm" data-go="editing" aria-label="Edit: ${text}">Edit</button></div>
+    <div class="meta">${tags.map(t => `<span class="chip">${t}</span>`).join("")}${angles.map(a => `<span class="chip">angle: ${a}</span>`).join("")}<span class="chip ok">Confirmed</span><span class="small faint">· ${src}</span></div></div>`;
+  document.querySelectorAll("[data-pieces]").forEach(el => el.innerHTML = (P[el.dataset.pieces] || []).map(pc).join(""));
+
+  // answer bank
+  const A = [
+    ["Are you authorised to work in the EU?", "Yes. I'm a Bulgarian citizen and don't need sponsorship.", "Standard", "Kestrel Payments · 9 Oct", 14],
+    ["Notice period / earliest start date", "Two weeks from an accepted offer.", "Standard", "Kestrel Payments · 9 Oct", 14],
+    ["Salary expectations", "€3,200–3,800 gross per month, depending on the full package.", "Standard", "Brightwave · 4 Oct", 9],
+    ["Describe a security incident you handled", "At Orbital Bank I led the response to a phishing campaign aimed at branch staff. I pulled the matching emails from 140 mailboxes, blocked the sender domains and the landing page, and wrote a Splunk detection so the next wave was caught within minutes. Two more incidents I supported as part of the team…", "Screening", "Kestrel Payments · 9 Oct", 4],
+    ["Years of experience with Splunk", "2 years (2023–2025), daily, including writing detections.", "Screening", "Ardent Labs · 2 Oct", 3],
+    ["Kubernetes experience", "Learning: deployed a personal project on k3s. Not used at work yet.", "Screening", "Halden Systems · 7 Oct", 1, "warn"],
+    ["Are you willing to work night shifts?", "Yes, on a rotation.", "Screening", "Ardent Labs · 2 Oct", 1],
+    ["Link to portfolio", "https://kris-portfolio.example", "Standard", "never", 0, "dim"],
+  ];
+  document.querySelectorAll('[data-rows="answers"]').forEach(tb => tb.innerHTML = A.map(([q, a, t, l, n, f]) =>
+    `<tr${f === "dim" ? ' class="dim"' : ""}><td style="min-width:180px"><b>${q}</b>${f === "warn" ? '<div><span class="chip warn">Changed in a portal</span></div>' : ""}</td>
+     <td class="ans"><div title="${a}" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${a}</div></td>
+     <td>${t}</td><td style="white-space:nowrap">${l}</td><td>${n}×</td><td><button class="btn sm" aria-label="Edit answer: ${q}">Edit</button></td></tr>`).join(""));
+
+  // voice rules
+  const R = [
+    ["Short sentences", "About 13 words on average; rarely over 25.", "all 4 samples"],
+    ["Never \"passionate\", \"dynamic\" or \"synergy\"", "You deleted \"passionate\" from 6 drafts.", "edits"],
+    ["Opens with the job, not \"I am writing to…\"", "First line names the role and one reason it fits.", "3 samples · 9 edits"],
+    ["Numbers as digits", "\"40 detections\", not \"forty\".", "all 4 samples"],
+    ["Plain sign-off", "\"Best, Kris\". No \"Kind regards\".", "4 samples"],
+  ];
+  document.querySelectorAll('[data-rows="rules"]').forEach(el => el.innerHTML = R.map(([h, d, e]) =>
+    `<div class="item"><div><b>${h}</b><div class="small muted">${d}</div><div class="small faint">from ${e}</div></div><button class="btn ghost sm" aria-label="Remove rule: ${h.replace(/"/g, "")}">Wrong? Remove</button></div>`).join(""));
+
+  // in-page jumps between states
+  document.addEventListener("click", e => {
+    const g = e.target.closest("[data-go]"); if (!g) return;
+    e.preventDefault();
+    document.querySelector(`.state-tab[data-target="${g.dataset.go}"]`)?.click();
+  });
+
+  const health = document.getElementById("health");
+  const set = () => {
+    const vis = [...document.querySelectorAll("[data-state]")].find(s => !s.hidden)?.dataset.state;
+    health.innerHTML = vis === "empty" ? "No sources yet" : 'Sources <b>14/14 OK</b> · checked 07:30';
+  };
+  document.querySelectorAll(".state-tab").forEach(t => t.addEventListener("click", set)); set();
+})();
+</script>
+</body>
+</html>

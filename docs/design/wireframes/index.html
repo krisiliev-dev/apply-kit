@@ -1,0 +1,61 @@
+<title>apply-kit Wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px }
+.flow a { text-decoration: none; border: 1px solid var(--line); background: var(--paper); border-radius: 8px; padding: 8px 12px; font-weight: 600; display: grid; gap: 0 }
+.flow a span { font-weight: 400; font-size: 0.8rem; color: var(--ink-2) }
+.flow .arrow { color: var(--ink-3); font-family: var(--mono) }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px }
+.card { text-decoration: none; border: 1px solid var(--line); background: var(--paper); border-radius: 10px; padding: 14px; display: grid; gap: 6px; align-content: start }
+.card:hover { border-color: var(--ink-3) }
+.card h3 { font-size: 1.05rem }
+</style>
+
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html" aria-current="page">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <span class="label">Design step 4 · Wireframes</span>
+    <h1>apply-kit wireframes</h1>
+    <p class="lede">Greyscale screens for every part of the product, each with all its states: normal, loading, empty, error, partial and overflow. Use the state buttons at the top of each screen; the blue notes under each frame explain the decisions. All data is made up.</p>
+  </header>
+
+  <section class="box" style="background:var(--paper)">
+    <span class="label">First run · once</span>
+    <div class="flow">
+      <a href="onboarding.html">Onboarding<span>import → review → interview → your search</span></a>
+      <span class="arrow" aria-hidden="true">→</span>
+      <a href="feed.html#loading">First feed<span>sources checked live</span></a>
+    </div>
+  </section>
+
+  <section class="box" style="background:var(--paper)">
+    <span class="label">Daily loop · the four jobs</span>
+    <div class="flow">
+      <a href="feed.html">Feed<span>0 · discover</span></a><span class="arrow" aria-hidden="true">→</span>
+      <a href="job.html">Job<span>fit check</span></a><span class="arrow" aria-hidden="true">→</span>
+      <a href="package.html">Package<span>1 · prepare</span></a><span class="arrow" aria-hidden="true">→</span>
+      <a href="extension.html">Extension<span>2 · apply · you press Submit</span></a><span class="arrow" aria-hidden="true">→</span>
+      <a href="applications.html">Applications<span>3 · track</span></a><span class="arrow" aria-hidden="true">→</span>
+      <a href="application.html">Application<span>follow up · learn</span></a>
+    </div>
+    <p class="small muted">The profile keeps learning along the way: gap questions answered in a package and new screening answers flow back into Profile.</p>
+  </section>
+
+  <section class="stack">
+    <span class="label">All screens</span>
+    <div class="grid">
+      <a class="card" href="onboarding.html"><h3>Onboarding</h3><p class="small muted">Import old CVs, confirm what the AI drafted, an interview for gaps and forgotten skills, then set up the search.</p></a>
+      <a class="card" href="feed.html"><h3>Feed</h3><p class="small muted">One scan table of every new job, sorted by fit, with source health and the hidden pile.</p></a>
+      <a class="card" href="job.html"><h3>Job</h3><p class="small muted">Merged postings, requirements met or missing, dealbreakers, fit check, target posting.</p></a>
+      <a class="card" href="package.html"><h3>Package</h3><p class="small muted">Guided steps: target posting, CV, cover letter, screening answers, ATS check, approve.</p></a>
+      <a class="card" href="extension.html"><h3>Extension</h3><p class="small muted">Fills the company's portal from the approved package; you review and press Submit.</p></a>
+      <a class="card" href="applications.html"><h3>Applications</h3><p class="small muted">Stats, what needs you today, then everything grouped by status.</p></a>
+      <a class="card" href="application.html"><h3>Application</h3><p class="small muted">Status, timeline of emails and changes, the package as sent, follow-ups, prep sheet.</p></a>
+      <a class="card" href="profile.html"><h3>Profile</h3><p class="small muted">Master profile pieces, three angles, answer bank, voice, dealbreakers.</p></a>
+      <a class="card" href="settings.html"><h3>Settings</h3><p class="small muted">Sources and watchlist with health, coverage check, mailbox, model and budget, data.</p></a>
+    </div>
+  </section>
+</div>

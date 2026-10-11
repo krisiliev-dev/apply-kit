@@ -1,0 +1,542 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Onboarding · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+  /* page-local additions: tokens from wf.css only */
+  ol.stepper { list-style: none; margin: 0; padding: 0 }
+  fieldset { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 8px }
+  legend { font-weight: 700; padding: 0; margin-bottom: 4px }
+  .check { display: flex; align-items: flex-start; gap: 8px; font-size: 0.92rem }
+  .check input { margin-top: 4px; flex: none }
+  .check[aria-disabled="true"] { color: var(--ink-3) }
+  .drop { border: 2px dashed var(--line); border-radius: 10px; background: var(--fill); padding: 24px 16px; display: grid; gap: 8px; justify-items: center; text-align: center }
+  .file { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line) }
+  .file .meter { grid-column: 1 / -1 }
+  .piece { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0 }
+  .piece.flagged { border-color: var(--warn) }
+  .piece.done { background: var(--fill) }
+  .piece p { overflow-wrap: anywhere }
+  .chat { display: grid; gap: 10px; align-content: start; min-width: 0 }
+  .msg { max-width: 85%; padding: 10px 12px; border-radius: 10px; background: var(--fill); font-size: 0.93rem; overflow-wrap: anywhere }
+  .msg.me { justify-self: end; background: var(--paper); border: 1px solid var(--line) }
+  .msg .label { display: block; margin-bottom: 2px }
+  .composer { display: grid; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px }
+  .side { position: sticky; top: 12px }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; align-items: start }
+  .narrow { max-width: 160px }
+  .sum { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html" aria-current="page">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Onboarding</h1>
+    <p class="lede">First run. Concept A → B → C in sequence: import what already exists, let the coach question it and fill the gaps, set up the search, then let the profile keep learning while you apply.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a href="feed.html">Feed</a><a href="applications.html">Applications</a><a class="on" href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health" id="health">Setup · saved as you go</span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ 1. WELCOME / IMPORT ============ -->
+      <section data-state="welcome" data-state-name="Welcome · import">
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="0" aria-label="Setup progress"></ol>
+          <div class="stack">
+            <h2>Start with what you already have</h2>
+            <p class="muted">Old CVs and your LinkedIn export give the coach something to question. Nothing needs to be up to date or polished. About 30–45 minutes in total, and you can stop after any phase.</p>
+          </div>
+
+          <div class="cols">
+            <div class="stack" style="gap:14px">
+              <div class="drop">
+                <b>Drop old CVs and cover letters here</b>
+                <span class="small muted">PDF, DOCX or TXT · as many versions as you have, duplicates are merged</span>
+                <label class="btn sm" for="cv-files">Choose files</label>
+                <input type="file" id="cv-files" multiple accept=".pdf,.docx,.txt" class="sr-only" style="position:absolute;width:1px;height:1px;opacity:0">
+              </div>
+
+              <div class="list" aria-label="Ready to import">
+                <div class="file"><div><b class="trunc" title="CV-Kris-2025.pdf">CV-Kris-2025.pdf</b><div class="small faint">PDF · 2 pages · 184 KB</div></div><button class="btn ghost sm" aria-label="Remove CV-Kris-2025.pdf">Remove</button></div>
+                <div class="file"><div><b class="trunc" title="CV-security-2023.docx">CV-security-2023.docx</b><div class="small faint">DOCX · 1 page · 41 KB</div></div><button class="btn ghost sm" aria-label="Remove CV-security-2023.docx">Remove</button></div>
+                <div class="file"><div><b class="trunc" title="CV_old_2021_final_FINAL(2).pdf">CV_old_2021_final_FINAL(2).pdf</b><div class="small faint">PDF · 1 page · 2.3 MB</div></div><button class="btn ghost sm" aria-label="Remove CV_old_2021_final_FINAL(2).pdf">Remove</button></div>
+              </div>
+
+              <div class="field">
+                <label for="li-export">LinkedIn data export <span class="faint small">(optional)</span></label>
+                <span class="help" id="li-help">LinkedIn → Settings → Data privacy → Get a copy of your data. Choose "Positions, Education, Skills". The .zip arrives by email in about 10 minutes; you can add it later.</span>
+                <input type="file" id="li-export" accept=".zip" aria-describedby="li-help">
+              </div>
+
+              <div class="grid2">
+                <div class="field">
+                  <label for="gh">GitHub profile <span class="faint small">(optional)</span></label>
+                  <input type="text" inputmode="url" id="gh" value="https://github.com/kris-dev" aria-describedby="gh-help">
+                  <span class="help" id="gh-help">Public repos only: languages, READMEs, commit dates.</span>
+                </div>
+                <div class="field">
+                  <label for="pf">Portfolio or personal site <span class="faint small">(optional)</span></label>
+                  <input type="text" inputmode="url" id="pf" placeholder="https://" aria-describedby="pf-help">
+                  <span class="help" id="pf-help">Design case studies count as experience.</span>
+                </div>
+              </div>
+
+              <div class="row">
+                <button class="btn primary" data-go="importing">Import 3 files and 1 link</button>
+                <button class="btn ghost" data-go="interview">No CV? Start with the interview</button>
+              </div>
+            </div>
+
+            <aside class="box" aria-label="Privacy">
+              <span class="label">Where this goes</span>
+              <p class="small"><b>Files stay on this machine.</b> They're read locally and never committed to git.</p>
+              <p class="small muted">To turn text into profile pieces, only the extracted text is sent to the model through OpenRouter, pinned to non-China hosts that don't store or train on it.</p>
+              <p class="small muted">Delete any file or piece at any time in Profile.</p>
+              <hr style="border:0;border-top:1px solid var(--line);margin:4px 0">
+              <span class="label">What happens next</span>
+              <ol class="small muted" style="margin:0;padding-left:18px;display:grid;gap:4px">
+                <li>You confirm the drafted pieces</li>
+                <li>The coach checks them and asks about gaps</li>
+                <li>You set where and what to search</li>
+              </ol>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 2. IMPORTING ============ -->
+      <section data-state="importing" data-state-name="Importing" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="0" aria-label="Setup progress"></ol>
+          <div class="row"><h2>Reading your files</h2><span class="spacer"></span><span class="small muted" aria-live="polite">2 of 4 done · about 40 s left</span></div>
+          <div class="meter" role="progressbar" aria-label="Import progress" aria-valuenow="55" aria-valuemin="0" aria-valuemax="100"><span style="width:55%"></span></div>
+
+          <div class="list" aria-label="Import progress per file">
+            <div class="file"><div><b>CV-Kris-2025.pdf</b><div class="small muted">Done · 23 pieces drafted</div></div><span class="chip ok">Done</span></div>
+            <div class="file"><div><b>github.com/kris-dev</b><div class="small muted">Done · 14 public repos · 6 pieces drafted</div></div><span class="chip ok">Done</span></div>
+            <div class="file"><div><b>CV-security-2023.docx</b><div class="small muted">Drafting pieces · comparing with CV 2025 to merge duplicates</div></div><span class="chip">Reading</span><div class="meter" aria-hidden="true"><span style="width:60%"></span></div></div>
+            <div class="file"><div><b class="trunc" title="CV_old_2021_final_FINAL(2).pdf">CV_old_2021_final_FINAL(2).pdf</b><div class="small faint">Waiting</div></div><span class="chip">Queued</span></div>
+          </div>
+
+          <div class="banner info"><span>29 pieces are ready. Start reviewing now; the rest join the list as they finish.</span><span class="spacer"></span><button class="btn sm primary" data-go="review">Start reviewing</button></div>
+
+          <div class="stack" aria-hidden="true">
+            <span class="label">Next pieces</span>
+            <div class="piece"><div class="skel w30"></div><div class="skel w90"></div><div class="row"><div class="skel" style="width:60px"></div><div class="skel" style="width:80px"></div><div class="skel" style="width:70px"></div></div></div>
+            <div class="piece"><div class="skel w40"></div><div class="skel w80"></div><div class="row"><div class="skel" style="width:70px"></div><div class="skel" style="width:50px"></div></div></div>
+          </div>
+          <div class="row small"><button class="btn ghost sm">Cancel import</button><span class="faint">Pieces already drafted are kept.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 3. IMPORT ERROR (partial) ============ -->
+      <section data-state="import-error" data-state-name="Error · one file unreadable" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="0" data-flag="0" aria-label="Setup progress"></ol>
+          <div class="banner warn" role="alert">
+            <b>3 of 4 imported. One file couldn't be read.</b>
+            <span>Everything else is fine: 41 pieces are waiting for review.</span>
+          </div>
+
+          <div class="list" aria-label="Import results">
+            <div class="file"><div><b>CV-Kris-2025.pdf</b><div class="small muted">23 pieces</div></div><span class="chip ok">Done</span></div>
+            <div class="file"><div><b>CV-security-2023.docx</b><div class="small muted">12 pieces · 9 merged with CV 2025</div></div><span class="chip ok">Done</span></div>
+            <div class="file"><div><b>github.com/kris-dev</b><div class="small muted">6 pieces</div></div><span class="chip ok">Done</span></div>
+          </div>
+
+          <div class="box flag">
+            <div class="row"><b class="trunc" title="CV_old_2021_final_FINAL(2).pdf">CV_old_2021_final_FINAL(2).pdf</b><span class="chip bad">Not read</span></div>
+            <p>It's a scanned image: the pages are pictures, so there's no text to read. It's probably the only record of your 2021 work.</p>
+            <span class="label">What do you want to do?</span>
+            <div class="stack">
+              <div class="row"><button class="btn">Read it with text recognition</button><span class="small muted">Runs on this machine, about 1 min. Scans misread, so every piece from it is marked "check this".</span></div>
+              <div class="row"><label class="btn" for="replace-2021">Upload a text version</label><input type="file" id="replace-2021" accept=".pdf,.docx,.txt" style="position:absolute;width:1px;height:1px;opacity:0"><span class="small muted">A DOCX or a PDF exported from Word or Google Docs.</span></div>
+              <div class="row"><button class="btn ghost">Skip it</button><span class="small muted">The coach will ask you about 2021 instead.</span></div>
+            </div>
+          </div>
+
+          <div class="row"><button class="btn primary" data-go="review">Review 41 pieces</button><span class="small faint">You can come back to this file from Profile.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 4. REVIEW PIECES ============ -->
+      <section data-state="review" data-state-name="Review pieces" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="1" aria-label="Setup progress"></ol>
+          <div class="row">
+            <h2>Check what we drafted</h2><span class="spacer"></span>
+            <span class="small" aria-live="polite"><b id="rv-count">17</b> of 41 confirmed</span>
+          </div>
+          <div class="meter" aria-hidden="true"><span id="rv-meter" style="width:41%"></span></div>
+          <p class="small muted">Confirm what's true, edit what's close, discard what's wrong. Anything you're unsure about can wait: the coach asks about it next.</p>
+
+          <div class="row" role="group" aria-label="Show">
+            <span class="chip solid">To check · 24</span><span class="chip">Flagged · 3</span><span class="chip">Confirmed · 17</span><span class="chip">Discarded · 2</span>
+            <span class="spacer"></span>
+            <span class="small muted"><kbd>C</kbd> confirm · <kbd>E</kbd> edit · <kbd>D</kbd> discard · <kbd>J</kbd><kbd>K</kbd> move</span>
+          </div>
+
+          <div class="group-h"><span>Junior Security Analyst · Orbital Bank · 2023–2025</span><span class="spacer"></span><span class="small muted" style="font-weight:400">9 to check</span></div>
+          <div class="row"><button class="btn sm">Confirm 7 unflagged pieces from Orbital Bank</button><span class="small faint">Flagged pieces are never bulk-confirmed.</span></div>
+
+          <article class="piece" aria-label="Role piece">
+            <div class="row"><span class="label">Role</span><span class="spacer"></span><span class="small faint">CV 2025 · CV 2023 · they agree</span></div>
+            <p><b>Junior Security Analyst</b>, Orbital Bank, Sofia · Mar 2023 – Jun 2025</p>
+            <div class="row"><span class="chip">SOC</span><span class="chip">banking</span><span class="chip">angle: Security</span></div>
+            <div class="row"><button class="btn sm primary" data-confirm>Confirm</button><button class="btn sm">Edit</button><button class="btn ghost sm">Discard</button></div>
+          </article>
+
+          <article class="piece" aria-label="Achievement piece">
+            <div class="row"><span class="label">Achievement</span><span class="spacer"></span><span class="small faint">CV 2025</span></div>
+            <p>Built 40 Splunk detections that cut false-positive alerts by about a third.</p>
+            <div class="row"><span class="chip">Splunk</span><span class="chip">SIEM</span><span class="chip">detection engineering</span><span class="chip">angle: Security</span></div>
+            <div class="row"><button class="btn sm primary" data-confirm>Confirm</button><button class="btn sm">Edit</button><button class="btn ghost sm">Discard</button></div>
+          </article>
+
+          <article class="piece flagged" aria-label="Achievement piece, flagged">
+            <div class="row"><span class="label">Achievement</span><span class="chip warn">Sources disagree</span><span class="spacer"></span><span class="small faint">CV 2023 · CV 2025</span></div>
+            <p>Led the response to 3 phishing incidents.</p>
+            <p class="small"><span class="muted">CV 2023 says</span> "took part in the response to 3 phishing incidents". <span class="muted">CV 2025 says</span> "led". The coach will ask which is true.</p>
+            <div class="row"><span class="chip">incident response</span><span class="chip">phishing</span><span class="chip">angle: Security</span></div>
+            <div class="row"><button class="btn sm">Use "took part in"</button><button class="btn sm">Use "led"</button><button class="btn ghost sm">Ask me in the interview</button></div>
+          </article>
+
+          <article class="piece done" aria-label="Skill piece, confirmed">
+            <div class="row"><span class="label">Skill</span><span class="chip ok">Confirmed</span><span class="spacer"></span><button class="btn ghost sm">Undo</button></div>
+            <p>Alert triage, about 25 alerts a day in a 6-person SOC</p>
+          </article>
+
+          <div class="group-h"><span>Freelance full-stack developer · 2022–2023</span><span class="spacer"></span><span class="small muted" style="font-weight:400">6 to check</span></div>
+          <article class="piece" aria-label="Skill piece">
+            <div class="row"><span class="label">Skill</span><span class="spacer"></span><span class="small faint">GitHub · 5 repos</span></div>
+            <p>React and Node.js: client projects and personal tools, 2022–2023</p>
+            <div class="row"><span class="chip">React</span><span class="chip">Node.js</span><span class="chip">TypeScript</span><span class="chip">angle: Developer</span></div>
+            <div class="row"><button class="btn sm primary" data-confirm>Confirm</button><button class="btn sm">Edit</button><button class="btn ghost sm">Discard</button></div>
+          </article>
+
+          <div class="row small"><button class="btn ghost sm">Show the next 10 to check</button><span class="spacer"></span><span class="faint">Saved automatically</span></div>
+          <div class="row"><button class="btn primary" data-go="interview">Continue to the interview</button><span class="small muted">24 unchecked pieces go with you; the coach covers them first.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 5. REVIEW OVERFLOW ============ -->
+      <section data-state="review-many" data-state-name="Overflow · many pieces" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="1" aria-label="Setup progress"></ol>
+          <div class="row"><h2>Check what we drafted</h2><span class="spacer"></span><span class="small"><b>0</b> of 118 confirmed</span></div>
+          <div class="banner info"><span>7 CVs gave 164 drafts. 46 near-duplicates were merged into the 118 below, so you see each fact once.</span><span class="spacer"></span><button class="btn ghost sm">See merges</button></div>
+          <p class="small muted">Grouped by role, collapsed. Open one group at a time.</p>
+          <div class="list">
+            <div class="item"><button class="group-h" data-toggle="g-orb" aria-expanded="false">▸ Junior Security Analyst · Orbital Bank · 2023–2025</button><span class="small muted">41 · 2 flagged</span></div>
+            <div id="g-orb" hidden class="stack" style="padding-bottom:10px">
+              <article class="piece"><div class="row"><span class="label">Achievement</span><span class="spacer"></span><span class="small faint">CV 2025 + 3 more</span></div><p class="trunc" title="Built 40 Splunk detections that cut false-positive alerts by about a third, covering phishing, impossible travel and suspicious PowerShell use across the retail banking estate.">Built 40 Splunk detections that cut false-positive alerts by about a third, covering phishing, impossible travel and suspicious PowerShell use across the retail banking estate.</p></article>
+              <button class="btn ghost sm" style="justify-self:start">Show 40 more</button>
+            </div>
+            <div class="item"><button class="group-h" data-toggle="g-var" aria-expanded="false">▸ SOC Intern · Varna Telecom · 2022</button><span class="small muted">14</span></div>
+            <div id="g-var" hidden class="small muted" style="padding-bottom:10px">14 pieces…</div>
+            <div class="item"><button class="group-h" data-toggle="g-fre" aria-expanded="false">▸ Freelance full-stack developer · 2022–2023</button><span class="small muted">33 · 1 flagged</span></div>
+            <div id="g-fre" hidden class="small muted" style="padding-bottom:10px">33 pieces…</div>
+            <div class="item"><button class="group-h" data-toggle="g-edu" aria-expanded="false">▸ BSc Computer Science · 2022</button><span class="small muted">9</span></div>
+            <div id="g-edu" hidden class="small muted" style="padding-bottom:10px">9 pieces…</div>
+            <div class="item"><button class="group-h" data-toggle="g-sk" aria-expanded="false">▸ Skills not tied to a role</button><span class="small muted">21</span></div>
+            <div id="g-sk" hidden class="small muted" style="padding-bottom:10px">21 pieces…</div>
+          </div>
+          <div class="row"><button class="btn primary" data-go="interview">Continue to the interview</button><span class="small muted">The coach can walk through the unchecked ones with you, role by role.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 6. INTERVIEW ============ -->
+      <section data-state="interview" data-state-name="Interview" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="2" aria-label="Setup progress"></ol>
+          <div class="row">
+            <h2>Interview with the coach</h2>
+            <span class="spacer"></span>
+            <span class="chip ok">Check imported · 18 of 24</span><span class="chip solid">Gaps · 1 of 2</span><span class="chip">Forgotten skills</span>
+          </div>
+          <p class="small muted">The coach only writes down what you tell it. Short answers are fine; "I don't remember" is a fine answer too. About 15 minutes left.</p>
+
+          <div class="cols">
+            <div class="chat" aria-label="Conversation" role="log">
+              <div class="msg"><span class="label">Coach</span>Your 2023 CV says you <i>took part in</i> the response to 3 phishing incidents. Your 2025 CV says you <i>led</i> it. Which is closer?</div>
+              <div class="msg me"><span class="label">You</span>I led one of them. The other two I was on the team, doing the mailbox searches and blocking.</div>
+              <div class="msg"><span class="label">Coach</span>Then I'll write "Led the response to 1 phishing incident and supported 2 more." That's what a reference from Orbital Bank would say. Change it in the panel if it's off.</div>
+              <div class="msg"><span class="label">Coach</span>Next, a gap. <b>2021 shows no role</b>: your BSc ran until 2022 and freelancing starts in 2022. The CV from 2021 couldn't be read. Were you doing anything that year, even small or unpaid?</div>
+              <div class="msg me"><span class="label">You</span>Yes, I started freelancing in 2021 actually. First project was a booking site for a dental clinic in Varna.</div>
+              <div class="msg"><span class="label">Coach</span>Good, I've moved freelancing to start in 2021. Booking sites usually need some way to take deposits or sync with a calendar. Did you build either of those?</div>
+              <div class="msg small faint" aria-live="polite" style="background:transparent;padding-inline:0">Coach is writing…</div>
+              <div class="composer">
+                <label for="answer" class="small" style="font-weight:600">Your answer</label>
+                <textarea id="answer" rows="3" placeholder="A sentence or two is enough" style="min-height:70px"></textarea>
+                <div class="row"><button class="btn primary">Send</button><button class="btn ghost sm">I don't remember</button><button class="btn ghost sm">Skip this question</button><span class="spacer"></span><button class="btn ghost sm">Pause, finish later</button></div>
+              </div>
+            </div>
+
+            <aside class="side box" aria-label="Pieces found">
+              <div class="row"><span class="label">Pieces from this interview · 5</span></div>
+              <div class="stack">
+                <div class="piece"><div class="row"><span class="chip ok">New</span><span class="small faint">just now</span></div><p class="small">Freelance full-stack developer, 2021–2023 (was 2022–2023)</p><div class="row"><button class="btn ghost sm">Edit</button></div></div>
+                <div class="piece"><div class="row"><span class="chip ok">New</span></div><p class="small">Built a booking site for a dental clinic in Varna (React, Node.js)</p><div class="row"><span class="chip">React</span><span class="chip">angle: Developer</span></div></div>
+                <div class="piece"><div class="row"><span class="chip">Updated</span></div><p class="small">Led the response to 1 phishing incident and supported 2 more</p></div>
+                <div class="piece flagged">
+                  <div class="row"><span class="chip warn">Needs your OK</span></div>
+                  <p class="small">Cut false-positive alerts by <b>33%</b></p>
+                  <p class="small muted">Your source says "about a third", which was an estimate from your team lead. A precise 33% is favourable rounding: fine if you'd defend it when asked how it was measured.</p>
+                  <div class="row"><button class="btn sm">Approve 33%</button><button class="btn ghost sm">Keep "about a third"</button></div>
+                </div>
+                <div class="piece"><div class="row"><span class="chip">Confirmed</span></div><p class="small">Triaged about 25 alerts a day in a 6-person SOC</p></div>
+              </div>
+              <a class="small" href="#review" data-go="review">All 46 pieces</a>
+            </aside>
+          </div>
+          <div class="row"><button class="btn" data-go="search">Finish interview</button><span class="small muted">Questions left: 1 gap, 4 skill probes. You can skip them; the coach asks again during applications if they matter.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 7. INTERVIEW ERROR ============ -->
+      <section data-state="interview-error" data-state-name="Error · coach offline" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="2" data-flag="2" aria-label="Setup progress"></ol>
+          <div class="banner bad" role="alert">
+            <b>The coach didn't answer.</b>
+            <span>OpenRouter timed out twice. Your answer is saved below and nothing was lost. Trying again in 20 s.</span>
+            <span class="spacer"></span><button class="btn sm">Try now</button>
+          </div>
+          <div class="chat" role="log" aria-label="Conversation">
+            <div class="msg"><span class="label">Coach</span>Booking sites usually need some way to take deposits or sync with a calendar. Did you build either of those?</div>
+            <div class="msg me"><span class="label">You · not sent yet</span>Deposits with Stripe, in test mode first, then live. Also Google Calendar sync for the dentists.</div>
+          </div>
+          <div class="row"><button class="btn ghost sm">Pause, finish later</button><button class="btn ghost sm" data-go="search">Skip ahead to Your search</button><span class="small faint">Search setup doesn't need the coach.</span></div>
+        </div>
+      </section>
+
+      <!-- ============ 8. YOUR SEARCH ============ -->
+      <section data-state="search" data-state-name="Your search" hidden>
+        <form class="stack" style="gap:18px" onsubmit="return false" novalidate>
+          <ol class="stepper" data-phase="3" aria-label="Setup progress"></ol>
+          <div class="stack">
+            <h2>What should the feed show you?</h2>
+            <p class="small muted">Jobs outside these settings aren't dropped, they're hidden with a reason you can read. Change any of this later in Profile.</p>
+          </div>
+
+          <div class="grid2">
+            <fieldset class="box">
+              <legend>Where</legend>
+              <p class="small muted">Both are first priority and rank equally.</p>
+              <label class="check"><input type="checkbox" checked> <span><b>Sofia</b>, on-site or hybrid</span></label>
+              <label class="check"><input type="checkbox" checked> <span><b>Remote in European time zones</b><br><span class="small muted">Within ±2 h of Sofia</span></span></label>
+            </fieldset>
+
+            <fieldset class="box">
+              <legend>Relocation</legend>
+              <p class="small muted">A separate, lower-priority list. Never mixed into the main sort.</p>
+              <label class="check"><input type="checkbox" role="switch" id="reloc" aria-describedby="reloc-help"> <span><b>Also show relocation jobs</b></span></label>
+              <span class="small faint" id="reloc-help">Off for now</span>
+              <label class="check" aria-disabled="true"><input type="checkbox" checked disabled> Switzerland</label>
+              <label class="check" aria-disabled="true"><input type="checkbox" checked disabled> Spain</label>
+            </fieldset>
+          </div>
+
+          <fieldset class="box">
+            <legend>Fields</legend>
+            <p class="small muted">Each angle tailors your CV differently. Untick one to stop seeing its jobs.</p>
+            <div class="grid2" style="gap:8px">
+              <label class="check"><input type="checkbox" checked> <span><b>Developer</b> <span class="small muted">· full-stack, backend, frontend</span></span></label>
+              <label class="check"><input type="checkbox" checked> <span><b>Security</b> <span class="small muted">· SOC, detection, AppSec</span></span></label>
+              <label class="check"><input type="checkbox" checked> <span><b>Design</b> <span class="small muted">· product, UX</span></span></label>
+              <label class="check"><input type="checkbox" checked> <span>Other computer science roles <span class="small muted">· ranked lower</span></span></label>
+            </div>
+          </fieldset>
+
+          <fieldset class="box">
+            <legend>Dealbreakers</legend>
+            <p class="small muted">A job with a dealbreaker is hidden, with the reason shown. "Preferred" requirements never hide a job; they only lower its fit.</p>
+            <div class="grid2">
+              <div class="field">
+                <label for="langs">Languages you work in</label>
+                <span class="help" id="langs-help">Jobs requiring any other language are hidden.</span>
+                <div class="row"><span class="chip">English ✕</span><span class="chip">Bulgarian ✕</span></div>
+                <input type="text" id="langs" placeholder="Add a language" aria-describedby="langs-help">
+              </div>
+              <div class="field">
+                <label for="maxyrs">Hide jobs asking for more than</label>
+                <span class="help" id="maxyrs-help">You have about 2.5 years. Jobs often hire one or two years below what they ask.</span>
+                <div class="row"><input type="number" id="maxyrs" value="4" min="0" max="20" class="narrow" aria-describedby="maxyrs-help"><span>years</span></div>
+              </div>
+              <div class="field">
+                <label for="minsal">Minimum salary <span class="faint small">(optional)</span></label>
+                <span class="help" id="minsal-help">Gross, per month, in euro.</span>
+                <div class="row"><span>€</span><input type="number" id="minsal" value="24000" min="0" step="100" class="narrow" aria-describedby="minsal-help minsal-warn"><span class="small muted">per month</span></div>
+                <span class="small" id="minsal-warn" style="color:var(--warn)">€24,000 a month is above every salary in the feed. Did you mean per year (about €2,000 a month)?</span>
+                <label class="check small"><input type="checkbox" checked> Keep jobs that don't state a salary</label>
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="box">
+            <legend>Companies to watch</legend>
+            <p class="small muted">Checked directly every morning, whatever boards they post on. Picked from the Sofia watchlist; add your own later in Settings.</p>
+            <div class="row">
+              <label for="co-filter" class="small" style="font-weight:600">Filter</label>
+              <input type="search" id="co-filter" placeholder="Company name" style="max-width:240px">
+              <span class="spacer"></span><button type="button" class="btn ghost sm">Select all 43</button>
+            </div>
+            <div class="grid2" style="gap:6px" id="companies"></div>
+            <button type="button" class="btn ghost sm" style="justify-self:start">Show 36 more</button>
+          </fieldset>
+
+          <fieldset class="box">
+            <legend>Job-alert mailbox <span class="faint small" style="font-weight:400">(optional)</span></legend>
+            <p class="small muted">For sites that forbid scraping (LinkedIn, jobs.bg, Google, Apple), their email alerts are the source. Your iCloud rule forwards them to a dedicated mailbox that only apply-kit reads, read-only. Your personal mail is never opened.</p>
+            <div class="row"><button type="button" class="btn">Connect mailbox…</button><button type="button" class="btn ghost">Skip for now</button><span class="small faint">You can connect it in Settings any time.</span></div>
+          </fieldset>
+
+          <div class="row"><button type="button" class="btn" data-go="interview">Back</button><button type="button" class="btn primary" data-go="done">Save and finish</button></div>
+        </form>
+      </section>
+
+      <!-- ============ 9. DONE ============ -->
+      <section data-state="done" data-state-name="Done" hidden>
+        <div class="stack" style="gap:16px">
+          <ol class="stepper" data-phase="4" aria-label="Setup progress"></ol>
+          <div class="stack">
+            <h2>Your master profile is ready</h2>
+            <p class="muted">The first check of your sources is running now and takes about a minute.</p>
+          </div>
+          <div class="sum">
+            <div class="stat"><span class="label">Pieces</span><b>46</b><span class="small muted">44 confirmed · 2 need your OK</span></div>
+            <div class="stat"><span class="label">Angles</span><b>3</b><span class="small muted">Design is the thinnest</span></div>
+            <div class="stat"><span class="label">Companies</span><b>7</b><span class="small muted">plus boards and feeds</span></div>
+            <div class="stat"><span class="label">Mailbox</span><b>—</b><span class="small muted">Skipped · <a href="settings.html">connect</a></span></div>
+          </div>
+          <div class="box">
+            <span class="label">Keeps learning</span>
+            <p>When a package needs something your profile doesn't have, you get one short question inside that package. Your answer is used for that job and saved to Profile as an unconfirmed piece, so you decide whether it stays.</p>
+          </div>
+          <div class="row">
+            <a class="btn primary" href="feed.html">Open your feed</a>
+            <a class="btn" href="profile.html">Review 2 pieces first</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ 10. RESUME ============ -->
+      <section data-state="resume" data-state-name="Returning · resume" hidden>
+        <div class="stack" style="gap:14px">
+          <ol class="stepper" data-phase="1" aria-label="Setup progress"></ol>
+          <div class="empty">
+            <h2>Welcome back, Kris</h2>
+            <p class="muted">You stopped while reviewing pieces yesterday at 21:40. 17 of 41 are confirmed; nothing was lost.</p>
+            <div class="row"><button class="btn primary" data-go="review">Continue reviewing</button><button class="btn" data-go="interview">Go straight to the interview</button></div>
+            <p class="small faint">Prefer to start applying today? <a href="feed.html">Skip setup</a>: your profile has enough to tailor a first CV, and the coach asks the rest as you go.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="welcome"><span class="label">Design notes</span><ul>
+    <li>Phase A starts from what exists, so the first screen asks for files, not typing. Every source except one CV is optional, and "No CV?" goes straight to the coach.</li>
+    <li>The stepper names five phases so the 30–45 minute commitment is visible up front. Each phase saves as you go and can be stopped (see "Returning").</li>
+    <li>The privacy box sits next to the drop zone, where the worry starts. It says what leaves the machine (extracted text to the model, non-China hosts) and what doesn't (the files).</li>
+    <li>The LinkedIn help text explains how to get the export, because most people don't know it exists and it takes about 10 minutes to arrive.</li>
+    <li>App nav stays live with Profile highlighted: onboarding is how the master profile gets built, and leaving never loses work.</li></ul></aside>
+  <aside class="notes" data-notes-for="importing" hidden><span class="label">Design notes</span><ul>
+    <li>Over 10 seconds, so: progress per file and overall, a time estimate, and the option to start reviewing pieces that are already done.</li>
+    <li>Duplicates across CV versions are merged during import, so review shows each fact once.</li>
+    <li>Cancelling keeps what was drafted. Skeleton cards match the real piece cards.</li></ul></aside>
+  <aside class="notes" data-notes-for="import-error" hidden><span class="label">Design notes</span><ul>
+    <li>Partial failure doesn't block anything: the banner leads with what worked and the button still goes to review.</li>
+    <li>The message names the cause (a scanned image) in plain words and gives three ways forward, each with its cost: text recognition (slow, misreads, so its pieces get flagged), a better file, or skip and let the interview cover the year.</li>
+    <li>Text recognition runs locally, so a scanned CV is never uploaded as an image.</li></ul></aside>
+  <aside class="notes" data-notes-for="review" hidden><span class="label">Design notes</span><ul>
+    <li>Three piece types share one card: Role, Achievement, Skill. Each shows its tags, its angle and where it came from, so you can judge it without opening the source.</li>
+    <li>Bulk confirm works per role and skips flagged pieces, which saves time without letting a disputed claim through unseen.</li>
+    <li>When sources disagree, both versions are quoted. "Ask me in the interview" passes the question to the coach instead of forcing a guess now.</li>
+    <li>You don't have to finish: unchecked pieces go to the interview, where the coach covers them first. Discard is reversible from the Discarded filter.</li></ul></aside>
+  <aside class="notes" data-notes-for="review-many" hidden><span class="label">Design notes</span><ul>
+    <li>With many old CVs the draft count explodes. Merging near-duplicates (with a "See merges" audit) and collapsing groups keep the review doable.</li>
+    <li>Long piece text truncates in the collapsed view with the full text on hover; it wraps once the card is opened for editing.</li></ul></aside>
+  <aside class="notes" data-notes-for="interview" hidden><span class="label">Design notes</span><ul>
+    <li>Phase B has three jobs, shown as chips at the top: check what was imported, ask about timeline gaps, look for forgotten skills. The scope is visible so the interview doesn't feel endless.</li>
+    <li>The gap question picks up the unreadable 2021 CV from the import, so the phases connect instead of starting over.</li>
+    <li>The live panel shows every piece the coach writes. You can edit any of them, and nothing is invented: pieces only come from your answers.</li>
+    <li>Near-the-line items (here, "about a third" turned into "33%") get a "Needs your OK" card that explains why, with both choices. Gaps are asked about, never filled in.</li>
+    <li>"Finish interview" is always available. Questions you skip come back later as package questions, but only if a job needs them (concept C).</li></ul></aside>
+  <aside class="notes" data-notes-for="interview-error" hidden><span class="label">Design notes</span><ul>
+    <li>A model timeout is shown in a banner with an automatic retry (backoff) and a manual "Try now". Your typed answer stays on screen, marked "not sent yet".</li>
+    <li>An alternative path: search setup needs no AI, so you can carry on with it.</li></ul></aside>
+  <aside class="notes" data-notes-for="search" hidden><span class="label">Design notes</span><ul>
+    <li>One column of grouped fieldsets, top-aligned labels, optional fields marked "optional". Defaults come from PRODUCT.md, so most people only check them.</li>
+    <li>Sofia and Remote EU are two equal checkboxes with "rank equally" written out. Relocation is a separate switch with its own countries, disabled until it's on, because it's a separate, lower-priority list.</li>
+    <li>Dealbreakers say what they do ("hidden, with the reason shown"). The salary check runs on blur: an amount that looks yearly gets a warning with a suggested fix, not a blocking error.</li>
+    <li>The mailbox step can be skipped because it's the only one that needs setup outside the app (an iCloud rule). It says what's read and what isn't.</li></ul></aside>
+  <aside class="notes" data-notes-for="done" hidden><span class="label">Design notes</span><ul>
+    <li>The summary leads with numbers and says what's still open (2 pieces, mailbox skipped) without blocking. "Open your feed" is the main action.</li>
+    <li>The "Keeps learning" box sets up phase C, so the first gap question inside a package isn't a surprise.</li></ul></aside>
+  <aside class="notes" data-notes-for="resume" hidden><span class="label">Design notes</span><ul>
+    <li>Returning mid-setup lands on where you stopped, with exact progress. "Skip setup" is the concept-C fallback for a day when you just want to apply.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  const phases = ["Import", "Review", "Interview", "Your search", "Done"];
+  document.querySelectorAll("ol.stepper[data-phase]").forEach(ol => {
+    const now = +ol.dataset.phase, flag = ol.dataset.flag != null ? +ol.dataset.flag : -1;
+    ol.innerHTML = phases.map((p, i) => {
+      const cls = i === flag ? "step now flag" : i < now ? "step done" : i === now ? "step now" : "step";
+      const mark = i < now ? "✓ " : `${i + 1} `;
+      return `<li class="${cls}"${i === now ? ' aria-current="step"' : ""}>${mark}${p}${i === flag ? " · needs a look" : ""}</li>`;
+    }).join("");
+  });
+
+  // fictional watchlist picks
+  const cos = [["Kestrel Payments", 6, true], ["Brightwave", 4, true], ["Ardent Labs", 3, true], ["Halden Systems", 5, true], ["Lumen Health", 2, true], ["Corvid Logistics", 3, true], ["Ostrava Bank", 1, true]];
+  const box = document.getElementById("companies");
+  if (box) box.innerHTML = cos.map(([n, j, on]) => `<label class="check"><input type="checkbox"${on ? " checked" : ""}> <span>${n} <span class="small faint">· ${j} open jobs</span></span></label>`).join("");
+
+  // in-page jumps between states
+  document.addEventListener("click", e => {
+    const g = e.target.closest("[data-go]"); if (!g) return;
+    e.preventDefault();
+    document.querySelector(`.state-tab[data-target="${g.dataset.go}"]`)?.click();
+    document.querySelector(".frame").scrollIntoView({ block: "start" });
+  });
+
+  // review: confirm increments the counter
+  let n = 17;
+  document.querySelectorAll("[data-confirm]").forEach(b => b.addEventListener("click", () => {
+    const card = b.closest(".piece"); if (card.classList.contains("done")) return;
+    card.classList.add("done");
+    b.closest(".row").innerHTML = '<span class="chip ok">Confirmed</span><button class="btn ghost sm">Undo</button>';
+    n++; document.getElementById("rv-count").textContent = n;
+    document.getElementById("rv-meter").style.width = (n / 41 * 100).toFixed(0) + "%";
+  }));
+
+  // health line follows the state
+  const health = document.getElementById("health");
+  const set = () => {
+    const vis = [...document.querySelectorAll("[data-state]")].find(s => !s.hidden)?.dataset.state;
+    health.innerHTML = vis === "interview-error" ? 'Coach <b class="bad">not responding</b>' : vis === "done" ? "Sources <b>first check running</b>" : "Setup · saved as you go";
+  };
+  document.querySelectorAll(".state-tab").forEach(t => t.addEventListener("click", set)); set();
+})();
+</script>
+</body>
+</html>

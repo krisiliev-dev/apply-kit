@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Application · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+/* page-local: header, timeline, draft and prep sheet. Tokens only, so both themes work. */
+.screen > section, .screen .stack > *, .cols > * { min-width: 0 } /* grid items would otherwise grow to the widest table */
+.ahead { display: grid; gap: 8px }
+.ahead .back { font-size: 0.85rem; color: var(--ink-2); text-decoration: none }
+.ahead select { width: auto; padding: 4px 8px; font-size: 0.85rem }
+.stepper { list-style: none; margin: 0; padding: 0; align-items: center }
+.stepper .sep { color: var(--ink-3); font-size: 0.8rem; padding-inline: 2px }
+.step.bad { color: var(--bad); background: var(--bad-bg); border-color: transparent }
+.tl { list-style: none; margin: 0; padding: 0; display: grid }
+.tl li { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 2px 12px; padding: 10px 0; border-top: 1px solid var(--line) }
+.tl li:first-child { border-top: 0 }
+.tl time { font-family: var(--mono); font-size: 0.75rem; color: var(--ink-3); padding-top: 2px }
+@media (max-width: 480px) { .tl li { grid-template-columns: minmax(0, 1fr) } }
+.by { font-family: var(--mono); font-size: 0.7rem; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.05em }
+.quote { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; color: var(--ink-2); font-size: 0.85rem }
+.draft { font-size: 0.95rem; line-height: 1.6; min-height: 170px }
+.src { font-family: var(--mono); font-size: 0.68rem; color: var(--ink-3) }
+.next { border: 1px solid var(--ink); border-radius: 8px; padding: 14px; display: grid; gap: 8px }
+.next b.big { font-size: 1.15rem }
+.pq td:first-child { min-width: 130px } .pq td:nth-child(2) { min-width: 200px } .pq td:nth-child(3) { min-width: 200px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html" aria-current="page">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Application</h1>
+    <p class="lede">One submitted Package and everything that happened to it: Status, the next step, a timeline of Events (each says whether an email or Kris caused it), the Package exactly as sent, and the Follow-up draft. Each state below shows a different Application from Kris's list.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a href="feed.html">Feed</a><a class="on" href="applications.html" aria-current="page">Applications</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health">Mail <b>synced 07:30</b></span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ APPLIED · WAITING ============ -->
+      <section data-state="applied" data-state-name="Applied · waiting">
+        <div class="stack" style="gap:16px">
+          <div data-head="corvid"></div>
+          <div class="cols">
+            <div class="stack" style="gap:16px">
+              <div class="next">
+                <span class="label">Next step</span>
+                <b class="big">Wait for a reply. Follow-up due Thu 15 Oct.</b>
+                <p class="small muted">That's 7 days after applying, the starting default for Applied (change it in Settings). A draft will be ready that morning. If Corvid replies first, the Follow-up is cancelled.</p>
+                <div class="row"><button class="btn sm">Change date</button><button class="btn ghost sm">Draft it now</button></div>
+              </div>
+              <div class="stack">
+                <div class="row"><h3>Timeline</h3><span class="spacer"></span><button class="btn ghost sm">Add note</button></div>
+                <ol class="tl">
+                  <li><time>Fri 9 Oct<br>11:20</time><div><b>Note</b> · "Asked Petar whether he knows anyone on the routing team."<div class="by">by you</div></div></li>
+                  <li><time>Thu 8 Oct<br>16:51</time><div><b>Email matched</b> · "Your application has been received", jobs@corvid.bg<p class="quote">"Hi Kris, thanks for applying for Backend Engineer. Our team reviews every application and will get back to you within two weeks…"</p><div class="by">by email · Status unchanged (already Applied)</div></div></li>
+                  <li><time>Thu 8 Oct<br>16:42</time><div><b>Submitted</b> → <span class="chip">Applied</span> · on Recruitee, filled by the extension<div class="by">by you · marked submitted in the extension</div></div></li>
+                  <li><time>Thu 8 Oct<br>16:05</time><div><b>Package approved</b> · Developer angle, ATS check passed<div class="by">by you</div></div></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stack" data-side="corvid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FOLLOW-UP DUE ============ -->
+      <section data-state="followup" data-state-name="Follow-up due" hidden>
+        <div class="stack" style="gap:16px">
+          <div data-head="kestrel"></div>
+          <div class="cols">
+            <div class="stack" style="gap:16px">
+              <div class="next">
+                <div class="row"><span class="label">Follow-up due today</span><span class="spacer"></span><span class="small faint">7 days after applying · starting default</span></div>
+                <b class="big">No reply in 7 days. Here's a short nudge to send from your own mail.</b>
+                <div class="field">
+                  <label for="draft-k">Draft <span class="faint small" style="font-weight:400">· body only, edit freely</span></label>
+                  <textarea id="draft-k" class="draft">I applied for the Security Engineer role on 4 October and wanted to confirm I'm still very interested. The part of the posting about centralising audit logging for PCI DSS stood out: at Velora I moved our card-payment services onto one SIEM pipeline and cut alert noise by about a third, so it's work I'd enjoy doing again. I'm happy to share more about that project or answer any questions, and I'm free for a call any weekday this month.</textarea>
+                  <span class="help">86 words · to hiring@kestrelpayments.com, in the thread of their confirmation email · the figure "about a third" comes from your Master profile</span>
+                </div>
+                <div class="row">
+                  <button class="btn primary">Copy</button><a class="btn" href="mailto:hiring@kestrelpayments.com">Open in Mail</a>
+                  <span class="spacer"></span>
+                  <button class="btn">Mark sent</button><button class="btn ghost">Snooze 3 days</button>
+                </div>
+                <p class="small faint">apply-kit never sends mail. After you send it, "Mark sent" logs an Event. If you skip that, the next sync spots your message in the job mailbox and asks.</p>
+              </div>
+              <div class="stack">
+                <div class="row"><h3>Timeline</h3><span class="spacer"></span><button class="btn ghost sm">Add note</button></div>
+                <ol class="tl">
+                  <li><time>Today<br>07:30</time><div><b>Follow-up came due</b> · draft written<div class="by">by apply-kit · schedule</div></div></li>
+                  <li><time>Fri 9 Oct</time><div><b>Posting closed</b> on Kestrel's career page. That's normal after applications close and says nothing about you. A saved copy is kept.<div class="by">by apply-kit · source check</div></div></li>
+                  <li><time>Sun 4 Oct<br>19:12</time><div><b>Email matched</b> · "Application received: Security Engineer", hiring@kestrelpayments.com<div class="by">by email · Status unchanged</div></div></li>
+                  <li><time>Sun 4 Oct<br>19:03</time><div><b>Submitted</b> → <span class="chip">Applied</span> · Greenhouse, filled by the extension<div class="by">by you</div></div></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stack" data-side="kestrel"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ FOLLOW-UP · NO DRAFT (error) ============ -->
+      <section data-state="followup-nodraft" data-state-name="Error · no draft" hidden>
+        <div class="stack" style="gap:16px">
+          <div data-head="kestrel"></div>
+          <div class="banner warn" role="status"><b>No draft this time: this month's AI budget ($10) ran out on Fri 9 Oct.</b><span>It resets on 1 Nov. Everything else works, and you can write this one yourself below.</span><span class="spacer"></span><a class="btn sm" href="settings.html">Budget settings</a></div>
+          <div class="next">
+            <div class="row"><span class="label">Follow-up due today</span></div>
+            <b class="big">Write a short nudge (70–110 words works well)</b>
+            <div class="box dashed small">
+              <b>Points to cover, from the Application</b>
+              <ul style="margin:0;padding-left:18px;display:grid;gap:2px">
+                <li>Applied for Security Engineer on Sun 4 Oct; still interested.</li>
+                <li>One detail from the posting: "centralise audit logging for PCI DSS".</li>
+                <li>Your matching evidence: Velora SIEM pipeline (Master profile).</li>
+              </ul>
+            </div>
+            <div class="field"><label for="draft-k2">Your follow-up</label><textarea id="draft-k2" class="draft" placeholder="I applied for the Security Engineer role on 4 October…"></textarea><span class="help">Kept as you type. What you write here also teaches your voice.</span></div>
+            <div class="row"><button class="btn primary" disabled>Copy</button><a class="btn" href="mailto:hiring@kestrelpayments.com">Open in Mail</a><span class="spacer"></span><button class="btn">Mark sent</button><button class="btn ghost">Snooze 3 days</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ INTERVIEWING ============ -->
+      <section data-state="interviewing" data-state-name="Interviewing" hidden>
+        <div class="stack" style="gap:16px">
+          <div data-head="brightwave"></div>
+          <div class="cols">
+            <div class="stack" style="gap:16px">
+              <div class="next">
+                <span class="label">Next step</span>
+                <b class="big">Interview Thu 15 Oct, 14:00–15:00</b>
+                <dl class="kv">
+                  <dt>Format</dt><dd>Video call, Google Meet. The link is in the invite email.</dd>
+                  <dt>With</dt><dd>Mara Ivanova, Engineering Manager · Teo Lindqvist, Senior Engineer</dd>
+                  <dt>Round</dt><dd>1 of 2: technical conversation, then a take-home (from the email)</dd>
+                  <dt>Time zone</dt><dd>Sofia time (EEST). Teo is in Stockholm, one hour behind.</dd>
+                </dl>
+                <div class="row"><button class="btn primary">Add to calendar (.ics)</button><button class="btn">Open invite email</button></div>
+                <p class="small faint">After the call: a thank-you draft is ready Thursday evening, due Sat 17 Oct (2 days, starting default).</p>
+              </div>
+
+              <div class="stack">
+                <div class="row"><h3>Prep sheet</h3><span class="small faint">light prep, not coaching · built from the posting, your notes and your Master profile</span></div>
+                <div class="box">
+                  <span class="label">Company facts</span>
+                  <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+                    <li>About 120 people, remote-first across EU time zones. <span class="src">[posting]</span></li>
+                    <li>Builds booking and records software for private clinics: React, Node, Postgres. <span class="src">[posting]</span></li>
+                    <li>Teams of 4–5 "own features end to end, from idea to on-call". <span class="src">[posting]</span></li>
+                    <li>Raised a Series B in 2025. <span class="src">[unverified]</span></li>
+                    <li>You liked that the posting lists salary and has no whiteboard round. <span class="src">[your notes]</span></li>
+                  </ul>
+                </div>
+                <div class="row"><span class="label">Likely questions · 8</span><span class="chip ok">6 have a story</span><span class="chip warn">2 to prepare</span></div>
+                <div class="scroll"><table class="pq">
+                  <thead><tr><th>Requirement</th><th>Likely question</th><th>Your story</th><th>Practised</th></tr></thead>
+                  <tbody>
+                    <tr><td>TypeScript, 2+ yrs</td><td>"Walk me through a codebase you made safer with TypeScript."</td><td>Velora dashboard: moved 40k lines to strict TS <span class="src">[profile · Velora 2023]</span></td><td><input type="checkbox" aria-label="Practised: TypeScript question" checked></td></tr>
+                    <tr><td>React + Node</td><td>"How did you split a feature between the frontend and the API?"</td><td>Clinic-style booking widget plus Express endpoint <span class="src">[profile · Velora 2024]</span></td><td><input type="checkbox" aria-label="Practised: React and Node question"></td></tr>
+                    <tr><td>Owns features end to end</td><td>"Tell me about something you took from idea to production."</td><td>Shift-swap side project, 300 users <span class="src">[profile · side projects]</span></td><td><input type="checkbox" aria-label="Practised: ownership question"></td></tr>
+                    <tr><td>Remote collaboration</td><td>"How do you keep your work visible on a remote team?"</td><td>Weekly written updates at Velora <span class="src">[profile]</span></td><td><input type="checkbox" aria-label="Practised: remote question"></td></tr>
+                    <tr><td>Health data (nice to have)</td><td>"How would you keep patient data out of logs?"</td><td>Log redaction rules from your SOC work <span class="src">[profile · security angle]</span></td><td><input type="checkbox" aria-label="Practised: health data question"></td></tr>
+                    <tr><td>Why Brightwave</td><td>"Why us, and why now?"</td><td>Your notes: remote-first, clinic software, small teams <span class="src">[your notes]</span></td><td><input type="checkbox" aria-label="Practised: why Brightwave"></td></tr>
+                    <tr><td>Postgres (preferred)</td><td>"Tell me about a slow query you tracked down."</td><td><span class="chip warn">No story in your profile</span><div class="small muted">Prepare one from real work, or say honestly how you'd approach it.</div></td><td><input type="checkbox" aria-label="Practised: Postgres question"></td></tr>
+                    <tr><td>Testing (preferred)</td><td>"How do you decide what to test?"</td><td><span class="chip warn">No story in your profile</span><div class="small muted">Answers you add here go into your Master profile.</div></td><td><input type="checkbox" aria-label="Practised: testing question"></td></tr>
+                  </tbody></table></div>
+              </div>
+
+              <div class="stack">
+                <h3>Timeline</h3>
+                <ol class="tl">
+                  <li><time>Fri 9 Oct<br>09:12</time><div><b>Email matched</b> · "Interview: Full-stack Developer", mara@brightwave.io<p class="quote">"Hi Kris, we enjoyed your application and would like to invite you to a first conversation on Thursday 15 October at 14:00…"</p><div class="by">by email</div></div></li>
+                  <li><time>Fri 9 Oct<br>09:12</time><div><b>Status</b> <span class="chip">Applied</span> → <span class="chip solid">Interviewing</span> · Follow-up "post-apply nudge" cancelled<div class="by">by email · <button class="btn ghost sm" style="padding:0">undo</button></div></div></li>
+                  <li><time>Mon 28 Sep<br>10:30</time><div><b>Submitted</b> → <span class="chip">Applied</span> · Ashby<div class="by">by you</div></div></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stack" data-side="brightwave"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ REJECTED ============ -->
+      <section data-state="rejected" data-state-name="Rejected" hidden>
+        <div class="stack" style="gap:16px">
+          <div data-head="lumen"></div>
+          <div class="cols">
+            <div class="stack" style="gap:16px">
+              <div class="next">
+                <span class="label">Rejected yesterday · form letter, no interview</span>
+                <p class="quote">"Thank you for your interest in Lumen Health. After careful review, we've decided to move forward with candidates whose experience more closely matches our current needs…" · people@lumenhealth.com</p>
+                <div class="field">
+                  <label for="lesson-r">One-line lesson</label>
+                  <input type="text" id="lesson-r" placeholder="e.g. For design roles asking 3+ years, lead with the shipped clinic-booking case study">
+                  <span class="help">Specific to this one. Lines like "tailor your CV" don't count.</span>
+                </div>
+                <div class="field">
+                  <label for="why-r">Likely reason <span class="faint small" style="font-weight:400">· optional</span></label>
+                  <select id="why-r"><option>Experience gap: asked 3+ years, you have 2</option><option>Missing skill or certificate</option><option>Location or remote terms</option><option>Salary</option><option>No reason given</option><option>Other</option></select>
+                  <span class="help">Pre-filled from the fit check, which flagged "3+ years" as a stretch. A form letter rarely says why, so this is a guess and is labelled one in Stats.</span>
+                </div>
+                <div class="row"><button class="btn primary">Save</button><button class="btn ghost">Skip</button><span class="spacer"></span><button class="btn ghost sm">Not a rejection? Undo</button></div>
+              </div>
+              <div class="box">
+                <span class="label">What this changes in Stats</span>
+                <dl class="kv">
+                  <dt>Response rate</dt><dd>Still 18%. A rejection is a reply, so this already counts toward 7 of 39.</dd>
+                  <dt>Design angle</dt><dd>1 of 4 replied, 0 interviews. Too few to draw a conclusion yet.</dd>
+                  <dt>Your 3 rejections</dt><dd>2 for a missing skill or certificate (Vue, CCNA), 1 for experience (this one)</dd>
+                </dl>
+              </div>
+              <div class="stack">
+                <h3>Timeline</h3>
+                <ol class="tl">
+                  <li><time>Sat 10 Oct<br>17:05</time><div><b>Status</b> <span class="chip">Applied</span> → <span class="chip bad">Rejected</span> · pending Follow-up cancelled<div class="by">by email</div></div></li>
+                  <li><time>Fri 2 Oct<br>08:00</time><div><b>Follow-up marked sent</b><div class="by">by you</div></div></li>
+                  <li><time>Thu 1 Oct<br>14:20</time><div><b>Submitted</b> → <span class="chip">Applied</span> · Teamtailor, with portfolio link<div class="by">by you</div></div></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stack" data-side="lumen"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ OFFER ============ -->
+      <section data-state="offer" data-state-name="Offer" hidden>
+        <div class="stack" style="gap:16px">
+          <p class="banner info small">Illustrative: Ardent Labs a few weeks on, after round 2.</p>
+          <div data-head="ardent"></div>
+          <div class="cols">
+            <div class="stack" style="gap:16px">
+              <div class="next">
+                <div class="row"><span class="label">Offer · respond by Fri 6 Nov</span><span class="spacer"></span><span class="small faint">note to self due 1 day after the offer · starting default</span></div>
+                <b class="big">Note to self</b>
+                <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:2px">
+                  <li><b>Deadline:</b> Fri 6 Nov, 18:00. That's 9 days.</li>
+                  <li><b>One question to answer:</b> is the 2-nights-a-month shift rotation fixed or negotiable?</li>
+                  <li><b>One action:</b> ask HR for the written contract before deciding.</li>
+                </ul>
+              </div>
+              <form class="box" aria-labelledby="offer-h" onsubmit="return false">
+                <div class="row"><h3 id="offer-h">Offer details</h3><span class="spacer"></span><span class="small faint">pre-filled from the offer email · check against the written offer</span></div>
+                <div class="field"><label for="o-sal">Base salary</label><input type="text" id="o-sal" value="€2,650 gross / month"><span class="help">Posting said "not stated". Your floor is €2,450.</span></div>
+                <div class="field"><label for="o-start">Start date</label><input type="text" id="o-start" value="Mon 4 Jan 2027"></div>
+                <div class="field"><label for="o-work">Work pattern</label><input type="text" id="o-work" value="On-site, Sofia (Business Park) · 2 night shifts a month"></div>
+                <div class="field"><label for="o-contract">Contract</label><input type="text" id="o-contract" value="Permanent, 6-month probation, 25 days leave"></div>
+                <div class="field"><label for="o-other">Other</label><textarea id="o-other" style="min-height:60px">Private health insurance, food vouchers, certification budget (CompTIA CySA+).</textarea></div>
+                <div class="row"><button class="btn primary">Save details</button></div>
+              </form>
+              <div class="box dashed small">
+                <b>Not in this version: comparing offers and negotiating</b>
+                <p class="muted">apply-kit records the offer so nothing is lost. Weighing it against others and negotiating are left to you in v1 (PRODUCT.md non-goals). Your other open Applications are still tracked as usual.</p>
+              </div>
+              <div class="stack">
+                <h3>Timeline</h3>
+                <ol class="tl">
+                  <li><time>Wed 28 Oct<br>16:40</time><div><b>Status</b> <span class="chip">Interviewing</span> → <span class="chip ok">Offer</span><div class="by">by email · offer letter attached (PDF kept)</div></div></li>
+                  <li><time>Mon 26 Oct</time><div><b>Note</b> · "Round 2 went well. They asked a lot about Sentinel KQL."<div class="by">by you</div></div></li>
+                  <li><time>Wed 7 Oct</time><div><b>Status</b> <span class="chip">Screening</span> → <span class="chip">Interviewing</span><div class="by">by email</div></div></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stack" data-side="ardent"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ STATUS CHANGED BY EMAIL ============ -->
+      <section data-state="by-email" data-state-name="Changed by email" hidden>
+        <div class="stack" style="gap:16px">
+          <div class="banner ok" role="status">
+            <b>Moved Applied → Screening by an email, today 08:40.</b><span>It matched on 3 signals, listed below.</span>
+            <span class="spacer"></span><button class="btn sm">Looks right</button><button class="btn sm">Undo</button>
+          </div>
+          <div data-head="ostrava"></div>
+          <div class="cols">
+            <div class="stack" style="gap:16px">
+              <div class="box">
+                <div class="row"><span class="label">The email that moved it</span><span class="spacer"></span><span class="small faint">today 08:40 · in Bulgarian</span></div>
+                <div class="small"><b>Галина Петрова</b> &lt;careers@ostravabank.bg&gt; · Покана за телефонен разговор</div>
+                <p class="quote" lang="bg">"Здравейте, Крис! Благодарим Ви за проявения интерес към позицията „Специалист информационна сигурност“. Бихме искали да проведем кратък телефонен разговор с Вас. Удобно ли Ви е във вторник, 13 октомври, от 10:00 ч.?"</p>
+                <p class="small"><b>In English:</b> thanks you for applying for IT Security Specialist and asks for a short phone call on Tue 13 Oct at 10:00.</p>
+                <div class="small muted"><b>Why it matched:</b>
+                  <ul style="margin:2px 0 0;padding-left:18px">
+                    <li>The sender's domain is the same as the target posting's (ostravabank.bg).</li>
+                    <li>It names the job, in Bulgarian: "Специалист информационна сигурност".</li>
+                    <li>It's your only Application with Ostrava Bank.</li>
+                  </ul>
+                </div>
+                <p class="small faint">Undo puts the Status back to Applied, restores its Follow-up, and keeps the email in the timeline marked "not a status change". The matcher learns from it.</p>
+              </div>
+              <div class="next">
+                <span class="label">Next step</span>
+                <b class="big">Reply to confirm the call: Tue 13 Oct, 10:00</b>
+                <p class="small muted">You reply from your own mail. After that: a thank-you note is due Wed 14 Oct (3 days after Screening began, starting default).</p>
+                <div class="row"><button class="btn primary">Add to calendar (.ics)</button><button class="btn">Open email in Mail</button></div>
+              </div>
+              <div class="stack">
+                <h3>Timeline</h3>
+                <ol class="tl">
+                  <li><time>Today<br>08:40</time><div><b>Status</b> <span class="chip">Applied</span> → <span class="chip solid">Screening</span> · post-apply Follow-up (due Tue 13 Oct) cancelled<div class="by">by email · <button class="btn ghost sm" style="padding:0">undo</button></div></div></li>
+                  <li><time>Today<br>08:40</time><div><b>Email matched</b> · "Покана за телефонен разговор", careers@ostravabank.bg<div class="by">by email</div></div></li>
+                  <li><time>Tue 6 Oct<br>12:15</time><div><b>Submitted</b> → <span class="chip">Applied</span> · the bank's own careers form, Bulgarian CV<div class="by">by you</div></div></li>
+                </ol>
+              </div>
+            </div>
+            <div class="stack" data-side="ostrava"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="applied"><span class="label">Design notes</span><ul>
+    <li>Focal point is the "Next step" box (the only element with an ink border). Every state answers "what now?" before anything else.</li>
+    <li>The stepper shows the happy path Applied → Screening → Interviewing → Offer. Rejected and Withdrawn sit after an "or" as a branch, never as steps. The select beside it is the manual override.</li>
+    <li>Every timeline Event names its cause, "by email" or "by you", plus "by apply-kit" for schedule and source events. That's how Kris can trust a Status he didn't set.</li>
+    <li>The side column holds the Package exactly as sent (read-only, "View as sent"), the target posting with a saved copy, and notes.</li>
+    <li>Follow-up due dates are starting defaults (7/3/2/1 days after Applied/Screening/Interviewing/Offer), shown as such wherever a date appears.</li></ul></aside>
+  <aside class="notes" data-notes-for="followup" hidden><span class="label">Design notes</span><ul>
+    <li>Polish-only: the app drafts and Kris sends. Primary is "Copy", then "Open in Mail" (recipient and thread pre-filled). "Mark sent" logs the Event. Nothing here can send.</li>
+    <li>Draft rules from the old prototype: body only, 70–110 words, one real detail from the posting, no fawning phrases, numbers only from the Master profile. The help line says where the number came from.</li>
+    <li>Snooze is 3 days (old default). Edits to the draft are learned as voice.</li>
+    <li>The closed posting appears as a neutral fact with reassurance, so it doesn't read as a rejection.</li></ul></aside>
+  <aside class="notes" data-notes-for="followup-nodraft" hidden><span class="label">Design notes</span><ul>
+    <li>The AI budget cap is a hard stop (PRODUCT.md). The error says what happened, when it resets, and that only drafting is affected.</li>
+    <li>Recovery: a deterministic outline built from the Application's own data, with no model call, so Kris can still send a good nudge in two minutes. Typed text is saved as he goes.</li></ul></aside>
+  <aside class="notes" data-notes-for="interviewing" hidden><span class="label">Design notes</span><ul>
+    <li>Scheduling first: when, format, who, which round, time zone. All parsed from the invite email; Kris checks it against the email itself.</li>
+    <li>The prep sheet is deliberately light (PRODUCT.md: no full coaching). Company facts carry source tags and "[unverified]". Each likely question maps to a posting Requirement and to a real story from the Master profile.</li>
+    <li>When no truthful story exists, the row says so and gives no invented answer (honesty line). Answers written here flow back into the Master profile.</li>
+    <li>The old cadence sends the thank-you 2 days after Interviewing begins. Here it anchors on the interview itself. See open questions.</li></ul></aside>
+  <aside class="notes" data-notes-for="rejected" hidden><span class="label">Design notes</span><ul>
+    <li>Low-drama by design: one quoted line from the email, a one-line lesson, an optional reason pre-filled from the fit check, and Skip is always available.</li>
+    <li>The reason is labelled a guess for form letters, so Stats don't over-read them. "What this changes in Stats" frames the rejection as data: the response rate doesn't drop, because a rejection is a reply.</li>
+    <li>Recurring reasons across rejections ("2 of 3: missing skill") are the learning loop the old prototype had. Here they stay small and factual.</li></ul></aside>
+  <aside class="notes" data-notes-for="offer" hidden><span class="label">Design notes</span><ul>
+    <li>The Offer Follow-up is a note to self, not an email: deadline, one question and one action, per the old prototype's rule.</li>
+    <li>Offer details are a plain form, pre-filled from the offer email and checked against the floor salary from the Profile. That one comparison is factual, not advice.</li>
+    <li>Comparing and negotiating offers are explicitly out of scope for v1, and the screen says so instead of hinting at a missing feature.</li></ul></aside>
+  <aside class="notes" data-notes-for="by-email" hidden><span class="label">Design notes</span><ul>
+    <li>Automatic moves are visible and reversible. The banner shows from→to, when it happened, Undo and "Looks right". The full email and the match signals sit right below.</li>
+    <li>A Bulgarian email gets a one-line English summary. The original stays primary, so nothing is lost in translation.</li>
+    <li>Undo restores the Status and the cancelled Follow-up and teaches the matcher. Low-confidence matches never reach this state; they go to "Needs you" as an unmatched email.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const STATUSES = ["Applied", "Screening", "Interviewing", "Offer", "Rejected", "Withdrawn"];
+  const PATH = ["Applied", "Screening", "Interviewing", "Offer"];
+  const A = {
+    corvid: { job: "Backend Engineer", co: "Corvid Logistics", st: "Applied", where: "Sofia · hybrid", angle: "Developer", sent: "Thu 8 Oct",
+      cv: "Developer angle · v1 · 2 pages", letter: "186 words", answers: ["Why Corvid?", "Notice period: 1 month", "Expected salary: €3,300 gross"], ats: "Passed · 11 of 12 keywords",
+      url: "careers.corvid.bg/jobs/backend-engineer-go", posting: "Still open · checked today 07:30", note: "Go is new to me: mention the Go side project and the Postgres work." },
+    kestrel: { job: "Security Engineer", co: "Kestrel Payments", st: "Applied", where: "Sofia · hybrid", angle: "Security", sent: "Sun 4 Oct",
+      cv: "Security angle · v2 · 2 pages", letter: "204 words", answers: ["Why Kestrel?", "PCI DSS experience", "Right to work in the EU: yes", "Expected salary: €3,050 gross"], ats: "Passed · 14 of 14 keywords",
+      url: "kestrelpayments.com/careers/4471", posting: "Closed Fri 9 Oct · saved copy kept", note: "CISSP is preferred, not required. Don't apologise for it." },
+    brightwave: { job: "Full-stack Developer", co: "Brightwave", st: "Interviewing", where: "Remote · EU", angle: "Developer", sent: "Mon 28 Sep",
+      cv: "Developer angle · v1 · 2 pages", letter: "172 words", answers: ["Time zone overlap", "Expected salary: €3,800 / month"], ats: "Passed · 10 of 10 keywords",
+      url: "jobs.ashbyhq.com/brightwave/full-stack", posting: "Still open · checked today 07:30", note: "Remote-first, clinic software, small teams. Salary range is in the posting." },
+    lumen: { job: "Product Designer", co: "Lumen Health", st: "Rejected", from: "Applied", where: "Sofia · hybrid", angle: "Design", sent: "Thu 1 Oct",
+      cv: "Design angle · v1 · 2 pages + portfolio link", letter: "190 words", answers: ["Portfolio URL", "Figma level", "Expected salary: €2,450 gross"], ats: "Passed · 9 of 10 keywords",
+      url: "lumenhealth.teamtailor.com/jobs/product-designer", posting: "Closed Sat 10 Oct · saved copy kept", note: "" },
+    ardent: { job: "SOC Analyst L2", co: "Ardent Labs", st: "Offer", where: "Sofia · on-site", angle: "Security", sent: "Tue 22 Sep",
+      cv: "Security angle · v1 · 2 pages", letter: "168 words", answers: ["Shift availability", "Bulgarian: native", "SIEM tools used"], ats: "Passed · 12 of 13 keywords",
+      url: "ardentlabs.eu/careers/soc-analyst-l2", posting: "Closed Tue 13 Oct · saved copy kept", note: "Night shifts flagged at fit check. Ask about the rotation." },
+    ostrava: { job: "IT Security Specialist", co: "Ostrava Bank", st: "Screening", where: "Sofia · on-site", angle: "Security", sent: "Tue 6 Oct",
+      cv: "Security angle · v1 · Bulgarian · 2 pages", letter: "No cover letter (not asked)", answers: ["ISO 27001 experience", "Expected salary: €2,800 gross"], ats: "Passed · 8 of 9 keywords",
+      url: "ostravabank.bg/kariera/it-security", posting: "Still open · checked today 07:30", note: "" },
+  };
+  const chipCls = st => st === "Rejected" ? "bad" : st === "Offer" ? "ok" : st === "Withdrawn" ? "" : "solid";
+  const stepper = a => {
+    const end = a.st === "Rejected" || a.st === "Withdrawn";
+    const reached = PATH.indexOf(end ? a.from : a.st);
+    const steps = PATH.map((s, i) => {
+      const cls = i < reached || (end && i === reached) ? "done" : i === reached ? "now" : "";
+      return `<li class="step ${cls}"${!end && i === reached ? ' aria-current="step"' : ""}>${cls === "done" ? "✓ " : ""}${s}</li>`;
+    }).join("");
+    const branch = ["Rejected", "Withdrawn"].map(s => `<li class="step ${a.st === s ? "bad" : ""}"${a.st === s ? ' aria-current="step"' : ""}>${s}</li>`).join("");
+    return `<ol class="stepper" aria-label="Status: ${a.st}">${steps}<li class="sep" aria-hidden="true">or</li>${branch}</ol>`;
+  };
+  $$("[data-head]").forEach((el, n) => {
+    const a = A[el.dataset.head];
+    el.innerHTML = `<div class="ahead">
+      <a class="back" href="applications.html">← Applications</a>
+      <div class="row"><h2>${a.job}</h2><span class="muted">· ${a.co}</span><span class="chip ${chipCls(a.st)}">${a.st}</span></div>
+      <div class="small muted">${a.where} · ${a.angle} angle · applied ${a.sent}</div>
+      <div class="row">${stepper(a)}<span class="spacer"></span>
+        <label class="small muted" for="chg-${n}">Change status</label><select id="chg-${n}">${STATUSES.map(s => `<option${s === a.st ? " selected" : ""}>${s}</option>`).join("")}</select></div></div>`;
+  });
+  $$("[data-side]").forEach((el, n) => {
+    const a = A[el.dataset.side];
+    el.innerHTML = `<div class="box">
+        <div class="row"><span class="label">Package as sent · ${a.sent}</span></div>
+        <dl class="kv"><dt>CV version</dt><dd>${a.cv}</dd><dt>Cover letter</dt><dd>${a.letter}</dd>
+          <dt>Answers</dt><dd>${a.answers.length}: ${a.answers.join(" · ")}</dd><dt>ATS check</dt><dd>${a.ats}</dd></dl>
+        <div class="row"><a class="btn sm" href="package.html">View as sent</a><span class="small faint">read-only · the exact files submitted</span></div>
+      </div>
+      <div class="box">
+        <span class="label">Target posting</span>
+        <a class="small trunc" href="https://${a.url}" title="${a.url}">${a.url}</a>
+        <span class="small muted">${a.posting}</span>
+        <a class="btn ghost sm" href="job.html" style="justify-self:start;padding-inline:0">Open the Job</a>
+      </div>
+      <div class="field">
+        <label for="note-${n}">Notes</label>
+        <textarea id="note-${n}" placeholder="Anything worth remembering: names, what they asked, salary talk…">${a.note}</textarea>
+        <span class="help">Saved as you type. Notes show up in the timeline and the prep sheet.</span>
+      </div>`;
+  });
+})();
+</script>
+</body>
+</html>

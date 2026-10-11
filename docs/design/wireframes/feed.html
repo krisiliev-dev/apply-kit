@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feed · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html" aria-current="page">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Feed</h1>
+    <p class="lede">Every new job from every source in one scan table, sorted by fit. Concept B, with C's "why it ranks here" line and A's keyboard shortcuts.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a class="on" href="feed.html">Feed</a><a href="applications.html">Applications</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health" id="health">Sources <b>14/14 OK</b> · checked 07:30</span>
+    </div>
+
+    <div class="screen">
+      <!-- shared toolbar is repeated per state on purpose: states differ in what it says -->
+
+      <section data-state="normal" data-state-name="Normal">
+        <div class="stack">
+          <div class="row">
+            <h2>23 new since yesterday</h2><span class="faint small">· 143 open jobs in total</span>
+            <span class="spacer"></span>
+            <input type="search" id="q-normal" placeholder="Search title, company, skill" aria-label="Search jobs" style="max-width:260px">
+          </div>
+          <div class="row">
+            <span class="chip solid">New</span><span class="chip">Saved · 6</span><span class="chip">All open</span>
+            <span class="faint">|</span>
+            <span class="chip">Angle: all ▾</span><span class="chip">Sofia + Remote EU ▾</span><span class="chip">Relocation: off</span>
+            <span class="spacer"></span>
+            <span class="small muted">Sort</span><span class="chip">Fit ▾</span>
+          </div>
+          <div class="row small muted" id="bulk"><span>0 selected</span><button class="btn sm" disabled>Save</button><button class="btn sm" disabled>Pass…</button><span class="spacer"></span><span><kbd>J</kbd><kbd>K</kbd> move · <kbd>Enter</kbd> open · <kbd>S</kbd> save · <kbd>X</kbd> pass</span></div>
+          <div class="scroll">
+            <table>
+              <thead><tr><th><input type="checkbox" aria-label="Select all"></th><th>Job</th><th>Where</th><th>Angle</th><th>Requirements</th><th>Salary</th><th>Sources</th><th>Posted</th></tr></thead>
+              <tbody data-rows="normal"></tbody>
+            </table>
+          </div>
+          <div class="row small">
+            <button class="btn ghost sm">Show 7 hidden jobs and why</button>
+            <span class="spacer"></span>
+            <span class="pager">1–23 of 23 new <button class="btn sm" disabled>Previous</button><button class="btn sm" disabled>Next</button></span>
+          </div>
+        </div>
+      </section>
+
+      <section data-state="loading" data-state-name="Checking sources">
+        <div class="stack">
+          <div class="row"><h2>Checking your sources</h2><span class="spacer"></span><span class="small muted">9 of 14 done · about 20 s left</span></div>
+          <div class="meter" aria-hidden="true"><span style="width:64%"></span></div>
+          <p class="small muted">Jobs appear as each source finishes. You can start reading now.</p>
+          <div class="scroll">
+            <table>
+              <thead><tr><th></th><th>Job</th><th>Where</th><th>Angle</th><th>Requirements</th><th>Salary</th><th>Sources</th><th>Posted</th></tr></thead>
+              <tbody data-rows="loading"></tbody>
+              <tbody>
+                <tr><td></td><td><div class="skel w80"></div><div class="skel w40" style="margin-top:6px"></div></td><td><div class="skel w60"></div></td><td><div class="skel w60"></div></td><td><div class="skel w90"></div></td><td><div class="skel w60"></div></td><td><div class="skel w30"></div></td><td><div class="skel w40"></div></td></tr>
+                <tr><td></td><td><div class="skel w60"></div><div class="skel w30" style="margin-top:6px"></div></td><td><div class="skel w60"></div></td><td><div class="skel w40"></div></td><td><div class="skel w80"></div></td><td><div class="skel w40"></div></td><td><div class="skel w30"></div></td><td><div class="skel w40"></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section data-state="first-run" data-state-name="Empty · first run">
+        <div class="empty">
+          <h2>Your feed fills up once sources are connected</h2>
+          <p class="muted">Pick companies from the Sofia watchlist and add your job-alert mailbox. The first check takes about a minute.</p>
+          <div class="row"><a class="btn primary" href="settings.html">Choose companies</a><a class="btn" href="settings.html">Connect mailbox</a></div>
+          <p class="small faint">Or paste a job link to start with one job:</p>
+          <div class="row" style="width:100%"><input type="text" id="paste-first" placeholder="https://…" aria-label="Job link" style="max-width:420px"><button class="btn">Add job</button></div>
+        </div>
+      </section>
+
+      <section data-state="source-failed" data-state-name="Error · source failed">
+        <div class="stack">
+          <div class="banner bad" role="status">
+            <b>dev.bg didn't respond at 07:30.</b>
+            <span>Its 12 jobs are kept as they were, not closed. Next try at 08:00.</span>
+            <span class="spacer"></span><button class="btn sm">Try now</button><a class="btn ghost sm" href="settings.html">Source health</a>
+          </div>
+          <div class="row"><h2>19 new since yesterday</h2><span class="faint small">· 13 of 14 sources checked</span></div>
+          <div class="scroll"><table><thead><tr><th></th><th>Job</th><th>Where</th><th>Angle</th><th>Requirements</th><th>Salary</th><th>Sources</th><th>Posted</th></tr></thead><tbody data-rows="failed"></tbody></table></div>
+        </div>
+      </section>
+
+      <section data-state="drop" data-state-name="Warning · unusual drop">
+        <div class="stack">
+          <div class="banner warn" role="status">
+            <b>SumUp returned 0 jobs. It usually has about 30.</b>
+            <span>That could be a hiring freeze or a broken feed, so its jobs stay open until the next check confirms it.</span>
+            <span class="spacer"></span><a class="btn sm" href="https://sumup.com/careers">Check their site</a><button class="btn ghost sm">It's real, close them</button>
+          </div>
+          <div class="row"><h2>21 new since yesterday</h2></div>
+          <div class="scroll"><table><thead><tr><th></th><th>Job</th><th>Where</th><th>Angle</th><th>Requirements</th><th>Salary</th><th>Sources</th><th>Posted</th></tr></thead><tbody data-rows="drop"></tbody></table></div>
+        </div>
+      </section>
+
+      <section data-state="no-match" data-state-name="Empty · filters">
+        <div class="stack">
+          <div class="row"><span class="chip">New</span><span class="chip solid">Angle: design ✕</span><span class="chip solid">Remote EU only ✕</span><span class="chip solid">Salary ≥ €4,000 ✕</span></div>
+          <div class="empty">
+            <h2>No new jobs match these filters</h2>
+            <p class="muted">2 design jobs are remote but list no salary, and 1 is hidden because it needs 5+ years.</p>
+            <div class="row"><button class="btn primary">Include jobs without a salary</button><button class="btn">Show the hidden one</button><button class="btn ghost">Clear filters</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section data-state="hidden" data-state-name="Hidden jobs">
+        <div class="stack">
+          <div class="row"><h2>7 hidden today</h2><span class="spacer"></span><a class="btn ghost sm" href="profile.html">Edit dealbreakers</a></div>
+          <p class="small muted">Hidden, never deleted. Each one says why. If a reason is wrong, unhide the job and adjust the rule.</p>
+          <div class="scroll"><table><thead><tr><th>Job</th><th>Where</th><th>Why it's hidden</th><th></th></tr></thead><tbody data-rows="hidden"></tbody></table></div>
+        </div>
+      </section>
+
+      <section data-state="overflow" data-state-name="Overflow">
+        <div class="stack">
+          <div class="row"><h2>212 new since yesterday</h2><span class="faint small">· first check after a week away</span></div>
+          <div class="banner info"><span>That's a lot. The top 25 by fit are first; the rest are a page away.</span><span class="spacer"></span><button class="btn sm">Save top 10 for later</button></div>
+          <div class="scroll"><table><thead><tr><th></th><th>Job</th><th>Where</th><th>Angle</th><th>Requirements</th><th>Salary</th><th>Sources</th><th>Posted</th></tr></thead><tbody data-rows="overflow"></tbody></table></div>
+          <div class="pager"><span>1–25 of 212</span><span class="spacer"></span><button class="btn sm" disabled>Previous</button><button class="btn sm">Next</button></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="normal"><span class="label">Design notes</span><ul>
+    <li>Default sort is fit; the grey line under each title says why it ranks there, so the order is never a black box.</li>
+    <li>Requirement chips: green = you meet it, amber = partly or "preferred", red = a gap. Dealbreakers never appear here; those jobs are hidden with a reason.</li>
+    <li>"Sources" counts the postings merged into this job. Row opens the Job; checkbox enables bulk save/pass.</li>
+    <li>Source health is always visible in the top bar, so you never wonder whether the feed is complete.</li></ul></aside>
+  <aside class="notes" data-notes-for="loading" hidden><span class="label">Design notes</span><ul>
+    <li>Over 10 seconds, so: determinate progress, a time estimate, and results streaming in as each source finishes.</li>
+    <li>Skeleton rows match the real row shape to avoid layout jumps.</li></ul></aside>
+  <aside class="notes" data-notes-for="first-run" hidden><span class="label">Design notes</span><ul>
+    <li>Never a blank table: the empty state says what will appear and gives two ways to start, plus the one-job shortcut.</li></ul></aside>
+  <aside class="notes" data-notes-for="source-failed" hidden><span class="label">Design notes</span><ul>
+    <li>The old app closed every job of a failed source. Here a failed fetch changes nothing: jobs stay as they were, and the banner says so.</li>
+    <li>Health in the top bar turns red too. "Try now" retries just that source.</li></ul></aside>
+  <aside class="notes" data-notes-for="drop" hidden><span class="label">Design notes</span><ul>
+    <li>The "a bug hid half my jobs" guard: a sharp drop against a source's normal volume is treated as suspicious, not as truth.</li>
+    <li>You decide whether it's real; until then nothing is closed.</li></ul></aside>
+  <aside class="notes" data-notes-for="no-match" hidden><span class="label">Design notes</span><ul>
+    <li>A filtered-to-zero view explains which filter is responsible and offers the one-click fix, instead of "No results".</li></ul></aside>
+  <aside class="notes" data-notes-for="hidden" hidden><span class="label">Design notes</span><ul>
+    <li>"Nothing disappears silently": every hidden job keeps a plain-language reason and can be unhidden.</li>
+    <li>"Not a dealbreaker for me" updates the rule, so the same mistake doesn't repeat.</li></ul></aside>
+  <aside class="notes" data-notes-for="overflow" hidden><span class="label">Design notes</span><ul>
+    <li>Long titles and company names truncate with the full text on hover; the why-line wraps.</li>
+    <li>Paging at 25 keeps the table scannable; fit order means the important rows are always on page one.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  const jobs = [
+    { t: "Security Engineer", c: "Kestrel Payments", w: "Sofia · hybrid", a: "Security", r: [["3+ yrs", "ok"], ["SIEM", "ok"], ["CISSP pref.", "warn"]], s: "€2,800–3,600", n: 3, p: "2d", why: "Strong security match · 2 of 3 requirements met · above your salary floor" },
+    { t: "Full-stack Developer (React/Node)", c: "Brightwave", w: "Remote · EU", a: "Developer", r: [["2+ yrs", "ok"], ["TypeScript", "ok"], ["English", "ok"]], s: "€3,200–4,200", n: 2, p: "1d", why: "Every requirement met · remote in your time zones" },
+    { t: "SOC Analyst L2", c: "Ardent Labs", w: "Sofia · on-site", a: "Security", r: [["2+ yrs", "ok"], ["Bulgarian", "ok"], ["Night shifts", "warn"]], s: "Not stated", n: 1, p: "3d", why: "Matches your SOC experience · shift work flagged" },
+    { t: "Cloud Security Engineer", c: "Halden Systems", w: "Remote · EU", a: "Security", r: [["AWS", "ok"], ["Kubernetes", "bad"], ["4+ yrs", "warn"]], s: "€4,000–5,000", n: 4, p: "today", why: "Good security fit · one gap you could answer" },
+    { t: "Product Designer", c: "Lumen Health", w: "Sofia · hybrid", a: "Design", r: [["Portfolio", "ok"], ["Figma", "ok"], ["3+ yrs", "warn"]], s: "€2,050–2,800", n: 2, p: "today", why: "Design angle · experience slightly short" },
+    { t: "Backend Engineer (Go)", c: "Corvid Logistics", w: "Sofia · hybrid", a: "Developer", r: [["Go", "warn"], ["Postgres", "ok"], ["2+ yrs", "ok"]], s: "€3,050–4,100", n: 2, p: "4d", why: "Developer angle · Go is new to you" },
+    { t: "IT Security Specialist", c: "Ostrava Bank", w: "Sofia · on-site", a: "Security", r: [["ISO 27001", "warn"], ["Bulgarian", "ok"]], s: "Not stated", n: 1, p: "5d", why: "Security angle · bank, on-site" },
+  ];
+  const hidden = [
+    ["Penetration Tester", "Vollmer GmbH", "Remote · DE", "Requires fluent German"],
+    ["Senior Security Architect", "Northgate Group", "Sofia", "Requires 7+ years"],
+    ["Frontend Developer", "Pixelforge", "Plovdiv · on-site", "On-site outside Sofia"],
+    ["DevOps Engineer", "Tallis", "Remote · US only", "Remote limited to the US"],
+  ];
+  const chips = r => r.map(([l, k]) => `<span class="chip ${k}">${l}</span>`).join(" ");
+  const row = (j, i) => `<tr${i === 0 ? ' class="focused"' : ""}><td><input type="checkbox" aria-label="Select ${j.t}"></td>
+    <td style="min-width:220px"><a href="job.html"><b class="trunc" title="${j.t}">${j.t}</b></a><div class="small">${j.c}</div><div class="why">${j.why}</div></td>
+    <td>${j.w}</td><td>${j.a}</td><td><div class="row">${chips(j.r)}</div></td><td>${j.s}</td><td>${j.n}</td><td>${j.p}</td></tr>`;
+  const fill = (key, list) => document.querySelectorAll(`[data-rows="${key}"]`).forEach(tb => tb.innerHTML = list.map(row).join(""));
+  fill("normal", jobs);
+  fill("loading", jobs.slice(0, 3));
+  fill("failed", jobs.slice(0, 5));
+  fill("drop", jobs.slice(1, 6));
+  const long = [
+    { ...jobs[0], t: "Senior Application Security Engineer, Payments Platform (Fraud & Risk Engineering)", c: "International Clearing & Settlement Services Bulgaria EAD", n: 5 },
+    ...jobs.slice(1, 4),
+  ];
+  fill("overflow", long);
+  document.querySelectorAll('[data-rows="hidden"]').forEach(tb => tb.innerHTML = hidden.map(h =>
+    `<tr><td><b>${h[0]}</b><div class="small">${h[1]}</div></td><td>${h[2]}</td><td><span class="chip bad">${h[3]}</span></td>
+     <td><div class="row"><button class="btn sm">Unhide</button><button class="btn ghost sm">Not a dealbreaker for me</button></div></td></tr>`).join(""));
+  // health indicator follows the state
+  const health = document.getElementById("health");
+  const setHealth = () => {
+    const vis = [...document.querySelectorAll("[data-state]")].find(s => !s.hidden)?.dataset.state;
+    health.innerHTML = vis === "source-failed" ? 'Sources <b class="bad">13/14 · 1 failing</b>' : vis === "drop" ? 'Sources <b class="bad">14/14 · 1 unusual</b>' : vis === "first-run" ? "No sources yet" : 'Sources <b>14/14 OK</b> · checked 07:30';
+  };
+  document.querySelectorAll(".state-tab").forEach(t => t.addEventListener("click", setHealth)); setHealth();
+})();
+</script>
+</body>
+</html>

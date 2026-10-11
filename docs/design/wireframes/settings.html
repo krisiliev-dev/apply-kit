@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Settings · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+  /* page-local: settings layout, section nav, health bars, mailbox chain. Tokens only. */
+  .set { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 20px; align-items: start }
+  .secnav { display: grid; gap: 2px; position: sticky; top: 12px; font-size: 0.9rem }
+  .secnav a { padding: 6px 10px; border-radius: 6px; color: var(--ink-2); text-decoration: none }
+  .secnav a[aria-current="true"] { background: var(--fill); color: var(--ink); font-weight: 700 }
+  .secnav .dot { color: var(--bad); font-weight: 700 }
+  .secnav .dot.warn { color: var(--warn) }
+  @media (max-width: 760px) {
+    .set { grid-template-columns: minmax(0, 1fr) }
+    .secnav { position: static; display: flex; overflow-x: auto; gap: 4px; padding-bottom: 4px; border-bottom: 1px solid var(--line) }
+    .secnav a { white-space: nowrap }
+  }
+  .sec { display: grid; gap: 12px; padding-bottom: 22px; border-bottom: 1px solid var(--line); min-width: 0 }
+  .sec:last-child { border-bottom: 0; padding-bottom: 0 }
+  .sec-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px }
+  .crumb { font-size: 0.85rem; color: var(--ink-2) }
+  .crumb a { color: var(--ink-2) }
+  .spk { width: 100%; height: 40px; display: block }
+  .spk rect { fill: var(--ink-3) }
+  .spk rect.now { fill: var(--ink) }
+  .spk rect.bad { fill: var(--bad) }
+  .spk rect.warn { fill: var(--warn) }
+  .spk line { stroke: var(--line); stroke-dasharray: 3 3 }
+  .spk-axis { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.7rem; color: var(--ink-3) }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-family: var(--mono); font-size: 0.78rem }
+  .chain .node { border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; background: var(--paper) }
+  .chain .node.bad { border-color: var(--bad); color: var(--bad) }
+  .chain .via { color: var(--ink-3) }
+  .meter.warn span { background: var(--warn) }
+  .meter.bad span { background: var(--bad) }
+  .meter.tall { height: 12px }
+  .box.danger { border-color: var(--bad) }
+  .box.quiet { background: var(--fill); border-color: transparent }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px }
+  .check-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.88rem }
+  .check-list li { display: flex; gap: 8px; align-items: center }
+  .check-list .st { font-family: var(--mono); font-size: 0.75rem; width: 64px; flex: none; color: var(--ink-3) }
+  .check-list .st.ok { color: var(--ok) }
+  .check-list .st.bad { color: var(--bad) }
+  ol.steps { margin: 0; padding-left: 20px; display: grid; gap: 6px }
+  code, .mono { font-family: var(--mono); font-size: 0.82rem }
+  input[type="password"], input[type="url"] { font: inherit; width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; background: var(--paper); color: var(--ink) }
+  details summary { cursor: pointer; font-size: 0.85rem; color: var(--ink-2) }
+  details pre { font-family: var(--mono); font-size: 0.78rem; background: var(--fill); padding: 10px; border-radius: 6px; overflow-x: auto; margin: 8px 0 0; white-space: pre-wrap }
+  .w-narrow { max-width: 460px }
+  fieldset { border: 0; padding: 0; margin: 0; display: grid; gap: 6px }
+  legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 4px }
+  .opt { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html" aria-current="page">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Settings</h1>
+    <p class="lede">Where the plumbing lives: sources and the watchlist, their health, coverage checks, the job mailbox, the model and its spending cap, and your data. One long page with a section rail, because Kris visits it rarely and mostly to fix one thing a banner sent him here for.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a href="feed.html">Feed</a><a href="applications.html">Applications</a><a href="profile.html">Profile</a><a class="on" href="settings.html" aria-current="page">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health" id="health">Sources <b>14/14 OK</b> · checked 07:30</span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ NORMAL ============ -->
+      <section data-state="normal" data-state-name="Normal">
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="sources"></nav>
+          <div class="stack" style="gap:22px">
+
+            <div class="sec" id="sources">
+              <div class="sec-h"><h2>Sources &amp; watchlist</h2><span class="small muted">14 sources · 9 companies on your watchlist · all answered at 07:30</span></div>
+              <div class="row">
+                <button class="btn primary sm">Add company</button>
+                <button class="btn sm">Add aggregator search</button>
+                <button class="btn sm">Add email alert</button>
+                <span class="spacer"></span>
+                <span class="small muted">Checked every 30 min, 07:00–23:00, while this laptop is awake</span>
+                <button class="btn ghost sm">Check all now</button>
+              </div>
+              <div class="row small">
+                <span class="chip solid">All 14</span><span class="chip">ATS feed · 8</span><span class="chip">Public API · 1</span><span class="chip">Aggregator · 2</span><span class="chip">Email alert · 3</span><span class="chip">Needs attention · 0</span>
+              </div>
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Company / source</th><th>Type</th><th>Last check</th><th>Jobs found</th><th>Normal</th><th>Status</th><th><span class="faint">Actions</span></th></tr></thead>
+                  <tbody data-sources="normal"></tbody>
+                </table>
+              </div>
+              <p class="small muted">"Jobs found" counts postings in your locations (Sofia, remote within ±2h); the grey number is everything the source listed. "Normal" is the range over the last 14 checks, used by the drop rule below.</p>
+            </div>
+
+            <div class="sec" id="health-detail">
+              <div class="sec-h"><h2>Source health</h2><span class="small muted">Pick a row above to see its history. Showing dev.bg.</span></div>
+              <div class="two">
+                <div class="box">
+                  <div class="row"><b>dev.bg · it-security · Sofia</b><span class="spacer"></span><span class="chip ok">✓ OK</span></div>
+                  <svg class="spk" data-spark="13,12,14,12,12,11,13,12,12,14,13,12,12,12" role="img" aria-label="Jobs per check over the last 14 checks: between 11 and 14, latest 12"></svg>
+                  <div class="spk-axis"><span>04 Oct</span><span>14 checks</span><span>07:30 today</span></div>
+                  <dl class="kv"><dt>Last answer</dt><dd>07:30 · 1.8 s · 12 jobs</dd><dt>Failures (30 days)</dt><dd>1 · timed out 2 Oct 22:00, fine at 22:30</dd><dt>Next check</dt><dd>08:00</dd></dl>
+                </div>
+                <div class="box quiet">
+                  <span class="label">Drop rule · all sources</span>
+                  <p class="small">Warn when a check returns <b>less than half of its lowest count</b> in the last 14 checks, or <b>0 when it normally has 3 or more</b>.</p>
+                  <p class="small">A warning never closes jobs. They stay open until you confirm the drop is real, or until the next 2 checks agree.</p>
+                  <p class="small">A failed check (timeout, error page, login wall) changes nothing at all.</p>
+                  <div><button class="btn sm">Edit rule</button></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="sec" id="coverage">
+              <div class="sec-h"><h2>Coverage check</h2><span class="small muted">Is the Feed missing anything you'd find by hand?</span></div>
+              <div class="box">
+                <div class="row"><span class="small">Last check <b>4 Oct</b>: dev.bg "security Sofia" · 38 results, apply-kit had all 38.</span><span class="spacer"></span><span class="chip ok">✓ Nothing missing</span></div>
+                <p class="small muted">Do one a week for the first month. You search a site the normal way and tell apply-kit what you searched; it lists anything the Feed doesn't have and why.</p>
+                <div><button class="btn sm">Run a coverage check</button></div>
+              </div>
+            </div>
+
+            <div class="sec" id="mailbox">
+              <div class="sec-h"><h2>Mailbox</h2><span class="chip ok">✓ Connected · read-only</span></div>
+              <div class="chain" aria-label="Email path: kris@krisiliev.dev forwards by iCloud rule to kris.jobs.inbox@fastmail.com, which apply-kit reads read-only over IMAP">
+                <span class="node">kris@krisiliev.dev</span><span class="via">— iCloud rule →</span><span class="node">kris.jobs.inbox@fastmail.com</span><span class="via">— IMAP, read-only →</span><span class="node">apply-kit</span>
+              </div>
+              <dl class="kv">
+                <dt>Last email</dt><dd>06:12 · LinkedIn Job Alerts · "4 new jobs for security engineer in Sofia"</dd>
+                <dt>This month</dt><dd>146 emails read · 38 job alerts · 12 matched to Applications · 3 not matched <a href="applications.html">(review)</a></dd>
+                <dt>Checked</dt><dd>every 10 min · last 07:40</dd>
+              </dl>
+              <p class="small muted">apply-kit only reads this one mailbox. It never sends, moves, marks as read or deletes, and it never touches your personal iCloud mail.</p>
+              <div class="row"><button class="btn sm">Test the whole path</button><button class="btn ghost sm">Change mailbox</button><button class="btn ghost sm">Disconnect</button></div>
+            </div>
+
+            <div class="sec" id="model">
+              <div class="sec-h"><h2>Model &amp; budget</h2></div>
+              <div class="stack">
+                <div class="row"><b>$3.41</b><span class="muted small">of $10.00 this month · resets 1 Nov · on track for about $8</span></div>
+                <div class="meter tall" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="3.41" aria-label="Spend this month"><span style="width:34%"></span></div>
+              </div>
+              <div class="two">
+                <dl class="kv">
+                  <dt>Provider</dt><dd>OpenRouter · key ends …4f2a</dd>
+                  <dt>Model</dt><dd>DeepSeek V4.1 Flash, for every task</dd>
+                  <dt>Hosts</dt><dd>US and EU hosts only. DeepSeek's own API (China) is excluded. "Don't allow providers that train or store prompts" is on.</dd>
+                  <dt>Monthly cap</dt><dd>$10.00, hard. Also set as the key's credit limit on OpenRouter, so it holds even if apply-kit has a bug.</dd>
+                </dl>
+                <div class="box quiet">
+                  <span class="label">When the cap is reached</span>
+                  <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:3px">
+                    <li>Sources keep being checked; new jobs land in the Feed marked "not screened yet", never hidden.</li>
+                    <li>Screening, package drafts and new answer drafts pause until 1 Nov or until you raise the cap.</li>
+                    <li>The extension still fills from your profile and answer bank.</li>
+                  </ul>
+                </div>
+              </div>
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Task</th><th>Model</th><th>This month</th><th>Sends personal data?</th></tr></thead>
+                  <tbody>
+                    <tr><td>Screening postings (requirements, dealbreakers)</td><td><select aria-label="Model for screening postings"><option>Default · DeepSeek V4.1 Flash</option><option>Haiku 5.5 (batch)</option></select></td><td>$2.06 · 611 postings</td><td>No, posting text only</td></tr>
+                    <tr><td>Tailoring CV versions</td><td><select aria-label="Model for tailoring CV versions"><option>Default · DeepSeek V4.1 Flash</option><option>Sonnet 5.5</option><option>Mistral Large</option></select></td><td>$0.71 · 6 packages</td><td>Yes, master profile</td></tr>
+                    <tr><td>Cover letters</td><td><select aria-label="Model for cover letters"><option>Default · DeepSeek V4.1 Flash</option><option>Sonnet 5.5</option></select></td><td>$0.38 · 6</td><td>Yes, voice samples</td></tr>
+                    <tr><td>Screening answers</td><td><select aria-label="Model for screening answers"><option>Default · DeepSeek V4.1 Flash</option></select></td><td>$0.19 · 14</td><td>Yes, answer bank</td></tr>
+                    <tr><td>Matching emails to Applications</td><td><select aria-label="Model for matching emails"><option>Default · DeepSeek V4.1 Flash</option></select></td><td>$0.07 · 41</td><td>Yes, email text</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <p class="small muted">An override shows its estimated monthly cost before you save it. Every model offered here goes through the same host pinning.</p>
+            </div>
+
+            <div class="sec" id="data">
+              <div class="sec-h"><h2>Data &amp; privacy</h2></div>
+              <div class="two">
+                <div class="box">
+                  <span class="label">Stays on this laptop</span>
+                  <p class="small">Master profile, voice samples, CV versions, answer bank, Applications and matched emails, in <code>~/apply-kit/data</code>. Outside the repo, never committed.</p>
+                  <span class="label">Leaves this laptop</span>
+                  <p class="small">Only the text a task needs, to OpenRouter's pinned hosts, without training or storage. The mailbox password lives in the macOS Keychain.</p>
+                </div>
+                <div class="box">
+                  <span class="label">Backup &amp; export</span>
+                  <p class="small">Nightly backup to <code>~/Backups/apply-kit</code>, last one 02:00 today, 14 kept.</p>
+                  <div class="row"><button class="btn sm">Export everything (.zip)</button><button class="btn ghost sm">Change backup folder</button></div>
+                  <p class="small faint">The export holds JSON for every record plus the CV files, so you can leave apply-kit at any time.</p>
+                </div>
+              </div>
+              <div class="box danger">
+                <div class="row"><b>Delete all data</b><span class="spacer"></span><button class="btn sm">Delete…</button></div>
+                <p class="small muted">Removes the profile, packages, Applications, emails and backups from this laptop and forgets the mailbox password. It asks you to type "delete" and offers an export first.</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ SOURCE FAILING ============ -->
+      <section data-state="source-failing" data-state-name="Error · source failing" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="health-detail" data-bad="sources"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="crumb"><a href="#sources">Sources &amp; watchlist</a> › dev.bg</div>
+            <div class="banner bad" role="alert">
+              <b>dev.bg hasn't answered for the last 3 checks.</b>
+              <span>At 07:30, 08:00 and 08:30 the connection timed out after 30 seconds.</span>
+            </div>
+            <div class="two">
+              <div class="box">
+                <div class="row"><h2>dev.bg · it-security · Sofia</h2><span class="spacer"></span><span class="chip bad">✕ Failing since 07:30</span></div>
+                <svg class="spk" data-spark="13,12,14,12,12,11,13,12,12,14,13,-1,-1,-1" role="img" aria-label="Jobs per check: steady around 12, then the last 3 checks failed with no answer"></svg>
+                <div class="spk-axis"><span>04 Oct</span><span>red = no answer</span><span>08:30</span></div>
+                <span class="label">What happened, in plain words</span>
+                <p class="small">dev.bg's site didn't reply at all. Nothing changed on our side: same address, same search. That usually means their site is down or very slow, and it tends to fix itself within hours.</p>
+                <div class="row">
+                  <button class="btn primary sm">Try now</button>
+                  <a class="btn sm" href="https://dev.bg/company/jobs/it-security/">Open dev.bg</a>
+                  <button class="btn ghost sm">Pause this source</button>
+                </div>
+                <p class="small muted">Next automatic try 09:00. After 3 failures it retries hourly instead of every 30 min, to stay polite.</p>
+                <details><summary>Technical details</summary>
+<pre>GET https://dev.bg/company/jobs/it-security/?city=sofia
+07:30:02  timeout after 30 s (no response)
+08:00:01  timeout after 30 s
+08:30:03  timeout after 30 s
+Last good answer: 07:00:04 · 200 · 12 postings</pre></details>
+              </div>
+              <div class="box quiet">
+                <span class="label">What it means for your Feed</span>
+                <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+                  <li><b>dev.bg's 12 jobs stay open</b>, exactly as they were at 07:00. A failure never closes anything.</li>
+                  <li><b>9 of them</b> are also on another source (the company's own ATS or Jooble), so they're still being checked there.</li>
+                  <li><b>3 are dev.bg-only</b>: if one of those closed this morning, you'll find out when dev.bg is back.</li>
+                  <li>Jobs posted only on dev.bg since 07:00 can't appear until it answers again.</li>
+                </ul>
+                <p class="small">If it's still failing after 3 days, apply-kit will ask whether to remove it. It won't remove it on its own.</p>
+              </div>
+            </div>
+            <div class="box" aria-label="Retry in progress example">
+              <span class="label">After "Try now"</span>
+              <div class="row small"><span class="skel" style="width:14px;height:14px;border-radius:50%"></span><span>Asking dev.bg… 12 s</span><span class="spacer"></span><button class="btn ghost sm">Cancel</button></div>
+              <p class="small faint">Inline, on this card only. If it answers, the card turns green and the Feed banner clears; if it times out again, the message updates with the new time.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ UNUSUAL DROP ============ -->
+      <section data-state="drop" data-state-name="Warning · unusual drop" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="health-detail" data-warn="sources"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="crumb"><a href="#sources">Sources &amp; watchlist</a> › SumUp</div>
+            <div class="banner warn" role="status">
+              <b>SumUp returned 0 jobs at 07:30. It usually has 30–36.</b>
+              <span>That breaks the drop rule, so its 34 jobs are kept open until you decide.</span>
+            </div>
+            <div class="two">
+              <div class="box flag">
+                <div class="row"><h2>SumUp · Greenhouse</h2><span class="spacer"></span><span class="chip warn">! Unusual drop</span></div>
+                <svg class="spk" data-spark="34,35,33,34,36,34,33,35,34,34,35,34,34,0" data-warn="13" role="img" aria-label="Jobs per check: steady between 33 and 36, latest check 0"></svg>
+                <div class="spk-axis"><span>04 Oct</span><span>amber = suspicious</span><span>07:30</span></div>
+                <span class="label">What we know</span>
+                <p class="small">Greenhouse answered normally: the board <code>sumup</code> exists and returned an empty list. So this isn't a broken connection. Either SumUp really took everything down, or they moved their jobs somewhere else.</p>
+                <div class="stack">
+                  <div class="row"><a class="btn sm" href="https://sumup.com/careers">Check SumUp's careers page</a><button class="btn sm">Detect their ATS again</button></div>
+                  <div class="row"><button class="btn ghost sm">Wait for the next 2 checks</button><button class="btn ghost sm">It's real: close the 34 jobs</button></div>
+                </div>
+                <p class="small muted">Closing gives each job the reason "no longer listed by SumUp", visible under All jobs › Closed. Your 1 Application at SumUp is not affected.</p>
+              </div>
+              <div class="box quiet">
+                <span class="label">If SumUp moved ATS</span>
+                <p class="small">"Detect again" checks Greenhouse, Lever, Ashby, Recruitee, Workable, SmartRecruiters, Personio, Teamtailor and Workday. If it finds SumUp on a new one, it offers to switch the source and match the 34 old jobs to the new postings, so nothing duplicates.</p>
+                <span class="label">If nobody acts</span>
+                <p class="small">After 2 more checks with 0, the jobs are closed with the reason "SumUp listed 0 jobs for 3 checks in a row", and you get one line in the Feed saying so.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ADD COMPANY ============ -->
+      <section data-state="add" data-state-name="Add company" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="sources"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="crumb"><a href="#sources">Sources &amp; watchlist</a> › Add company</div>
+            <h2>Add a company to your watchlist</h2>
+            <form class="stack w-narrow" onsubmit="return false">
+              <div class="field">
+                <label for="add-q">Company name or careers page link</label>
+                <span class="help" id="add-q-help">A name is enough. A link to their careers page makes detection faster and surer.</span>
+                <input type="text" id="add-q" aria-describedby="add-q-help" value="Kestrel Payments" autocomplete="off">
+              </div>
+              <div class="row"><button class="btn primary">Find their jobs</button><a class="btn ghost" href="#sources">Cancel</a></div>
+            </form>
+            <div class="box quiet">
+              <span class="label">From the Sofia watchlist, not added yet</span>
+              <div class="list">
+                <div class="item"><div><b>Accedia</b> <span class="small muted">· Recruitee · 5 in Sofia · developer</span></div><button class="btn sm">Add</button></div>
+                <div class="item"><div><b>AMPECO</b> <span class="small muted">· Lever · 7 in Bulgaria · developer, design</span></div><button class="btn sm">Add</button></div>
+                <div class="item"><div><b>Grafana Labs</b> <span class="small muted">· Greenhouse · remote EMEA · developer, security</span></div><button class="btn sm">Add</button></div>
+                <div class="item"><div><b>1Password</b> <span class="small muted">· Ashby · remote EU, check eligibility · security</span></div><button class="btn sm">Add</button></div>
+              </div>
+              <button class="btn ghost sm" style="justify-self:start">Show all 23 suggestions</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ADD · DETECTING ============ -->
+      <section data-state="add-detecting" data-state-name="Add · detecting ATS" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="sources"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="crumb"><a href="#sources">Sources &amp; watchlist</a> › Add company</div>
+            <h2>Looking for Kestrel Payments' jobs</h2>
+            <div class="stack w-narrow">
+              <div class="row small"><span>Checked 5 of 9 job systems</span><span class="spacer"></span><span class="muted">about 6 s left</span></div>
+              <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="9" aria-valuenow="5" aria-label="Job systems checked"><span style="width:55%"></span></div>
+              <ul class="check-list" aria-live="polite">
+                <li><span class="st">no</span>Lever · <code>kestrelpayments</code></li>
+                <li><span class="st">no</span>Ashby · <code>kestrelpayments</code></li>
+                <li><span class="st">no</span>Recruitee · <code>kestrelpayments</code></li>
+                <li><span class="st">no</span>Workable · <code>kestrel-payments</code></li>
+                <li><span class="st ok">found</span><b>Greenhouse · <code>kestrelpayments</code></b> · 41 open jobs</li>
+                <li><span class="st">checking</span><span class="skel w40"></span></li>
+                <li><span class="st">waiting</span><span class="faint">SmartRecruiters, Personio, Teamtailor, Workday</span></li>
+              </ul>
+              <p class="small muted">It keeps going after a hit, because some companies use two systems (say, Greenhouse for engineering and Workday for everyone else).</p>
+              <div><button class="btn ghost sm">Stop and use Greenhouse</button></div>
+            </div>
+            <div class="box" aria-label="Result once detection finishes">
+              <span class="label">When it finishes</span>
+              <div class="row"><b>Kestrel Payments · Greenhouse</b><span class="chip ok">✓ Found</span><span class="spacer"></span><span class="small muted">boards.greenhouse.io/kestrelpayments</span></div>
+              <p class="small"><b>41 open jobs</b>, <b>6 in your locations</b> (5 Sofia, 1 remote EU). The 6 appear in the Feed after the first check; the other 35 are kept but hidden as "outside your locations".</p>
+              <div class="row"><button class="btn primary sm">Add to watchlist</button><button class="btn ghost sm">Preview the 6 jobs</button></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ADD · NOT FOUND ============ -->
+      <section data-state="add-notfound" data-state-name="Add · not found" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="sources"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="crumb"><a href="#sources">Sources &amp; watchlist</a> › Add company</div>
+            <h2>No job feed found for Nexo</h2>
+            <div class="banner info"><span>Checked 9 job systems and <code>nexo.com/careers</code> (it returned "page not found"). Nexo probably runs its own site, which apply-kit won't scrape.</span></div>
+            <div class="stack">
+              <span class="label">Other ways to still catch Nexo's jobs</span>
+              <div class="box">
+                <div class="row"><b>1 · Email alert from LinkedIn</b><span class="chip">Recommended</span></div>
+                <p class="small">Follow Nexo on LinkedIn and turn on job alerts for the company, sent to <b>kris@krisiliev.dev</b>. They'll forward to your job mailbox and appear in the Feed under "LinkedIn job alerts".</p>
+                <div class="row"><button class="btn primary sm">Show me the steps</button><span class="small muted">Takes about 2 minutes in LinkedIn.</span></div>
+              </div>
+              <div class="box">
+                <b>2 · Aggregators already watching</b>
+                <p class="small">dev.bg and Jooble listed 4 Nexo jobs in the last month, so many will reach you anyway. Add "Nexo" as a company filter there to be sure.</p>
+                <div><button class="btn sm">Add Nexo to dev.bg and Jooble searches</button></div>
+              </div>
+              <div class="box">
+                <b>3 · Try a different link</b>
+                <div class="field w-narrow">
+                  <label for="nf-url">Careers page link</label>
+                  <span class="help" id="nf-url-help">If you've seen their job page, paste its address and apply-kit checks again.</span>
+                  <input type="url" id="nf-url" aria-describedby="nf-url-help" placeholder="https://">
+                </div>
+                <div><button class="btn sm">Check this link</button></div>
+              </div>
+            </div>
+            <p class="small muted">Nexo is saved to your watchlist as "no feed, watched via alerts", so the coverage check knows to look for it.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ REMOVE ============ -->
+      <section data-state="remove" data-state-name="Remove company" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="sources"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="crumb"><a href="#sources">Sources &amp; watchlist</a> › Delasport</div>
+            <div class="box w-narrow" role="dialog" aria-labelledby="rm-h" aria-describedby="rm-d" style="max-width:560px">
+              <h2 id="rm-h">Remove Delasport from your watchlist?</h2>
+              <div id="rm-d" class="stack small">
+                <p>apply-kit stops checking <code>delasportbulgaria</code> on Greenhouse. Here's what happens to its 9 jobs:</p>
+                <ul style="margin:0;padding-left:18px;display:grid;gap:4px">
+                  <li><b>7 found only here</b> are closed with the reason <b>"source removed"</b>. They stay findable under All jobs › Closed; nothing is deleted.</li>
+                  <li><b>2 also on dev.bg</b> stay open and keep being checked there.</li>
+                  <li>Your draft Package for <b>Backend Engineer · Delasport</b> is kept, with a note that its job is closed.</li>
+                  <li>Applications are never touched.</li>
+                </ul>
+              </div>
+              <div class="row"><button class="btn primary">Remove and close 7 jobs</button><button class="btn">Pause instead</button><button class="btn ghost">Cancel</button></div>
+              <p class="small faint">"Pause" stops checking but leaves the jobs open, marked "not being checked", in case you only want a break from them.</p>
+            </div>
+            <div class="banner ok" role="status"><span><b>Delasport removed.</b> 7 jobs closed with "source removed".</span><span class="spacer"></span><button class="btn sm">Undo</button></div>
+            <p class="small faint">After confirming: a 10-second undo, then the row leaves the table.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ COVERAGE ============ -->
+      <section data-state="coverage" data-state-name="Coverage check" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="coverage"></nav>
+          <div class="stack" style="gap:16px">
+            <h2>Coverage check</h2>
+            <form class="box" onsubmit="return false" aria-label="Your manual search">
+              <span class="label">What you searched</span>
+              <div class="two">
+                <div class="field"><label for="cv-site">Site</label><select id="cv-site"><option>dev.bg</option><option>jobs.bg</option><option>LinkedIn</option><option>Google Jobs</option></select></div>
+                <div class="field"><label for="cv-q">Search words</label><input type="text" id="cv-q" value="security"></div>
+                <div class="field"><label for="cv-loc">Location</label><input type="text" id="cv-loc" value="Sofia"></div>
+                <div class="field"><label for="cv-n">Results you saw</label><input type="number" id="cv-n" value="41" inputmode="numeric"></div>
+              </div>
+              <div class="field"><label for="cv-url">Results page link <span class="faint">(optional)</span></label><span class="help" id="cv-url-help">For dev.bg and jobs.bg apply-kit reads the page once and lists exactly what's missing. For LinkedIn, capture the results page with the extension instead.</span><input type="url" id="cv-url" aria-describedby="cv-url-help" value="https://dev.bg/?s=security&amp;city=sofia"></div>
+              <div><button class="btn primary sm">Compare</button></div>
+            </form>
+            <div class="box">
+              <div class="row"><h3>You searched dev.bg for "security Sofia": 41 results. apply-kit has 39.</h3></div>
+              <div class="row small"><span class="chip ok">39 already in the Feed</span><span class="chip warn">2 missing</span></div>
+              <div class="list">
+                <div class="item">
+                  <div><b>Information Security Officer · Fibank</b>
+                    <div class="small muted">Why missed: dev.bg filed it under "IT management", which you don't watch, and Fibank isn't on your watchlist.</div></div>
+                  <div class="row"><button class="btn primary sm">Add the job</button><button class="btn sm">Also watch "IT management"</button></div>
+                </div>
+                <div class="item">
+                  <div><b>Security Engineer · Paynetics</b>
+                    <div class="small muted">Why missed: posted 08:12, after the 07:30 check. It'll arrive at 08:30 on its own.</div></div>
+                  <span class="chip">Nothing to do</span>
+                </div>
+              </div>
+              <p class="small muted">Result saved to the coverage history. Gaps that repeat point to a source or category to add.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MAILBOX NOT CONNECTED ============ -->
+      <section data-state="mail-setup" data-state-name="Mailbox · not connected" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="mailbox" data-warn="mailbox"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="sec-h"><h2>Mailbox</h2><span class="chip">Not connected</span></div>
+            <p class="muted small" style="max-width:70ch">Without it, apply-kit misses email job alerts (LinkedIn, jobs.bg, Google) and can't move Application statuses when companies reply. Three steps, about 5 minutes.</p>
+            <div class="stepper" aria-label="Setup steps"><span class="step done">✓ 1 Job mailbox</span><span class="step now">2 Forwarding rule</span><span class="step">3 Connect &amp; test</span></div>
+            <div class="box">
+              <h3>2 · Forward your job address to the job mailbox</h3>
+              <ol class="steps small">
+                <li>On icloud.com, open <b>Mail › Settings › Rules › Add a rule</b>.</li>
+                <li>If a message <b>is addressed to</b> <code>kris@krisiliev.dev</code></li>
+                <li>Then <b>forward to</b> <code>kris.jobs.inbox@fastmail.com</code> and <b>keep a copy</b> in iCloud.</li>
+                <li>Save. Use <code>kris@krisiliev.dev</code> for every application and job alert from now on.</li>
+              </ol>
+              <p class="small muted">Only mail to the job address is forwarded. apply-kit never connects to iCloud.</p>
+              <div class="row"><button class="btn primary sm">Done, next</button><button class="btn ghost sm">Back</button></div>
+            </div>
+            <div class="box quiet" aria-label="Step 3 preview">
+              <h3>3 · Connect &amp; test</h3>
+              <div class="field w-narrow"><label for="ms-user">Job mailbox address</label><input type="email" id="ms-user" value="kris.jobs.inbox@fastmail.com"></div>
+              <div class="field w-narrow"><label for="ms-pass">App password</label><span class="help" id="ms-pass-help">Create one in Fastmail › Settings › Privacy &amp; Security › App passwords. Not your login password. Kept in the macOS Keychain.</span><input type="password" id="ms-pass" aria-describedby="ms-pass-help" autocomplete="off"></div>
+              <p class="small muted">Server <code>imap.fastmail.com:993</code> is filled in for Fastmail. apply-kit opens the mailbox read-only.</p>
+              <div><button class="btn sm" disabled>Connect and send a test</button></div>
+              <span class="label">The test checks the whole path</span>
+              <ul class="check-list">
+                <li><span class="st ok">done</span>Logged in to kris.jobs.inbox@fastmail.com, read-only</li>
+                <li><span class="st ok">done</span>Asked you to send any email to kris@krisiliev.dev with code <code>AK-7F3K</code></li>
+                <li><span class="st">waiting</span><span>Waiting for it to arrive through the iCloud rule… 0:41 <span class="faint">(usually under 2 min)</span></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MAILBOX AUTH ERROR ============ -->
+      <section data-state="mail-auth" data-state-name="Error · mailbox sign-in" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="mailbox" data-bad="mailbox"></nav>
+          <div class="stack" style="gap:16px">
+            <div class="sec-h"><h2>Mailbox</h2><span class="chip bad">✕ Can't sign in</span></div>
+            <div class="banner bad" role="alert"><b>Fastmail rejected the app password at 08:00.</b><span>It was probably revoked or expired. apply-kit has read nothing since.</span></div>
+            <div class="chain" aria-label="Email path: forwarding still works, apply-kit cannot read the job mailbox">
+              <span class="node">kris@krisiliev.dev</span><span class="via">— iCloud rule ✓ →</span><span class="node">kris.jobs.inbox@fastmail.com</span><span class="via">— ✕ →</span><span class="node bad">apply-kit</span>
+            </div>
+            <div class="two">
+              <div class="box">
+                <h3>Reconnect</h3>
+                <div class="field"><label for="ma-pass">New app password</label><span class="help" id="ma-pass-help">Fastmail › Settings › Privacy &amp; Security › App passwords › New. Pick IMAP access; if Fastmail offers read-only, choose it.</span><input type="password" id="ma-pass" aria-describedby="ma-pass-help ma-pass-err" aria-invalid="true" autocomplete="off"><span class="err" id="ma-pass-err">The last one stopped working at 08:00. Paste a new one here.</span></div>
+                <div class="row"><button class="btn primary sm">Reconnect</button><a class="btn ghost sm" href="https://app.fastmail.com/settings/security">Open Fastmail settings</a></div>
+              </div>
+              <div class="box quiet">
+                <span class="label">Meanwhile</span>
+                <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+                  <li><b>No email is lost.</b> Forwarding still works; 7 emails are waiting in the mailbox and get read the moment you reconnect.</li>
+                  <li>The 3 email-alert sources show "waiting", and their jobs stay open.</li>
+                  <li>Application statuses won't move from replies until then. Check your inbox yourself if you're expecting news.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ BUDGET NEAR ============ -->
+      <section data-state="budget-near" data-state-name="Budget · nearly reached" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="model" data-warn="model"></nav>
+          <div class="stack" style="gap:16px">
+            <h2>Model &amp; budget</h2>
+            <div class="banner warn" role="status"><b>$8.40 of your $10 cap used, with 20 days left.</b><span>At this pace the cap is reached around 18 Oct.</span></div>
+            <div class="stack">
+              <div class="row"><b>$8.40</b><span class="muted small">of $10.00 · resets 1 Nov</span></div>
+              <div class="meter tall warn" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="8.4" aria-label="Spend this month"><span style="width:84%"></span></div>
+            </div>
+            <div class="box">
+              <span class="label">What used it</span>
+              <div class="scroll"><table>
+                <thead><tr><th>Task</th><th>This month</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td>Screening postings</td><td>$6.12</td><td class="small muted">$3.90 of it on 9 Oct: 212 new jobs after your week away</td></tr>
+                  <tr><td>Tailoring CV versions</td><td>$1.30</td><td class="small muted">11 packages</td></tr>
+                  <tr><td>Cover letters &amp; answers</td><td>$0.86</td><td></td></tr>
+                  <tr><td>Matching emails</td><td>$0.12</td><td></td></tr>
+                </tbody>
+              </table></div>
+              <p class="small muted">The 9 Oct spike was one-off. Without it you're on track for about $9.</p>
+            </div>
+            <div class="row"><button class="btn sm">Raise cap for October to $15</button><button class="btn ghost sm">Keep $10</button></div>
+            <p class="small faint">Raising applies to this month only; November goes back to $10 unless you change the default.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ BUDGET REACHED ============ -->
+      <section data-state="budget-hit" data-state-name="Budget · cap reached" hidden>
+        <div class="set">
+          <nav class="secnav" aria-label="Settings sections" data-on="model" data-bad="model"></nav>
+          <div class="stack" style="gap:16px">
+            <h2>Model &amp; budget</h2>
+            <div class="banner bad" role="alert"><b>Monthly cap reached: $10.00 of $10.00, at 14:02 today.</b><span>AI tasks are paused until 1 Nov or until you raise the cap.</span></div>
+            <div class="meter tall bad" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="10" aria-label="Spend this month"><span style="width:100%"></span></div>
+            <div class="two">
+              <div class="box">
+                <span class="label">Still working</span>
+                <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+                  <li>Checking all 14 sources. New jobs show in the Feed as <b>"not screened yet"</b>, with nothing hidden.</li>
+                  <li>Reading the mailbox; replies from known senders still move statuses.</li>
+                  <li>The extension fills from your profile and answer bank, and attaches approved CV versions.</li>
+                  <li>Editing packages by hand.</li>
+                </ul>
+              </div>
+              <div class="box flag">
+                <span class="label">Paused</span>
+                <ul class="small" style="margin:0;padding-left:18px;display:grid;gap:4px">
+                  <li>Screening: <b>23 jobs</b> are queued and run first when the cap lifts.</li>
+                  <li>New package drafts, cover letters and screening-answer drafts.</li>
+                  <li>Email matching that needs the model (3 emails queued).</li>
+                </ul>
+              </div>
+            </div>
+            <div class="row"><button class="btn primary sm">Raise cap for October to $15</button><button class="btn sm">Stay paused until 1 Nov</button></div>
+            <p class="small muted">Nothing is retried in a loop or charged past the cap: the OpenRouter key has the same $10 limit, so requests stop at the provider even if apply-kit miscounts.</p>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="normal"><span class="label">Design notes</span><ul>
+    <li>One page with a section rail (a row of tabs at 400px), not six sub-screens: Kris arrives from a banner to fix one thing, and the rail plus anchors take him straight there. Rail items get a red or amber dot when their section needs attention.</li>
+    <li>The sources table is source health: every row shows last check, count, the source's normal range and a status chip with text, never colour alone. A quiet source with a normal of 0 (Amazon in Bulgaria) shows "Quiet, as usual", so zero isn't confused with broken.</li>
+    <li>"Jobs found" splits in-location from total, so a big global board like Canonical doesn't look alarming or broken.</li>
+    <li>The drop rule is written out in plain words next to the history, because it's what decides when the app raises its voice.</li>
+    <li>Mailbox shows the forwarding chain as a path, which makes "where did it break?" readable in the error state. Model &amp; budget shows which tasks send personal data, since that's the privacy question behind host pinning.</li>
+    <li>Delete is the only destructive control and sits apart in a red-bordered box, with export offered first.</li></ul></aside>
+  <aside class="notes" data-notes-for="source-failing" hidden><span class="label">Design notes</span><ul>
+    <li>Error format: what happened (no reply, 3 times), why (their site, not ours), what to do (Try now, open the site, pause).</li>
+    <li>The right-hand box answers the real question, "what does this do to my Feed?", with numbers: kept, still covered elsewhere, at risk.</li>
+    <li>Retry is inline on the card with a cancel; the raw request log is behind a disclosure for debugging, not in the main text.</li>
+    <li>Backoff (hourly after 3 failures) and the 3-day "remove it?" prompt are stated so the behaviour is predictable. Nothing is removed automatically.</li></ul></aside>
+  <aside class="notes" data-notes-for="drop" hidden><span class="label">Design notes</span><ul>
+    <li>Different from a failure: the source answered, but with a suspicious number. The copy says that explicitly, because the fix differs (re-detect the ATS rather than retry).</li>
+    <li>"It's real: close them" is a ghost button so it's never the obvious click; the reason that will be stored is shown before you press it.</li>
+    <li>A default path exists if Kris ignores it (close after 3 zero checks in a row, with a Feed line), so the warning can't go stale forever.</li></ul></aside>
+  <aside class="notes" data-notes-for="add" hidden><span class="label">Design notes</span><ul>
+    <li>One field. Name or URL both work; the app works out the ATS. Fewer fields, and Kris never needs to know what a board slug is.</li>
+    <li>Suggestions from the researched Sofia watchlist sit below, with ATS and local volume, so adding a known company is one click.</li></ul></aside>
+  <aside class="notes" data-notes-for="add-detecting" hidden><span class="label">Design notes</span><ul>
+    <li>About 10 seconds, so: determinate progress, a time estimate, and each system's result appearing live in a polite live region.</li>
+    <li>A hit is shown as soon as it happens, with a "stop and use it" shortcut; detection continues by default because companies sometimes split across two systems.</li>
+    <li>The result says how many jobs land in the Feed versus kept-but-hidden, before anything is added.</li></ul></aside>
+  <aside class="notes" data-notes-for="add-notfound" hidden><span class="label">Design notes</span><ul>
+    <li>Not a dead end: three ranked alternatives, the email alert first because it's the compliant route for sites apply-kit won't scrape.</li>
+    <li>The company is still saved as "watched via alerts", so coverage checks can notice if its jobs never arrive.</li></ul></aside>
+  <aside class="notes" data-notes-for="remove" hidden><span class="label">Design notes</span><ul>
+    <li>Fixes the old prototype's orphaned postings: removal closes the source's jobs with the reason "source removed", and the dialog says exactly how many, before you confirm.</li>
+    <li>Jobs also found on another source stay open; packages and Applications are never touched.</li>
+    <li>The primary button names its consequence ("Remove and close 7 jobs"). Undo for 10 seconds afterwards; "Pause" is offered as the softer option.</li></ul></aside>
+  <aside class="notes" data-notes-for="coverage" hidden><span class="label">Design notes</span><ul>
+    <li>Turns the riskiest assumption (coverage) into a weekly 2-minute ritual. Kris searches as usual and only reports what he searched and how many results he saw.</li>
+    <li>Each missing job explains why it was missed, and the fix targets the cause (watch a category), not only the symptom (add the job).</li>
+    <li>For sites apply-kit can't fetch (LinkedIn), the count is still useful, and the extension can capture the results page.</li></ul></aside>
+  <aside class="notes" data-notes-for="mail-setup" hidden><span class="label">Design notes</span><ul>
+    <li>Three-step setup with a stepper; each step is completable on its own and Back keeps what was typed.</li>
+    <li>The test checks the whole path (iCloud rule → mailbox → apply-kit) with a code in the email, because a login test alone wouldn't catch a broken forwarding rule.</li>
+    <li>Read-only and "never touches iCloud" are said at the point of entering a password, where the worry happens.</li></ul></aside>
+  <aside class="notes" data-notes-for="mail-auth" hidden><span class="label">Design notes</span><ul>
+    <li>The chain shows which link broke (forwarding is fine, reading isn't), so Kris knows he only needs a new app password.</li>
+    <li>The error sits under the field it concerns, linked with aria-describedby. "No email is lost" leads the side box because that's the first fear.</li></ul></aside>
+  <aside class="notes" data-notes-for="budget-near" hidden><span class="label">Design notes</span><ul>
+    <li>Warns at 80% with a projected date, and explains the spend: a one-off spike reads very differently from a pace problem.</li>
+    <li>Raising the cap is scoped to this month by default, so a one-off decision doesn't quietly become the new normal.</li></ul></aside>
+  <aside class="notes" data-notes-for="budget-hit" hidden><span class="label">Design notes</span><ul>
+    <li>Splits into "still working" and "paused", because the fear is that the whole app stops. Discovery and filling don't need the model, so they carry on.</li>
+    <li>Unscreened jobs are shown, never hidden: hiding needs a dealbreaker, and with no screening there is none. Queued work runs first when the cap lifts.</li>
+    <li>The cap is enforced twice (in apply-kit and as the OpenRouter key's limit), stated so Kris can trust "hard".</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  // sources table
+  const S = [
+    ["SumUp", "Greenhouse · sumup", "ATS feed", "07:30", 34, 346, "30–36", "ok"],
+    ["Playtech", "SmartRecruiters · Playtech", "ATS feed", "07:30", 33, 122, "28–36", "ok"],
+    ["Trading 212", "Ashby · trading212", "ATS feed", "07:30", 22, 65, "18–24", "ok"],
+    ["TBI Bank", "Recruitee · tbibank", "ATS feed", "07:30", 51, 51, "45–55", "ok"],
+    ["DXC Technology", "Workday · dxctechnology.wd1", "ATS feed", "07:31", 33, 100, "30–40", "ok", "Workday lists at most 100 per check; DXC has more, but only Sofia ones are asked for."],
+    ["Kraken", "Ashby · kraken.com", "ATS feed", "07:30", 30, 82, "25–32", "ok"],
+    ["Canonical", "Greenhouse · canonical", "ATS feed", "07:30", 47, 311, "40–50", "ok"],
+    ["Delasport", "Greenhouse · delasportbulgaria", "ATS feed", "07:30", 9, 9, "7–12", "ok"],
+    ["Amazon Jobs", "amazon.jobs · country BGR", "Public API", "07:30", 0, 0, "0–1", "quiet"],
+    ["dev.bg", "it-security · Sofia", "Aggregator", "07:30", 12, 12, "10–16", "ok"],
+    ["Jooble", "cyber security | Bulgaria", "Aggregator", "07:30", 11, 14, "8–14", "ok"],
+    ["LinkedIn job alerts", "4 saved searches, by email", "Email alert", "email 06:12", "9 this week", "", "6–12 / week", "ok"],
+    ["jobs.bg alerts", "2 saved searches, by email", "Email alert", "email yesterday", "5 this week", "", "3–8 / week", "ok"],
+    ["Google Careers alerts", "security · Europe, by email", "Email alert", "email 3 Oct", "1 this week", "", "0–2 / week", "ok"],
+  ];
+  const chip = {
+    ok: '<span class="chip ok">✓ OK</span>', quiet: '<span class="chip">Quiet, as usual</span>',
+    bad: '<span class="chip bad">✕ Failing</span>', warn: '<span class="chip warn">! Unusual drop</span>', wait: '<span class="chip">Waiting for mailbox</span>',
+  };
+  const row = (r, over = {}) => {
+    const st = over[r[0]] || r[7];
+    const cls = st === "bad" || st === "warn" ? ' class="focused"' : "";
+    const found = typeof r[4] === "number" ? `${r[4]}${r[5] !== r[4] && r[5] !== "" ? ` <span class="faint">of ${r[5]}</span>` : ""}` : r[4];
+    return `<tr${cls}><td style="min-width:190px"><b>${r[0]}</b><div class="why">${r[1]}</div>${r[8] ? `<div class="why">${r[8]}</div>` : ""}</td>
+      <td>${r[2]}</td><td>${r[3]}</td><td>${found}</td><td>${r[6]}</td><td>${chip[st]}</td>
+      <td><button class="btn ghost sm" aria-label="Actions for ${r[0]}: check now, pause, remove">⋯</button></td></tr>`;
+  };
+  document.querySelectorAll('[data-sources="normal"]').forEach(tb => {
+    tb.innerHTML = S.map(r => row(r)).join("") +
+      `<tr class="dim"><td><b>Manual capture</b><div class="why">jobs you add with the extension or a pasted link</div></td><td>Manual</td><td>not checked</td><td>3 this month</td><td>–</td><td><span class="chip">Added by you</span></td><td></td></tr>`;
+  });
+
+  // section rail
+  const SECS = [["sources", "Sources & watchlist"], ["health-detail", "Source health"], ["coverage", "Coverage check"], ["mailbox", "Mailbox"], ["model", "Model & budget"], ["data", "Data & privacy"]];
+  document.querySelectorAll(".secnav").forEach(n => {
+    n.innerHTML = SECS.map(([id, l]) => {
+      const dot = n.dataset.bad === id ? ' <span class="dot" aria-label="needs attention">●</span>' : n.dataset.warn === id ? ' <span class="dot warn" aria-label="warning">●</span>' : "";
+      return `<a href="#${id}"${n.dataset.on === id ? ' aria-current="true"' : ""}>${l}${dot}</a>`;
+    }).join("");
+  });
+  // narrow screens: keep the current rail item in view when a state is shown
+  const railToCurrent = () => document.querySelectorAll("section:not([hidden]) .secnav").forEach(n => {
+    const a = n.querySelector('[aria-current="true"]'); if (a) n.scrollLeft = a.offsetLeft - n.offsetLeft - 8;
+  });
+  document.querySelectorAll(".state-tab").forEach(t => t.addEventListener("click", railToCurrent)); railToCurrent();
+
+  // bar sparks: -1 = failed check (no answer), data-warn = suspicious index
+  document.querySelectorAll("svg.spk[data-spark]").forEach(svg => {
+    const v = svg.dataset.spark.split(",").map(Number), warn = (svg.dataset.warn || "").split(",").map(Number);
+    const max = Math.max(...v, 1), W = 280, H = 40, bw = W / v.length;
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("preserveAspectRatio", "none");
+    svg.innerHTML = `<line x1="0" x2="${W}" y1="${H - 0.5}" y2="${H - 0.5}"/>` + v.map((n, i) => {
+      if (n < 0) return `<rect class="bad" x="${i * bw + 2}" y="${H - 6}" width="${bw - 4}" height="6"/>`;
+      const h = Math.max(2, (n / max) * (H - 4));
+      const c = warn.includes(i) ? "warn" : i === v.length - 1 ? "now" : "";
+      return `<rect class="${c}" x="${i * bw + 2}" y="${H - h}" width="${bw - 4}" height="${h}"/>`;
+    }).join("");
+  });
+
+  // top-bar health follows the state
+  const health = document.getElementById("health");
+  const setHealth = () => {
+    const vis = [...document.querySelectorAll("[data-state]")].find(s => !s.hidden)?.dataset.state;
+    health.innerHTML =
+      vis === "source-failing" ? 'Sources <b class="bad">13/14 · 1 failing</b>' :
+      vis === "drop" ? 'Sources <b class="bad">14/14 · 1 unusual</b>' :
+      vis === "mail-auth" ? 'Sources <b class="bad">11/14 · mailbox signed out</b>' :
+      vis === "mail-setup" ? 'Sources <b>11/11 OK</b> · no mailbox' :
+      vis === "budget-hit" ? 'Sources <b>14/14 OK</b> · <b class="bad">AI paused: cap</b>' :
+      'Sources <b>14/14 OK</b> · checked 07:30';
+  };
+  document.querySelectorAll(".state-tab").forEach(t => t.addEventListener("click", setHealth)); setHealth();
+})();
+</script>
+</body>
+</html>

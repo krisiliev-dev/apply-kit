@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Job · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+/* page-local additions: only wf.css tokens, so both themes follow */
+[hidden] { display: none !important }
+.appcrumbs { font-size: 0.85rem; color: var(--ink-2) }
+.appcrumbs a { color: var(--ink-2) }
+.job-h { font-size: 1.4rem; letter-spacing: -0.01em }
+.meta { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--ink-2); font-size: 0.92rem }
+.src { border-left: 3px solid var(--line); background: var(--fill); padding: 6px 10px; border-radius: 0 6px 6px 0; font-size: 0.85rem; color: var(--ink-2) }
+.src mark { background: var(--warn-bg); color: var(--warn); padding: 0 2px }
+.src .faint { font-family: var(--mono); font-size: 0.72rem }
+.facts { display: grid; gap: 0 }
+.fact { display: grid; grid-template-columns: minmax(110px, 160px) minmax(0, 1fr) auto; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); align-items: start }
+.fact > dt { color: var(--ink-2); font-size: 0.9rem }
+.fact > dd { margin: 0 }
+.fact .src { grid-column: 1 / -1 }
+@media (max-width: 520px) { .fact { grid-template-columns: minmax(0, 1fr) auto } .fact > dt { grid-column: 1 / -1 } }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.9rem }
+.checks li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap }
+.posting { display: grid; gap: 4px; padding: 10px 0; border-top: 1px solid var(--line) }
+.posting.target { border-left: 3px solid var(--ink); padding-left: 10px; margin-left: -13px }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0 }
+legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
+.opt { display: flex; gap: 8px; align-items: flex-start; font-size: 0.92rem }
+.opt input { margin-top: 4px }
+.actions { position: sticky; bottom: 0; background: var(--paper); border-top: 1px solid var(--line); padding: 10px 0 0 }
+.bg { font-style: italic }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html" aria-current="page">Job</a><a href="package.html">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Job</h1>
+    <p class="lede">One job, opened from a Feed row: every posting that was merged into it, its requirements against your master profile, the dealbreaker check and fit check, and the facts that decide "worth it?", each traceable to the line it came from. Ends in one decision: Prepare package, Save or Pass.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a class="on" href="feed.html" aria-current="page">Feed</a><a href="applications.html">Applications</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health">Sources <b>14/14 OK</b> · checked 07:30</span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ NORMAL ============ -->
+      <section data-state="normal" data-state-name="Normal" class="stack" style="gap:14px">
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span> <span class="faint">· 1 of 23 new <kbd>J</kbd><kbd>K</kbd> next/previous</span></nav>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">Security Engineer</h2>
+            <div class="meta"><span><b>Kestrel Payments</b></span><span>Sofia · hybrid, 2 days in office</span><span>€2,800–3,600 gross/month</span><span>Posted 9 Oct (2 days ago)</span></div>
+            <div class="row"><span class="chip ok">Strong fit</span><span class="chip">Security angle</span><span class="chip">No dealbreakers</span><span class="chip">3 postings merged</span></div>
+          </div>
+          <div class="row">
+            <a class="btn primary" href="package.html">Prepare package</a>
+            <button class="btn" type="button">Save</button>
+            <button class="btn ghost" type="button">Pass…</button>
+          </div>
+        </div>
+
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <!-- Fit check -->
+            <div class="box">
+              <div class="row"><h3>Fit check</h3><span class="chip ok">Strong fit</span><span class="spacer"></span><span class="small faint">Effort to tailor: low</span></div>
+              <p><b>Why it ranks #1 today:</b> 4 of 6 requirements met with evidence, no dealbreakers, and the salary floor (€2,800) is above yours (€2,300).</p>
+              <dl class="kv">
+                <dt>Closest angle</dt><dd>Security: your SOC and detection work covers the core of the role. Developer angle would score lower (no coding requirements beyond scripting).</dd>
+                <dt>Gaps</dt><dd><span class="chip bad">Kubernetes security</span> no evidence in your master profile · <span class="chip warn">CISSP preferred</span> not held</dd>
+                <dt>Honest take</dt><dd>Apply. The Kubernetes gap is real; it will be named, not covered up, and you'll be asked about it in the CV step.</dd>
+              </dl>
+            </div>
+
+            <!-- Requirements -->
+            <div class="stack">
+              <div class="row"><h3>Requirements</h3><span class="small muted">6 found · 4 met · 1 not held · 1 gap</span></div>
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead>
+                  <tbody data-reqs="kestrel"></tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Dealbreakers -->
+            <div class="box">
+              <div class="row"><h3>Dealbreaker check</h3><span class="chip ok">None apply</span><span class="spacer"></span><a class="btn ghost sm" href="profile.html">Edit dealbreakers</a></div>
+              <ul class="checks" data-deal="kestrel"></ul>
+            </div>
+
+            <!-- Key facts -->
+            <div class="stack">
+              <div class="row"><h3>Key facts</h3><span class="small muted">pulled from the target posting · each links to its source line</span></div>
+              <dl class="facts" data-facts="kestrel"></dl>
+            </div>
+
+            <!-- Full posting -->
+            <div class="box">
+              <button class="group-h" type="button" data-toggle="full-normal" aria-expanded="false" aria-controls="full-normal">▸ Full posting text · kestrel.greenhouse.io · 640 words</button>
+              <div id="full-normal" class="lines" hidden>
+                <p class="small muted">About the team: Kestrel's security team protects payment flows for 12,000 merchants across South-East Europe…</p>
+                <div class="line w90"></div><div class="line w80"></div><div class="line w90"></div><div class="line w60"></div>
+                <p class="small muted"><b>What you'll do</b></p>
+                <div class="line w80"></div><div class="line w90"></div><div class="line w40"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Side column -->
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <div class="row"><h3>Postings</h3><span class="small muted">3 merged into this job</span></div>
+              <div data-postings="kestrel"></div>
+              <p class="small muted">Merged because title, company and description match (94% same text). <button class="btn ghost sm" type="button">Not the same job? Split</button></p>
+            </div>
+            <div class="box">
+              <h3>History with Kestrel</h3>
+              <p class="small muted">No earlier applications. On your watchlist since 2 Oct.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ APPLIED BEFORE ============ -->
+      <section data-state="applied" data-state-name="Applied before" class="stack" style="gap:14px" hidden>
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span></nav>
+        <div class="banner warn" role="status">
+          <b>You applied to Kestrel Payments 4 months ago.</b>
+          <span>SOC Analyst · applied 3 Jun · rejected 18 Jun after the screening call. This is a different role, so applying again is normal.</span>
+          <span class="spacer"></span><a class="btn sm" href="application.html">Open that application</a>
+        </div>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">Security Engineer</h2>
+            <div class="meta"><span><b>Kestrel Payments</b></span><span>Sofia · hybrid, 2 days in office</span><span>€2,800–3,600 gross/month</span><span>Posted 9 Oct</span></div>
+            <div class="row"><span class="chip ok">Strong fit</span><span class="chip">Security angle</span><span class="chip warn">Applied before</span></div>
+          </div>
+          <div class="row"><a class="btn primary" href="package.html">Prepare package</a><button class="btn" type="button">Save</button><button class="btn ghost" type="button">Pass…</button></div>
+        </div>
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>What's different from last time</h3>
+              <dl class="kv">
+                <dt>Last time</dt><dd>SOC Analyst · CV version "Security · Kestrel SOC" · screening call with Elena (talent partner)</dd>
+                <dt>Their reason</dt><dd>"We went ahead with candidates with more cloud experience." <span class="faint small">from the rejection email, 18 Jun</span></dd>
+                <dt>Since then</dt><dd>You added 1 item to your master profile (Elastic SIEM course, Aug). Cloud is still thin: Kubernetes is a gap on this job too.</dd>
+                <dt>Suggestion</dt><dd>Mention in the cover letter that you applied for SOC Analyst in June; hiding it doesn't work, the recruiter sees it in Greenhouse.</dd>
+              </dl>
+            </div>
+            <div class="stack">
+              <div class="row"><h3>Requirements</h3><span class="small muted">4 met · 1 not held · 1 gap</span></div>
+              <div class="scroll"><table><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead><tbody data-reqs="kestrel"></tbody></table></div>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>History with Kestrel</h3>
+              <div class="list small">
+                <div class="item"><span><b>SOC Analyst</b><br><span class="muted">applied 3 Jun · via kestrel.greenhouse.io</span></span><span class="chip bad">Rejected</span></div>
+                <div class="item"><span><b>Security Engineer</b><br><span class="muted">this job</span></span><span class="chip">Not applied</span></div>
+              </div>
+            </div>
+            <div class="box"><div class="row"><h3>Postings</h3><span class="small muted">3 merged</span></div><div data-postings="kestrel"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ LOW CONFIDENCE ============ -->
+      <section data-state="low-confidence" data-state-name="Partial · low-confidence facts" class="stack" style="gap:14px" hidden>
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span></nav>
+        <div class="banner warn" role="status">
+          <b>2 facts need you.</b>
+          <span>The posting is unclear about salary and years. Until you answer, the fit check uses the cautious reading.</span>
+          <span class="spacer"></span><a class="btn sm" href="#q-salary">Answer now</a>
+        </div>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">Security Engineer</h2>
+            <div class="meta"><span><b>Kestrel Payments</b></span><span>Sofia · hybrid</span><span><span class="chip warn">Salary unclear</span></span><span>Posted 9 Oct</span></div>
+            <div class="row"><span class="chip warn">Likely fit · provisional</span><span class="chip">Security angle</span></div>
+          </div>
+          <div class="row"><a class="btn primary" href="package.html">Prepare package</a><button class="btn" type="button">Save</button><button class="btn ghost" type="button">Pass…</button></div>
+        </div>
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <div class="box flag" id="q-salary">
+              <div class="row"><h3>Salary: couldn't read it reliably</h3><span class="chip warn">Low confidence</span></div>
+              <div class="src">"Package: 5.5–7k + annual bonus, paid monthly." <span class="faint">· kestrel.greenhouse.io, line 41</span></div>
+              <p class="small muted">No currency and no gross/net. dev.bg lists no salary for this job, so there is nothing to compare against.</p>
+              <fieldset>
+                <legend>What does "5.5–7k" mean?</legend>
+                <label class="opt"><input type="radio" name="cur" checked> <span>€2,800–3,600 gross/month <span class="faint small">· most likely: Sofia employer, monthly</span></span></label>
+                <label class="opt"><input type="radio" name="cur"> <span>5,500–7,000 EUR gross/month</span></label>
+                <label class="opt"><input type="radio" name="cur"> <span>Net, not gross</span></label>
+                <label class="opt"><input type="radio" name="cur"> <span>Don't know: treat as "not stated" and ask in the screening call</span></label>
+              </fieldset>
+              <div class="row"><button class="btn sm primary" type="button">Use this reading</button><span class="small faint">Only this job; nothing is changed in the posting.</span></div>
+            </div>
+            <div class="box flag" id="q-years">
+              <div class="row"><h3>Years of experience: two different numbers</h3><span class="chip warn">Ambiguous</span></div>
+              <div class="src">"<mark>3+ years</mark> in a security operations role" <span class="faint">· Requirements, line 18</span></div>
+              <div class="src">"Ideally <mark>5+ years</mark> working in a SOC or CERT" <span class="faint">· Nice to have, line 29</span></div>
+              <fieldset>
+                <legend>Which one is the requirement?</legend>
+                <label class="opt"><input type="radio" name="yrs" checked> <span>3+ required, 5+ preferred <span class="faint small">· suggested: the 5+ line sits under "Nice to have"</span></span></label>
+                <label class="opt"><input type="radio" name="yrs"> <span>5+ required: this would become a gap for you (you have 3)</span></label>
+              </fieldset>
+              <div class="row"><button class="btn sm primary" type="button">Use this reading</button></div>
+            </div>
+            <div class="stack">
+              <div class="row"><h3>Requirements</h3><span class="small muted">5 read confidently · 1 waiting on you</span></div>
+              <div class="scroll"><table><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead><tbody data-reqs="kestrel-low"></tbody></table></div>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>Fit check</h3>
+              <p class="small"><span class="chip warn">Provisional</span> Cautious reading: salary "not stated", years "5+ required". Even so, it ranks #4 today.</p>
+              <p class="small muted">Answering both would likely move it to Strong fit, #1.</p>
+            </div>
+            <div class="box"><div class="row"><h3>Postings</h3><span class="small muted">3 merged</span></div><div data-postings="kestrel"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ BULGARIAN ============ -->
+      <section data-state="bulgarian" data-state-name="Bulgarian posting" class="stack" style="gap:14px" hidden>
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">SOC Analyst L2 · Ardent Labs</span></nav>
+        <div class="banner info" role="status">
+          <b>This posting is in Bulgarian.</b>
+          <span>Requirements and facts were read from the original and are shown here in English. Quotes stay in Bulgarian, with a translation under each.</span>
+          <span class="spacer"></span><button class="btn sm" type="button" data-toggle="orig-bg" aria-expanded="false" aria-controls="orig-bg">▸ View original</button>
+        </div>
+        <div id="orig-bg" class="box dashed" hidden lang="bg">
+          <span class="label">Original · jobs.bg email alert · Ardent Labs</span>
+          <p class="small"><b>Анализатор SOC, ниво 2</b></p>
+          <p class="small">Търсим анализатор с минимум 2 години опит в SOC среда, работа с SIEM системи и готовност за работа на смени, включително нощни.</p>
+          <div class="lines"><div class="line w90"></div><div class="line w80"></div><div class="line w60"></div></div>
+        </div>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">SOC Analyst L2 <span class="faint small" lang="bg">(Анализатор SOC, ниво 2)</span></h2>
+            <div class="meta"><span><b>Ardent Labs</b></span><span>Sofia · on-site</span><span>Salary not stated</span><span>Posted 8 Oct</span></div>
+            <div class="row"><span class="chip ok">Good fit</span><span class="chip">Security angle</span><span class="chip">Bulgarian original</span><span class="chip">1 posting</span></div>
+          </div>
+          <div class="row"><a class="btn primary" href="package.html">Prepare package</a><button class="btn" type="button">Save</button><button class="btn ghost" type="button">Pass…</button></div>
+        </div>
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <div class="stack">
+              <div class="row"><h3>Requirements</h3><span class="small muted">4 found · 3 met · 1 partly</span></div>
+              <div class="scroll"><table><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead><tbody data-reqs="ardent"></tbody></table></div>
+            </div>
+            <div class="stack">
+              <div class="row"><h3>Key facts</h3></div>
+              <dl class="facts">
+                <div class="fact"><dt>Shifts</dt><dd>24/7 rota, including nights; 1 week in 4 on nights</dd><dd><button class="btn ghost sm" type="button" data-toggle="bg-src1" aria-expanded="true" aria-controls="bg-src1">▾ Show where</button></dd>
+                  <div id="bg-src1" class="src"><span lang="bg" class="bg">"работа на смени, включително нощни (една седмица от четири)"</span><br>shift work, including nights (one week in four) <span class="faint">· line 9</span></div></div>
+                <div class="fact"><dt>Language</dt><dd>Bulgarian, fluent; English for reports</dd><dd><button class="btn ghost sm" type="button">▸ Show where</button></dd></div>
+                <div class="fact"><dt>Experience</dt><dd>2+ years in a SOC</dd><dd><button class="btn ghost sm" type="button">▸ Show where</button></dd></div>
+                <div class="fact"><dt>CV language</dt><dd>"CV in Bulgarian or English": your package will default to <b>English</b> <button class="btn ghost sm" type="button">Switch to Bulgarian</button></dd><dd></dd></div>
+              </dl>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>Fit check</h3>
+              <p class="small"><span class="chip ok">Good fit</span> Matches your SOC experience. Night shifts aren't a dealbreaker in your profile, so it's flagged, not hidden.</p>
+            </div>
+            <div class="box">
+              <div class="row"><h3>Postings</h3><span class="small muted">1</span></div>
+              <div class="posting target"><b class="small">jobs.bg alert email</b><span class="small muted">Target posting by default: Ardent has no careers page in your sources.</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ CLOSED ============ -->
+      <section data-state="closed" data-state-name="Closed" class="stack" style="gap:14px" hidden>
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span></nav>
+        <div class="banner info" role="status">
+          <b>This job closed on 10 Oct.</b>
+          <span>kestrel.greenhouse.io stopped listing it at the 07:30 check and dev.bg marked it expired. It stays here so nothing you saved or noted is lost.</span>
+        </div>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">Security Engineer</h2>
+            <div class="meta"><span><b>Kestrel Payments</b></span><span>Sofia · hybrid</span><span>€2,800–3,600 gross/month</span><span>Open 9–10 Oct</span></div>
+            <div class="row"><span class="chip solid">Closed</span><span class="chip">Security angle</span></div>
+          </div>
+          <div class="row">
+            <button class="btn primary" type="button" disabled aria-describedby="closed-why">Prepare package</button>
+            <button class="btn ghost" type="button">It's still open: reopen</button>
+          </div>
+        </div>
+        <p id="closed-why" class="small muted">Can't prepare a package: the target posting no longer accepts applications. The LinkedIn copy still shows, but it's from an alert email 2 days old and links to the same closed form.</p>
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <div class="stack">
+              <div class="row"><h3>Similar open jobs</h3><span class="small muted">same angle, close requirements</span></div>
+              <div class="scroll">
+                <table>
+                  <thead><tr><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th></tr></thead>
+                  <tbody>
+                    <tr><td><a href="job.html"><b>Cloud Security Engineer</b></a><div class="small">Halden Systems</div><div class="why">Same Kubernetes gap · higher salary</div></td><td>Remote · EU</td><td><div class="row"><span class="chip ok">AWS</span><span class="chip bad">Kubernetes</span><span class="chip warn">4+ yrs</span></div></td><td>€4,000–5,000</td></tr>
+                    <tr><td><a href="job.html"><b>SOC Analyst L2</b></a><div class="small">Ardent Labs</div><div class="why">Matches your SOC work · night shifts</div></td><td>Sofia · on-site</td><td><div class="row"><span class="chip ok">2+ yrs</span><span class="chip ok">Bulgarian</span><span class="chip warn">Night shifts</span></div></td><td>Not stated</td></tr>
+                    <tr><td><a href="job.html"><b>IT Security Specialist</b></a><div class="small">Ostrava Bank</div><div class="why">Bank SOC background fits</div></td><td>Sofia · on-site</td><td><div class="row"><span class="chip warn">ISO 27001</span><span class="chip ok">Bulgarian</span></div></td><td>Not stated</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="box">
+              <button class="group-h" type="button" data-toggle="full-closed" aria-expanded="false" aria-controls="full-closed">▸ Full posting text · last copy, saved 10 Oct</button>
+              <div id="full-closed" class="lines" hidden><div class="line w90"></div><div class="line w80"></div><div class="line w60"></div></div>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>Hear about the next one</h3>
+              <label class="opt"><input type="checkbox" checked> <span>Put new Kestrel security jobs at the top of the Feed</span></label>
+              <p class="small muted">Kestrel is already on your watchlist; this only boosts its security roles.</p>
+            </div>
+            <div class="box"><div class="row"><h3>Postings</h3></div><div data-postings="kestrel-closed"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ LOADING ============ -->
+      <section data-state="loading" data-state-name="Loading · reading posting" class="stack" style="gap:14px" hidden aria-busy="true">
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span></nav>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">Security Engineer</h2>
+            <div class="meta"><span><b>Kestrel Payments</b></span><span>Sofia · hybrid</span><span><span class="skel" style="display:inline-block;width:140px;vertical-align:middle"></span></span><span>Posted 9 Oct</span></div>
+            <div class="row"><span class="chip">3 postings merged</span></div>
+          </div>
+          <div class="row">
+            <button class="btn primary" type="button" disabled aria-describedby="load-why">Prepare package</button>
+            <button class="btn" type="button">Save</button><button class="btn ghost" type="button">Pass…</button>
+          </div>
+        </div>
+        <div class="box" role="status" aria-live="polite">
+          <div class="row"><b>Reading the posting</b><span class="spacer"></span><span class="small muted">usually 5–10 s</span></div>
+          <ul class="checks">
+            <li><span class="chip ok">Done</span> Fetched 3 postings and chose the target posting</li>
+            <li><span class="chip">Working</span> Pulling out requirements and key facts</li>
+            <li><span class="chip">Waiting</span> <span class="faint">Comparing against your master profile (fit check)</span></li>
+          </ul>
+          <p id="load-why" class="small muted">Prepare package unlocks once requirements are read. Save and Pass work now.</p>
+        </div>
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <div class="box"><div class="skel w30"></div><div class="skel w90"></div><div class="skel w80"></div></div>
+            <div class="scroll"><table><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence</th></tr></thead><tbody>
+              <tr><td><div class="skel w80"></div></td><td><div class="skel w60"></div></td><td><div class="skel w40"></div></td><td><div class="skel w90"></div></td></tr>
+              <tr><td><div class="skel w60"></div></td><td><div class="skel w60"></div></td><td><div class="skel w40"></div></td><td><div class="skel w80"></div></td></tr>
+              <tr><td><div class="skel w80"></div></td><td><div class="skel w40"></div></td><td><div class="skel w40"></div></td><td><div class="skel w60"></div></td></tr>
+            </tbody></table></div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box"><div class="row"><h3>Postings</h3><span class="small muted">3 merged</span></div><div data-postings="kestrel"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ ERROR ============ -->
+      <section data-state="error" data-state-name="Error · couldn't read" class="stack" style="gap:14px" hidden>
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span></nav>
+        <div class="banner bad" role="alert">
+          <b>Couldn't read this posting's requirements.</b>
+          <span>The model didn't answer within 60 s (OpenRouter timeout). The posting itself is saved; nothing was lost.</span>
+          <span class="spacer"></span><button class="btn sm" type="button">Try again</button>
+        </div>
+        <div class="row" style="align-items:flex-start; gap:12px 16px">
+          <div class="stack" style="gap:6px; flex:1 1 380px">
+            <h2 class="job-h">Security Engineer</h2>
+            <div class="meta"><span><b>Kestrel Payments</b></span><span>Sofia · hybrid</span><span>Posted 9 Oct</span></div>
+            <div class="row"><span class="chip">Fit check not run</span><span class="chip">3 postings merged</span></div>
+          </div>
+          <div class="row"><button class="btn primary" type="button" disabled aria-describedby="err-why">Prepare package</button><button class="btn" type="button">Save</button><button class="btn ghost" type="button">Pass…</button></div>
+        </div>
+        <p id="err-why" class="small muted">A package needs the requirements first. Save it and it will be retried automatically at the next check (08:00).</p>
+        <div class="box">
+          <span class="label">Full posting text · read it yourself meanwhile</span>
+          <div class="lines"><div class="line w90"></div><div class="line w80"></div><div class="line w90"></div><div class="line w60"></div><div class="line w80"></div></div>
+        </div>
+      </section>
+
+      <!-- ============ PASS ============ -->
+      <section data-state="pass" data-state-name="Pass with reason" class="stack" style="gap:14px" hidden>
+        <nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <span aria-current="page">Security Engineer · Kestrel Payments</span></nav>
+        <div class="row"><h2 class="job-h">Security Engineer</h2><span class="muted">Kestrel Payments</span></div>
+        <form class="box" style="max-width:560px" aria-labelledby="pass-h" onsubmit="return false">
+          <h3 id="pass-h">Pass on this job</h3>
+          <p class="small muted">The reason trains the ranking. The job moves to "Passed", never deleted.</p>
+          <fieldset>
+            <legend>Why?</legend>
+            <label class="opt"><input type="radio" name="why" checked> <span>Skills gap too big <span class="faint small">· Kubernetes security</span></span></label>
+            <label class="opt"><input type="radio" name="why"> <span>Salary too low</span></label>
+            <label class="opt"><input type="radio" name="why"> <span>Location or remote rules</span></label>
+            <label class="opt"><input type="radio" name="why"> <span>Not interested in this company</span></label>
+            <label class="opt"><input type="radio" name="why"> <span>Other</span></label>
+          </fieldset>
+          <div class="field">
+            <label for="pass-note">Note <span class="faint">(optional)</span></label>
+            <input type="text" id="pass-note" placeholder="e.g. revisit after the CKS course">
+          </div>
+          <label class="opt"><input type="checkbox"> <span>Rank jobs that need Kubernetes security lower from now on</span></label>
+          <div class="row"><button class="btn primary" type="submit">Pass</button><button class="btn ghost" type="button">Cancel</button><span class="spacer"></span><span class="small faint"><kbd>X</kbd> opens this · <kbd>Esc</kbd> cancels</span></div>
+        </form>
+        <div class="banner info"><span>After passing: "Passed · Security Engineer at Kestrel". </span><button class="btn sm" type="button">Undo</button><span class="small muted">The next job opens.</span></div>
+      </section>
+
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="normal"><span class="label">Design notes</span><ul>
+    <li>Header answers "what and is it worth it" in one line; the three actions sit right of it so the decision is reachable without scrolling. Prepare package is the only primary.</li>
+    <li>Order of the main column follows the decision: fit check (verdict) → requirements (evidence) → dealbreakers (deal-killers) → key facts → raw text. The full posting is collapsed: the extraction should save the read, and "Show where" proves it didn't invent anything.</li>
+    <li>Requirements table names the evidence for each "met", so the same evidence carries into the CV step's requirement → evidence map. "Not held" (CISSP preferred) is amber, a required gap red: preferred items never count as gaps.</li>
+    <li>Postings: the target posting (thick left rule) defaults to the company's own page because it goes straight into their ATS and the extension can fill it. Split is always offered because merging is a guess.</li>
+    <li><kbd>J</kbd>/<kbd>K</kbd> keep working here, so you can walk the Feed in order from inside the detail view.</li>
+    <li>At 400px: the side column drops below, header actions wrap under the title, facts stack label over value, table scrolls inside its box.</li></ul></aside>
+  <aside class="notes" data-notes-for="applied" hidden><span class="label">Design notes</span><ul>
+    <li>Warning, not a block: re-applying to a company for a different role is normal. The banner gives date, role and outcome so you don't have to dig.</li>
+    <li>The rejection reason is quoted from the matched email (job 3 feeds back into job 1), plus what changed since, so the new package can address it.</li>
+    <li>Applying to the same job twice would be a stronger warning that asks for confirmation before Prepare package.</li></ul></aside>
+  <aside class="notes" data-notes-for="low-confidence" hidden><span class="label">Design notes</span><ul>
+    <li>Extraction accuracy is riskiest assumption #2, so low confidence is shown, never guessed silently: the source line is quoted with the unclear part marked.</li>
+    <li>Radios, with the most likely reading pre-selected and the reason next to it. "Don't know" is a valid answer.</li>
+    <li>Until answered, the fit check uses the cautious reading (salary "not stated", the higher year count) and says so: a job is never promoted on a guess.</li>
+    <li>Prepare package isn't blocked: these answers affect ranking and the salary answer, not the CV. The salary question comes back in the Screening answers step if still open.</li></ul></aside>
+  <aside class="notes" data-notes-for="bulgarian" hidden><span class="label">Design notes</span><ul>
+    <li>Answers PRODUCT.md's open question in favour of "extract directly, show in English": requirements are read from the original; quotes keep the Bulgarian text with a translation, so you can check the reading.</li>
+    <li>"View original" opens the untouched text (marked <code>lang="bg"</code> for screen readers).</li>
+    <li>The posting allows either language, so the package defaults to English (PRODUCT.md) with a one-click switch.</li></ul></aside>
+  <aside class="notes" data-notes-for="closed" hidden><span class="label">Design notes</span><ul>
+    <li>Nothing disappears silently: a closed job stays reachable, says when and how it closed (which source, which check), and keeps the last saved copy.</li>
+    <li>Prepare package is disabled with the reason written next to it, not just greyed. "Reopen" covers the case where our check is wrong (the source-drop guard from the Feed).</li>
+    <li>Empty-ish state with a next step: similar open jobs ranked the same way, plus a watchlist boost.</li></ul></aside>
+  <aside class="notes" data-notes-for="loading" hidden><span class="label">Design notes</span><ul>
+    <li>What's known from the Feed row (title, company, location, sources) shows at once; only the extracted parts are skeletons shaped like the real table.</li>
+    <li>5–10 s, so a step list with what's done and what's next, not a spinner. Results replace skeletons per section as they arrive.</li>
+    <li>Save and Pass don't need extraction and work immediately; Prepare says why it's waiting.</li></ul></aside>
+  <aside class="notes" data-notes-for="error" hidden><span class="label">Design notes</span><ul>
+    <li>Says what failed, why, and that nothing was lost; the retry is in the banner. Saving queues an automatic retry, so you don't have to remember.</li>
+    <li>Raw posting text stays readable: the failure blocks the package, not the decision.</li></ul></aside>
+  <aside class="notes" data-notes-for="pass" hidden><span class="label">Design notes</span><ul>
+    <li>One required choice with a pre-selected reason guessed from the fit check (the gap); the note is optional and marked so.</li>
+    <li>The "rank lower" checkbox is opt-in and specific: it adjusts ranking, it doesn't create a dealbreaker that hides jobs.</li>
+    <li>Pass is undoable for the session and the next job opens, keeping the Feed's keyboard rhythm.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  const reqs = {
+    kestrel: [
+      ["3+ years in security operations", "Required", "ok", "Met", "Orbital Bank, Junior Security Analyst 2023–2025 · Varna Telecom SOC intern 2022"],
+      ["SIEM: Splunk or Elastic", "Required", "ok", "Met", "Built 40 Splunk detections, false positives down by about a third"],
+      ["Incident response", "Required", "ok", "Met", "Took part in the response to 3 phishing incidents"],
+      ["Kubernetes security", "Required", "bad", "Gap", "No evidence in your master profile"],
+      ["CISSP", "Preferred", "warn", "Not held", "Will be left out, not claimed"],
+      ["English, professional", "Required", "ok", "Met", "English C1 · all work at Orbital Bank in English"],
+    ],
+    ardent: [
+      ["2+ years in a SOC", "Required", "ok", "Met", "Orbital Bank SOC 2023–2025"],
+      ["SIEM experience", "Required", "ok", "Met", "40 Splunk detections"],
+      ["Bulgarian, fluent", "Required", "ok", "Met", "Native"],
+      ["Night shifts", "Required", "warn", "Partly", "Not in your dealbreakers; you haven't worked nights"],
+    ],
+  };
+  reqs["kestrel-low"] = reqs.kestrel.map((r, i) => i === 0 ? ["3+ or 5+ years in security operations?", "Unclear", "warn", "Needs you", "You have 3 years: met at 3+, a gap at 5+"] : r);
+  document.querySelectorAll("[data-reqs]").forEach(tb => tb.innerHTML = reqs[tb.dataset.reqs].map(r =>
+    `<tr><td><b>${r[0]}</b></td><td class="small">${r[1]}</td><td><span class="chip ${r[2]}">${r[3]}</span></td><td class="small">${r[4]}</td></tr>`).join(""));
+
+  document.querySelectorAll('[data-deal="kestrel"]').forEach(ul => ul.innerHTML = [
+    ["Location", "Sofia, hybrid: in your first-priority area"],
+    ["Language", "English only: fine"],
+    ["Years asked", "3+: under your 5-year cut-off"],
+    ["Salary", "€2,800 floor, above your €2,300 minimum"],
+    ["Work authorisation", "Right to work in Bulgaria: you're an EU citizen"],
+  ].map(([k, v]) => `<li><span class="chip ok">OK</span><b>${k}</b><span class="muted">${v}</span></li>`).join(""));
+
+  const facts = [
+    ["Experience", "3+ years in security operations", '"You have 3+ years in a security operations or SOC role." · Requirements, line 18', true],
+    ["Salary", "€2,800–3,600 gross/month", '"€2,800–3,600 gross per month, plus annual bonus" · dev.bg, salary field'],
+    ["Remote rules", "Hybrid: 2 days a week in the Sofia office (Business Park)", '"We work hybrid, two days a week together at Business Park Sofia." · Benefits, line 52'],
+    ["Languages", "English, professional. Bulgarian not required", '"Our working language is English." · line 33'],
+    ["Work authorisation", "Right to work in Bulgaria; no visa sponsorship", '"We are unable to sponsor visas for this role." · line 58'],
+    ["Contract", "Full-time, permanent", '"Full-time · Permanent" · Greenhouse job header'],
+  ];
+  document.querySelectorAll('[data-facts="kestrel"]').forEach(dl => dl.innerHTML = facts.map((f, i) => {
+    const id = "fact-" + i;
+    return `<div class="fact"><dt>${f[0]}</dt><dd>${f[1]}</dd><dd><button class="btn ghost sm" type="button" data-toggle="${id}" aria-expanded="${!!f[3]}" aria-controls="${id}">${f[3] ? "▾" : "▸"} Show where</button></dd>
+      <div id="${id}" class="src"${f[3] ? "" : " hidden"}>${f[2].replace(/ · (.*)$/, ' <span class="faint">· $1</span>')}</div></div>`;
+  }).join(""));
+
+  const postings = {
+    kestrel: [
+      ["kestrel.greenhouse.io", "Company's own page · Greenhouse", "Posted 9 Oct · full text · 6 screening questions", true],
+      ["LinkedIn alert email", "Received 9 Oct 08:14", "Easy Apply only: sends your LinkedIn profile, not a tailored CV"],
+      ["dev.bg", "Board · seen 10 Oct", "Only copy that lists the salary · links to the Greenhouse form"],
+    ],
+  };
+  postings["kestrel-closed"] = [
+    ["kestrel.greenhouse.io", "Removed 10 Oct 07:30", "Last copy saved", true, "Closed"],
+    ["LinkedIn alert email", "Received 9 Oct", "Links to the closed form", false, "Stale"],
+    ["dev.bg", "Marked expired 10 Oct", "", false, "Closed"],
+  ];
+  document.querySelectorAll("[data-postings]").forEach(el => el.innerHTML = postings[el.dataset.postings].map(p =>
+    `<div class="posting${p[3] ? " target" : ""}"><div class="row"><b class="small">${p[0]}</b>${p[3] ? '<span class="chip solid">Target posting</span>' : ""}${p[4] ? `<span class="chip">${p[4]}</span>` : ""}</div>
+     <span class="small muted">${p[1]}</span>${p[2] ? `<span class="small">${p[2]}</span>` : ""}
+     <div class="row">${p[3] ? "" : '<button class="btn ghost sm" type="button">Make target</button>'}<a class="btn ghost sm" href="#">Open ↗</a></div></div>`).join(""));
+
+  // wire the toggles rendered above (wf.js only binds those present at load)
+  document.querySelectorAll('[data-facts] [data-toggle]').forEach(b => b.addEventListener("click", () => {
+    const el = document.getElementById(b.dataset.toggle); el.hidden = !el.hidden;
+    b.setAttribute("aria-expanded", String(!el.hidden));
+    b.textContent = b.textContent.replace(/^[▸▾]/, el.hidden ? "▸" : "▾");
+  }));
+})();
+</script>
+</body>
+</html>

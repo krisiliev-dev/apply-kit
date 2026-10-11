@@ -1,0 +1,527 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Package · apply-kit wireframes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="wf.css">
+<style>
+/* page-local additions: only wf.css tokens, so both themes follow */
+[hidden] { display: none !important }
+.appcrumbs { font-size: 0.85rem; color: var(--ink-2) }
+.appcrumbs a { color: var(--ink-2) }
+.pk-head { display: grid; gap: 8px }
+ol.stepper { list-style: none; margin: 0; padding: 0 }
+ol.stepper a.step { text-decoration: none }
+.step-h { font-size: 1.2rem }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; border-top: 1px solid var(--line); padding-top: 12px }
+.btn[aria-disabled="true"] { opacity: .45; cursor: not-allowed }
+/* requirement → evidence map */
+.map { display: grid }
+.req { display: grid; grid-template-columns: minmax(0, 220px) minmax(0, 1fr); gap: 6px 16px; padding: 10px 0; border-top: 1px solid var(--line) }
+.req .ev { display: grid; gap: 2px; font-size: 0.9rem }
+.req .cvline { font-size: 0.88rem; color: var(--ink-2) }
+.req .cvline::before { content: "CV → "; font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3) }
+.req > .box { grid-column: 1 / -1 }
+@media (max-width: 600px) { .req { grid-template-columns: minmax(0, 1fr) } }
+.box.flag { background: var(--warn-bg) }
+.box.flag .src { background: var(--paper) }
+.box.must { outline: 2px solid var(--bad); outline-offset: 2px }
+.box.resolved { border-color: transparent; background: var(--ok-bg); color: var(--ok) }
+.src { border-left: 3px solid var(--line); background: var(--fill); padding: 6px 10px; border-radius: 0 6px 6px 0; font-size: 0.88rem }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 0 }
+legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
+.opt { display: flex; gap: 8px; align-items: flex-start; font-size: 0.92rem }
+.opt input { margin-top: 4px; flex: none }
+.diff p { margin: 0 }
+.diff .ch { padding: 8px 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: start }
+/* cover letter */
+.letter { border: 1px solid var(--line); border-radius: 8px; padding: 16px 18px; display: grid; gap: 12px; line-height: 1.6; max-width: 68ch }
+.letter:focus-visible { outline: 2px solid var(--focus) }
+.letter mark { background: var(--note-bg); color: inherit; border-bottom: 2px solid var(--note); padding: 0 1px }
+.hide-marks .letter mark { background: none; border: 0 }
+.count { font-family: var(--mono); font-size: 0.78rem; color: var(--ink-2); font-variant-numeric: tabular-nums }
+/* screening + ATS */
+.q { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 8px }
+.parsed { font-family: var(--mono); font-size: 0.8rem; line-height: 1.55; background: var(--fill); border-radius: 8px; padding: 12px 14px; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere }
+.parsed .miss { background: var(--bad-bg); color: var(--bad) }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 0.9rem }
+.checks li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap }
+.part { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center }
+.part .meter { grid-column: 1 / -1 }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="wf-head">
+    <nav class="wf-crumbs" aria-label="Wireframes">
+      <a href="index.html">Overview</a><a href="onboarding.html">Onboarding</a><a href="feed.html">Feed</a><a href="job.html">Job</a><a href="package.html" aria-current="page">Package</a><a href="applications.html">Applications</a><a href="application.html">Application</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a><a href="extension.html">Extension</a>
+    </nav>
+    <h1>Package</h1>
+    <p class="lede">A step inside the Job. Concept A's guided steps (target posting → CV → cover letter → screening answers → ATS check), each approved before the next; B's requirement → evidence map lives in the CV step, and C's flags are pinned inside the step they belong to. A step with an open flag can't be approved.</p>
+    <div class="states" role="tablist" aria-label="State"></div>
+  </header>
+
+  <div class="frame">
+    <div class="bar">
+      <span class="brand">apply-kit</span>
+      <nav class="nav" aria-label="App"><a class="on" href="feed.html" aria-current="page">Feed</a><a href="applications.html">Applications</a><a href="profile.html">Profile</a><a href="settings.html">Settings</a></nav>
+      <span class="spacer"></span>
+      <span class="health" id="health"></span>
+    </div>
+
+    <div class="screen">
+
+      <!-- ============ GENERATING ============ -->
+      <section data-state="generating" data-state-name="Generating" class="stack" style="gap:14px">
+        <div class="pk-head" data-head="generating"></div>
+        <div class="cols">
+          <div class="stack">
+            <div class="row"><h2 class="step-h">Preparing your package</h2><span class="spacer"></span><span class="small muted" role="status" aria-live="polite">3 of 5 parts ready · about 20 s left</span></div>
+            <div class="meter" aria-hidden="true"><span style="width:62%"></span></div>
+            <div class="list">
+              <div class="part"><span><b>Target posting</b> <span class="muted small">· kestrel.greenhouse.io (company's own page)</span></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>CV version</b> <span class="muted small">· Security angle · 7 changes · 2 flags for you</span></span><a class="btn sm" href="#" data-goto="cv">Start reviewing</a></div>
+              <div class="part"><span><b>Screening answers</b> <span class="muted small">· 6 questions · 3 from your answer bank</span></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>Cover letter</b> <span class="muted small">· writing in your voice (7 samples)</span></span><span class="chip">Writing…</span><div class="meter" aria-label="Cover letter progress" role="progressbar" aria-valuenow="55" aria-valuemin="0" aria-valuemax="100"><span style="width:55%"></span></div></div>
+              <div class="part"><span><b>ATS check</b> <span class="muted small">· parses the CV PDF once it's rendered</span></span><span class="chip">Running</span><div class="meter" aria-hidden="true"><span style="width:20%"></span></div></div>
+            </div>
+            <div class="banner info"><span>Usually 30–40 s. You don't have to wait here: review the CV now, or go back to the Feed; the job shows <b>Package ready</b> when it's done.</span></div>
+            <div class="row"><button class="btn ghost sm" type="button">Stop generating</button><span class="small faint">Keeps the parts already finished.</span></div>
+          </div>
+          <div class="box">
+            <h3>While you wait</h3>
+            <p class="small muted">Nothing is sent anywhere. Every part is a draft until you approve it, and the application only exists after you press Submit in the portal.</p>
+            <dl class="kv small"><dt>Model</dt><dd>DeepSeek V4.1 Flash</dd><dt>Est. cost</dt><dd>$0.03 for this package</dd></dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ STEP 1 TARGET ============ -->
+      <section data-state="target" data-state-name="1 · Target posting" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="target"></div>
+        <div class="stack" style="max-width:760px">
+          <h2 class="step-h">Which posting will you apply through?</h2>
+          <p class="small muted">The screening questions and the portal the extension fills come from this posting.</p>
+          <fieldset>
+            <legend class="small faint" style="font-weight:500">3 postings of this job</legend>
+            <label class="box opt" style="border-color:var(--ink)"><input type="radio" name="tp" checked>
+              <span class="stack" style="gap:2px"><span class="row"><b>kestrel.greenhouse.io</b><span class="chip solid">Recommended</span></span>
+              <span class="small">Company's own page. Your CV goes straight into their ATS; the extension can fill this Greenhouse form; no account needed. 6 screening questions.</span></span></label>
+            <label class="box opt"><input type="radio" name="tp">
+              <span class="stack" style="gap:2px"><b>dev.bg</b><span class="small">Forwards to the same Greenhouse form, but marks you as "source: dev.bg". Pick this only if you want the board credited.</span></span></label>
+            <label class="box opt"><input type="radio" name="tp">
+              <span class="stack" style="gap:2px"><b>LinkedIn (from alert email)</b><span class="small">Easy Apply sends your LinkedIn profile, not this tailored CV, and the extension doesn't run on LinkedIn. You'd apply by hand.</span></span></label>
+          </fieldset>
+        </div>
+        <div class="actions"><a class="btn" href="job.html">Back to job</a><span class="spacer"></span><button class="btn primary" type="button">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ STEP 2 CV ============ -->
+      <section data-state="cv" data-state-name="2 · CV" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="cv"></div>
+        <div class="row"><h2 class="step-h">CV version</h2><span class="chip">Security angle</span><span class="small muted">closest of your three angles: 4 of 6 requirements with evidence</span><span class="spacer"></span><button class="btn ghost sm" type="button">Switch angle ▾</button><button class="btn sm" type="button">Preview PDF</button></div>
+        <div class="banner warn" role="status"><b>2 flags to resolve before approving:</b> <a href="#flag-ir">Incident response wording</a> · <a href="#flag-k8s">Kubernetes security gap</a></div>
+        <div class="cols">
+          <div class="stack" style="gap:16px">
+            <div class="stack">
+              <div class="row"><h3>Requirements → evidence</h3><span class="small muted">what the CV uses for each requirement</span></div>
+              <div class="map" data-map="cv"></div>
+            </div>
+            <div class="stack diff">
+              <div class="row"><h3>Changes vs your master profile</h3><span class="small muted">7 edits · each can be undone</span></div>
+              <div data-diff></div>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>Honesty check</h3>
+              <ul class="checks small">
+                <li><span class="chip ok">OK</span> Employers, titles, dates match your master profile</li>
+                <li><span class="chip ok">OK</span> No skill added that isn't in your profile</li>
+                <li><span class="chip ok">OK</span> CISSP left out, not claimed</li>
+                <li><span class="chip warn">1</span> Near-the-line edit: "took part in" → "led"</li>
+                <li><span class="chip bad">1</span> Gap: Kubernetes security, no evidence</li>
+              </ul>
+            </div>
+            <div class="box"><h3>Tailoring notes</h3><ul class="checks small" style="gap:4px">
+              <li>Summary leads with detection engineering, the posting's first requirement.</li>
+              <li>Freelance web work kept but shortened: the role asks for scripting, not product development.</li>
+              <li>2 pages, single column.</li></ul></div>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span id="cv-why" class="small muted">2 flags left</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="cv-why">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ BLOCKED ============ -->
+      <section data-state="blocked" data-state-name="Blocked approve" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="blocked"></div>
+        <div class="banner bad" role="alert" tabindex="-1">
+          <b>The CV can't be approved yet: 1 flag is unresolved.</b>
+          <span>The draft still says you <i>led</i> the phishing response; your master profile says you took part. Pick a wording you can defend in an interview.</span>
+          <span class="spacer"></span><a class="btn sm" href="#flag-ir-b">Go to the flag</a>
+        </div>
+        <div class="row"><h2 class="step-h">CV version</h2><span class="chip">Security angle</span></div>
+        <div class="map" data-map="blocked"></div>
+        <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span id="bl-why" class="small" style="color:var(--bad)">1 flag left: Incident response wording</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="bl-why">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ STEP 3 COVER ============ -->
+      <section data-state="cover" data-state-name="3 · Cover letter" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="cover"></div>
+        <div class="row"><h2 class="step-h">Cover letter</h2><span class="small muted">written in your voice from 7 samples and 23 past edits</span><span class="spacer"></span>
+          <span class="pager"><button class="btn sm" type="button" aria-label="Previous draft">‹</button>Draft 2 of 2<button class="btn sm" type="button" aria-label="Next draft" disabled>›</button></span></div>
+        <div class="cols">
+          <div class="stack" id="cover-wrap">
+            <div class="row small"><label class="opt"><input type="checkbox" id="mark-toggle" checked> <span>Highlight sentences written for Kestrel (not from your usual letter)</span></label><span class="spacer"></span><span class="count" aria-live="polite">217 words · target 220</span></div>
+            <div class="letter" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Cover letter, editable">
+              <p>Dear Kestrel hiring team,</p>
+              <p><mark>Kestrel moves money for 12,000 merchants, which means every false alarm in your SOC costs an analyst's time and every missed one can cost a merchant.</mark> Telling those two apart is the part of security work I have spent the last two years on, and it is why the Security Engineer role stood out to me.</p>
+              <p>At Orbital Bank I built 40 Splunk detections for a six-person SOC and cut our false positives by about a third, mostly by rewriting noisy rules around how our staff actually logged in rather than how the vendor templates assumed they did. Triaging around 25 alerts a day taught me which detections earn their place and which only create work. I was also part of the response to three phishing incidents, from the first alert to the write-up.</p>
+              <p><mark>Your posting mentions moving detection work onto Elastic and hardening the Kubernetes platform.</mark> <mark>Elastic would be a short step from Splunk for me. Kubernetes security I haven't done in production, and I would want to close that gap early rather than talk around it.</mark> The rest of the role, detection engineering, alert tuning and incident write-ups, is work I could pick up in the first month. I would like to hear where the team wants its detections to be a year from now.</p>
+              <p>Kris</p>
+            </div>
+            <form class="box" onsubmit="return false" aria-labelledby="regen-h">
+              <h3 id="regen-h">Change something</h3>
+              <div class="field">
+                <label for="regen">Instruction for a new draft</label>
+                <span class="help" id="regen-help">Your current draft stays as draft 2. Edits you make by hand are learned as voice.</span>
+                <input type="text" id="regen" aria-describedby="regen-help" placeholder="e.g. shorter, mention the June application, less formal">
+              </div>
+              <div class="row"><button class="btn sm" type="button">Shorter</button><button class="btn sm" type="button">More direct</button><button class="btn sm" type="button">Mention the Elastic course</button><span class="spacer"></span><button class="btn" type="submit">Regenerate</button></div>
+            </form>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>Checks</h3>
+              <ul class="checks small">
+                <li><span class="chip ok">OK</span> Every claim traces to your master profile</li>
+                <li><span class="chip ok">OK</span> Uses "part of the response", matching your CV decision</li>
+                <li><span class="chip ok">OK</span> Kubernetes gap named, not hidden (your choice in the CV step)</li>
+                <li><span class="chip ok">OK</span> No stock phrases ("passionate", "excited to apply")</li>
+                <li><span class="chip ok">OK</span> Three paragraphs, one concrete example with a number</li>
+              </ul>
+            </div>
+            <div class="box"><h3>Voice</h3><p class="small muted">7 voice samples (local only) · last learned from your edit on the Brightwave letter, 7 Oct.</p><a class="btn ghost sm" href="profile.html">Manage voice samples</a></div>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span class="small faint">Saved 10:51</span><button class="btn primary" type="button">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ STEP 4 SCREENING ============ -->
+      <section data-state="screening" data-state-name="4 · Screening answers" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="screening"></div>
+        <div class="row"><h2 class="step-h">Screening answers</h2><span class="small muted">6 questions from kestrel.greenhouse.io · 3 from your answer bank · 2 new drafts · 1 needs you</span></div>
+        <div class="stack" style="max-width:780px; gap:10px">
+          <div class="q">
+            <div class="row"><b>Do you have the right to work in Bulgaria?</b><span class="spacer"></span><span class="chip ok">Answer bank</span></div>
+            <div class="row"><label class="opt"><input type="radio" name="rtw" checked> Yes</label><label class="opt"><input type="radio" name="rtw"> No</label><span class="small faint">· EU citizen · used in 9 applications</span></div>
+          </div>
+          <div class="q">
+            <div class="row"><label for="notice"><b>What is your notice period?</b></label><span class="spacer"></span><span class="chip ok">Answer bank</span></div>
+            <input type="text" id="notice" value="Available immediately" style="max-width:320px">
+          </div>
+          <div class="q box flag" id="q-salary">
+            <div class="row"><label for="sal"><b>What are your salary expectations? (gross monthly, EUR)</b></label><span class="spacer"></span><span class="chip warn">Needs you</span></div>
+            <p class="small">Posting range <b>€2,800–3,600</b> gross · your floor €2,300 · last asked at Corvid Logistics: €3,300. Suggested: <b>€3,300</b>, in the upper half with room to negotiate. The form takes a single number, not a range.</p>
+            <div class="row"><input type="number" id="sal" value="3300" aria-describedby="sal-help" style="max-width:160px"><span class="small muted">€ gross / month</span><button class="btn sm primary" type="button">Confirm</button></div>
+            <span class="small muted" id="sal-help">Not saved to the answer bank: salary depends on the job.</span>
+          </div>
+          <div class="q">
+            <div class="row"><label for="why"><b>Why Kestrel?</b></label><span class="spacer"></span><span class="chip">New draft</span></div>
+            <textarea id="why" aria-describedby="why-c" rows="5">Payments security is detection work with a short feedback loop: a bad rule shows up as blocked merchants or missed fraud within days, and that is the kind of SOC I want to work in. At Orbital Bank I built 40 Splunk detections and cut false positives by about a third, so tuning noisy alerting is where I would start. Kestrel's move to Elastic and the hybrid setup in Sofia fit what I am looking for next.</textarea>
+            <div class="row"><span class="count" id="why-c">77 / 150 words (form limit)</span><span class="spacer"></span><span class="small faint">Company-specific: not saved to the answer bank</span><button class="btn ghost sm" type="button">Regenerate</button></div>
+          </div>
+          <div class="q">
+            <div class="row"><label for="inc"><b>Describe a security incident you handled.</b></label><span class="spacer"></span><span class="chip ok">Answer bank · adapted</span></div>
+            <textarea id="inc" rows="4" aria-describedby="inc-n">In March 2024 a phishing email posing as our payroll provider reached about 60 staff at Orbital Bank. I was on triage when the first reports came in: I pulled the sender and link indicators, searched Splunk for clicks and found 4 people who had entered credentials, then handed them to the incident lead for resets…</textarea>
+            <span class="small muted" id="inc-n">Your answer from 12 Aug, trimmed by 1 sentence to fit 150 words. No facts added. Keeps "handed to the incident lead", consistent with the CV wording you chose.</span>
+          </div>
+          <div class="q">
+            <div class="row"><label for="heard"><b>How did you hear about us?</b></label><span class="spacer"></span><span class="chip">New · from your sources</span></div>
+            <select id="heard" style="max-width:320px"><option>LinkedIn</option><option>Company website</option><option>Job board</option><option>Referral</option></select>
+            <span class="small muted">First seen in a LinkedIn alert on 9 Oct. <label class="opt" style="display:inline-flex"><input type="checkbox" checked> Save "first source wins" as the rule for this question</label></span>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span id="sc-why" class="small muted">1 answer needs you: <a href="#q-salary">salary</a></span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="sc-why">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ STEP 5 ATS ============ -->
+      <section data-state="ats" data-state-name="5 · ATS check" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="ats"></div>
+        <div class="row"><h2 class="step-h">ATS check</h2><span class="small muted">the CV PDF run through a parser, the way Greenhouse reads it</span><span class="spacer"></span><span class="chip warn">6 of 7 pass</span></div>
+        <div class="cols">
+          <div class="stack">
+            <div class="row"><h3>What the ATS reads</h3><span class="small muted">parsed text, in reading order</span></div>
+<pre class="parsed" aria-label="Parsed CV text">NAME       Kris
+EMAIL      kris@example.dev
+PHONE      +359 88 000 0000
+LOCATION   Sofia, Bulgaria
+
+SUMMARY    Security analyst with 3 years in security operations:
+           detection engineering in Splunk, alert triage and phishing
+           incident response in a bank SOC.
+
+EXPERIENCE
+  Junior Security Analyst · Orbital Bank          Jan 2023 – Dec 2025
+    - Built 40 Splunk detections, cutting false positives by about a third
+    - Triaged about 25 alerts a day in a 6-person SOC
+    - Responded to 3 phishing incidents as part of the SOC team
+  SOC Intern · Varna Telecom                      <span class="miss">(no dates found)</span>
+  Freelance Full-stack Developer                  2021 – 2023
+
+EDUCATION  BSc Computer Science · 2022
+SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pre>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>Checks</h3>
+              <ul class="checks small">
+                <li><span class="chip ok">Pass</span> Text-based PDF, single column, 2 pages</li>
+                <li><span class="chip ok">Pass</span> Name, email, phone, location found</li>
+                <li><span class="chip ok">Pass</span> Education and skills found</li>
+                <li><span class="chip ok">Pass</span> 11 of 13 posting keywords found; missing: Kubernetes, CISSP (deliberate gaps)</li>
+                <li><span class="chip ok">Pass</span> File name: Kris_CV_Kestrel_Security_Engineer.pdf</li>
+                <li><span class="chip ok">Pass</span> Summary 2 sentences, bullets under 160 characters</li>
+                <li><span class="chip bad">Fail</span> Varna Telecom: "Summer 2022" isn't read as a date</li>
+              </ul>
+            </div>
+            <form class="box flag" onsubmit="return false" aria-labelledby="fix-h">
+              <h3 id="fix-h">Fix: give the internship real months</h3>
+              <p class="small">Your master profile says "Summer 2022". Parsers need months. Which months were they?</p>
+              <div class="row">
+                <div class="field"><label for="from">From</label><select id="from"><option>Choose…</option><option>Jun 2022</option><option>Jul 2022</option></select></div>
+                <div class="field"><label for="to">To</label><select id="to"><option>Choose…</option><option>Aug 2022</option><option>Sep 2022</option></select></div>
+              </div>
+              <label class="opt small"><input type="checkbox" checked> Also update my master profile</label>
+              <div class="row"><button class="btn sm primary" type="submit">Apply and re-check</button></div>
+            </form>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span id="ats-why" class="small muted">1 check failing</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="ats-why">Approve package</button></div>
+      </section>
+
+      <!-- ============ MODEL ERROR ============ -->
+      <section data-state="error" data-state-name="Error · model failed" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="error"></div>
+        <div class="banner bad" role="alert">
+          <b>The cover letter didn't finish.</b>
+          <span>The model host didn't answer within 60 s. Your CV version and screening answers are finished and saved; nothing was lost.</span>
+          <span class="spacer"></span><button class="btn sm" type="button">Retry cover letter</button>
+        </div>
+        <div class="cols">
+          <div class="stack">
+            <div class="list">
+              <div class="part"><span><b>Target posting</b></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>CV version</b> <span class="small muted">· 2 flags for you</span></span><a class="btn sm" href="#" data-goto="cv">Review</a></div>
+              <div class="part"><span><b>Screening answers</b></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>Cover letter</b> <span class="small muted">· failed at 10:46, retried once automatically</span></span><span class="chip bad">Failed</span></div>
+              <div class="part"><span><b>ATS check</b> <span class="small muted">· waits for the CV to be approved</span></span><span class="chip">Waiting</span></div>
+            </div>
+            <p class="small muted">Keep reviewing meanwhile: the cover letter step will be ready by the time you reach it, or you can write it yourself.</p>
+          </div>
+          <div class="box">
+            <h3>Other options</h3>
+            <button class="btn sm" type="button">Write it myself</button>
+            <p class="small muted">If retries keep failing, check the model and provider in <a href="settings.html">Settings → Model &amp; budget</a>. This package costs about $0.01 more per retry.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ BUDGET CAP ============ -->
+      <section data-state="cap" data-state-name="Error · budget cap" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="cap"></div>
+        <div class="banner warn" role="alert">
+          <b>This month's budget is used up: $10.00 of $10.00.</b>
+          <span>Generation stopped before the cover letter and ATS check. Everything finished so far is saved. The cap resets on 1 Nov.</span>
+        </div>
+        <div class="cols">
+          <div class="stack">
+            <div class="list">
+              <div class="part"><span><b>Target posting</b></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>CV version</b></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>Screening answers</b></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>Cover letter</b></span><span class="chip">Not generated</span></div>
+              <div class="part"><span><b>ATS check</b> <span class="small muted">· runs locally, no model needed</span></span><span class="chip ok">Will run</span></div>
+            </div>
+          </div>
+          <div class="box">
+            <h3>How to continue</h3>
+            <a class="btn primary" href="settings.html">Raise the cap in Settings</a>
+            <p class="small muted">A cover letter costs about $0.01. October so far: 312 jobs read, 14 packages.</p>
+            <button class="btn" type="button">Write the cover letter myself</button>
+            <button class="btn ghost" type="button">Finish on 1 Nov</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ APPROVED ============ -->
+      <section data-state="approved" data-state-name="Approved" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="approved"></div>
+        <div class="banner ok" role="status"><b>Package approved at 10:58.</b><span>8 minutes since you opened the job.</span></div>
+        <div class="cols">
+          <div class="stack" style="gap:14px">
+            <div class="row"><a class="btn primary" href="extension.html">Open the target posting ↗</a><span class="small muted">The extension fills the Greenhouse form; you check it and press Submit.</span></div>
+            <div class="row"><button class="btn" type="button">Download CV (PDF)</button><button class="btn" type="button">Download cover letter</button></div>
+            <dl class="kv">
+              <dt>Target posting</dt><dd>kestrel.greenhouse.io · Security Engineer</dd>
+              <dt>CV version</dt><dd>Security · Kestrel · 2 pages · 7 changes from master</dd>
+              <dt>Cover letter</dt><dd>217 words · draft 2</dd>
+              <dt>Screening answers</dt><dd>6 · salary €3,300 gross · 1 rule saved to your answer bank</dd>
+              <dt>ATS check</dt><dd>7 of 7 pass</dd>
+              <dt>Your decisions</dt><dd>Incident response: "Responded to 3 phishing incidents as part of the SOC team" (not "led") · Kubernetes: kept as a named gap, mentioned in the letter · Varna Telecom: Jun–Aug 2022</dd>
+            </dl>
+          </div>
+          <div class="box">
+            <h3>What happens next</h3>
+            <ul class="checks small" style="gap:4px">
+              <li>When you press Submit in the portal, the extension logs the application under Applications.</li>
+              <li>Until then the job sits in Saved with "Package ready".</li>
+              <li>Editing any part re-opens that step for approval.</li>
+            </ul>
+            <button class="btn ghost sm" type="button">Edit package</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <aside class="notes" data-notes-for="generating"><span class="label">Design notes</span><ul>
+    <li>Over 10 s, so: per-part progress, a time estimate, and finished parts open straight away. The CV usually finishes first and is the step that needs you most, so "Start reviewing" is the next action, not waiting.</li>
+    <li>Leaving the page is safe and said so; the Feed row picks up "Package ready". "Stop" keeps finished parts.</li>
+    <li>Cost is shown per package because there's a hard monthly cap.</li></ul></aside>
+  <aside class="notes" data-notes-for="target" hidden><span class="label">Design notes</span><ul>
+    <li>Radio cards, all three visible, recommended one pre-selected with its reason. Each option says what you lose by choosing it (Easy Apply loses the tailored CV and the extension).</li>
+    <li>Usually a one-click step; it's still a step because the choice decides which screening questions and which portal the rest of the package is built for.</li></ul></aside>
+  <aside class="notes" data-notes-for="cv" hidden><span class="label">Design notes</span><ul>
+    <li>Concept B inside A: each requirement shows the profile evidence and the exact CV line it became. The two flags sit inline under their requirement, in amber boxes, and are also listed at the top with jump links.</li>
+    <li>Flag options have no pre-selection on purpose: honesty decisions should be conscious. Each option says how it holds up in an interview, and the "led" option asks for the fact that would justify it.</li>
+    <li>Gaps are named, never covered: CISSP is shown as "left out, not claimed"; Kubernetes asks whether you have evidence, and if so it goes into the master profile first, not only this CV.</li>
+    <li>Diff vs master profile is a list of discrete edits with an undo each, so every change is auditable and reversible.</li>
+    <li>Approve is <code>aria-disabled</code> (still focusable, explains itself) rather than <code>disabled</code>; pressing it gives the Blocked state.</li></ul></aside>
+  <aside class="notes" data-notes-for="blocked" hidden><span class="label">Design notes</span><ul>
+    <li>Pressing Approve with an open flag moves focus to an alert that names the flag, why it matters and links straight to it; the flag gets a strong outline. Resolved flags turn green and stay visible with what you chose.</li>
+    <li>The same rule applies everywhere: editing an approved part later re-opens that step, so the final package can never contain an unresolved flag.</li></ul></aside>
+  <aside class="notes" data-notes-for="cover" hidden><span class="label">Design notes</span><ul>
+    <li>Editable in place; the word count is always visible against the target. Highlights show which sentences were written for this job versus carried over from your usual letter, so you can check the parts most likely to be wrong.</li>
+    <li>"Regenerate with an instruction" keeps the current draft (drafts are paged), so nothing is lost by trying.</li>
+    <li>Checks tie back to the CV step's decisions: the letter can't say "led" if the CV says "took part", and the gap you chose to name is named.</li></ul></aside>
+  <aside class="notes" data-notes-for="screening" hidden><span class="label">Design notes</span><ul>
+    <li>Questions in the portal's order, each with its origin: Answer bank, adapted (with what changed) or New draft. New company-specific answers are not saved to the bank; reusable ones offer to be.</li>
+    <li>Salary is always "Needs you": the range, your floor and your last answer are shown, plus a suggested number. The field type follows the portal (single number).</li>
+    <li>Word limits come from the portal form and show as a live count, not only on overflow.</li></ul></aside>
+  <aside class="notes" data-notes-for="ats" hidden><span class="label">Design notes</span><ul>
+    <li>Shows what the parser actually extracted, in reading order, with lost fields marked: more useful than a score. Pass/fail per check, no composite number (see cv-writing-and-evaluation.md §12).</li>
+    <li>The fix asks for the real months instead of guessing them, and offers to update the master profile so it doesn't come back.</li>
+    <li>Missing keywords that are deliberate gaps count as a pass, with the reason.</li></ul></aside>
+  <aside class="notes" data-notes-for="error" hidden><span class="label">Design notes</span><ul>
+    <li>Says which part failed, why, and that the rest is saved. One automatic retry already happened; the next one is yours to trigger.</li>
+    <li>Review continues: a failure in one part doesn't block the steps before it.</li></ul></aside>
+  <aside class="notes" data-notes-for="cap" hidden><span class="label">Design notes</span><ul>
+    <li>A cap is a limit you set, not an error, so it's amber. Raising it is a Settings change you make yourself; the app never raises it.</li>
+    <li>Three ways forward: raise the cap, write the missing part yourself, or wait. The ATS check runs locally and continues regardless.</li></ul></aside>
+  <aside class="notes" data-notes-for="approved" hidden><span class="label">Design notes</span><ul>
+    <li>One primary action: open the target posting, where the extension takes over. The user presses Submit; the app never does.</li>
+    <li>The summary records your honesty decisions in words, so you can answer for them in an interview.</li>
+    <li>Time since opening the job is shown against the under-10-minutes goal.</li></ul></aside>
+</div>
+
+<script src="wf.js"></script>
+<script>
+(function () {
+  const NAMES = ["Target posting", "CV", "Cover letter", "Screening answers", "ATS check", "Approved"];
+  // per state: one code per step. d done · n now · t to do · w working · x failed · s skipped/not generated ; "!text" adds a note
+  const PLAN = {
+    generating: ["d", "d!2 flags", "w!writing…", "d", "w!running", "t"],
+    target: ["n", "t", "t", "t", "t", "t"],
+    cv: ["d", "n!2 flags", "t", "t", "t", "t"],
+    blocked: ["d", "n!1 flag", "t", "t", "t", "t"],
+    cover: ["d", "d", "n", "t", "t", "t"],
+    screening: ["d", "d", "d", "n!1 needs you", "t", "t"],
+    ats: ["d", "d", "d", "d", "n!1 to fix", "t"],
+    error: ["d", "d!2 flags", "x!failed", "d", "t", "t"],
+    cap: ["d", "d", "s!not generated", "d", "t", "t"],
+    approved: ["d", "d", "d", "d", "d", "d"],
+  };
+  const head = (state) => {
+    const steps = PLAN[state].map((code, i) => {
+      const [k, note] = code.split("!");
+      const n = i < 5 ? `${i + 1} ` : "";
+      const label = `${k === "d" ? "✓ " : ""}${n}${NAMES[i]}${note ? " · " + note : ""}`;
+      const cls = { d: "step done", n: "step now", t: "step", w: "step", x: "step flag", s: "step flag" }[k] + (note && k === "d" ? " flag" : "");
+      if (k === "n") return `<li><span class="${cls}" aria-current="step">${label}</span></li>`;
+      if (k === "d") return `<li><a class="${cls}" href="#">${label}</a></li>`;
+      return `<li><span class="${cls}">${label}</span></li>`;
+    }).join("");
+    return `<nav class="appcrumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a> / <a href="job.html">Security Engineer · Kestrel Payments</a> / <span aria-current="page">Package</span></nav>
+      <nav aria-label="Package steps"><ol class="stepper">${steps}</ol></nav>`;
+  };
+  document.querySelectorAll("[data-head]").forEach(el => el.innerHTML = head(el.dataset.head));
+
+  // requirement → evidence map
+  const irFlag = (id, must) => `<div class="box flag${must ? " must" : ""}" id="${id}">
+      <div class="row"><span class="chip warn">Near the line</span><b>"Took part in" became "Led"</b></div>
+      <div class="src">Master profile: "Took part in the response to 3 phishing incidents"<br>Draft: "<b>Led</b> the response to 3 phishing incidents"</div>
+      <fieldset><legend>Which wording goes in the CV?</legend>
+        <label class="opt"><input type="radio" name="${id}"> <span>"Took part in the response to 3 phishing incidents" <span class="faint small">· your original</span></span></label>
+        <label class="opt"><input type="radio" name="${id}"> <span>"Responded to 3 phishing incidents as part of the SOC team" <span class="faint small">· stronger verb, still accurate</span></span></label>
+        <label class="opt"><input type="radio" name="${id}"> <span>"Led the response…": only if you led at least one. An interviewer will ask what leading involved.</span></label>
+      </fieldset>
+      <div class="row"><button class="btn sm primary" type="button">Use this wording</button></div></div>`;
+  const k8sFlag = `<div class="box flag" id="flag-k8s">
+      <div class="row"><span class="chip bad">Gap</span><b>Kubernetes security: no evidence in your master profile</b></div>
+      <p class="small">It's left out of the CV, not covered up. Is there anything real to add?</p>
+      <fieldset><legend>Your experience with Kubernetes security</legend>
+        <label class="opt"><input type="radio" name="k8s"> <span>None: keep it as a named gap</span></label>
+        <label class="opt"><input type="radio" name="k8s"> <span>Some: add it to my master profile first <span class="faint small">· e.g. RBAC, network policies, image scanning in a side project</span></span></label>
+      </fieldset>
+      <label class="opt small"><input type="checkbox" checked> <span>Name the gap in one honest sentence in the cover letter</span></label>
+      <div class="row"><button class="btn sm primary" type="button">Save answer</button></div></div>`;
+  const k8sDone = `<div class="box resolved small"><b>Resolved:</b> kept as a named gap; the cover letter mentions it. <button class="btn ghost sm" type="button">Change</button></div>`;
+  const R = (name, chip, chipCls, ev, cv, extra = "") =>
+    `<div class="req"><div class="stack" style="gap:4px"><b>${name}</b><span><span class="chip ${chipCls}">${chip}</span></span></div>
+     <div class="ev"><span>${ev}</span>${cv ? `<span class="cvline">${cv}</span>` : ""}</div>${extra}</div>`;
+  const rows = (mode) => [
+    R("3+ years in security operations", "Met", "ok", "Orbital Bank 2023–2025 · Varna Telecom intern 2022", "Summary: \"3 years in security operations\""),
+    R("SIEM: Splunk or Elastic", "Met", "ok", "40 Splunk detections, false positives down about a third · Elastic SIEM course (2026)", "Orbital Bank, bullet 1 · Skills: Splunk, Elastic first"),
+    R("Incident response", "Met · flagged", "warn", "Took part in the response to 3 phishing incidents", "Orbital Bank, bullet 3", irFlag(mode === "blocked" ? "flag-ir-b" : "flag-ir", mode === "blocked")),
+    R("Kubernetes security", "Gap", "bad", "No evidence", "Not in the CV", mode === "blocked" ? k8sDone : k8sFlag),
+    R("CISSP (preferred)", "Not held", "warn", "Left out, not claimed", ""),
+    R("English, professional", "Met", "ok", "English C1", "Languages"),
+  ].join("");
+  document.querySelectorAll("[data-map]").forEach(el => el.innerHTML = rows(el.dataset.map));
+
+  const diffs = [
+    ["Summary", '<del>Junior security analyst and full-stack developer with experience in SOC work and web apps.</del> <ins>Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing incident response in a bank SOC.</ins>'],
+    ["Orbital Bank · bullet order", 'Moved up: "Built 40 Splunk detections, cutting false positives by about a third" is now first.'],
+    ["Orbital Bank · bullet 3", '<del>Took part in</del> <ins>Led</ins> the response to 3 phishing incidents <span class="chip warn">flagged</span>'],
+    ["Wording", '<del>phishing cases</del> <ins>phishing incidents</ins> · the posting\'s term for the same thing'],
+    ["Freelance 2021–2023", 'Shortened from 3 bullets to 1: <del>Built client dashboards…</del> <del>Set up CI…</del>'],
+    ["Skills", 'Reordered: <ins>Splunk, Elastic, incident response</ins> first; React and Node.js moved to the end'],
+    ["Layout", 'Projects section dropped to keep 2 pages (still in your master profile)'],
+  ];
+  document.querySelectorAll("[data-diff]").forEach(el => el.innerHTML = diffs.map(([k, v]) =>
+    `<div class="ch"><div class="stack" style="gap:2px"><span class="label">${k}</span><p class="small">${v}</p></div><button class="btn ghost sm" type="button">Undo</button></div>`).join(""));
+
+  // highlight toggle on the cover letter
+  const mt = document.getElementById("mark-toggle");
+  mt && mt.addEventListener("change", () => document.getElementById("cover-wrap").classList.toggle("hide-marks", !mt.checked));
+
+  // jump links that switch state (e.g. "Start reviewing" → CV step)
+  document.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => {
+    e.preventDefault(); document.querySelector(`.state-tab[data-target="${a.dataset.goto}"]`)?.click();
+  }));
+
+  // budget indicator follows the state
+  const health = document.getElementById("health");
+  const setHealth = () => {
+    const vis = [...document.querySelectorAll("[data-state]")].find(s => !s.hidden)?.dataset.state;
+    health.innerHTML = vis === "cap" ? 'Budget <b class="bad">$10.00 / $10 · cap reached</b>' : vis === "error" ? 'Model <b class="bad">1 failure</b> · budget $3.44 / $10' : 'Sources <b>14/14 OK</b> · budget $3.42 / $10';
+  };
+  document.querySelectorAll(".state-tab").forEach(t => t.addEventListener("click", setHealth)); setHealth();
+})();
+</script>
+</body>
+</html>
