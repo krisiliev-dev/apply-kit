@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createEngine, createScheduler } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
+import { createImapMailReader, readMailSettings } from "./mail.ts";
 import { createServer } from "./server.ts";
 import { createOpenRouterExtractor } from "./extraction/openrouter.ts";
 import type { Extractor } from "@apply-kit/core";
@@ -24,8 +25,9 @@ const engine = createEngine({
   fetch: globalThis.fetch,
   extractor,
   aiMonthlyCapUsd: config.ai.monthlyCapUsd,
-  // The IMAP mail reader arrives with its ticket.
-  mailReader: { fetchSince: async () => [] },
+  // The Gmail job mailbox, read-only. Only read when an email-alert Source exists, during checks
+  // the scheduler runs; missing settings show on Sources as "not configured" with how to fix it.
+  mailReader: createImapMailReader(readMailSettings(process.env)),
   // Sources read their keys (JOOBLE_API_KEY, REED_API_KEY) by name; values are never logged.
   settings: { get: (name) => process.env[name] },
 });

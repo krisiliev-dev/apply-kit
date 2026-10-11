@@ -92,3 +92,13 @@ export async function readJob(id: string): Promise<JobDetail> {
 export async function confirmFact(id: string, key: string, answer: FactAnswer): Promise<JobDetail> {
   return json(await postJson(`${jobPath(id)}/facts/${encodeURIComponent(key)}`, { answer }));
 }
+
+/** "Make target": one of the Job's Postings becomes the one Kris applies through. */
+export async function makeTarget(jobId: string, postingId: string): Promise<JobDetail> {
+  return json(await postJson(`${jobPath(jobId)}/target`, { postingId }));
+}
+
+/** "Not the same job? Split": the Posting leaves the Job; answers with both Jobs' ids (this one first). */
+export async function splitPosting(jobId: string, postingId: string): Promise<{ jobIds: [string, string] }> {
+  return json(await postJson(`${jobPath(jobId)}/split`, { postingId }));
+}

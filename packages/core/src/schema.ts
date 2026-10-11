@@ -98,6 +98,41 @@ const migrations: string[] = [
      confirmed_at TEXT NOT NULL,
      PRIMARY KEY (posting_id, fact_key)
    );`,
+  // #17: alert emails each email Source received (by Message-ID, so a re-delivered copy is one row),
+  // for its usual rhythm; and every read of the job mailbox, for mailbox errors on Sources.
+  `CREATE TABLE alert_email (
+     source_id TEXT NOT NULL REFERENCES source(id),
+     email_id TEXT NOT NULL,
+     received_at TEXT NOT NULL,
+     subject TEXT NOT NULL,
+     postings INTEGER NOT NULL,
+     PRIMARY KEY (source_id, email_id)
+   );
+   CREATE INDEX alert_email_received ON alert_email(source_id, received_at);
+   CREATE TABLE mailbox_read (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     read_at TEXT NOT NULL,
+     outcome TEXT NOT NULL,
+     reason TEXT,
+     error TEXT,
+     emails INTEGER
+   );`,
+  // #9: merging Postings into Jobs. Each Posting carries its match key (normalised company and title)
+  // and why it joined its Job. A Job merged into another keeps its row (state and decisions intact)
+  // and points at the Job that absorbed it, so a split can bring it back. Kris's chosen target
+  // posting is kept on the Job; splits are remembered as pairs of Postings that never merge again.
+  `ALTER TABLE posting ADD COLUMN match_key TEXT;
+   ALTER TABLE posting ADD COLUMN merge_reason TEXT;
+   CREATE INDEX posting_match ON posting(match_key);
+   CREATE INDEX posting_url ON posting(url);
+   ALTER TABLE job ADD COLUMN merged_into TEXT REFERENCES job(id);
+   ALTER TABLE job ADD COLUMN target_posting_id TEXT REFERENCES posting(id);
+   CREATE TABLE posting_split (
+     a TEXT NOT NULL REFERENCES posting(id),
+     b TEXT NOT NULL REFERENCES posting(id),
+     created_at TEXT NOT NULL,
+     PRIMARY KEY (a, b)
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
