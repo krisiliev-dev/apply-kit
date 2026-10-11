@@ -3,6 +3,7 @@ import type { EngineDeps, SqlDatabase } from "./ports.ts";
 import { isInYourLocations } from "./locations.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { adapterFor, adapters } from "./sources/registry.ts";
+import { backfillMatchKeys, reconcile, refreshMatchKey, targetOf } from "./merging.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
@@ -22,7 +23,9 @@ export interface FeedJob {
   postedAt: string | null;
   /** How many Postings were merged into this Job. */
   postingCount: number;
-  /** Link to the job's posting. */
+  /** How many different sites (link hosts) list it: the Feed's "on N sites". */
+  siteCount: number;
+  /** Link to the Job's target posting (by default the company's own page). */
   url: string;
   state: JobState;
   /** Set on passed Jobs: when, the reason Kris chose (null when he gave none), and the Decision to undo. */
@@ -213,6 +216,7 @@ const viewStates: Record<FeedView, JobState[]> = {
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
+  backfillMatchKeys(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
 
@@ -245,7 +249,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
   const countStates = (states: string[]) =>
-    count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
+    count(`SELECT COUNT(*) AS n FROM job WHERE merged_into IS NULL AND state IN (${states.map(() => "?").join(",")})`, ...states);
 
   async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
     const sourceId = String(row.id);
@@ -295,7 +299,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
       const out: string[] = [];
       for (const jobId of new Set(jobIds)) {
-        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ?").get(jobId);
+        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ? AND merged_into IS NULL").get(jobId);
         if (!job || !from.includes(String(job.state) as JobState)) continue;
         db.prepare(
           `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
@@ -313,6 +317,16 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     db.prepare("UPDATE job SET state = ?, state_changed_at = ?, pass_reason = ?, pass_note = ?, closed_how = ? WHERE id = ?").run(
       state, changedAt, f.passReason ?? null, f.passNote ?? null, f.closedHow ?? null, jobId,
     );
+  }
+
+  /** The target posting's link and how many sites list the Job. */
+  function linksOf(jobId: string): { siteCount: number; url: string } {
+    const rows = db.prepare("SELECT id, url FROM posting WHERE job_id = ?").all(jobId);
+    const target = targetOf(db, jobId).postingId;
+    return {
+      siteCount: new Set(rows.map((r) => siteOf(String(r.url)))).size,
+      url: String(rows.find((r) => r.id === target)?.url ?? rows[0]?.url),
+    };
   }
 
   function allSourceHealth(): SourceHealth[] {
@@ -399,7 +413,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
                   WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
          FROM job j
          JOIN posting p ON p.id = (SELECT id FROM posting WHERE job_id = j.id ORDER BY first_seen_at, id LIMIT 1)
-         WHERE j.state IN (${states.map(() => "?").join(",")})
+         WHERE j.merged_into IS NULL AND j.state IN (${states.map(() => "?").join(",")})
          ORDER BY ${query.view === "passed" ? "j.state_changed_at DESC, " : ""}p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all(...states);
       return {
@@ -414,7 +428,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           salary: r.salary == null ? null : String(r.salary),
           postedAt: r.posted_at == null ? null : String(r.posted_at),
           postingCount: Number(r.n),
-          url: String(r.url),
+          ...linksOf(String(r.id)),
           state: String(r.state) as JobState,
           ...(r.state === "passed" && {
             passed: {
@@ -484,6 +498,15 @@ function startNow(start: () => Promise<Response>): Promise<Response> {
   }
 }
 
+/** The site a link is on, "www." aside ("dev.bg", "job-boards.eu.greenhouse.io"). */
+function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 function kindLabel(kind: string): string {
   return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
@@ -523,7 +546,8 @@ function toCheckRecord(r: Record<string, unknown>): CheckRecord {
 
 /**
  * Upserts one Posting by its stable identity (source id + the Source's own id). A Posting seen for
- * the first time gets its own Job; merging Postings into shared Jobs comes later. Returns true if new.
+ * the first time gets its own Job, then merges with any Job it's the same as (see merging.ts).
+ * Returns true if new.
  */
 function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: string): boolean {
   const id = `${sourceId}:${p.externalId}`;
@@ -533,6 +557,8 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
       `UPDATE posting SET url = ?, title = ?, company = ?, location = ?, salary = ?, posted_at = ?,
               description_html = ?, last_seen_at = ? WHERE id = ?`,
     ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, id);
+    refreshMatchKey(db, id, p);
+    reconcile(db, id);
     return false;
   }
   const jobId = `job:${id}`;
@@ -542,6 +568,8 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
                           description_html, first_seen_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, sourceId, p.externalId, jobId, p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, now);
+  refreshMatchKey(db, id, p);
+  reconcile(db, id);
   return true;
 }
 
