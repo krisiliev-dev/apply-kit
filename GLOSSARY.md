@@ -24,6 +24,14 @@ _Avoid_: Outage, failure (a drop is a check that worked)
 A source that returns only its top results for a query (Jooble, Reed, EURES, Microsoft, Amazon), so a posting missing from one check never counts as gone.
 _Avoid_: Partial source
 
+**Capture**:
+Adding the job page, or the listings of a search results page, that the user is viewing in Chrome, with one click in the extension. Captured postings belong to the Source "Captured · <site>"; nothing is captured without a click.
+_Avoid_: Scrape, crawl, import
+
+**Unverified**:
+A captured or pasted job that nothing has seen for 30 days (no checked Source lists it and it wasn't captured again). It stays in the feed, marked, and is never closed for it.
+_Avoid_: Stale, expired
+
 **Company**:
 An employer that posts jobs.
 _Avoid_: Employer, organisation, client

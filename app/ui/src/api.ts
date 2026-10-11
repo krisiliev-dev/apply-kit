@@ -1,5 +1,5 @@
 import type {
-  RuleChange, SearchSettings,
+  RuleChange, SearchSettings, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
@@ -191,4 +191,17 @@ export async function splitPosting(jobId: string, postingId: string): Promise<{ 
 /** "Paste a job link", optionally with the job's text Kris pasted when the page couldn't be read. */
 export async function addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult> {
   return json(await postJson("/api/jobs/link", pasted ? { link, pasted } : { link }));
+}
+
+/** A one-time code for pairing the Chrome extension (Settings → Chrome extension). */
+export async function startPairing(): Promise<{ code: string; expiresAt: string }> {
+  return json(await postJson("/api/pairing"));
+}
+
+export async function fetchPairedDevices(signal?: AbortSignal): Promise<PairedDevice[]> {
+  return json(await fetch("/api/pairing/devices", { signal }));
+}
+
+export async function unpairDevice(id: string): Promise<void> {
+  await json(await postJson(`/api/pairing/devices/${encodeURIComponent(id)}/unpair`));
 }

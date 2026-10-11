@@ -4,8 +4,11 @@ export type {
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
   Decision, JobState, PassReason, PassInput,
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
-  AddLinkResult, LinkProblem, PastedPosting,
+  AddLinkResult, LinkProblem, PastedPosting, CaptureReport, CaptureItem, CaptureStatus,
 } from "./engine.ts";
+export type { CapturedPage, MissingField } from "./capture/listings.ts";
+export { createPairing } from "./pairing.ts";
+export type { Pairing, PairResult, PairedDevice } from "./pairing.ts";
 export { sourceRemovedHow, noLongerListedBy } from "./engine.ts";
 export type { UnusualDrop, NormalVolume, DropWording } from "./drops.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";

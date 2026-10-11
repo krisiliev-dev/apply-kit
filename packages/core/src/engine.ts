@@ -21,6 +21,7 @@ import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, sp
 import { describeMergeReason, type MergeReason } from "./matching.ts";
 import { jobLinkFrom, linkKey, protectedSite, robotsAllows } from "./capture/links.ts";
 import { readJobPage } from "./capture/page.ts";
+import { missingFields, readCapturedPage, type CapturedListing, type CapturedPage, type MissingField, type PageListings } from "./capture/listings.ts";
 import { escapeHtml } from "./sources/shared.ts";
 
 /**
@@ -96,6 +97,11 @@ export interface FeedJob {
   hidden: boolean;
   /** True when Kris chose "Show this job" despite its dealbreakers. */
   shownByYou: boolean;
+  /**
+   * Set on an open Job Kris captured or pasted that nothing has seen for 30 days (no job system
+   * lists it, and Kris hasn't captured it again): since when. It stays open. Absent otherwise.
+   */
+  unverified?: { since: string };
 }
 
 /** One Posting of a Job, as the Job page lists it. */
@@ -173,6 +179,8 @@ export interface JobDetail {
   hidden: boolean;
   /** Kris chose "Show this job" despite its dealbreakers. */
   shownByYou: boolean;
+  /** See FeedJob.unverified. Absent unless unverified. */
+  unverified?: { since: string };
 }
 
 /** A rule Kris changed with "Not a dealbreaker for me", kept so it can be listed and undone. */
@@ -546,6 +554,19 @@ export interface DiscoveryEngine {
    * posting's text himself (`pasted`), which is never fetched.
    */
   addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult>;
+  /**
+   * What capturing this page would do, changing nothing: every listing the page shows (one on a job
+   * page, every rendered card on a search results page) as new, already in the Feed, hidden (with
+   * reasons) or couldn't read. The page is only what the extension sent; nothing is fetched.
+   */
+  previewCapture(page: CapturedPage): Promise<CaptureReport>;
+  /**
+   * Adds every readable listing of a captured page to the Feed, under the Source "Captured · <site>":
+   * merged with Jobs already there, ranked, and read later within the budget (a single job page is
+   * read straight away, so its dealbreakers show in the answer). Capturing the same page again adds
+   * nothing new; it fills in what the earlier capture lacked. Nothing is fetched.
+   */
+  capturePage(page: CapturedPage): Promise<CaptureReport>;
 }
 
 /** What Kris can paste along with a link, when the page can't be read (or he'd rather paste it). */
@@ -594,6 +615,54 @@ export type AddLinkResult =
       alertSender: string | null;
     };
 
+/**
+ * What a captured listing is, in Kris's words:
+ * - new: not in the Feed (after capturing: added);
+ * - in-feed: already in the Feed (by its link, or the same role at the same company from another Source);
+ * - hidden: in the Feed but in the hidden pile, with the reasons;
+ * - unreadable: the card or page didn't give enough to add it (no title, no link), with why.
+ */
+export type CaptureStatus = "new" | "in-feed" | "hidden" | "unreadable";
+
+/** One listing of a captured page, with its status. */
+export interface CaptureItem {
+  title: string | null;
+  company: string | null;
+  location: string | null;
+  salary: string | null;
+  /** The job's own link (tracking dropped), or null when the card has none. */
+  url: string | null;
+  status: CaptureStatus;
+  /** The Job it is (or would be) in, or null when unreadable. In a preview, a new listing's Job doesn't exist yet. */
+  jobId: string | null;
+  /** The Job's state when it is already in the Feed, else null. */
+  state: JobState | null;
+  /** True when it joins a Job found through another Source or site ("merged"). */
+  merged: boolean;
+  /** What the page didn't show: the Job is still added, marked with what's missing. */
+  missing: MissingField[];
+  /** For a hidden listing: each dealbreaker, in plain words. */
+  hiddenBecause: string[];
+  /** For an unreadable listing: why, in plain words. */
+  problem: string | null;
+}
+
+/** What capturing a page found (a preview) or did. */
+export interface CaptureReport {
+  /** "job": the job page Kris is viewing. "search": the listings a results page shows. "none": no job found. */
+  kind: "job" | "search" | "none";
+  /** The site captured on ("LinkedIn", "jobs.bg"). */
+  site: string;
+  /** The Source the listings belong to ("Captured · LinkedIn"), or null when nothing could be read. */
+  source: string | null;
+  listings: CaptureItem[];
+  counts: { new: number; inFeed: number; hidden: number; unreadable: number };
+  /** Cards further down the results that the site hasn't shown yet. Kris scrolls and captures again. */
+  notLoaded: number;
+  /** When no job was found, what to do, in plain words; null otherwise. */
+  message: string | null;
+}
+
 export interface ReadResult {
   read: number;
   failed: number;
@@ -626,11 +695,18 @@ interface StateFields {
 
 const sqlText = (v: unknown): string | null => (v == null ? null : String(v));
 
+/** The company a Posting carries when its page doesn't say (never evidence for merging). */
+const companyNotStated = "Company not stated";
+
 /**
  * SQL condition for Sources on the watchlist: every Source but the ones Kris adds jobs through himself
  * (pasted links), which are never checked and have no health to show.
  */
-const onWatchlist = `kind NOT IN (${Object.entries(adapters).filter(([, a]) => a.category === "capture").map(([k]) => `'${k}'`).join(", ")})`;
+const captureKinds = Object.entries(adapters).filter(([, a]) => a.category === "capture").map(([k]) => `'${k}'`).join(", ");
+const onWatchlist = `kind NOT IN (${captureKinds})`;
+
+/** A captured or pasted Job nothing has seen for this long shows as unverified (it is never closed for it). */
+const unverifiedAfterMs = 30 * 24 * 60 * 60_000;
 
 const viewStates: Record<FeedView, JobState[]> = {
   new: ["new"],
@@ -1042,11 +1118,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return { ...decision, jobIds: applyDecision(decision.id, closing, ["new", "saved"], "closed", { closedHow: how }) };
   }
 
-  /** Whether a watchlist Source (paused ones included) still lists one of this Job's Postings. */
+  /**
+   * Whether a watchlist Source (paused ones included) still lists one of this Job's Postings. A copy
+   * Kris captured or pasted doesn't count: the company's own job system re-checks it, and once that
+   * no longer lists the job, it closes like any other.
+   */
   function stillListed(jobId: string): boolean {
     return !!db.prepare(
       `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
-       WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL LIMIT 1`,
+       WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL AND s.kind NOT IN (${captureKinds}) LIMIT 1`,
     ).get(jobId);
   }
 
@@ -1092,6 +1172,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       dealbreakers,
       hidden: isHidden(String(r.state), dealbreakers, shown),
       shownByYou: shown,
+      ...unverifiedOf(String(r.id), String(r.state)),
       state: String(r.state) as JobState,
       ...(r.state === "passed" && {
         passed: {
@@ -1179,7 +1260,23 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       dealbreakers,
       hidden: isHidden(String(row.state), dealbreakers, shown),
       shownByYou: shown,
+      ...unverifiedOf(jobId, String(row.state)),
     };
+  }
+
+  /**
+   * When an open Job that came in through a capture or a pasted link became unverified: 30 days
+   * after anything last saw it (a job system's Check, an alert, or Kris capturing it again).
+   */
+  function unverifiedOf(jobId: string, state: string): { unverified?: { since: string } } {
+    if (state !== "new" && state !== "saved") return {};
+    const r = db.prepare(
+      `SELECT MAX(p.last_seen_at) AS seen, SUM(s.kind IN (${captureKinds})) AS captured
+       FROM posting p JOIN source s ON s.id = p.source_id WHERE p.job_id = ? AND p.gone_at IS NULL`,
+    ).get(jobId);
+    if (!r?.seen || !Number(r.captured)) return {};
+    const since = Date.parse(String(r.seen)) + unverifiedAfterMs;
+    return clock.now().getTime() >= since ? { unverified: { since: new Date(since).toISOString() } } : {};
   }
 
   /** Open Jobs (New and Saved) with the same closest angle, best Fit first. */
@@ -1409,8 +1506,110 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return { html, url: res.url || link.href };
   }
 
+  /** The Source a site's captured pages belong to ("Captured · LinkedIn"), created on the first capture there. */
+  function capturedSource(read: PageListings): string {
+    const adapter = adapterFor("captured");
+    const config = adapter.parseConfig({ site: read.host, name: read.site });
+    const id = `captured:${adapter.key(config)}`;
+    db.prepare("INSERT OR IGNORE INTO source (id, name, kind, config, created_at) VALUES (?, ?, 'captured', ?, ?)").run(
+      id, adapter.defaultName(config), JSON.stringify(config), clock.now().toISOString(),
+    );
+    return id;
+  }
+
+  /**
+   * Stores every readable listing of a captured page and reports each one. Runs in the caller's
+   * transaction: a preview rolls it back, a capture commits it.
+   */
+  function captureNow(read: PageListings): CaptureReport {
+    const now = clock.now().toISOString();
+    const readable = read.listings.filter((l): l is CapturedListing & { url: string; title: string } => !l.problem && !!l.url && !!l.title);
+    const sourceId = readable.length ? capturedSource(read) : null;
+    const items = read.listings.map((l): CaptureItem => {
+      const base: CaptureItem = {
+        title: l.title, company: l.company, location: l.location, salary: l.salary, url: l.url,
+        status: "unreadable", jobId: null, state: null, merged: false, missing: [], hiddenBecause: [], problem: l.problem,
+      };
+      if (!sourceId || l.problem || !l.url || !l.title) return { ...base, problem: l.problem ?? "Not enough on the page to add this job" };
+      const externalId = createHash("sha256").update(linkKey(l.url)).digest("hex").slice(0, 16);
+      const postingId = `${sourceId}:${externalId}`;
+      const mine = db.prepare("SELECT title, company, location, salary, posted_at, description_html FROM posting WHERE id = ?").get(postingId);
+      const known = mine ? undefined : jobWithLink(l.url);
+      let jobId: string;
+      let isNew = false;
+      if (known) {
+        // Already in the Feed through another Source or a pasted link: nothing new is stored.
+        jobId = known;
+      } else {
+        // Recapturing keeps what an earlier capture read that this page doesn't show (a search card has no description).
+        const keep = (v: string | null, column: string) => v ?? (mine?.[column] == null ? null : String(mine[column]));
+        storePosting(db, sourceId, {
+          externalId, url: l.url, title: l.title,
+          company: l.company ?? (mine && String(mine.company) !== companyNotStated ? String(mine.company) : companyNotStated),
+          location: keep(l.location, "location"), salary: keep(l.salary, "salary"), postedAt: keep(l.postedAt, "posted_at"),
+          descriptionHtml: keep(l.descriptionHtml, "description_html"),
+        }, now);
+        jobId = liveJobId(db, `job:${postingId}`)!;
+        isNew = !mine && count("SELECT COUNT(*) AS n FROM posting WHERE job_id = ?", jobId) === 1;
+      }
+      const item: CaptureItem = { ...base, problem: null, jobId, missing: missingFields(l, read.kind), merged: !mine && !known && !isNew };
+      return isNew ? { ...item, status: "new" } : withFeedStatus(item);
+    });
+    const counts = countStatuses(items);
+    const source = sourceId ? String(db.prepare("SELECT name FROM source WHERE id = ?").get(sourceId)!.name) : null;
+    return {
+      kind: read.kind, site: read.site, source, listings: items, counts, notLoaded: read.notLoaded,
+      message: read.kind === "none"
+        ? "apply-kit couldn't find a job or a list of jobs on this page. Open the job's own page, or a page of search results, and capture again."
+        : null,
+    };
+  }
+
+  /** A captured listing whose Job is in the Feed: in-feed, or hidden with its reasons. */
+  function withFeedStatus(item: CaptureItem): CaptureItem {
+    const row = db.prepare(`${jobSelect} WHERE j.id = ?`).get(item.jobId!);
+    if (!row) return item;
+    const job = toFeedJob(row);
+    return job.hidden
+      ? { ...item, status: "hidden", state: job.state, hiddenBecause: job.dealbreakers.map((d) => d.text) }
+      : { ...item, status: "in-feed", state: job.state };
+  }
+
+  async function capturePage(page: CapturedPage, preview: boolean): Promise<CaptureReport> {
+    const read = readCapturedPage(page);
+    db.exec("BEGIN");
+    let report: CaptureReport;
+    try {
+      report = captureNow(read);
+      db.exec(preview ? "ROLLBACK" : "COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+    if (preview) {
+      // A listing new to the Feed has no Job yet.
+      return { ...report, listings: report.listings.map((l) => (l.status === "new" ? { ...l, jobId: null } : l)) };
+    }
+    if (report.kind !== "job") return report;
+    // One job page: read it now (within the budget), so the answer can say if it breaks a dealbreaker.
+    const listings: CaptureItem[] = [];
+    for (const item of report.listings) {
+      const row = item.jobId && item.status !== "unreadable" ? postingToRead(item.jobId) : undefined;
+      if (!row) {
+        listings.push(item);
+        continue;
+      }
+      if (readingOf(String(row.id), false).state !== "read") await readPosting(row);
+      const now = withFeedStatus(item);
+      listings.push(now.status === "hidden" || item.status !== "new" ? now : item);
+    }
+    return { ...report, listings, counts: countStatuses(listings) };
+  }
+
   return {
     addJobLink,
+    previewCapture: (page) => capturePage(page, true),
+    capturePage: (page) => capturePage(page, false),
 
     async save(jobIds) {
       return decide("save", jobIds, ["new"], "saved");
@@ -1804,6 +2003,12 @@ function looksBlocked(res: Response, html: string): boolean {
   const challenge = /just a moment|attention required|are you a (human|robot)|verify you are human|captcha|access denied|pardon our interruption/i;
   if (challenge.test(title)) return true;
   return (res.status === 403 || res.status === 429 || res.status === 503) && /captcha|challenge|bot|automated/i.test(html.slice(0, 20_000));
+}
+
+function countStatuses(items: CaptureItem[]): CaptureReport["counts"] {
+  const counts = { new: 0, inFeed: 0, hidden: 0, unreadable: 0 };
+  for (const i of items) counts[i.status === "in-feed" ? "inFeed" : i.status]++;
+  return counts;
 }
 
 /** Pasted plain text as HTML: one paragraph per line, so the posting reads like any other. */

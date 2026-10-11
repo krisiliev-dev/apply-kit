@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { checkAndWait, checkSource, fetchSources, pauseSource, removeSource, resumeSource, undoDecision } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { AddCompany, type Added } from "./AddCompany.tsx";
+import { ExtensionPanel } from "./ExtensionPanel.tsx";
 import { RemoveDialog } from "./RemoveDialog.tsx";
 import {
   categoryLabel, Chip, clockTime, DropBanner, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useConfirmDrop, useTryNow,
@@ -157,6 +158,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
             onCloseDrop={drops.confirm}
           />
         )}
+        {!adding && <ExtensionPanel />}
         {removing && (
           <RemoveDialog
             source={removing}

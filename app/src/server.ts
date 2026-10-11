@@ -2,13 +2,59 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
+import type { CapturedPage, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
 
-export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEngine; scheduler: Scheduler; uiDir: string }) {
+export function createServer({ engine, scheduler, pairing, uiDir }: { engine: DiscoveryEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string }) {
   const app = new Hono();
+
+  // The Chrome extension. Everything under /api/ext needs the token it got when Kris paired it, except
+  // pairing itself. The extension calls from its own pages with host permission for localhost, so no
+  // CORS is ever granted: a web page can't send the JSON or the Authorization header these need.
+  app.use("/api/ext/*", async (c, next) => {
+    if (c.req.path === "/api/ext/pair") return next();
+    const token = /^Bearer\s+(\S+)$/i.exec(c.req.header("authorization") ?? "")?.[1] ?? "";
+    if (!pairing.verify(token)) {
+      return c.json({ problem: "not-paired", error: "This extension isn't paired with apply-kit. Pair it again from the app." }, 401);
+    }
+    return next();
+  });
+
+  // The extension trades the code the app shows for its token: { code, name }.
+  app.post("/api/ext/pair", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const code = typeof body.code === "string" ? body.code : "";
+    const name = typeof body.name === "string" ? body.name : "Chrome extension";
+    const result = pairing.pair(code, name);
+    if (result.ok) return c.json({ token: result.token, deviceId: result.deviceId }, 201);
+    return c.json({ problem: result.problem, error: pairProblems[result.problem] }, 400);
+  });
+
+  app.get("/api/ext/status", (c) => c.json({ app: "apply-kit", paired: true }));
+
+  // { url, html, frames? }: the page Kris is viewing, read by the extension when Kris clicked.
+  app.post("/api/ext/capture/preview", (c) => withPage(c, (page) => engine.previewCapture(page)));
+  app.post("/api/ext/capture", (c) => withPage(c, async (page) => {
+    const report = await engine.capturePage(page);
+    // Search results carry no posting text; anything readable is read in the background, within the budget.
+    engine.readPending().catch((err: unknown) => console.error("Reading postings failed:", err));
+    return report;
+  }, 201));
+
+  // The app's side of pairing: show a code, list paired extensions, forget one.
+  app.post("/api/pairing", (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return c.json(pairing.startPairing(), 201);
+  });
+  app.get("/api/pairing/devices", (c) => c.json(pairing.devices()));
+  app.post("/api/pairing/devices/:id/unpair", (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    pairing.unpair(c.req.param("id"));
+    return c.json({ ok: true });
+  });
 
   app.get("/api/feed", async (c) => {
     const v = c.req.query("view") ?? "new";
@@ -202,6 +248,26 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
 }
 
 type Body = Record<string, unknown>;
+
+const pairProblems = {
+  "no-code": "There's no pairing code waiting. In apply-kit, choose Pair the extension to get one.",
+  expired: "That code has expired. In apply-kit, choose Pair the extension for a new one.",
+  "wrong-code": "That isn't the code apply-kit shows. Check it and try again.",
+} as const;
+
+/** A JSON-only POST carrying a captured page: { url, html, frames? }. */
+async function withPage(c: Context, act: (page: CapturedPage) => Promise<unknown>, status: 200 | 201 = 200) {
+  const body = await jsonBody(c);
+  if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+  if (typeof body.url !== "string" || typeof body.html !== "string") return c.json({ error: "Send the page's url and html" }, 400);
+  const frames = Array.isArray(body.frames)
+    ? body.frames.flatMap((f: unknown) => {
+        const o = f as { id?: unknown; html?: unknown } | null;
+        return o && typeof o.html === "string" ? [{ id: typeof o.id === "string" ? o.id : null, html: o.html }] : [];
+      })
+    : [];
+  return c.json(await act({ url: body.url, html: body.html, frames }), status);
+}
 
 /** Reads a JSON object body; null unless the request says it's JSON (see /api/check). */
 async function jsonBody(c: Context): Promise<Body | null> {
