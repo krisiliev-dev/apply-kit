@@ -24,7 +24,10 @@ async function feedOf(jobs: BoardJob[], facts: Record<string, PostingFacts> = {}
       content: `&lt;p&gt;${j.text ?? `About the ${j.title} role.`}&lt;/p&gt;`,
     })),
   };
-  const t = createTestEngine({ fetch: async () => Response.json(board), extractor: fakeExtractor(facts), searchSettings });
+  // These tests are about ranking, so nothing is hidden: dealbreakers are covered in dealbreakers.test.ts.
+  const settings = searchSettings ?? defaultSearchSettings;
+  const noDealbreakers = { ...settings, dealbreakers: { languagesNotSpoken: [], maxYearsRequired: null, salaryBelowMinimum: false, outsideLocations: false } };
+  const t = createTestEngine({ fetch: async () => Response.json(board), extractor: fakeExtractor(facts), searchSettings: noDealbreakers });
   await t.engine.addSource({ kind: "greenhouse", config: "example" });
   await t.engine.checkAll();
   if (read) await t.engine.readPending();

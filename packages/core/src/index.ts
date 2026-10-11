@@ -3,7 +3,7 @@ export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
   Decision, JobState, PassReason, PassInput,
-  ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort,
+  ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
   AddLinkResult, LinkProblem, PastedPosting,
 } from "./engine.ts";
 export { sourceRemovedHow } from "./engine.ts";
@@ -26,6 +26,7 @@ export type { Angle } from "./fit/angles.ts";
 export type { Place, LocationTier } from "./locations.ts";
 export { defaultSearchSettings } from "./search-settings.ts";
 export type { SearchSettings } from "./search-settings.ts";
+export type { DealbreakerRule, HiddenReason } from "./dealbreakers.ts";
 export { MailboxError, mailboxFix } from "./mailbox.ts";
 export type { MailboxProblem } from "./mailbox.ts";
 export { expectedFactsSchema, evaluationCaseSchema } from "./evaluation/labels.ts";

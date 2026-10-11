@@ -220,6 +220,19 @@
 .table .act .btn + .btn { margin-left: var(--s-2) }
 h1[tabindex="-1"]:focus { outline: none }
 
+/* dealbreakers: hidden pile, filtered-to-nothing, search settings */
+.hidden-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2) }
+.hidden-reasons li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.hidden-reasons .chip { white-space: normal }
+.hidden-reasons .linkish { font-size: var(--fs-small) }
+.settings-form { display: grid; gap: var(--s-7); max-width: 640px }
+.settings-form fieldset { border: 1px solid var(--rule); border-radius: var(--r-card); padding: var(--s-5) var(--s-6); margin: 0; display: grid; gap: var(--s-5); background: var(--surface) }
+.settings-form legend { font-weight: 600; padding: 0 var(--s-2) }
+.settings-form .check { display: flex; gap: var(--s-3); align-items: flex-start }
+.settings-form .check input { margin-top: var(--s-2) }
+.settings-form .err { color: var(--gap); font-size: var(--fs-small) }
+.rule-changes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }
+.rule-changes li { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: baseline }
 /* Paste a job link (first run and the toolbar's Add job) */
 .paste-first { width: min(460px, 100%) }
 .paste-link .field .err { font-size: var(--fs-small) }

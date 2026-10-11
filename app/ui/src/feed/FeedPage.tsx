@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { checkNow, fetchCheckStatus, fetchFeed, type FeedOptions } from "../api.ts";
 import { JobsTable } from "./JobsTable.tsx";
 import { PassedClosed } from "./PassedClosed.tsx";
+import { HiddenPile } from "./HiddenPile.tsx";
 import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
 import { useToaster } from "./toast.tsx";
 import { PasteLink } from "./PasteLink.tsx";
@@ -21,7 +22,8 @@ type Load =
   | { state: "ready"; feed: FeedResult; rows: ShownFeed };
 
 export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => void }) {
-  const [view, setView] = useState<FeedView>("new");
+  // "/?view=hidden" opens the hidden pile (the link from the search settings).
+  const [view, setView] = useState<FeedView>(initialView);
   const [options, setOptions] = useState<FeedOptions>({ sort: "fit", relocation: false });
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
@@ -140,7 +142,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
           waiting={rows.queued.length}
         />
         <Toolbar feed={feed} view={view} onView={setView} options={options} onOptions={setOptions} />
-        {!seenFitHint && view !== "passed" && options.sort === "fit" && rows.shown.length > 0 && (
+        {!seenFitHint && view !== "passed" && view !== "hidden" && options.sort === "fit" && rows.shown.length > 0 && (
           <div className="banner info hint">
             <span className="text"><b>New here? Fit</b> is how well a job matches your profile and preferences, 0–100. The grey line under each title says why it ranks there.</span>
             <button className="btn sm" type="button" onClick={dismissFitHint}>Got it</button>
@@ -149,7 +151,9 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
         <div ref={tableRef}>
           {view === "passed"
             ? <PassedClosed feed={{ ...feed, jobs: rows.shown }} toaster={toaster} onChanged={afterTriage} />
-            : (
+            : view === "hidden"
+              ? <HiddenPile feed={{ ...feed, jobs: rows.shown }} toaster={toaster} onChanged={afterTriage} />
+              : (
               <JobsTable
                 feed={{ ...feed, jobs: rows.shown }}
                 view={view}
@@ -159,6 +163,8 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
                 queued={rows.queued.length}
                 onShowQueued={showThem}
                 checking={check.status?.checking != null}
+                onShowRelocation={() => setOptions({ ...options, relocation: true })}
+                onShowHidden={() => setView("hidden")}
               />
             )}
         </div>
@@ -169,7 +175,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
 }
 
 function viewTitle(view: FeedView, n: number): string {
-  const label = { new: "new", saved: "saved", open: "open", passed: "passed or closed" }[view];
+  const label = { new: "new", saved: "saved", open: "open", passed: "passed or closed", hidden: "hidden by your dealbreakers" }[view];
   return `${n} ${label}`;
 }
 
@@ -287,7 +293,7 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
   onOptions: (o: FeedOptions) => void;
 }) {
   const { counts, ranking } = feed;
-  const ranked = view !== "passed";
+  const ranked = view !== "passed" && view !== "hidden";
   return (
     <div className="toolbar">
       <div className="segmented" role="group" aria-label="View">
@@ -297,9 +303,16 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
           </button>
         ))}
       </div>
-      <button className="filter" type="button" aria-pressed="false">
+      <button
+        className="filter"
+        type="button"
+        aria-pressed={view === "hidden"}
+        aria-describedby="hidden-why"
+        onClick={() => onView(view === "hidden" ? "new" : "hidden")}
+      >
         Hidden <span className="n num">{counts.hidden}</span>
       </button>
+      <span className="sr-only" id="hidden-why">Jobs your dealbreakers keep out of the Feed, each with its reason. Never deleted.</span>
       {ranked && (
         <>
           <span className="sep" aria-hidden="true" />
@@ -386,6 +399,14 @@ function FirstRun() {
       </div>
     </div>
   );
+}
+
+function initialView(): FeedView {
+  try {
+    return new URLSearchParams(window.location.search).get("view") === "hidden" ? "hidden" : "new";
+  } catch {
+    return "new";
+  }
 }
 
 /** The toolbar's "Add job": the paste-a-link field in a popover. Escape or a click elsewhere closes it. */
