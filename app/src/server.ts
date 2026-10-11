@@ -13,18 +13,30 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     return c.json(await engine.queryFeed({ view: v as FeedView }));
   });
 
+  // Requiring a JSON body type means a web page can't trigger a POST without a CORS preflight,
+  // which this service never grants.
+  const jsonOnly = (ct: string | undefined) => ct?.startsWith("application/json");
+
   // Whether a check is running (with progress and a time estimate) and how the last one went.
   app.get("/api/check", (c) => c.json(scheduler.status()));
 
   // Starts a check, or joins the one running, and answers straight away with its status;
-  // the UI follows progress through GET /api/check. Requiring a JSON body type means a web page
-  // can't trigger this without a CORS preflight, which this service never grants.
+  // the UI follows progress through GET /api/check.
   app.post("/api/check", async (c) => {
-    if (!c.req.header("content-type")?.startsWith("application/json")) {
-      return c.json({ error: "Send Content-Type: application/json" }, 415);
-    }
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     scheduler.checkNow().catch(() => {});
     return c.json(scheduler.status(), 202);
+  });
+
+  app.get("/api/sources", async (c) => c.json(await engine.sourceHealth()));
+
+  // "Try now": checks one Source. Same JSON-only rule as /api/check.
+  app.post("/api/sources/:id/check", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    const id = c.req.param("id");
+    const known = (await engine.sourceHealth()).sources.some((s) => s.id === id);
+    if (!known) return c.json({ error: `No source "${id}"` }, 404);
+    return c.json(await engine.checkSource(id));
   });
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));

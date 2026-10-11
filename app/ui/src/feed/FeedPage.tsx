@@ -2,6 +2,7 @@ import type { CheckProgress, FeedJob, FeedResult, FeedView, SchedulerStatus } fr
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkNow, fetchCheckStatus, fetchFeed } from "../api.ts";
 import { receive, showQueued, type ShownFeed } from "./queue.ts";
+import { FailedSourceBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -23,6 +24,10 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   const [announcement, setAnnouncement] = useState("");
   const tableRef = useRef<HTMLDivElement>(null);
   const focusAfterShow = useRef<string | null>(null);
+  // "Try now" on a failed Source: its jobs join through the queue like any other check's.
+  const [nudge, setNudge] = useState(0);
+  const [said, say] = useState("");
+  const { busy, tryNow } = useTryNow(() => setNudge((n) => n + 1), say);
 
   // A fresh load (first visit, another view, Try again) shows the Feed as it is.
   useEffect(() => {
@@ -39,7 +44,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   // While a check runs, each finished Source can bring jobs: fetch the Feed again and queue them.
   const { refreshKey } = check;
   useEffect(() => {
-    if (refreshKey === null) return;
+    if (refreshKey === null && nudge === 0) return;
     const ctrl = new AbortController();
     fetchFeed(view, ctrl.signal)
       .then((feed) => {
@@ -48,7 +53,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
       })
       .catch(() => { /* the next progress step tries again */ });
     return () => ctrl.abort();
-  }, [refreshKey, view, onHealth]);
+  }, [refreshKey, nudge, view, onHealth]);
 
   // After "Show them", move focus to the first job that joined so keyboard users land on it.
   useEffect(() => {
@@ -87,6 +92,16 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
 
   return (
     <section className="stack" style={{ gap: "var(--s-6)" }}>
+      {feed.health.failing.map((f) => (
+        <FailedSourceBanner
+          key={f.sourceId}
+          failure={f}
+          busy={busy === f.sourceId}
+          onTry={() => tryNow(f.sourceId, f.name, f.jobsKept)}
+          showHealthLink
+        />
+      ))}
+      <StatusLine message={said} />
       <CheckHead
         check={check}
         title={viewTitle(view, rows.shown.length)}
@@ -150,7 +165,6 @@ function CheckHead({ check, title, subtitle, waiting }: { check: CheckState; tit
   const { status, error, start } = check;
   const running = status?.checking ?? null;
   const last = status?.lastCheck ?? null;
-  const failed = !running && last ? last.sources.filter((s) => !s.ok) : [];
   const waitingText = waiting > 0 ? `, ${waiting} waiting under the bar` : "";
 
   // Announced politely: changes only when a Source finishes or the check ends, never on the clock.
@@ -169,11 +183,6 @@ function CheckHead({ check, title, subtitle, waiting }: { check: CheckState; tit
             <span role="status" aria-live="polite">{announced}</span>
             {running && ` · ${timeLeft(running)}`}
           </p>
-          {failed.length > 0 && (
-            <p className="meta" role="alert">
-              {failed.map((s) => `${s.name}: ${s.ok ? "" : s.error}. Its jobs are kept as they were.`).join(" ")}
-            </p>
-          )}
         </div>
         <span className="grow" />
         <button className="btn sm" type="button" onClick={start} disabled={running !== null}>
@@ -201,8 +210,10 @@ function finishedText(last: NonNullable<SchedulerStatus["lastCheck"]>, waitingTe
   const ok = last.sources.filter((s) => s.ok);
   const fresh = ok.reduce((n, s) => n + (s.ok ? s.newPostings : 0), 0);
   const total = last.sources.length;
+  const failed = total - ok.length;
+  const note = failed === 0 ? "" : ` · ${failed} failed, ${failed === 1 ? "its" : "their"} jobs kept as they were`;
   const at = new Date(last.finishedAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  return `Check finished at ${at} · ${ok.length} of ${total} ${plural(total, "source")} · ${fresh} new ${plural(fresh, "job")}${waitingText}`;
+  return `Check finished at ${at} · ${ok.length} of ${total} ${plural(total, "source")} · ${fresh} new ${plural(fresh, "job")}${note}${waitingText}`;
 }
 
 /** "about 40 seconds left", "about 2 minutes left"; refreshed with each status poll. */

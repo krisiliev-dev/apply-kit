@@ -8,6 +8,10 @@ A personal tool that finds jobs, prepares tailored applications, fills applicati
 A place postings come from: an ATS feed, a public jobs API, an aggregator, an email alert or a manual capture.
 _Avoid_: Feed (when meaning a single source), board, provider
 
+**Check**:
+One look at a source for the postings it lists right now, recorded with its time, outcome (worked, error, timeout or rate limited), the count in the user's locations and the total. A failed check never changes the source's postings.
+_Avoid_: Sync, crawl, refresh
+
 **Company**:
 An employer that posts jobs.
 _Avoid_: Employer, organisation, client
