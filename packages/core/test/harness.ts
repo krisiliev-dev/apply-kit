@@ -111,6 +111,7 @@ export function fakeMailbox(clock?: Clock): FakeMailbox {
 export function cannedFacts(overrides: Partial<PostingFacts> = {}): PostingFacts {
   return {
     language: "en",
+    titleTranslation: null,
     requirements: [],
     years: [],
     languages: [],

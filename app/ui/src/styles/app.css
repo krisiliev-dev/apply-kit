@@ -165,6 +165,39 @@
 .mini { font-size: var(--fs-small) }
 .jobs .narrow .chips { margin: var(--s-2) 0 var(--s-1) }
 
+/* Fit and ranking (from the Feed and Job hi-fi). Tokens only. */
+.toolbar .sep { width: 1px; height: 22px; background: var(--rule) }
+.hint { align-items: center }
+.pop-wrap { position: relative }
+.pop { position: absolute; z-index: 20; top: calc(100% + var(--s-2)); left: 0; min-width: 190px; max-width: calc(100vw - 2 * var(--s-5)); display: grid; gap: var(--s-1); padding: var(--s-2); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); box-shadow: var(--shadow-overlay) }
+.pop[hidden] { display: none }
+.pop.end-align { left: auto; right: 0 }
+.pop button { font: inherit; font-size: var(--fs-small); text-align: left; padding: var(--s-3) var(--s-4); border: 0; background: transparent; color: var(--ink); border-radius: var(--r-small); cursor: pointer; display: flex; gap: var(--s-3); align-items: center }
+.pop button:hover { background: var(--surface-sunken) }
+.pop button svg { width: 12px; height: 12px; visibility: hidden; color: var(--action) }
+.pop button[aria-pressed="true"] { font-weight: 600 }
+.pop button[aria-pressed="true"] svg { visibility: visible }
+.why-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4) }
+@media (hover: hover) and (min-width: 761px) {
+  .why-row { flex-wrap: nowrap; align-items: flex-start }
+  .why-row .why { flex: 1 1 auto; min-width: 0 }
+  .why-row .row-acts { flex: none; margin-top: 0 }
+}
+.fit-h { text-align: right }
+.fit-h .fit-hw { display: inline-flex; align-items: center; gap: var(--s-2); position: relative }
+.fit-h .info { font: inherit; font-size: 11px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-control); background: var(--surface); color: var(--ink-2); cursor: help; display: inline-grid; place-items: center; padding: 0 }
+.tip { display: none; position: absolute; right: 0; top: calc(100% + var(--s-3)); z-index: 5; width: 240px; max-width: 70vw; white-space: normal; text-align: left; font-size: var(--fs-caption); font-weight: 400; line-height: var(--lh-snug); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-small); padding: var(--s-3) var(--s-4); box-shadow: var(--shadow-overlay) }
+.fit-h .info:hover + .tip, .fit-h .info:focus-visible + .tip, .tip.open { display: block }
+.table .fit.provisional { color: var(--ink-3) }
+.job-head h1 .orig { display: block; margin-top: var(--s-2); font-family: var(--font-text); font-size: var(--fs-title); font-weight: 500; letter-spacing: 0; color: var(--ink-3) }
+.decide .lang { display: grid; gap: var(--s-3); padding-top: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.fit-why { display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.fit-why[hidden] { display: none }
+.fit-why .kv { padding: 0; border: 0 }
+.fitcheck .kv { grid-column: 1 / -1; padding-top: var(--s-5); border-top: 1px solid var(--rule) }
+@media (max-width: 520px) { .fitcheck .kv { grid-template-columns: minmax(0, 1fr) } .fitcheck .kv dd { margin-bottom: var(--s-3) } }
+.jobs tr.group th { background: var(--surface-sunken); color: var(--ink-2); font-weight: 600; text-align: left }
+
 /* Add company and Remove (from the Sources hi-fi states "Add company", "Add · detecting", "Add · not found", "Remove company"). Tokens only. */
 .narrow-panel { max-width: 520px }
 .panel-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4) }

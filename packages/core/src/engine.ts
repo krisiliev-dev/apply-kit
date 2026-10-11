@@ -6,9 +6,11 @@ import {
   jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
+import { computeFit, type Fit } from "./fit/fit.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
+import { defaultSearchSettings, type SearchSettings } from "./search-settings.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
@@ -19,7 +21,16 @@ export type FeedView = "new" | "saved" | "open" | "passed";
 
 export interface FeedQuery {
   view: FeedView;
+  /**
+   * The Relocation filter. Off (the default): relocation Jobs (Switzerland, Spain) are left out of
+   * the main list and only counted. On: they follow the main list as a separate, lower-priority group.
+   */
+  relocation?: boolean;
+  /** "fit" (the default): best Fit first. "newest": most recently posted first. Passed & closed is always latest decision first. */
+  sort?: FeedSort;
 }
+
+export type FeedSort = "fit" | "newest";
 
 /**
  * Whether a Job's posting has been read by the extractor:
@@ -31,10 +42,14 @@ export interface FeedQuery {
  */
 export type ReadingState = "unread" | "reading" | "read" | "failed" | "unscreened";
 
-/** One row of the Feed. Fit and the why-line arrive with their tickets. */
+/** One row of the Feed. */
 export interface FeedJob {
   id: string;
   title: string;
+  /** English title of a posting in another language, once read; null otherwise. */
+  titleTranslation: string | null;
+  /** ISO 639-1 code of the posting's language ("en", "bg"), or null until it is read. */
+  language: string | null;
   company: string;
   location: string | null;
   /**
@@ -60,6 +75,8 @@ export interface FeedJob {
   requirements: FeedRequirement[];
   /** How many low-confidence facts wait for Kris ("N facts need you"). */
   needsYou: number;
+  /** Fit with its reasons and the why-line. Always present: before a read it is provisional, from the title and location. */
+  fit: Fit;
 }
 
 /** One Posting of a Job, as the Job page lists it. */
@@ -85,6 +102,15 @@ export interface JobPosting {
 export interface JobDetail {
   id: string;
   title: string;
+  /** English title of a posting in another language, once read; null otherwise. */
+  titleTranslation: string | null;
+  /** ISO 639-1 code of the posting's language ("en", "bg"), or null until it is read. */
+  language: string | null;
+  /**
+   * The language a package for this Job starts in: Bulgarian for a Bulgarian posting, English
+   * otherwise. Switchable per package.
+   */
+  packageLanguage: "bg" | "en";
   company: string;
   location: string | null;
   /** Salary as the Source's structured data states it, or null. The read salary is in keyFacts. */
@@ -114,8 +140,8 @@ export interface JobDetail {
   needsYou: NeedsYouItem[];
   /** The reading dealbreakers and Fit use, or null until the posting is read. */
   screening: Screening | null;
-  /** The Fit check (Fit, closest angle, gaps) arrives with Fit; null until then. */
-  fit: null;
+  /** The Fit check: Fit with its reasons, closest angle and gaps. Provisional until read and confirmed. */
+  fit: Fit;
   /** This month's AI budget, so an unscreened Job can say why. */
   budget: BudgetInfo;
 }
@@ -185,7 +211,11 @@ export interface FeedResult {
   /** True until the first source is connected: the UI shows the first-run state. */
   firstRun: boolean;
   jobs: FeedJob[];
-  counts: { new: number; saved: number; open: number; passed: number; hidden: number };
+  /**
+   * Jobs per view. New, Saved and All open leave relocation Jobs out; `relocation` counts the ones
+   * in this view (0 for Passed & closed), whether or not the Relocation filter is on.
+   */
+  counts: { new: number; saved: number; open: number; passed: number; hidden: number; relocation: number };
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
   budget: BudgetInfo;
@@ -451,6 +481,25 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   backfillMatchKeys(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
+  /** Kris's search settings (#12 stores and edits them; until then the defaults). */
+  const searchSettings = (): SearchSettings => deps.searchSettings ?? defaultSearchSettings;
+
+  /** Fit for one Job from what is known about it now. Learned adjustments (#15) plug in here. */
+  function fitOf(job: { title: string; location: string | null; postedAt: string | null }, read: ReturnType<typeof readOf>, facts: PostingFacts | null): Fit {
+    return computeFit({
+      title: job.title,
+      titleTranslation: facts?.titleTranslation ?? null,
+      location: job.location,
+      postedAt: job.postedAt,
+      read: read != null,
+      requirements: read?.requirements ?? [],
+      screening: read?.screening ?? null,
+      needsYou: read?.needsYou.length ?? 0,
+      settings: searchSettings(),
+      now: clock.now(),
+      adjustments: [],
+    });
+  }
 
   // Polite polling: one request at a time per host, across every Source and Check, spaced by the
   // Source type's crawl delay (Lever asks for 1 s).
@@ -480,8 +529,6 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
-  const countStates = (states: string[]) =>
-    count(`SELECT COUNT(*) AS n FROM job WHERE merged_into IS NULL AND state IN (${states.map(() => "?").join(",")})`, ...states);
 
   /** One read of the job mailbox, shared by every email Source in a check and made only if one needs it. */
   function mailboxRead(): () => Promise<AlertEmail[]> {
@@ -749,19 +796,23 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const links = linksOf(String(r.id));
     const reading = readingOf(links.targetId, money.reached);
     const read = readOf(links.targetId, reading);
+    const base = { title: String(r.title), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
     return {
       id: String(r.id),
-      title: String(r.title),
+      title: base.title,
+      titleTranslation: reading.facts?.titleTranslation ?? null,
+      language: reading.facts?.language ?? null,
       company: String(r.company),
-      location: sqlText(r.location),
+      location: base.location,
       salary: r.salary != null ? String(r.salary) : readSalary(read?.keyFacts),
-      postedAt: sqlText(r.posted_at),
+      postedAt: base.postedAt,
       postingCount: Number(r.n),
       siteCount: links.siteCount,
       url: links.url,
       reading: reading.state,
       requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
       needsYou: read ? read.needsYou.length : 0,
+      fit: fitOf(base, read, reading.facts),
       state: String(r.state) as JobState,
       ...(r.state === "passed" && {
         passed: {
@@ -812,13 +863,18 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const money = budget();
     const reading = readingOf(target.postingId, money.reached);
     const read = readOf(target.postingId, reading);
+    const base = { title: String(row.title), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
+    const language = reading.facts?.language ?? null;
     return {
       id: jobId,
-      title: String(row.title),
+      title: base.title,
+      titleTranslation: reading.facts?.titleTranslation ?? null,
+      language,
+      packageLanguage: language === "bg" ? "bg" : "en",
       company: String(row.company),
-      location: sqlText(row.location),
+      location: base.location,
       salary: sqlText(row.salary),
-      postedAt: sqlText(row.posted_at),
+      postedAt: base.postedAt,
       url: t.url,
       state: String(row.state) as JobState,
       postingCount: postings.length,
@@ -831,7 +887,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       keyFacts: read?.keyFacts ?? [],
       needsYou: read?.needsYou ?? [],
       screening: read?.screening ?? null,
-      fit: null,
+      fit: fitOf(base, read, reading.facts),
       budget: money,
     };
   }
@@ -969,23 +1025,41 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL");
       const money = budget();
-      const states = viewStates[query.view];
+      // Every Job is built (with its Fit) so counts can leave relocation Jobs out; a personal Feed is small.
       const rows = db.prepare(
         `${jobSelect}
-         WHERE j.merged_into IS NULL AND j.state IN (${states.map(() => "?").join(",")})
-         ORDER BY ${query.view === "passed" ? "j.state_changed_at DESC, " : ""}p.posted_at IS NULL, p.posted_at DESC, j.id`,
-      ).all(...states);
+         WHERE j.merged_into IS NULL
+         ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+      ).all();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
+      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state);
+      const countView = (v: FeedView) => all.filter(({ job }) => inView(v, job) && (v === "passed" || !relocating(job))).length;
+
+      let jobs: FeedJob[];
+      if (query.view === "passed") {
+        jobs = all.filter(({ job }) => inView("passed", job))
+          .sort((a, b) => (a.changedAt < b.changedAt ? 1 : a.changedAt > b.changedAt ? -1 : 0))
+          .map(({ job }) => job);
+      } else {
+        const listed = all.map(({ job }) => job).filter((j) => inView(query.view, j));
+        const byFit = (a: FeedJob, b: FeedJob) => b.fit.value - a.fit.value;
+        if ((query.sort ?? "fit") === "fit") listed.sort(byFit);
+        const main = listed.filter((j) => !relocating(j));
+        jobs = query.relocation ? [...main, ...listed.filter(relocating)] : main;
+      }
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
         firstRun: sources === 0,
-        jobs: rows.map((r) => toFeedJob(r, money)),
+        jobs,
         counts: {
-          new: countStates(viewStates.new),
-          saved: countStates(viewStates.saved),
-          open: countStates(viewStates.open),
-          passed: countStates(viewStates.passed),
+          new: countView("new"),
+          saved: countView("saved"),
+          open: countView("open"),
+          passed: countView("passed"),
           hidden: 0,
+          relocation: query.view === "passed" ? 0 : all.filter(({ job }) => inView(query.view, job) && relocating(job)).length,
         },
         health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },

@@ -1,9 +1,16 @@
 import type {
-  CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
-export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<FeedResult> {
-  const res = await fetch(`/api/feed?view=${view}`, { signal });
+/** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
+export interface FeedOptions {
+  sort: FeedSort;
+  relocation: boolean;
+}
+
+export async function fetchFeed(view: FeedView, options: FeedOptions, signal?: AbortSignal): Promise<FeedResult> {
+  const q = new URLSearchParams({ view, sort: options.sort, ...(options.relocation && { relocation: "1" }) });
+  const res = await fetch(`/api/feed?${q}`, { signal });
   if (!res.ok) throw new Error(`The service answered ${res.status}`);
   return (await res.json()) as FeedResult;
 }

@@ -10,14 +10,14 @@ describe("Microsoft source", () => {
     const source = await engine.addSource({ kind: "microsoft", config: "security engineer|Dublin" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(source).toEqual({ id: "microsoft:security engineer|dublin", kind: "microsoft", name: "Microsoft · security engineer · Dublin" });
     expect(check.sources[0]).toMatchObject({ ok: true, found: 3, newPostings: 3 });
     expect(feed.jobs[0]).toEqual({
       id: "job:microsoft:security engineer|dublin:1970393557007211", title: "Software Engineer - Observability", company: "Microsoft",
       location: "Ireland, Dublin, Dublin", salary: null, postedAt: "2026-10-08T13:15:24.000Z", postingCount: 1, siteCount: 1, state: "new",
-      url: "https://apply.careers.microsoft.com/careers/job/1970393557007211", reading: "unread", requirements: [], needsYou: 0,
+      url: "https://apply.careers.microsoft.com/careers/job/1970393557007211", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object),
     });
     expect(feed.jobs[1]!.location).toBe("Ireland, Dublin, Dublin; Germany, Multiple Locations, Multiple Locations; United Kingdom, Multiple Locations, Multiple Locations; Portugal, Lisbon, Lisbon; Netherlands, Multiple Locations, Multiple Locations");
     expect((await engine.sourceHealth()).sources[0]).toMatchObject({ label: "Microsoft", category: "api" });
@@ -41,7 +41,7 @@ describe("Amazon source", () => {
     await engine.addSource({ kind: "amazon", config: "security engineer" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources[0]).toMatchObject({ sourceId: "amazon:security engineer", name: "Amazon · security engineer", ok: true, found: 3 });
     expect(feed.jobs.map((j) => [j.title, j.company, j.location, j.postedAt, j.url])).toEqual([
@@ -57,7 +57,7 @@ describe("Amazon source", () => {
     await engine.addSource({ kind: "amazon", config: { query: "security engineer", country: "gbr" } });
 
     await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(feed.jobs.map((j) => j.location)).toEqual(["London, England, GBR"]);
     expect((await engine.sourceHealth()).sources[0]).toMatchObject({ id: "amazon:security engineer|gbr", label: "Amazon", category: "api" });

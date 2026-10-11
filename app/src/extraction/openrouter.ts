@@ -59,6 +59,7 @@ const instructions = `You read one job posting and return its facts as JSON matc
 - Every "quote" is copied word for word from the posting, in its original language, short (one line or sentence).
   If the posting isn't in English, give an English "translation" of each quote; otherwise translation is null.
 - Labels, summaries, language names and "about" are short plain English, even for Bulgarian postings.
+- titleTranslation: the job title in plain English if the posting isn't in English; otherwise null.
 - "required" is anything the posting asks for as a must. Items under headings like "Nice to have", "Bonus",
   "Preferred", "Plus", or worded "ideally", "a plus", "is an advantage" are "preferred".
 - requirements: every skill, experience, language, certificate, education, location or work-authorisation ask.

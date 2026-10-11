@@ -10,7 +10,7 @@ describe("dev.bg source", () => {
     const source = await engine.addSource({ kind: "devbg", config: "it-security" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(source).toEqual({ id: "devbg:it-security", kind: "devbg", name: "dev.bg · it-security" });
     expect(check.sources[0]).toMatchObject({ ok: true, found: 3, newPostings: 3 });
