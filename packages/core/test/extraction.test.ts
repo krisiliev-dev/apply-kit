@@ -234,3 +234,56 @@ describe("reading postings: the monthly AI budget", () => {
     expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "read", "failed"]);
   });
 });
+
+describe("reading postings: when reading fails", () => {
+  it("keeps the Job with the reason, and reads it again next time", async () => {
+    let answer: PostingFacts | Error = new Error("The model didn't answer within 60 seconds (OpenRouter timeout)");
+    const t = await checked(kestrelEngine(fakeExtractor((input) => {
+      if (input.title !== "Security Engineer") return cannedFacts();
+      if (answer instanceof Error) throw answer;
+      return answer;
+    })));
+    const id = await jobId(t, "Security Engineer");
+
+    const first = await t.engine.readPending();
+    const failed = (await t.engine.getJob(id))!;
+    answer = securityEngineer;
+    await t.engine.readPending();
+
+    expect(first).toEqual({ read: 1, failed: 2, unscreened: 0 });
+    expect(failed.reading).toEqual({ state: "failed", error: "The model didn't answer within 60 seconds (OpenRouter timeout)" });
+    expect(failed.postingText).toContain("Hands-on with Splunk or Elastic");
+    expect((await t.engine.getJob(id))!.reading.state).toBe("read");
+  });
+
+  it("treats an answer that doesn't fit the fact schema as a failed read", async () => {
+    const broken = { ...securityEngineer, salary: { amount: "lots" } } as unknown as PostingFacts;
+    const t = await checked(kestrelEngine(fakeExtractor({ "Security Engineer": broken })));
+    await t.engine.readPending();
+
+    const job = (await t.engine.getJob(await jobId(t, "Security Engineer")))!;
+    expect(job.reading).toEqual({ state: "failed", error: "The model's answer didn't have the expected shape" });
+    expect(job.requirements).toEqual([]);
+  });
+});
+
+describe("reading postings: one Job on demand", () => {
+  it("reads a single Job when its page asks, showing it as being read meanwhile", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const base = fakeExtractor({ "Security Engineer": securityEngineer });
+    const extractor = { ...base, extract: async (input: Parameters<typeof base.extract>[0]) => { await gate; return base.extract(input); } };
+    const t = await checked(kestrelEngine(extractor as typeof base));
+    const id = await jobId(t, "Security Engineer");
+
+    const reading = t.engine.readJob(id);
+    const during = (await t.engine.getJob(id))!.reading.state;
+    release();
+    const job = await reading;
+
+    expect(during).toBe("reading");
+    expect(job.reading.state).toBe("read");
+    expect(job.requirements).toHaveLength(4);
+    expect(base.calls.map((c) => c.title)).toEqual(["Security Engineer"]);
+  });
+});

@@ -137,6 +137,11 @@ export interface DiscoveryEngine {
    * cautious one. Applies to this Job only; the posting isn't changed. Throws if the fact isn't waiting.
    */
   confirmFact(jobId: string, factKey: string, answer: FactAnswer): Promise<JobDetail>;
+  /**
+   * Reads one Job's posting now (the Job page asks when it opens an unread Job), within the budget.
+   * Resolves with the Job once the read has finished, failed or been refused by the cap.
+   */
+  readJob(jobId: string): Promise<JobDetail>;
 }
 
 export interface ReadResult {
@@ -175,8 +180,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     }
   }
 
-  /** Postings being read right now (by id), so a second read doesn't start. */
-  const inFlight = new Set<string>();
+  /** Postings being read right now, so a second read waits for the first instead of starting. */
+  const inFlight = new Map<string, Promise<keyof ReadResult>>();
   let pendingRun: Promise<ReadResult> | null = null;
 
   const month = () => clock.now().toISOString().slice(0, 7);
@@ -213,13 +218,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
   }
 
+  const toReadSql = `SELECT j.id AS job_id, p.id, p.title, p.company, p.location, p.description_html
+       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")}`;
+
   async function readAllPending(): Promise<ReadResult> {
     const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
     const rows = db.prepare(
-      `SELECT p.id, p.title, p.company, p.location, p.description_html
-       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")}
-       WHERE j.state IN ('new', 'saved')
-       ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+      `${toReadSql} WHERE j.state IN ('new', 'saved') ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
     ).all();
     for (const row of rows) {
       const state = readingOf(String(row.id), false).state;
@@ -230,7 +235,16 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return result;
   }
 
-  async function readPosting(row: Record<string, unknown>): Promise<keyof ReadResult> {
+  function readPosting(row: Record<string, unknown>): Promise<keyof ReadResult> {
+    const postingId = String(row.id);
+    const running = inFlight.get(postingId);
+    if (running) return running;
+    const run = readPostingNow(row).finally(() => inFlight.delete(postingId));
+    inFlight.set(postingId, run);
+    return run;
+  }
+
+  async function readPostingNow(row: Record<string, unknown>): Promise<keyof ReadResult> {
     const postingId = String(row.id);
     const text = postingText(row.description_html);
     const hash = hashText(text);
@@ -262,7 +276,6 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return "unscreened";
     }
 
-    inFlight.add(postingId);
     try {
       const out = await deps.extractor.extract(input);
       recordSpend(postingId, Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
@@ -278,8 +291,6 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       if (typeof billed === "number" && billed > 0) recordSpend(postingId, billed);
       store("failed", null, null, err instanceof Error ? err.message : String(err));
       return "failed";
-    } finally {
-      inFlight.delete(postingId);
     }
   }
 
@@ -389,6 +400,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       db.prepare("INSERT OR REPLACE INTO fact_confirmation (posting_id, fact_key, choice, confirmed_at) VALUES (?, ?, ?, ?)").run(
         postingId, factKey, answer, clock.now().toISOString(),
       );
+      return (await this.getJob(jobId))!;
+    },
+
+    async readJob(jobId) {
+      const row = db.prepare(`${toReadSql} WHERE j.id = ?`).get(jobId);
+      if (!row) throw new Error(`No job with id "${jobId}"`);
+      if (readingOf(String(row.id), false).state !== "read") await readPosting(row);
       return (await this.getJob(jobId))!;
     },
 
