@@ -54,6 +54,10 @@ A Source whose key setting is missing shows as failing on the Sources screen wit
 
 While the service runs it checks Sources every 30 minutes between 07:00 and 23:00 (local time), and after the Mac wakes it catches up within a minute if a check was missed. Change this with `APPLY_KIT_CHECK_EVERY_MINUTES` and `APPLY_KIT_CHECK_WINDOW` (e.g. `08:00-20:00`). **Check now** on the Feed checks straight away.
 
+### Paste a job link
+
+On the Feed (first run, or **Add job** in the toolbar), paste a job's link to add that one job. apply-kit reads the page once (its JSON-LD JobPosting, otherwise the page's heading and main text), only where the site's robots.txt allows it, and the Job is merged, ranked and read like any other. A link already in the Feed opens its Job. LinkedIn, jobs.bg, Google, Apple and Meta careers, Indeed and Glassdoor are never fetched, and a page behind bot protection is never retried: apply-kit keeps the link and asks you to paste the job's text instead. Pasted jobs aren't a Source to check, so they never close because a check missed them.
+
 ### Job mailbox (email alerts)
 
 Job-alert emails (LinkedIn, jobs.bg, Google Careers, Workday, MyGreenhouse) are read from a Gmail address used only for job mail, over IMAP and **read-only**: apply-kit opens one folder with EXAMINE, never marks mail read, moves or deletes anything.
