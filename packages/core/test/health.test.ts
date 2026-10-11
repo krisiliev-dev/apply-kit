@@ -102,3 +102,40 @@ describe("source health: status", () => {
     expect(source).toMatchObject({ status: "working", failingSince: null, lastGoodCheckAt: "2026-10-12T08:30:00.000Z" });
   });
 });
+
+describe("source health: overall summary for the top bar and Feed", () => {
+  it("is working with the last check time when every Source answered", async () => {
+    const { engine } = await checkedPayhawk();
+
+    const feed = await engine.queryFeed({ view: "new" });
+
+    expect(feed.health).toEqual({ state: "working", sources: 1, lastCheckAt: "2026-10-12T07:30:00.000Z", failing: [] });
+  });
+
+  it("is failing and names each failed Source with what it means for the Feed", async () => {
+    const { engine, deps, clock } = await checkedPayhawk();
+    deps.fetch = failures[1]![1];
+    clock.set("2026-10-12T08:00:00Z");
+    await engine.checkAll();
+
+    const feed = await engine.queryFeed({ view: "new" });
+    const report = await engine.sourceHealth();
+
+    const expected = {
+      state: "failing",
+      sources: 1,
+      lastCheckAt: "2026-10-12T08:00:00.000Z",
+      failing: [{
+        sourceId: "greenhouse:payhawkio",
+        name: "payhawkio",
+        outcome: "timeout",
+        error: "The operation was aborted due to timeout",
+        at: "2026-10-12T08:00:00.000Z",
+        since: "2026-10-12T08:00:00.000Z",
+        jobsKept: 3,
+      }],
+    };
+    expect(feed.health).toEqual(expected);
+    expect(report.summary).toEqual(expected);
+  });
+});

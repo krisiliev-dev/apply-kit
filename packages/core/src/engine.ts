@@ -26,7 +26,30 @@ export interface FeedJob {
   url: string;
 }
 
-export type HealthState = "no-sources" | "working";
+export type HealthState = "no-sources" | "working" | "failing";
+
+/** A Source whose latest Check failed, and what that means for the Feed. */
+export interface FailingSource {
+  sourceId: string;
+  name: string;
+  outcome: CheckFailure;
+  error: string;
+  /** The latest failed Check. */
+  at: string;
+  /** The first failed Check in this run of failures. */
+  since: string;
+  /** Open Jobs kept exactly as they were. */
+  jobsKept: number;
+}
+
+/** Overall source health: drives the top-bar pill and the Feed's failed-source banner. */
+export interface HealthSummary {
+  state: HealthState;
+  sources: number;
+  /** The most recent Check of any Source, or null if nothing has been checked yet. */
+  lastCheckAt: string | null;
+  failing: FailingSource[];
+}
 
 export interface FeedResult {
   view: FeedView;
@@ -36,7 +59,7 @@ export interface FeedResult {
   firstRun: boolean;
   jobs: FeedJob[];
   counts: { new: number; saved: number; open: number; passed: number; hidden: number };
-  health: { state: HealthState; sources: number };
+  health: HealthSummary;
   ranking: { learnedAdjustments: number };
 }
 
@@ -92,6 +115,7 @@ export interface SourceHealth {
 
 export interface HealthReport {
   asOf: string;
+  summary: HealthSummary;
   sources: SourceHealth[];
 }
 
@@ -167,6 +191,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     }
   }
 
+  function allSourceHealth(): SourceHealth[] {
+    const rows = db.prepare("SELECT id, name, kind FROM source ORDER BY created_at, id").all();
+    const history = db.prepare(
+      `SELECT checked_at, outcome, in_locations, total, error FROM source_check
+       WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
+    );
+    return rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord)));
+  }
+
   function describeSource(r: Record<string, unknown>, history: CheckRecord[]): SourceHealth {
     const id = String(r.id);
     const kind = String(r.kind);
@@ -220,7 +253,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           passed: countStates(viewStates.passed),
           hidden: 0,
         },
-        health: { state: sources === 0 ? "no-sources" : "working", sources },
+        health: summarise(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
       };
     },
@@ -244,16 +277,27 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
 
     async sourceHealth() {
-      const rows = db.prepare("SELECT id, name, kind FROM source ORDER BY created_at, id").all();
-      const history = db.prepare(
-        `SELECT checked_at, outcome, in_locations, total, error FROM source_check
-         WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
-      );
-      return {
-        asOf: clock.now().toISOString(),
-        sources: rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord))),
-      };
+      const sources = allSourceHealth();
+      return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
     },
+  };
+}
+
+function summarise(sources: SourceHealth[]): HealthSummary {
+  const failing: FailingSource[] = sources.flatMap((s) => {
+    const latest = s.history[0];
+    if (s.status !== "failing" || !latest || latest.outcome === "ok") return [];
+    return [{
+      sourceId: s.id, name: s.name, outcome: latest.outcome, error: latest.error ?? "",
+      at: latest.at, since: s.failingSince ?? latest.at, jobsKept: s.jobsKept,
+    }];
+  });
+  const times = sources.map((s) => s.history[0]?.at).filter((t): t is string => t != null).sort();
+  return {
+    state: sources.length === 0 ? "no-sources" : failing.length > 0 ? "failing" : "working",
+    sources: sources.length,
+    lastCheckAt: times.at(-1) ?? null,
+    failing,
   };
 }
 
