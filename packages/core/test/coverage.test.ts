@@ -140,6 +140,31 @@ describe("coverage check: missing from a company apply-kit watches", () => {
     });
   });
 
+  it("while the company's Source is in an unusual drop, with the fix to check it now", async () => {
+    const { engine, state, clock } = boards({
+      acme: {
+        company: "Acme",
+        jobs: [1, 2, 3, 4].map((id) => ({ id, title: `Developer ${id}`, location: "Sofia" })),
+      },
+    });
+    await engine.addSource({ kind: "greenhouse", config: "acme" });
+    await engine.checkAll();
+    state.boards.acme!.jobs = [{ id: 1, title: "Developer 1", location: "Sofia" }];
+    await clock.advance(30 * 60_000);
+    await engine.checkAll();
+
+    const result = await engine.recordCoverageCheck({ site: "dev.bg", query: "security", listings: [securityEngineer] });
+
+    expect(result.listings[0]).toMatchObject({
+      status: "missing",
+      reason: {
+        kind: "source-unusual", sourceId: "greenhouse:acme", at: "2026-10-12T08:00:00.000Z",
+        text: "Acme's jobs come from acme (Greenhouse), which listed far fewer jobs than usual at its last check. It may be having trouble.",
+      },
+      fixes: [{ kind: "check-source", sourceId: "greenhouse:acme", label: "Check acme now" }],
+    });
+  });
+
   it("while the company's Source is paused, with the fix to resume it", async () => {
     const { engine } = acme();
     await engine.addSource({ kind: "greenhouse", config: "acme" });

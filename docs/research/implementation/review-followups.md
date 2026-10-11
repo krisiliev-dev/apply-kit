@@ -11,3 +11,6 @@
 - Salary dealbreaker skips net salaries (a net figure below a gross minimum may be above it gross); add a net→gross estimate if Bulgarian net-only postings slip through (from #12)
 - Dealbreakers apply only once a posting is read, so a job outside the locations shows until it is read, then moves to the hidden pile (from #12)
 - Unhides don't yet create learned ranking adjustments; #15 hooks in at engine.unhide (from #12)
+- A Job also listed by a capped search (or an email alert) never closes by absence, even when the company's own ATS stops listing it; consider letting the ATS close it, or the 30-day 'unverified' rule for captured/emailed postings (from #16)
+- dev.bg is treated as listing everything; if a category ever exceeds its maxPages, postings past the cap would close. Consider failing the check instead of truncating (from #16)
+- Drop UI: 'Keep them open and wait', 'Check their site' and 'Detect their job system again' from the Sources hi-fi aren't built; the history chart (#4 follow-up) should mark unusual checks (CheckRecord.unusual) (from #16)

@@ -6,7 +6,8 @@ export type {
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
   AddLinkResult, LinkProblem, PastedPosting,
 } from "./engine.ts";
-export { sourceRemovedHow } from "./engine.ts";
+export { sourceRemovedHow, noLongerListedBy } from "./engine.ts";
+export type { UnusualDrop, NormalVolume, DropWording } from "./drops.ts";
 export type {
   CoverageInput, CoverageListing, CoverageResult, CoverageResultListing, CoverageReason, CoverageReasonKind, CoverageFix,
   CoverageTotals, CoverageSummary, CoverageHistory,

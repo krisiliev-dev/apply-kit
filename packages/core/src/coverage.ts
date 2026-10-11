@@ -62,7 +62,7 @@ export interface CoverageReason {
 
 export type CoverageReasonKind =
   // Missing:
-  | "source-failing" | "source-paused" | "source-removed" | "not-listed" | "outside-locations" | "not-covered"
+  | "source-failing" | "source-unusual" | "source-paused" | "source-removed" | "not-listed" | "outside-locations" | "not-covered"
   // Found, but not in the main list:
   | "dealbreaker" | "relocation" | "passed" | "closed";
 
@@ -297,7 +297,8 @@ export interface CompanySource {
   label: string;
   kind: string;
   config: unknown;
-  status: "not-checked" | "working" | "failing" | "quiet" | "paused" | "removed";
+  status: "not-checked" | "working" | "failing" | "quiet" | "unusual" | "paused" | "removed";
+  /** When it started failing, or its unusual drop began. */
   failingSince: string | null;
   lastGoodCheckAt: string | null;
 }
@@ -313,7 +314,7 @@ function sourcesOfCompany(db: SqlDatabase, company: string, sources: CompanySour
     db.prepare("SELECT DISTINCT source_id, company FROM posting").all()
       .filter((r) => normaliseCompany(String(r.company)) === name).map((r) => String(r.source_id)),
   );
-  const rank: Record<CompanySource["status"], number> = { working: 0, quiet: 0, "not-checked": 1, failing: 2, paused: 3, removed: 4 };
+  const rank: Record<CompanySource["status"], number> = { working: 0, quiet: 0, "not-checked": 1, unusual: 2, failing: 2, paused: 3, removed: 4 };
   return sources
     .filter((s) => listedIt.has(s.id) || normaliseCompany(s.name) === name)
     .sort((a, b) => rank[a.status] - rank[b.status]);
@@ -344,6 +345,14 @@ export function whyMissing(
         return {
           reason: { kind: "source-failing", sourceId, at: own.failingSince, text: `${company}'s jobs come from ${named}, which is failing. New jobs can't arrive until it works again.` },
           fixes: [{ kind: "check-source", sourceId, label: `Try ${own.name} now` }],
+        };
+      case "unusual":
+        return {
+          reason: {
+            kind: "source-unusual", sourceId, at: own.failingSince,
+            text: `${company}'s jobs come from ${named}, which listed far fewer jobs than usual at its last check. It may be having trouble.`,
+          },
+          fixes: [{ kind: "check-source", sourceId, label: `Check ${own.name} now` }],
         };
       case "paused":
         return {

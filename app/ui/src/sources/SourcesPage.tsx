@@ -1,16 +1,19 @@
 // Settings › Sources & watchlist (hi-fi: docs/design/hifi/sources.html). Built so far: health summary,
 // failed-source banners with Try now, the job mailbox (status, errors with how to fix them), email
 // alerts quiet longer than usual, the sources table, adding a company (AddCompany.tsx), pausing, and
-// removing with an impact preview and Undo (RemoveDialog.tsx), and coverage checks (Coverage.tsx).
-// Normal volume and history charts arrive with their tickets.
-import type { CheckRecord, HealthReport, HealthSummary, MailboxHealth, QuietSource, SourceHealth } from "@apply-kit/core";
+// removing with an impact preview and Undo (RemoveDialog.tsx), each source's normal volume and its
+// unusual drop (same banner as the Feed, close with the count, Undo), and coverage checks
+// (Coverage.tsx). History charts arrive with their ticket.
+import type { CheckRecord, HealthReport, HealthSummary, MailboxHealth, NormalVolume, QuietSource, SourceHealth, UnusualDrop } from "@apply-kit/core";
 import { useEffect, useState } from "react";
 import { checkAndWait, checkSource, fetchSources, pauseSource, removeSource, resumeSource, undoDecision } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { AddCompany, type Added } from "./AddCompany.tsx";
 import { RemoveDialog } from "./RemoveDialog.tsx";
 import { CoverageCard, CoveragePage } from "./Coverage.tsx";
-import { categoryLabel, Chip, clockTime, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useTryNow } from "../health.tsx";
+import {
+  categoryLabel, Chip, clockTime, DropBanner, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useConfirmDrop, useTryNow,
+} from "../health.tsx";
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; report: HealthReport };
 
@@ -26,6 +29,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
   const [removing, setRemoving] = useState<SourceHealth | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const toaster = useToaster();
+  const drops = useConfirmDrop(toaster, reload, say);
   const focusRow = (id: string) => () => document.getElementById(rowActId(id))?.focus();
   const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
@@ -156,6 +160,8 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
             onPause={pause}
             onResume={resume}
             onRemove={setRemoving}
+            closingDrop={drops.busy}
+            onCloseDrop={drops.confirm}
           />
         )}
         {removing && (
@@ -188,7 +194,7 @@ const screenOf = (): Screen => {
   return path === screenPath.add ? "add" : path === screenPath.coverage ? "coverage" : "list";
 };
 
-function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage, ...actions }: {
+function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage, closingDrop, onCloseDrop, ...actions }: {
   report: HealthReport;
   busy: string | null;
   onTry: (s: SourceHealth) => void;
@@ -196,6 +202,8 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
   onCheckAll: () => void;
   onAdd: () => void;
   onCoverage: () => void;
+  closingDrop: string | null;
+  onCloseDrop: (drop: UnusualDrop) => void;
 } & RowActions) {
   const { summary, sources } = report;
   if (sources.length === 0) {
@@ -210,8 +218,9 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
   const failing = sources.filter((s) => s.status === "failing").length;
   const unchecked = sources.filter((s) => s.status === "not-checked").length;
   const quiet = summary.quiet;
+  const unusual = summary.unusual;
   const paused = sources.filter((s) => s.status === "paused");
-  const working = sources.length - failing - unchecked - quiet.length - paused.length;
+  const working = sources.length - failing - unchecked - quiet.length - unusual.length - paused.length;
   const byId = new Map(sources.map((s) => [s.id, s]));
   const mailboxDown = summary.mailbox?.state === "error";
 
@@ -221,9 +230,10 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
       {summary.failing.map((f) => (
         <FailedSourceBanner key={f.sourceId} failure={f} busy={busy === f.sourceId} onTry={() => onTry(byId.get(f.sourceId)!)} />
       ))}
+      {unusual.map((d) => <DropBanner key={d.sourceId} drop={d} busy={closingDrop === d.sourceId} onClose={() => onCloseDrop(d)} />)}
       <div className="page-head">
         <div className="lead">
-          <h1>{headline(sources.length - paused.length, working, failing, quiet.length)}</h1>
+          <h1>{headline(sources.length - paused.length, working, failing, quiet.length + unusual.length)}</h1>
           <p className="meta">
             {summary.lastCheckAt ? `Last check ${clockTime(summary.lastCheckAt)}` : "Not checked yet"}
             {" · "}checked when you press Check now; automatic checks arrive soon
@@ -244,6 +254,12 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
           <div className="tile warn">
             <span className="n"><TileIcon tone="warn" />{quiet.length}</span>
             <span className="l">quiet longer than usual: {quiet.map((q) => q.name).join(", ")}</span>
+          </div>
+        )}
+        {unusual.length > 0 && (
+          <div className="tile warn">
+            <span className="n"><TileIcon tone="warn" />{unusual.length}</span>
+            <span className="l">unusual drop: {unusual.map((d) => `${d.name} listed ${d.listed}`).join("; ")}</span>
           </div>
         )}
         {paused.length > 0 && <div className="tile"><span className="n">{paused.length}</span><span className="l">paused: {paused.map((s) => s.name).join(", ")}</span></div>}
@@ -269,7 +285,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
           </table>
         </div>
         <p className="table-foot">
-          <b>In your locations</b> counts postings in Sofia or remote within Europe at the last good check; the grey number is everything the source listed. A source that fails keeps all its jobs exactly as they were: a failure never closes anything. <b>Pause</b> stops checking a source and closes nothing; <b>Remove</b> first shows which jobs would close (only those no other source lists) and can be undone. <b>Email alerts</b> are read from the job mailbox (read-only) at each check; each learns its usual rhythm and is flagged when no email arrives for more than 3× its usual gap.
+          <b>In your locations</b> counts postings in Sofia or remote within Europe at the last good check; the grey number is everything the source listed. A source that fails keeps all its jobs exactly as they were: a failure never closes anything. A job a source stops listing closes with "No longer listed", unless the source is a capped search (Jooble, Reed, EURES, Microsoft, Amazon), which never closes anything that way. <b>Unusual drop</b>: a check listing less than half of a source's usual count keeps every job open; after 2 more checks just as low you're asked to confirm, and only your confirmation closes them (with Undo). <b>Pause</b> stops checking a source and closes nothing; <b>Remove</b> first shows which jobs would close (only those no other source lists) and can be undone. <b>Email alerts</b> are read from the job mailbox (read-only) at each check; each learns its usual rhythm and is flagged when no email arrives for more than 3× its usual gap.
         </p>
       </div>
       <div className="two">
@@ -279,10 +295,11 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
   );
 }
 
-function headline(total: number, working: number, failing: number, quiet: number): string {
-  const quietPart = quiet > 0 ? `${quiet} quiet longer than usual` : "";
-  if (failing > 0) return [`${failing} ${failing === 1 ? "source" : "sources"} failing`, quietPart].filter(Boolean).join(", ");
-  if (quiet > 0) return `${total - quiet} of ${total} sources look normal`;
+/** `unusual`: quiet longer than usual, or in an unusual drop. */
+function headline(total: number, working: number, failing: number, unusual: number): string {
+  const unusualPart = unusual > 0 ? `${unusual} unusual` : "";
+  if (failing > 0) return [`${failing} ${failing === 1 ? "source" : "sources"} failing`, unusualPart].filter(Boolean).join(", ");
+  if (unusual > 0) return `${total - unusual} of ${total} sources look normal`;
   if (working === total) return total === 1 ? "Your source is working" : `All ${total} sources working`;
   return `${working} of ${total} sources working`;
 }
@@ -299,6 +316,7 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet, acting, onPause
   const status = s.status === "failing"
     ? <Chip tone="bad">{s.category === "email" && mailboxDown ? "Mailbox not read" : `Failing since ${clockTime(s.failingSince!)}`}</Chip>
     : s.status === "quiet" ? <Chip tone="warn">Quiet longer than usual</Chip>
+    : s.status === "unusual" ? <Chip tone="warn">Unusual drop</Chip>
     : s.status === "working" ? <Chip tone="ok">Working</Chip>
     : s.status === "paused" ? <Chip tone="none">Paused</Chip> : <Chip tone="none">Not checked yet</Chip>;
   const lastEmail = s.alerts ? (s.alerts.lastEmailAt ? `email ${clockTime(s.alerts.lastEmailAt)}` : "no email yet") : null;
@@ -312,6 +330,9 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet, acting, onPause
           <div className="note quiet-note">
             {quietText(quiet.silentHours, quiet.usualGapHours)} Check the alert is still on, and that the iCloud forward still sends this sender's mail. Its jobs stay open.
           </div>
+        )}
+        {s.drop && s.status === "unusual" && (
+          <div className="note quiet-note">{s.drop.wording.headline} {s.drop.wording.kept}</div>
         )}
         {s.status === "paused" && (
           <div className="note">
@@ -331,10 +352,11 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet, acting, onPause
       <td className="num c-last">{last}</td>
       <td className="r num">
         {lastGood ? <>{lastGood.inLocations}{lastGood.total !== lastGood.inLocations && <span className="total"> of {lastGood.total}</span>}</> : "—"}
+        {s.normal && <span className="total usual">{usualText(s.normal)}</span>}
       </td>
       <td className="c-type">{categoryLabel[s.category]}</td>
       <td className="act">
-        {(s.status === "failing" || s.status === "quiet") && (
+        {(s.status === "failing" || s.status === "quiet" || s.status === "unusual") && (
           <button className="btn sm" type="button" onClick={onTry} disabled={busy}>
             {busy ? "Checking…" : s.category === "email" ? "Check mailbox" : "Try now"}<span className="sr-only">: {s.name}</span>
           </button>
@@ -346,6 +368,11 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet, acting, onPause
       </td>
     </tr>
   );
+}
+
+/** "usually 30–36": what the Source lists per check, all locations. */
+function usualText(n: NormalVolume): string {
+  return `usually ${n.low === n.high ? n.usual : `${n.low}–${n.high}`}`;
 }
 
 function failureNote(c: CheckRecord | undefined): string {

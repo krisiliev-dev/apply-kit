@@ -55,6 +55,12 @@ export interface SourceAdapter<Config = unknown> {
    */
   readonly crawlDelayMs?: number;
   /**
+   * True for a search whose answer is capped (a keyword search returns its top N): a Posting missing
+   * from one Check may simply have fallen below the cap, so the engine never treats it as gone.
+   * Leave unset for a Source that lists everything or fails (an ATS board, Workday).
+   */
+  readonly capped?: boolean;
+  /**
    * Validates config and returns it normalised. Accepts the adapter's config object or a
    * shorthand string (for Greenhouse, the board token). Throws an Error with a readable message.
    */
@@ -84,6 +90,14 @@ export interface EmailAlertAdapter<Config = unknown> extends SourceAdapter<Confi
   isFrom(config: Config, email: AlertEmail): boolean;
   /** Every job the email lists, with stable ids, so a repeated or re-delivered alert adds nothing. */
   parseEmail(config: Config, email: AlertEmail): FoundPosting[];
+}
+
+/**
+ * Whether a Check of this Source type lists every posting it has, so one it no longer lists is gone.
+ * Not for capped searches, nor for alert emails and captures, which only ever show some postings.
+ */
+export function listsEverything(a: SourceAdapter<unknown>): boolean {
+  return a.capped !== true && a.category !== "email" && a.category !== "capture";
 }
 
 export function isEmailAlertAdapter(a: SourceAdapter<unknown>): a is EmailAlertAdapter<unknown> {

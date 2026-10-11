@@ -159,6 +159,11 @@ export async function fetchCoverageCheck(id: string, signal?: AbortSignal): Prom
   return json(await fetch(`/api/coverage/${encodeURIComponent(id)}`, { signal }));
 }
 
+/** "Close 34 SumUp jobs": Kris confirms a Source's unusual drop. Undo with undoDecision. */
+export async function confirmDrop(id: string): Promise<Decision> {
+  return json(await postJson(`${sourcePath(id)}/confirm-drop`));
+}
+
 /** "Make target": one of the Job's Postings becomes the one Kris applies through. */
 export async function makeTarget(jobId: string, postingId: string): Promise<JobDetail> {
   return json(await postJson(`${jobPath(jobId)}/target`, { postingId }));
