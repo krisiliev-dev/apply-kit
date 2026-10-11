@@ -17,3 +17,7 @@
   .jobs .narrow { display: block }
 }
 .foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small); color: var(--ink-2) }
+
+/* Checking sources (from the Feed hi-fi): progress head and the new-jobs queue bar */
+.progress-head { display: grid; gap: var(--s-3) }
+.queue { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--met-soft); color: var(--met); font-size: var(--fs-small); font-weight: 600 }
