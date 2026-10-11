@@ -23,8 +23,11 @@ export const fitWeights = {
   /** Requirement score for each determinable required item (preferred items only ever add). */
   requirements: { met: 1, partly: 0.5, gap: 0, preferredMetBonus: 0.05 },
 
-  /** Location score per tier. Unknown is a part of its own: "remote, region not stated" scores this; no location at all is left out. */
-  location: { first: 1, remoteRegionUnstated: 0.6, relocation: 0.4, other: 0 },
+  /**
+   * Location score per tier. `unclear` is for a location that may be first priority but doesn't say
+   * ("Remote" with no region, "Bulgaria" with no city); no location at all is left out.
+   */
+  location: { first: 1, unclear: 0.6, relocation: 0.4, other: 0 },
 
   /** Salary score: whole range at or above the minimum, range reaching it, or entirely below it. */
   salary: { above: 1, reaches: 0.7, below: 0 },

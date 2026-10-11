@@ -16,7 +16,7 @@ export const angleKeywords: Record<Angle, string[]> = {
   ],
   security: [
     "security", "cybersecurity", "cyber", "infosec", "information security", "soc", "siem", "splunk", "elastic",
-    "incident response", "threat", "threat intelligence", "detection", "pentest", "pentester", "penetration testing",
+    "incident response", "threat", "threat intelligence", "detection", "pentest", "pentester", "penetration testing", "penetration tester", "ethical hacker",
     "appsec", "application security", "devsecops", "iam", "identity and access", "grc", "vulnerability", "forensics",
     "dfir", "malware", "red team", "blue team", "security operations", "cissp", "oscp", "cism", "iso 27001", "27001",
     "сигурност", "киберсигурност", "информационна сигурност",

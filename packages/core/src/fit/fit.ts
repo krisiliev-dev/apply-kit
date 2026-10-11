@@ -5,7 +5,7 @@
 // posting date) is left out and the other parts rescaled, so an unknown never counts as a gap.
 import type { RequirementStatus, Screening } from "../extraction/reading.ts";
 import { formatSalary } from "../extraction/reading.ts";
-import { placeOf, type Place } from "../locations.ts";
+import { NOT_STATED, placeOf, type Place } from "../locations.ts";
 import type { SearchSettings } from "../search-settings.ts";
 import { phrasesIn, words } from "../words.ts";
 import { angleKeywords, angleLabel, angles, type Angle } from "./angles.ts";
@@ -155,7 +155,7 @@ function locationReason(place: Place): Omit<FitReason, "points"> {
     case "first": return { ...base, score: W.location.first };
     case "relocation": return { ...base, score: W.location.relocation, text: `${place.label}, a separate, lower-priority list` };
     case "other": return { ...base, score: W.location.other };
-    case "unknown": return { ...base, score: place.label === "Location not stated" ? null : W.location.remoteRegionUnstated };
+    case "unknown": return { ...base, score: place.label === NOT_STATED ? null : W.location.unclear };
   }
 }
 

@@ -9,7 +9,7 @@ import { hasPhrase, words } from "./words.ts";
  * - first: a first-priority city, or remote within European time zones;
  * - relocation: a country Kris would relocate to (shown separately);
  * - other: somewhere else, or remote outside European time zones;
- * - unknown: no location stated, or remote without saying where from.
+ * - unknown: no location stated, remote without saying where from, or the home country with no city.
  */
 export type LocationTier = "first" | "relocation" | "other" | "unknown";
 
@@ -31,6 +31,14 @@ const aliases: Record<string, string[]> = {
   switzerland: ["switzerland", "swiss", "schweiz", "suisse", "svizzera", "швейцария", "zurich", "zürich", "geneva", "genève", "basel", "bern", "lausanne", "lugano", "zug"],
   spain: ["spain", "españa", "espana", "испания", "madrid", "barcelona", "valencia", "seville", "sevilla", "malaga", "málaga", "bilbao"],
 };
+
+/** The country of each first-priority city, for postings that name only the country. */
+const countryOfCity: Record<string, { name: string; spellings: string[] }> = {
+  sofia: { name: "Bulgaria", spellings: ["bulgaria", "българия", "republic of bulgaria"] },
+};
+
+/** The label of a Place with no location at all (its Fit part is left out, not scored). */
+export const NOT_STATED = "Location not stated";
 
 const remoteWords = ["remote", "remotely", "fully remote", "work from home", "wfh", "home office", "дистанционно", "дистанционна", "от вкъщи", "remote first"];
 
@@ -63,7 +71,7 @@ export function placeOf(input: PlaceInput, settings: SearchSettings["locations"]
   const w = words(stated);
   const mode = input.remote?.mode ?? "not-stated";
   const remote = mode === "remote" || anyOf(w, remoteWords) != null;
-  if (w.length === 0 && !remote) return { tier: "unknown", label: "Location not stated" };
+  if (w.length === 0 && !remote) return { tier: "unknown", label: NOT_STATED };
 
   const city = settings.cities.find((c) => anyOf(w, named(c)));
   if (city && !remote) return { tier: "first", label: mode === "hybrid" || mode === "on-site" ? `${title(city)} · ${mode}` : title(city) };
@@ -78,6 +86,10 @@ export function placeOf(input: PlaceInput, settings: SearchSettings["locations"]
 
   const country = settings.relocation.find((c) => anyOf(w, named(c)));
   if (country) return { tier: "relocation", label: `Relocation: ${title(country)}` };
+
+  // "Bulgaria" alone may well be Sofia: unknown, not outside.
+  const home = settings.cities.map((c) => countryOfCity[c.toLowerCase()]).find((c) => c && anyOf(w, c.spellings));
+  if (home) return { tier: "unknown", label: `${home.name}, city not stated` };
   return { tier: "other", label: "Outside your locations" };
 }
 
