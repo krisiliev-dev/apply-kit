@@ -18,3 +18,9 @@ export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts"
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export { MailboxError, mailboxFix } from "./mailbox.ts";
 export type { MailboxProblem } from "./mailbox.ts";
+export { expectedFactsSchema, evaluationCaseSchema } from "./evaluation/labels.ts";
+export type { ExpectedFacts, EvaluationCase } from "./evaluation/labels.ts";
+export { scoreCase, similarity, TEXT_MATCH } from "./evaluation/score.ts";
+export type { CaseScore, ListScore } from "./evaluation/score.ts";
+export { runEvaluation } from "./evaluation/run.ts";
+export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
