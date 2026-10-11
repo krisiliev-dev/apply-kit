@@ -46,7 +46,7 @@ export const recruitee: SourceAdapter<RecruiteeConfig> = {
   },
 
   key: (c) => c.host.replace(/\.recruitee\.com$/, ""),
-  defaultName: (c) => humanizeSlug(c.host.endsWith(".recruitee.com") ? c.host.split(".")[0]! : c.host),
+  defaultName: (c) => (c.host.endsWith(".recruitee.com") ? humanizeSlug(c.host.split(".")[0]!) : c.host),
 
   async fetchPostings(config, { fetch }) {
     const res = await fetch(`https://${config.host}/api/offers/`);

@@ -2,8 +2,10 @@ import type { SourceAdapter } from "./adapter.ts";
 import { ashby } from "./ashby.ts";
 import { greenhouse } from "./greenhouse.ts";
 import { lever } from "./lever.ts";
+import { personio } from "./personio.ts";
 import { recruitee } from "./recruitee.ts";
 import { smartrecruiters } from "./smartrecruiters.ts";
+import { teamtailor } from "./teamtailor.ts";
 
 /** Every Source type the engine can check, by kind. New adapters register here. */
 export const adapters: Record<string, SourceAdapter<unknown>> = {
@@ -12,6 +14,8 @@ export const adapters: Record<string, SourceAdapter<unknown>> = {
   [ashby.kind]: ashby as SourceAdapter<unknown>,
   [recruitee.kind]: recruitee as SourceAdapter<unknown>,
   [smartrecruiters.kind]: smartrecruiters as SourceAdapter<unknown>,
+  [personio.kind]: personio as SourceAdapter<unknown>,
+  [teamtailor.kind]: teamtailor as SourceAdapter<unknown>,
 };
 
 export function adapterFor(kind: string): SourceAdapter<unknown> {
