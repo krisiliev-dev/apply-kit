@@ -5,7 +5,7 @@ import { JobsTable } from "./JobsTable.tsx";
 import { PassedClosed } from "./PassedClosed.tsx";
 import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
 import { useToaster } from "./toast.tsx";
-import { FailedSourceBanner, StatusLine, useTryNow } from "../health.tsx";
+import { FailedSourceBanner, MailboxBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -119,6 +119,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
 
     return (
       <section className="stack" style={{ gap: "var(--s-6)" }}>
+        {feed.health.mailbox?.state === "error" && <MailboxBanner mailbox={feed.health.mailbox} showHealthLink />}
         {feed.health.failing.map((f) => (
           <FailedSourceBanner
             key={f.sourceId}

@@ -1,6 +1,7 @@
 // The Source adapter contract. One adapter per Source type (Greenhouse, Lever, Ashby, ...).
 // Adapters only translate a Source's own format into FoundPostings; the engine owns storage,
 // identity, merging into Jobs, expiry and health. Adapters never touch the database or the clock.
+import type { AlertEmail } from "../ports.ts";
 
 /** One Posting as a Source lists it right now, already normalised. */
 export interface FoundPosting {
@@ -26,6 +27,11 @@ export interface FoundPosting {
 
 export interface AdapterContext {
   fetch: typeof fetch;
+  /**
+   * The job mailbox's emails for this check (email-alert Sources only). One read is shared by every
+   * email Source in a check. Throws a MailboxError if the mailbox can't be read.
+   */
+  mail?: () => Promise<AlertEmail[]>;
   /**
    * Reads a setting by name (e.g. "JOOBLE_API_KEY"), or undefined if it isn't set. Adapters that
    * need a key throw a readable error naming the missing setting, so the Source shows as failing
@@ -65,4 +71,21 @@ export interface SourceAdapter<Config = unknown> {
    * error, non-2xx, unparseable body). Returning [] means "the Source really lists nothing".
    */
   fetchPostings(config: Config, ctx: AdapterContext): Promise<FoundPosting[]>;
+}
+
+/**
+ * An email-alert Source (category "email"): its postings come from alert emails in the job mailbox,
+ * not from a request. The engine reads the mailbox once per check, records which emails belong to
+ * each Source (for its usual rhythm and "quiet longer than usual"), and asks the adapter to parse them.
+ */
+export interface EmailAlertAdapter<Config = unknown> extends SourceAdapter<Config> {
+  readonly category: "email";
+  /** Whether this Source's sender sent the email. */
+  isFrom(config: Config, email: AlertEmail): boolean;
+  /** Every job the email lists, with stable ids, so a repeated or re-delivered alert adds nothing. */
+  parseEmail(config: Config, email: AlertEmail): FoundPosting[];
+}
+
+export function isEmailAlertAdapter(a: SourceAdapter<unknown>): a is EmailAlertAdapter<unknown> {
+  return a.category === "email" && "parseEmail" in a;
 }
