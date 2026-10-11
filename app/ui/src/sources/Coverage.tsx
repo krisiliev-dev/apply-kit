@@ -6,7 +6,8 @@
 import type { CoverageFix, CoverageHistory, CoverageResult, CoverageResultListing, CoverageSummary } from "@apply-kit/core";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import {
-  addSource, checkSource, fetchCoverageCheck, fetchCoverageHistory, recordCoverageCheck, reopenJobs, resumeSource, undoDecision,
+  addSource, checkSource, fetchCoverageCheck, fetchCoverageHistory, notADealbreaker, recordCoverageCheck, reopenJobs, resumeSource,
+  undoDecision, unhideJobs,
 } from "../api.ts";
 import { Chip, clockTime, StatusLine } from "../health.tsx";
 
@@ -377,6 +378,8 @@ function fixAction(f: CoverageFix): (() => Promise<string>) | null {
     case "add-source": return () => addSource(f.source).then((s) => `${s.name} added: it's checked from the next check`);
     case "undo": return () => undoDecision(f.decisionId).then(() => "Pass undone: it's back in the Feed");
     case "reopen": return () => reopenJobs([f.jobId]).then(() => "Reopened: it's back in New");
-    default: return null;
+    case "unhide": return () => unhideJobs([f.jobId]).then(() => "Shown: it's back in New. The rule is unchanged");
+    case "not-a-dealbreaker": return () => notADealbreaker(f.jobId, f.reasonKey).then(({ change }) => `Rule changed: ${change.text}`);
+    case "add-company": case "show-relocation": case "adjust-locations": return null;
   }
 }

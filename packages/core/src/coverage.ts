@@ -64,7 +64,7 @@ export type CoverageReasonKind =
   // Missing:
   | "source-failing" | "source-paused" | "source-removed" | "not-listed" | "outside-locations" | "not-covered"
   // Found, but not in the main list:
-  | "relocation" | "passed" | "closed";
+  | "dealbreaker" | "relocation" | "passed" | "closed";
 
 /** One thing Kris can do about a reason, best first. `label` is the button text. */
 export type CoverageFix =
@@ -74,6 +74,8 @@ export type CoverageFix =
   | { kind: "add-source"; source: { kind: string; config: unknown; name: string }; label: string }
   | { kind: "adjust-locations"; place: string; label: string }
   | { kind: "show-relocation"; label: string }
+  | { kind: "unhide"; jobId: string; label: string }
+  | { kind: "not-a-dealbreaker"; jobId: string; reasonKey: string; label: string }
   | { kind: "undo"; decisionId: string; label: string }
   | { kind: "reopen"; jobId: string; label: string };
 
@@ -240,6 +242,9 @@ export interface FoundJob {
   place: { tier: string; label: string };
   passed?: { decisionId: string };
   closed?: { how: string };
+  /** In the hidden pile, and the dealbreakers it breaks. */
+  hidden: boolean;
+  dealbreakers: { key: string; text: string }[];
 }
 
 /** Whether a found Job is in the main Feed and, if not, why and how to bring it in. */
@@ -257,6 +262,20 @@ export function whereFound(job: FoundJob): { status: FoundStatus; reason: Covera
       status: "hidden",
       reason: { kind: "closed", text: `It was closed (${job.closed?.how ?? "no reason recorded"}). ${inPassed}` },
       fixes: [{ kind: "reopen", jobId: job.id, label: "Reopen it" }],
+    };
+  }
+  if (job.hidden) {
+    const why = job.dealbreakers.map((d) => d.text).join("; ");
+    return {
+      status: "hidden",
+      reason: { kind: "dealbreaker", text: `Hidden by your dealbreakers: ${why}. It's in the hidden pile.` },
+      fixes: [
+        { kind: "unhide", jobId: job.id, label: "Show this job" },
+        // Changing the rule: offered for a single dealbreaker, so it is clear which rule changes.
+        ...(job.dealbreakers.length === 1
+          ? [{ kind: "not-a-dealbreaker" as const, jobId: job.id, reasonKey: job.dealbreakers[0]!.key, label: "Not a dealbreaker for me" }]
+          : []),
+      ],
     };
   }
   if (job.place.tier === "relocation") {

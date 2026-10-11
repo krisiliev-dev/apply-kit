@@ -1,7 +1,8 @@
 // Coverage checks: Kris records a manual search he ran, and the engine compares it with the Feed,
 // explaining every job it doesn't have and offering a fix.
 import { describe, expect, it } from "vitest";
-import { createTestEngine } from "./harness.ts";
+import { defaultSearchSettings } from "../src/index.ts";
+import { cannedFacts, createTestEngine, fakeExtractor } from "./harness.ts";
 import { routedFetch } from "./http.ts";
 
 const greenhouseBoard = "https://boards-api.greenhouse.io/v1/boards/payhawkio/jobs?content=true";
@@ -209,6 +210,37 @@ describe("coverage check: found, but not in the main Feed", () => {
       status: "hidden",
       reason: { kind: "relocation", text: "It's a relocation job (Switzerland): relocation jobs show only with the Relocation filter on." },
       fixes: [{ kind: "show-relocation", label: "Turn on Relocation" }],
+    });
+    expect(result.totals).toMatchObject({ found: 1, inFeed: 0, hidden: 1, missing: 0 });
+  });
+
+  it("a job hidden by a dealbreaker is found, in the hidden pile, with the fixes to show it or change the rule", async () => {
+    const extractor = fakeExtractor({
+      "Security Engineer": cannedFacts({
+        languages: [{ language: "German", level: "fluent", kind: "required", source: { quote: "Fluent German", translation: null }, confidence: 0.95 }],
+      }),
+    });
+    const http = routedFetch(() => ({
+      json: { jobs: [{ id: 1, title: "Security Engineer", company_name: "Acme", location: { name: "Sofia" }, absolute_url: "https://example.test/jobs/1", content: "&lt;p&gt;Fluent German&lt;/p&gt;" }] },
+    }));
+    const searchSettings = { ...defaultSearchSettings, dealbreakers: { ...defaultSearchSettings.dealbreakers, languagesNotSpoken: ["German"] } };
+    const { engine } = createTestEngine({ fetch: http.fetch, extractor, searchSettings });
+    await engine.addSource({ kind: "greenhouse", config: "acme" });
+    await engine.checkAll();
+    await engine.readPending();
+    const [job] = (await engine.queryFeed({ view: "hidden" })).jobs;
+
+    const result = await engine.recordCoverageCheck({
+      site: "dev.bg", query: "security", listings: [{ title: "Security Engineer", company: "Acme", location: "Sofia" }],
+    });
+
+    expect(result.listings[0]).toMatchObject({
+      status: "hidden", jobId: job!.id,
+      reason: { kind: "dealbreaker", text: "Hidden by your dealbreakers: Requires German (fluent): a language you don't speak. It's in the hidden pile." },
+      fixes: [
+        { kind: "unhide", jobId: job!.id, label: "Show this job" },
+        { kind: "not-a-dealbreaker", jobId: job!.id, reasonKey: "language:German", label: "Not a dealbreaker for me" },
+      ],
     });
     expect(result.totals).toMatchObject({ found: 1, inFeed: 0, hidden: 1, missing: 0 });
   });
