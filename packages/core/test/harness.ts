@@ -21,6 +21,8 @@ export function loadFixture(name: string): string {
 export interface FakeClock extends Clock, Timers {
   advance(ms: number): Promise<void>;
   sleep(ms: number): void;
+  /** Polite gaps between requests: fake time passes at once. */
+  wait(ms: number): Promise<void>;
   set(iso: string): void;
 }
 
@@ -53,6 +55,7 @@ export function fakeClock(startIso = "2026-10-12T07:30:00Z"): FakeClock {
       return id;
     },
     clearInterval(id) { timers.delete(id as number); },
+    async wait(ms) { t += ms; },
   };
 }
 
