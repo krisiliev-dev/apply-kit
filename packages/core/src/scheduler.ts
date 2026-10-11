@@ -12,6 +12,35 @@ export interface Schedule {
 
 export const defaultSchedule: Schedule = { everyMinutes: 30, window: { start: "07:00", end: "23:00" } };
 
+/**
+ * Reads schedule settings as text (the service passes APPLY_KIT_CHECK_EVERY_MINUTES and
+ * APPLY_KIT_CHECK_WINDOW). Blank or missing settings fall back to the defaults.
+ * `every` is whole minutes; `window` is "HH:MM-HH:MM" on the same day.
+ */
+export function parseSchedule(settings: { every?: string; window?: string }): Schedule {
+  const every = settings.every?.trim();
+  const window = settings.window?.trim();
+  let everyMinutes = defaultSchedule.everyMinutes;
+  if (every) {
+    everyMinutes = Number(every);
+    if (!Number.isInteger(everyMinutes) || everyMinutes < 1) {
+      throw new Error(`Check interval must be a whole number of minutes (1 or more), got "${every}"`);
+    }
+  }
+  if (!window) return { everyMinutes, window: { ...defaultSchedule.window } };
+  const m = /^(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})$/.exec(window);
+  const valid = (h: string, min: string) => Number(h) <= 24 && Number(min) < 60;
+  if (!m || !valid(m[1]!, m[2]!) || !valid(m[3]!, m[4]!)) {
+    throw new Error(`Check window must look like "07:00-23:00", got "${window}"`);
+  }
+  const pad = (h: string, min: string) => `${h.padStart(2, "0")}:${min}`;
+  const result = { start: pad(m[1]!, m[2]!), end: pad(m[3]!, m[4]!) };
+  if (toMinutes(result.start) >= toMinutes(result.end)) {
+    throw new Error(`Check window must start before it ends on the same day, got "${window}"`);
+  }
+  return { everyMinutes, window: result };
+}
+
 export interface SchedulerOptions {
   engine: DiscoveryEngine;
   clock: Clock;
