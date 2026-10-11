@@ -6,6 +6,10 @@ export type {
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort,
 } from "./engine.ts";
 export { sourceRemovedHow } from "./engine.ts";
+export type {
+  CoverageInput, CoverageListing, CoverageResult, CoverageResultListing, CoverageReason, CoverageReasonKind, CoverageFix,
+  CoverageTotals, CoverageSummary, CoverageHistory,
+} from "./coverage.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {

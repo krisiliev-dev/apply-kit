@@ -138,6 +138,31 @@ const migrations: string[] = [
   `ALTER TABLE source ADD COLUMN paused_at TEXT;
    ALTER TABLE source ADD COLUMN removed_at TEXT;
    ALTER TABLE source ADD COLUMN removed_decision_id TEXT;`,
+  // #20: coverage checks. Each manual search Kris recorded (site, words, location, how many results he
+  // saw) and every listing he gave, with what it was when checked: found (and as which Job) or
+  // missing, with the reason and fixes offered then.
+  `CREATE TABLE coverage_check (
+     id TEXT PRIMARY KEY,
+     checked_at TEXT NOT NULL,
+     site TEXT NOT NULL,
+     query TEXT NOT NULL,
+     location TEXT,
+     result_count INTEGER NOT NULL,
+     app_had INTEGER NOT NULL
+   );
+   CREATE INDEX coverage_check_at ON coverage_check(checked_at);
+   CREATE TABLE coverage_listing (
+     check_id TEXT NOT NULL REFERENCES coverage_check(id),
+     position INTEGER NOT NULL,
+     title TEXT NOT NULL,
+     company TEXT NOT NULL,
+     location TEXT,
+     url TEXT,
+     status TEXT NOT NULL,
+     job_id TEXT,
+     reason TEXT,
+     PRIMARY KEY (check_id, position)
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

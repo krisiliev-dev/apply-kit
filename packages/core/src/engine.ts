@@ -14,8 +14,14 @@ import { defaultSearchSettings, type SearchSettings } from "./search-settings.ts
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
+import { devbgPageListings } from "./sources/devbg.ts";
 import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
 import { describeMergeReason, type MergeReason } from "./matching.ts";
+import {
+  answersSearch, coverageHistory, isReadableResultsPage, loadCoverageCheck, matchListing, parseListings, storeCoverageCheck,
+  totalsOf, unreadableResultsPage, whereFound, whyMissing,
+  type CompanySource, type CoverageHistory, type CoverageInput, type CoverageResult, type CoverageResultListing,
+} from "./coverage.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
@@ -437,6 +443,16 @@ export interface DiscoveryEngine {
    * other ways to catch its jobs, best first.
    */
   detectCompany(input: string, options?: DetectOptions): Promise<CompanyDetection>;
+  /**
+   * Records a coverage check: a manual search Kris ran (site, words, location, how many results he
+   * saw, optionally the listings) compared with the Feed. Each listing is found (in the Feed, or kept
+   * out of the main list with the reason) or missing, with the likely reason and fixes. Kept as history.
+   */
+  recordCoverageCheck(input: CoverageInput): Promise<CoverageResult>;
+  /** Every coverage check, newest first, with missing jobs that have arrived since counted as fixed; and whether one is due. */
+  coverageHistory(): Promise<CoverageHistory>;
+  /** One coverage check as it was recorded (missing listings that have arrived since point at their Job), or null. */
+  getCoverageCheck(id: string): Promise<CoverageResult | null>;
 }
 
 export interface ReadResult {
@@ -962,6 +978,25 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     };
   }
 
+  const liveJob = (jobId: string) => liveJobId(db, jobId) ?? null;
+
+  /** Every company's own job system (ATS or public jobs API), watched or removed, for coverage reasons. */
+  function companySources(): CompanySource[] {
+    const own = (kind: string) => ["ats", "api"].includes(adapters[kind]?.category ?? "ats");
+    const config = (id: string) => JSON.parse(String(db.prepare("SELECT config FROM source WHERE id = ?").get(id)?.config ?? "{}")) as unknown;
+    const watched = allSourceHealth().filter((s) => own(s.kind)).map((s): CompanySource => ({
+      id: s.id, name: s.name, label: s.label, kind: s.kind, config: config(s.id),
+      status: s.status, failingSince: s.failingSince, lastGoodCheckAt: s.lastGoodCheckAt,
+    }));
+    const removed = db.prepare("SELECT id, name, kind, config FROM source WHERE removed_at IS NOT NULL ORDER BY removed_at DESC").all()
+      .filter((r) => own(String(r.kind)))
+      .map((r): CompanySource => ({
+        id: String(r.id), name: String(r.name), label: kindLabel(String(r.kind)), kind: String(r.kind), config: JSON.parse(String(r.config)) as unknown,
+        status: "removed", failingSince: null, lastGoodCheckAt: null,
+      }));
+    return [...watched, ...removed];
+  }
+
   return {
     async save(jobIds) {
       return decide("save", jobIds, ["new"], "saved");
@@ -1184,6 +1219,65 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           return [...bySource.values()];
         },
       }, options);
+    },
+
+    async recordCoverageCheck(input) {
+      const id = `coverage:${crypto.randomUUID()}`;
+      const at = clock.now().toISOString();
+      const given = typeof input.listings === "string" ? parseListings(input.listings) : [...input.listings ?? []];
+      const resultsUrl = input.resultsUrl?.trim();
+      const count = input.resultCount;
+      if (!input.site?.trim()) throw new Error("Say which site you searched");
+      if (count != null && (!Number.isInteger(count) || count < 0)) throw new Error("The number of results must be a whole number, 0 or more");
+      if (count == null && given.length === 0 && !resultsUrl) {
+        throw new Error("Type how many results you saw, paste the listings, or paste the results link");
+      }
+      if (resultsUrl) {
+        if (!isReadableResultsPage(resultsUrl)) throw new Error(unreadableResultsPage);
+        const res = await fetchFor("devbg")(resultsUrl, { headers: { accept: "text/html" } });
+        if (!res.ok) throw new Error(`dev.bg answered ${res.status} for that results page`);
+        given.push(...devbgPageListings(await res.text()).map(({ title, company, location, url }) => ({ title, company, location, url })));
+      }
+      const money = budget();
+      const alertSenders = new Set(
+        db.prepare("SELECT config FROM source WHERE kind = 'email' AND removed_at IS NULL").all()
+          .map((r) => String((JSON.parse(String(r.config)) as { sender?: unknown }).sender)),
+      );
+      const ctx = { db, site: input.site, sources: companySources(), alertSenders, locations: searchSettings().locations };
+      const listings: CoverageResultListing[] = given.map((l) => {
+        const hit = matchListing(db, l);
+        const jobId = (hit && liveJobId(db, hit.job_id)) ?? null;
+        const url = l.url?.trim() || null;
+        const listing = { title: l.title.trim(), company: l.company.trim(), location: l.location?.trim() || null, url };
+        const row = jobId ? db.prepare(`${jobSelect} WHERE j.id = ?`).get(jobId) : undefined;
+        if (jobId && row) {
+          const job = toFeedJob(row, money);
+          // A link alone is described by the Job it found.
+          const described = listing.title ? listing : { title: job.title, company: job.company, location: job.location, url };
+          return { ...described, jobId, ...whereFound({ ...job, place: job.fit.place }), fixedBy: null };
+        }
+        const described = listing.title ? listing : { ...listing, title: url ?? "" };
+        return { ...described, status: "missing", jobId: null, ...whyMissing(listing, ctx), fixedBy: null };
+      });
+      const query = input.query?.trim() ?? "";
+      const location = input.location?.trim() || null;
+      // With no listings, what apply-kit had is the Jobs (in any view) that answer the same search.
+      const appHad = listings.length > 0 ? undefined : db.prepare(`${jobSelect} WHERE j.merged_into IS NULL`).all()
+        .filter((r) => answersSearch({ title: String(r.title), company: String(r.company), location: sqlText(r.location) }, query, location)).length;
+      const totals = totalsOf(listings, input.resultCount ?? listings.length, appHad);
+      const result: CoverageResult = {
+        id, at, site: input.site.trim(), query, location, listings, totals,
+      };
+      transaction(db, () => storeCoverageCheck(db, result));
+      return result;
+    },
+
+    async coverageHistory() {
+      return coverageHistory(db, clock.now(), liveJob);
+    },
+
+    async getCoverageCheck(id) {
+      return loadCoverageCheck(db, id, liveJob);
     },
 
     async sourceHealth() {
