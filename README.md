@@ -38,6 +38,8 @@ pnpm service:install     # builds the UI, installs ~/Library/LaunchAgents/dev.kr
 
 Logs go to `~/Library/Logs/apply-kit/`. `pnpm service:status` shows whether it is running; `pnpm service:uninstall` removes it. Run install again after upgrading Node or moving the repo.
 
+Reading postings (requirements, key facts) uses OpenRouter: set `OPENROUTER_API_KEY` and a hard monthly cap `AI_MONTHLY_CAP_USD` (e.g. `10`). Without a cap nothing is read and jobs stay in the Feed unscreened. `OPENROUTER_MODEL` and `OPENROUTER_PROVIDERS` are optional; China-hosted providers are always excluded.
+
 Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
 
 ## Commands
