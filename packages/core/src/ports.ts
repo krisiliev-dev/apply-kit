@@ -4,7 +4,13 @@
 export interface Clock {
   now(): Date;
   /** Waits this long (polite gaps between requests). Defaults to a real timer; tests pass fake time. */
-  sleep?(ms: number): Promise<void>;
+  wait?(ms: number): Promise<void>;
+}
+
+/** Repeating timers, injected so the scheduler can be driven by a fake clock in tests. */
+export interface Timers {
+  setInterval(fn: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
 }
 
 /**

@@ -13,7 +13,7 @@ describe("Teamtailor source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "teamtailor:superhosting", name: "Superhosting", ok: true, found: 1, newPostings: 1 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Technical Support Specialist", company: "SuperHosting", location: "Sofia, Bulgaria", salary: null, postedAt: "2026-08-07T14:58:39.000Z", postingCount: 1, url: "https://superhosting.teamtailor.com/jobs/8191492-technical-support-specialist" },
+      { id: expect.any(String), title: "Technical Support Specialist", company: "SuperHosting", location: "Sofia, Bulgaria", salary: null, postedAt: "2026-08-07T14:58:39.000Z", postingCount: 1, state: "new", url: "https://superhosting.teamtailor.com/jobs/8191492-technical-support-specialist" },
     ]);
   });
 
@@ -43,7 +43,7 @@ describe("Teamtailor source", () => {
     const { engine, clock } = createTestEngine({ fetch: fixtureFetch({ [superhosting]: "teamtailor.xml" }) });
     await engine.addSource({ kind: "teamtailor", config: { company: "superhosting" } });
     await engine.checkAll();
-    clock.advance(30 * 60_000);
+    await clock.advance(30 * 60_000);
 
     expect((await engine.checkAll()).sources[0]).toMatchObject({ ok: true, found: 1, newPostings: 0 });
   });

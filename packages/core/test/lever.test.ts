@@ -14,9 +14,9 @@ describe("Lever source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "lever:siteground", name: "SiteGround", ok: true, found: 3, newPostings: 3 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "AI Evaluation Engineer", company: "SiteGround", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-09-21T13:54:06.927Z", postingCount: 1, url: "https://jobs.lever.co/siteground/40139dc2-abd7-49b4-9c0b-df908a246233" },
-      { id: expect.any(String), title: "Software Engineer, Backend", company: "SiteGround", location: "Bulgaria · Hybrid", salary: null, postedAt: "2026-09-19T09:25:08.754Z", postingCount: 1, url: "https://jobs.lever.co/siteground/0a220806-406f-4e20-adf1-ee72259179e2" },
-      { id: expect.any(String), title: "Software Engineer, Frontend", company: "SiteGround", location: "Bulgaria · Hybrid", salary: null, postedAt: "2026-09-19T08:45:22.166Z", postingCount: 1, url: "https://jobs.lever.co/siteground/beedc45b-59c6-409e-8814-9ac1f7fa2a72" },
+      { id: expect.any(String), title: "AI Evaluation Engineer", company: "SiteGround", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-09-21T13:54:06.927Z", postingCount: 1, state: "new", url: "https://jobs.lever.co/siteground/40139dc2-abd7-49b4-9c0b-df908a246233" },
+      { id: expect.any(String), title: "Software Engineer, Backend", company: "SiteGround", location: "Bulgaria · Hybrid", salary: null, postedAt: "2026-09-19T09:25:08.754Z", postingCount: 1, state: "new", url: "https://jobs.lever.co/siteground/0a220806-406f-4e20-adf1-ee72259179e2" },
+      { id: expect.any(String), title: "Software Engineer, Frontend", company: "SiteGround", location: "Bulgaria · Hybrid", salary: null, postedAt: "2026-09-19T08:45:22.166Z", postingCount: 1, state: "new", url: "https://jobs.lever.co/siteground/beedc45b-59c6-409e-8814-9ac1f7fa2a72" },
     ]);
   });
 
@@ -24,7 +24,7 @@ describe("Lever source", () => {
     const { engine, clock } = createTestEngine({ fetch: fixtureFetch({ [sitegroundGlobal]: "lever.json" }) });
     await engine.addSource({ kind: "lever", config: "siteground" });
     await engine.checkAll();
-    clock.advance(30 * 60_000);
+    await clock.advance(30 * 60_000);
 
     const again = await engine.checkAll();
 

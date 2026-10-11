@@ -24,6 +24,20 @@ export interface FeedJob {
   postingCount: number;
   /** Link to the job's posting. */
   url: string;
+  state: JobState;
+  /** Set on passed Jobs: when, the reason Kris chose (null when he gave none), and the Decision to undo. */
+  passed?: { at: string; reason: PassReason | null; note: string | null; decisionId: string };
+  /** Set on closed Jobs: when, how it closed in plain words, and the Decision to undo. */
+  closed?: { at: string; how: string; decisionId: string };
+}
+
+/** The pass reasons Kris can choose from. None is ever chosen for him. */
+export const passReasons = ["skills-gap", "salary", "location", "company", "other"] as const;
+export type PassReason = (typeof passReasons)[number];
+
+export interface PassInput {
+  reason?: PassReason | null;
+  note?: string | null;
 }
 
 export type HealthState = "no-sources" | "working" | "failing";
@@ -127,16 +141,47 @@ export interface CheckResult {
   sources: SourceCheck[];
 }
 
+/** A save, pass, close or reopen. Its id undoes it. */
+export interface Decision {
+  id: string;
+  kind: "save" | "pass" | "close" | "reopen";
+  /** The Jobs it changed. Jobs it didn't apply to (say, saving a closed job) are left out. */
+  jobIds: string[];
+}
+
+export interface CheckOptions {
+  /** Called when the check starts, with how many Sources it will check. */
+  onStart?: (total: number) => void;
+  /** Called once per Source the moment its check finishes; its jobs are already in the Feed. */
+  onSourceChecked?: (check: SourceCheck) => void;
+}
+
 export interface DiscoveryEngine {
   queryFeed(query: FeedQuery): Promise<FeedResult>;
   /** Adds a Source. Adding the same Source again (same kind and key) changes nothing. */
   addSource(source: NewSource): Promise<SourceInfo>;
-  /** Checks every Source now. A failing Source is reported, never thrown, and changes nothing. */
-  checkAll(): Promise<CheckResult>;
+  /**
+   * Checks every Source now. A failing Source is reported, never thrown, and changes nothing.
+   * Each Source's results are stored as soon as it finishes, so the Feed fills while slower ones run.
+   */
+  checkAll(options?: CheckOptions): Promise<CheckResult>;
   /** Checks one Source now ("Try now"). Same rules as checkAll; throws only if the Source doesn't exist. */
   checkSource(sourceId: string): Promise<SourceCheck>;
   /** Every Source with its status, latest Checks and what a failure means for the Feed. */
   sourceHealth(): Promise<HealthReport>;
+  /** Saves open Jobs (new → saved). */
+  save(jobIds: string[]): Promise<Decision>;
+  /** Passes open Jobs, with the reason and note Kris gave (both optional, never defaulted). */
+  pass(jobIds: string[], input?: PassInput): Promise<Decision>;
+  /**
+   * Undoes a Decision, for all its Jobs or only the given ones, at any time: each Job goes back to
+   * its state before. A Job Kris has decided on again since is left alone. Returns the Jobs restored.
+   */
+  undo(decisionId: string, jobIds?: string[]): Promise<{ jobIds: string[] }>;
+  /** Closes Jobs that aren't closed yet, saying how in plain words ("No longer listed by Greenhouse"). */
+  close(jobIds: string[], how: string): Promise<Decision>;
+  /** Reopens closed Jobs: they go back to New. */
+  reopen(jobIds: string[]): Promise<Decision>;
 }
 
 /** How many recent Checks sourceHealth returns per Source. */
@@ -148,7 +193,17 @@ const checkTimeoutMs = 30_000;
 /** Sent with every Source request so hosts can see who is asking. */
 const userAgent = "apply-kit/0.1 (personal job search; https://github.com/krisiliev-dev/apply-kit)";
 
-const viewStates: Record<FeedView, string[]> = {
+export type JobState = "new" | "saved" | "passed" | "closed";
+
+interface StateFields {
+  passReason?: string | null;
+  passNote?: string | null;
+  closedHow?: string | null;
+}
+
+const sqlText = (v: unknown): string | null => (v == null ? null : String(v));
+
+const viewStates: Record<FeedView, JobState[]> = {
   new: ["new"],
   saved: ["saved"],
   open: ["new", "saved"],
@@ -161,19 +216,28 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   // Polite polling: one request at a time per host, across every Source and Check, spaced by the
   // Source type's crawl delay (Lever asks for 1 s).
-  const hosts = new Map<string, { tail: Promise<unknown>; lastStartMs: number }>();
-  const sleep = (ms: number) => (clock.sleep ? clock.sleep(ms) : new Promise<void>((r) => setTimeout(r, ms)));
+  const hosts = new Map<string, { tail: Promise<void> | null; lastStartMs: number }>();
+  const wait = (ms: number) => (clock.wait ? clock.wait(ms) : new Promise<void>((r) => setTimeout(r, ms)));
   function politely(url: string, gapMs: number, send: () => Promise<Response>): Promise<Response> {
     const host = new URL(url).host;
-    const h = hosts.get(host) ?? { tail: Promise.resolve(), lastStartMs: -Infinity };
+    const h = hosts.get(host) ?? { tail: null, lastStartMs: -Infinity };
     hosts.set(host, h);
-    const run = h.tail.then(async () => {
-      const wait = h.lastStartMs + gapMs - clock.now().getTime();
-      if (wait > 0) await sleep(wait);
+    const start = () => {
       h.lastStartMs = clock.now().getTime();
       return send();
+    };
+    // A free host is asked straight away (no extra tick); otherwise the request queues behind the others.
+    const run = !h.tail && h.lastStartMs + gapMs <= clock.now().getTime()
+      ? startNow(start)
+      : (h.tail ?? Promise.resolve()).then(async () => {
+          const gap = h.lastStartMs + gapMs - clock.now().getTime();
+          if (gap > 0) await wait(gap);
+          return start();
+        });
+    const tail: Promise<void> = run.then(() => undefined, () => undefined).then(() => {
+      if (h.tail === tail) h.tail = null;
     });
-    h.tail = run.catch(() => undefined);
+    h.tail = tail;
     return run;
   }
 
@@ -221,6 +285,34 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     }
   }
 
+  /** Moves each Job currently in one of `from` to `to`, remembering its previous state. */
+  function decide(kind: Decision["kind"], jobIds: string[], from: JobState[], to: JobState, fields: StateFields = {}): Decision {
+    const id = `decision:${crypto.randomUUID()}`;
+    const now = clock.now().toISOString();
+    const changed = transaction(db, () => {
+      db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
+      const out: string[] = [];
+      for (const jobId of new Set(jobIds)) {
+        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ?").get(jobId);
+        if (!job || !from.includes(String(job.state) as JobState)) continue;
+        db.prepare(
+          `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
+        setState(jobId, to, now, fields);
+        out.push(jobId);
+      }
+      return out;
+    });
+    return { id, kind, jobIds: changed };
+  }
+
+  function setState(jobId: string, state: string, changedAt: string | null, f: StateFields) {
+    db.prepare("UPDATE job SET state = ?, state_changed_at = ?, pass_reason = ?, pass_note = ?, closed_how = ? WHERE id = ?").run(
+      state, changedAt, f.passReason ?? null, f.passNote ?? null, f.closedHow ?? null, jobId,
+    );
+  }
+
   function allSourceHealth(): SourceHealth[] {
     const rows = db.prepare("SELECT id, name, kind FROM source ORDER BY created_at, id").all();
     const history = db.prepare(
@@ -252,16 +344,62 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   return {
+    async save(jobIds) {
+      return decide("save", jobIds, ["new"], "saved");
+    },
+
+    async pass(jobIds, input = {}) {
+      const reason = input.reason ?? null;
+      if (reason !== null && !passReasons.includes(reason)) throw new Error(`Unknown pass reason "${String(reason)}"`);
+      const note = input.note?.trim() || null;
+      return decide("pass", jobIds, ["new", "saved"], "passed", { passReason: reason, passNote: note });
+    },
+
+    async close(jobIds, how) {
+      return decide("close", jobIds, ["new", "saved", "passed"], "closed", { closedHow: how });
+    },
+
+    async reopen(jobIds) {
+      return decide("reopen", jobIds, ["closed"], "new");
+    },
+
+    async undo(decisionId, only) {
+      const now = clock.now().toISOString();
+      const restored = transaction(db, () => {
+        const rows = db.prepare(
+          `SELECT dj.rowid AS rid, dj.* FROM decision_job dj
+           WHERE dj.decision_id = ? AND dj.undone_at IS NULL
+             AND dj.rowid = (SELECT MAX(rowid) FROM decision_job WHERE job_id = dj.job_id AND undone_at IS NULL)
+           ORDER BY dj.rowid`,
+        ).all(decisionId);
+        const out: string[] = [];
+        for (const r of rows) {
+          const jobId = String(r.job_id);
+          if (only && !only.includes(jobId)) continue;
+          setState(jobId, String(r.prev_state), sqlText(r.prev_changed_at), {
+            passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
+          });
+          db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
+          out.push(jobId);
+        }
+        return out;
+      });
+      return { jobIds: restored };
+    },
+
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source");
       const states = viewStates[query.view];
       const rows = db.prepare(
-        `SELECT j.id, p.title, p.company, p.location, p.salary, p.posted_at, p.url,
-                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n
+        `SELECT j.id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
+                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
+                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
+                (SELECT decision_id FROM decision_job
+                  WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
          FROM job j
          JOIN posting p ON p.id = (SELECT id FROM posting WHERE job_id = j.id ORDER BY first_seen_at, id LIMIT 1)
          WHERE j.state IN (${states.map(() => "?").join(",")})
-         ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+         ORDER BY ${query.view === "passed" ? "j.state_changed_at DESC, " : ""}p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all(...states);
       return {
         view: query.view,
@@ -276,6 +414,18 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           postedAt: r.posted_at == null ? null : String(r.posted_at),
           postingCount: Number(r.n),
           url: String(r.url),
+          state: String(r.state) as JobState,
+          ...(r.state === "passed" && {
+            passed: {
+              at: String(r.state_changed_at),
+              reason: (sqlText(r.pass_reason) as PassReason | null),
+              note: sqlText(r.pass_note),
+              decisionId: String(r.decision_id),
+            },
+          }),
+          ...(r.state === "closed" && {
+            closed: { at: String(r.state_changed_at), how: String(r.closed_how), decisionId: String(r.decision_id) },
+          }),
         })),
         counts: {
           new: countStates(viewStates.new),
@@ -300,10 +450,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
     },
 
-    async checkAll() {
+    async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
-      const sources = await Promise.all(rows.map((r) => checkOne(r, startedAt)));
+      options.onStart?.(rows.length);
+      const sources = await Promise.all(rows.map(async (r) => {
+        const result = await checkOne(r, startedAt);
+        options.onSourceChecked?.(result);
+        return result;
+      }));
       return { startedAt, sources };
     },
 
@@ -318,6 +473,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
     },
   };
+}
+
+function startNow(start: () => Promise<Response>): Promise<Response> {
+  try {
+    return start();
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
 function summarise(sources: SourceHealth[]): HealthSummary {

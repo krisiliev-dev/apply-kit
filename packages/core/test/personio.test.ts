@@ -13,7 +13,7 @@ describe("Personio source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "personio:personio", name: "Personio", ok: true, found: 1, newPostings: 1 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Staff Software Engineer, Data Platform", company: "Personio SE & Co. KG", location: "Munich; Berlin", salary: null, postedAt: "2024-11-13T14:10:41.000Z", postingCount: 1, url: "https://personio.jobs.personio.de/job/1834171" },
+      { id: expect.any(String), title: "Staff Software Engineer, Data Platform", company: "Personio SE & Co. KG", location: "Munich; Berlin", salary: null, postedAt: "2024-11-13T14:10:41.000Z", postingCount: 1, state: "new", url: "https://personio.jobs.personio.de/job/1834171" },
     ]);
   });
 
@@ -32,7 +32,7 @@ describe("Personio source", () => {
     const { engine, clock } = createTestEngine({ fetch: fixtureFetch({ [personioFeed]: "personio.xml" }) });
     await engine.addSource({ kind: "personio", config: { account: "personio" } });
     await engine.checkAll();
-    clock.advance(30 * 60_000);
+    await clock.advance(30 * 60_000);
 
     expect((await engine.checkAll()).sources[0]).toMatchObject({ ok: true, found: 1, newPostings: 0 });
   });

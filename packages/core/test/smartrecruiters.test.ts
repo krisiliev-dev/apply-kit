@@ -14,8 +14,8 @@ describe("SmartRecruiters source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "smartrecruiters:Gameloft:bg", name: "Gameloft (Bulgaria)", ok: true, found: 2, newPostings: 2 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Video Artist", company: "Gameloft", location: "Sofia, Sofia City Province, Bulgaria · Hybrid", salary: null, postedAt: "2026-09-22T08:57:54.882Z", postingCount: 1, url: "https://jobs.smartrecruiters.com/Gameloft/744000150972019" },
-      { id: expect.any(String), title: "Game Producer", company: "Gameloft", location: "Sofia, Sofia City Province, Bulgaria", salary: null, postedAt: "2026-09-21T11:58:46.876Z", postingCount: 1, url: "https://jobs.smartrecruiters.com/Gameloft/744000150674086" },
+      { id: expect.any(String), title: "Video Artist", company: "Gameloft", location: "Sofia, Sofia City Province, Bulgaria · Hybrid", salary: null, postedAt: "2026-09-22T08:57:54.882Z", postingCount: 1, state: "new", url: "https://jobs.smartrecruiters.com/Gameloft/744000150972019" },
+      { id: expect.any(String), title: "Game Producer", company: "Gameloft", location: "Sofia, Sofia City Province, Bulgaria", salary: null, postedAt: "2026-09-21T11:58:46.876Z", postingCount: 1, state: "new", url: "https://jobs.smartrecruiters.com/Gameloft/744000150674086" },
     ]);
   });
 
@@ -45,7 +45,7 @@ describe("SmartRecruiters source", () => {
     await engine.addSource({ kind: "smartrecruiters", config: "Gameloft:bg" });
     const everywhere = await engine.addSource({ kind: "smartrecruiters", config: "https://jobs.smartrecruiters.com/Gameloft" });
     await engine.checkAll();
-    clock.advance(30 * 60_000);
+    await clock.advance(30 * 60_000);
 
     const again = await engine.checkAll();
 

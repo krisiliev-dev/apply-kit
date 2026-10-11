@@ -3,7 +3,7 @@
 // companies, coverage checks and the mailbox arrive with their tickets.
 import type { CheckRecord, HealthReport, HealthSummary, SourceHealth } from "@apply-kit/core";
 import { useEffect, useState } from "react";
-import { checkNow, fetchSources } from "../api.ts";
+import { checkAndWait, fetchSources } from "../api.ts";
 import { categoryLabel, Chip, clockTime, FailedSourceBanner, failureShort, StatusLine, useTryNow } from "../health.tsx";
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; report: HealthReport };
@@ -32,7 +32,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
   const checkAll = (count: number) => {
     setCheckingAll(true);
     say(`Checking all ${count} sources…`);
-    checkNow()
+    checkAndWait()
       .then((r) => {
         const failed = r.sources.filter((s) => !s.ok).length;
         say(failed === 0
