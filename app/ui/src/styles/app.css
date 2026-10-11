@@ -54,3 +54,80 @@
 .table-foot { padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-caption); color: var(--ink-3) }
 @media (max-width: 1100px) { .table .c-type { display: none } }
 @media (max-width: 560px) { .table .c-last { display: none } }
+
+/* Job page (from the Job hi-fi). Tokens only. */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-3) }
+.crumbs a { color: var(--ink-2); text-decoration: none; font-weight: 500 }
+.crumbs a:hover { color: var(--action); text-decoration: underline }
+.job-head { display: grid; gap: var(--s-3) }
+.job-head h1 { overflow-wrap: anywhere }
+.job-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-5); color: var(--ink-2) }
+.job-meta b { color: var(--ink); font-weight: 600 }
+.job-page .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 336px); gap: var(--s-6); align-items: start }
+.job-page .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 900px) {
+  .job-page .cols { grid-template-columns: minmax(0, 1fr) }
+  .job-page .col, .job-page .col.side { display: contents }
+  .job-page .o1 { order: 1 } .job-page .o2 { order: 2 } .job-page .o3 { order: 3 } .job-page .o4 { order: 4 }
+}
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4) }
+.sec-head .grow { flex: 1 1 auto }
+.panel.flush .sec-head { padding: var(--s-5) var(--s-6) var(--s-4) }
+.job-page .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.fitcheck { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-4) var(--s-6); align-items: start }
+.fit-num { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-display); line-height: 1; letter-spacing: var(--track-display); color: var(--ink); font-variant-numeric: tabular-nums }
+.fit-num small { display: block; margin-top: var(--s-2); font-family: var(--font-text); font-size: var(--fs-caption); font-weight: 500; letter-spacing: 0; color: var(--ink-3) }
+.fit-num.provisional { color: var(--ink-3) }
+.fitcheck .verdict { display: grid; gap: var(--s-3); min-width: 0 }
+.decide { gap: var(--s-4) }
+.decide .btn.primary { width: 100%; min-height: 44px; font-size: var(--fs-body) }
+.why-off { font-size: var(--fs-small); color: var(--ink-2) }
+.req .ev { color: var(--ink-2); min-width: 22ch }
+.req td:first-child { font-weight: 600; color: var(--ink); min-width: 16ch }
+.req .asked { color: var(--ink-3); white-space: nowrap }
+.req tbody tr { cursor: default }
+.req tr.is-ask td:first-child { box-shadow: inset 3px 0 0 var(--bloom) }
+.src { display: grid; gap: var(--s-1); border-left: 3px solid var(--rule); background: var(--surface-sunken); padding: var(--s-3) var(--s-4); border-radius: 0 var(--r-small) var(--r-small) 0; font-size: var(--fs-small); color: var(--ink) }
+.src[hidden] { display: none }
+.src .where { font-size: var(--fs-caption); color: var(--ink-3) }
+.src .tr { color: var(--ink-2) }
+.facts { margin: 0; display: grid }
+.fact { display: grid; grid-template-columns: minmax(100px, 150px) minmax(0, 1fr) auto; gap: var(--s-3) var(--s-5); padding: var(--s-4) 0; border-top: 1px solid var(--rule); align-items: baseline }
+.fact:first-child { border-top: 0; padding-top: 0 }
+.fact dt { color: var(--ink-3); font-size: var(--fs-small) }
+.fact dd { margin: 0; min-width: 0 }
+.fact .src { grid-column: 1 / -1 }
+@media (max-width: 520px) { .fact { grid-template-columns: minmax(0, 1fr) auto } .fact dt { grid-column: 1 / -1 } }
+.chev { width: 12px; height: 12px; transition: rotate var(--dur-fast) var(--ease-standard) }
+[aria-expanded="true"] > .chev { rotate: 90deg }
+.disclose { font: inherit; display: flex; width: 100%; align-items: center; gap: var(--s-3); background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer; text-align: left; font-weight: 600 }
+.disclose .meta { font-weight: 400 }
+.posting-text { display: grid; gap: var(--s-3); max-width: 68ch; color: var(--ink-2) }
+.posting-text[hidden] { display: none }
+.posting-text p { margin: 0 }
+.posting-text .li { padding-left: var(--s-5); position: relative }
+.posting-text .li::before { content: "•"; position: absolute; left: var(--s-2) }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4); font-size: var(--fs-small) }
+.steps li { display: flex; gap: var(--s-4); align-items: center }
+.steps .ic { width: 22px; height: 22px; display: inline-grid; place-items: center; flex: none; border-radius: 50% }
+.steps .ic svg { width: 12px; height: 12px }
+.steps .done .ic { background: var(--met-soft); color: var(--met) }
+.steps .now .ic { color: var(--action) }
+.steps .now { font-weight: 600 }
+.steps .next { color: var(--ink-3) }
+.steps .next .ic { border: 1.5px dashed var(--border-control) }
+.skel.w30 { width: 30% } .skel.w40 { width: 40% } .skel.w60 { width: 60% } .skel.w80 { width: 80% } .skel.w90 { width: 90% }
+.postings { display: grid }
+.posting { display: grid; gap: var(--s-1); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small); min-width: 0 }
+.posting:first-child { border-top: 0; padding-top: 0 }
+.posting .name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere }
+.posting .acts { margin-top: var(--s-2); margin-left: calc(-1 * var(--s-4)) }
+.ask-panel { border-left: 4px solid var(--bloom) }
+.ask-panel fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+.ask-panel legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
+.opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-body) }
+.opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 3px 0 0; flex: none }
+.opt .meta { display: block }
+.needs b { font-weight: 600 }
+.mini { font-size: var(--fs-small) }
+.jobs .narrow .chips { margin: var(--s-2) 0 var(--s-1) }

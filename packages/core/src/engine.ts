@@ -32,7 +32,10 @@ export interface FeedJob {
   title: string;
   company: string;
   location: string | null;
-  /** Null means the posting doesn't state one; the UI shows "Not stated". */
+  /**
+   * The Source's own salary text, else the salary read from the posting ("Unclear" while it waits
+   * for Kris). Null means none is stated, or the posting isn't read yet (see `reading`).
+   */
   salary: string | null;
   /** When the Source says the job was first published (ISO 8601), if known. */
   postedAt: string | null;
@@ -493,7 +496,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           title: String(r.title),
           company: String(r.company),
           location: r.location == null ? null : String(r.location),
-          salary: r.salary == null ? null : String(r.salary),
+          salary: r.salary != null ? String(r.salary) : readSalary(read?.keyFacts),
           postedAt: r.posted_at == null ? null : String(r.posted_at),
           postingCount: Number(r.n),
           url: String(r.url),
@@ -609,6 +612,14 @@ function toCheckRecord(r: Record<string, unknown>): CheckRecord {
     total: r.total == null ? null : Number(r.total),
     error: r.error == null ? null : String(r.error),
   };
+}
+
+/** The salary a read gives a Feed row: the reading in use, "Unclear" while it waits for Kris, null if not stated. */
+function readSalary(keyFacts: KeyFact[] | undefined): string | null {
+  const fact = keyFacts?.find((f) => f.key === "salary");
+  if (!fact) return null;
+  if (fact.needsYou) return "Unclear";
+  return fact.value === "Not stated" ? null : fact.value;
 }
 
 /** Longest posting text sent to the extractor; longer texts are cut (bounds the cost of one read). */

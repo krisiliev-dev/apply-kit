@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { checkNow, fetchCheckStatus, fetchFeed } from "../api.ts";
 import { receive, showQueued, type ShownFeed } from "./queue.ts";
 import { FailedSourceBanner, StatusLine, useTryNow } from "../health.tsx";
+import { RowChips } from "../requirements.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -54,6 +55,15 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
       .catch(() => { /* the next progress step tries again */ });
     return () => ctrl.abort();
   }, [refreshKey, nudge, view, onHealth]);
+
+  // While postings are being read, look again every few seconds so chips fill in place
+  // (rows keep their order: receive() only updates rows already on screen).
+  const reading = load.state === "ready" && load.rows.shown.some((j) => j.reading === "reading");
+  useEffect(() => {
+    if (!reading) return;
+    const timer = setTimeout(() => setNudge((n) => n + 1), 3_000);
+    return () => clearTimeout(timer);
+  }, [reading, load]);
 
   // After "Show them", move focus to the first job that joined so keyboard users land on it.
   useEffect(() => {
@@ -262,6 +272,7 @@ function JobsTable({ jobs, queued, onShowQueued, asOf, view, checking }: JobsTab
             <tr>
               <th scope="col">Job</th>
               <th scope="col" className="wide">Where</th>
+              <th scope="col" className="wide">Requirements</th>
               <th scope="col" className="wide">Salary</th>
               <th scope="col" className="wide" aria-sort="descending">Posted</th>
             </tr>
@@ -282,19 +293,20 @@ function JobsTable({ jobs, queued, onShowQueued, asOf, view, checking }: JobsTab
 
 function JobRow({ job, asOf }: { job: FeedJob; asOf: string }) {
   const where = job.location ?? "Location not stated";
-  const salary = job.salary ?? "Not stated";
+  // "Not stated" is only claimed once the posting has been read.
+  const salary = job.salary ?? (job.reading === "read" ? "Not stated" : "Not read yet");
   const posted = job.postedAt ? ago(job.postedAt, asOf) : "Unknown";
   return (
     <tr data-id={job.id}>
       <td className="job">
-        <a className="t" href={job.url} target="_blank" rel="noopener noreferrer">
-          {job.title}<span className="sr-only"> (opens the posting in a new tab)</span>
-        </a>
+        <a className="t" href={`/jobs/${encodeURIComponent(job.id)}`}>{job.title}</a>
         <span className="co">{job.company}</span>
         {job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
         <span className="narrow meta">{where} · {salary} · {posted}</span>
+        <div className="narrow"><RowChips job={job} /></div>
       </td>
       <td className="wide">{where}</td>
+      <td className="wide"><RowChips job={job} /></td>
       <td className="num wide">{salary}</td>
       <td className="num wide">
         {job.postedAt ? <time dateTime={job.postedAt} title={new Date(job.postedAt).toLocaleDateString("en-GB", { dateStyle: "long" })}>{posted}</time> : posted}

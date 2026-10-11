@@ -288,3 +288,18 @@ describe("reading postings: one Job on demand", () => {
     expect(base.calls.map((c) => c.title)).toEqual(["Security Engineer"]);
   });
 });
+
+describe("reading postings: salary on the Feed row", () => {
+  it("shows the salary read from the posting, 'Unclear' while it needs Kris, and his answer once given", async () => {
+    const t = await checked(kestrelEngine(fakeExtractor({ "Security Engineer": unsure })));
+    await t.engine.readPending();
+    const id = await jobId(t, "Security Engineer");
+    const salary = async () => (await t.engine.queryFeed({ view: "new" })).jobs.find((j) => j.id === id)!.salary;
+
+    const before = await salary();
+    await t.engine.confirmFact(id, "salary", "extracted");
+
+    expect(before).toBe("Unclear");
+    expect(await salary()).toBe("5,500–7,000 BGN gross/month");
+  });
+});
