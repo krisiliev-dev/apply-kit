@@ -73,11 +73,19 @@ export interface CheckRecord {
   error: string | null;
 }
 
+export type SourceStatus = "not-checked" | "working" | "failing";
+
 export interface SourceHealth {
   id: string;
   name: string;
   kind: string;
   category: SourceCategory;
+  status: SourceStatus;
+  /** First failed Check in the current run of failures; null unless failing. */
+  failingSince: string | null;
+  lastGoodCheckAt: string | null;
+  /** Open Jobs this Source found. A failure keeps every one of them exactly as it was. */
+  jobsKept: number;
   /** Recent Checks, newest first. */
   history: CheckRecord[];
 }
@@ -159,6 +167,26 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     }
   }
 
+  function describeSource(r: Record<string, unknown>, history: CheckRecord[]): SourceHealth {
+    const id = String(r.id);
+    const kind = String(r.kind);
+    const lastGood = db.prepare("SELECT MAX(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome = 'ok'").get(id)?.at;
+    const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
+    const latest = history[0];
+    const status: SourceStatus = !latest ? "not-checked" : latest.outcome === "ok" ? "working" : "failing";
+    const failingSince = status !== "failing" ? null : String(db.prepare(
+      "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
+    ).get(id, lastGoodCheckAt ?? "")!.at);
+    const jobsKept = count(
+      `SELECT COUNT(DISTINCT j.id) AS n FROM job j JOIN posting p ON p.job_id = j.id
+       WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
+    );
+    return {
+      id, name: String(r.name), kind, category: adapters[kind]?.category ?? "ats",
+      status, failingSince, lastGoodCheckAt, jobsKept, history,
+    };
+  }
+
   return {
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source");
@@ -223,16 +251,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       );
       return {
         asOf: clock.now().toISOString(),
-        sources: rows.map((r) => {
-          const kind = String(r.kind);
-          return {
-            id: String(r.id),
-            name: String(r.name),
-            kind,
-            category: adapters[kind]?.category ?? "ats",
-            history: history.all(String(r.id)).map(toCheckRecord),
-          };
-        }),
+        sources: rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord))),
       };
     },
   };

@@ -59,3 +59,46 @@ describe("source health: check history", () => {
     });
   });
 });
+
+describe("source health: status", () => {
+  it("shows a newly added Source as not checked yet", async () => {
+    const { engine } = createTestEngine({ fetch: goodFetch });
+    await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+
+    const [source] = (await engine.sourceHealth()).sources;
+
+    expect(source).toMatchObject({ status: "not-checked", failingSince: null, lastGoodCheckAt: null, jobsKept: 0 });
+  });
+
+  it("marks a Source failing since its first failure in a row, with the jobs it keeps open", async () => {
+    const { engine, deps, clock } = await checkedPayhawk();
+    deps.fetch = failures[1]![1];
+    clock.set("2026-10-12T08:00:00Z");
+    await engine.checkAll();
+    clock.set("2026-10-12T08:30:00Z");
+    await engine.checkAll();
+
+    const [source] = (await engine.sourceHealth()).sources;
+
+    expect(source).toMatchObject({
+      status: "failing",
+      failingSince: "2026-10-12T08:00:00.000Z",
+      lastGoodCheckAt: "2026-10-12T07:30:00.000Z",
+      jobsKept: 3,
+    });
+  });
+
+  it("is working again once a check succeeds", async () => {
+    const { engine, deps, clock } = await checkedPayhawk();
+    deps.fetch = failures[2]![1];
+    clock.set("2026-10-12T08:00:00Z");
+    await engine.checkAll();
+    deps.fetch = goodFetch;
+    clock.set("2026-10-12T08:30:00Z");
+    await engine.checkAll();
+
+    const [source] = (await engine.sourceHealth()).sources;
+
+    expect(source).toMatchObject({ status: "working", failingSince: null, lastGoodCheckAt: "2026-10-12T08:30:00.000Z" });
+  });
+});
