@@ -1,4 +1,4 @@
-import type { CheckResult, FeedResult, FeedView } from "@apply-kit/core";
+import type { CheckResult, Decision, FeedResult, FeedView, PassInput } from "@apply-kit/core";
 
 export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<FeedResult> {
   const res = await fetch(`/api/feed?view=${view}`, { signal });
@@ -11,3 +11,15 @@ export async function checkNow(): Promise<CheckResult> {
   if (!res.ok) throw new Error(`The service answered ${res.status}`);
   return (await res.json()) as CheckResult;
 }
+
+async function post<T>(url: string, body: unknown): Promise<T> {
+  const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(`The service answered ${res.status}`);
+  return (await res.json()) as T;
+}
+
+export const saveJobs = (jobIds: string[]) => post<Decision>("/api/jobs/save", { jobIds });
+export const passJobs = (jobIds: string[], input: PassInput) => post<Decision>("/api/jobs/pass", { jobIds, ...input });
+export const reopenJobs = (jobIds: string[]) => post<Decision>("/api/jobs/reopen", { jobIds });
+export const undoDecision = (id: string, jobIds?: string[]) =>
+  post<{ jobIds: string[] }>(`/api/decisions/${encodeURIComponent(id)}/undo`, jobIds ? { jobIds } : {});
