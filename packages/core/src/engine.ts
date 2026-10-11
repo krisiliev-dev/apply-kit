@@ -3,7 +3,8 @@ import type { EngineDeps, SqlDatabase } from "./ports.ts";
 import { isInYourLocations } from "./locations.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { adapterFor, adapters } from "./sources/registry.ts";
-import { backfillMatchKeys, reconcile, refreshMatchKey, targetOf } from "./merging.ts";
+import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf } from "./merging.ts";
+import { describeMergeReason, type MergeReason } from "./matching.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
@@ -32,6 +33,37 @@ export interface FeedJob {
   passed?: { at: string; reason: PassReason | null; note: string | null; decisionId: string };
   /** Set on closed Jobs: when, how it closed in plain words, and the Decision to undo. */
   closed?: { at: string; how: string; decisionId: string };
+}
+
+/** One Posting of a Job, as the Job page lists it. */
+export interface JobPosting {
+  id: string;
+  source: { id: string; name: string; kind: string; label: string; category: SourceCategory };
+  /** The site its link is on ("dev.bg", "job-boards.eu.greenhouse.io"). */
+  site: string;
+  url: string;
+  title: string;
+  company: string;
+  location: string | null;
+  salary: string | null;
+  postedAt: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  isTarget: boolean;
+  /** Why it was merged into this Job, in plain words; null for the Posting the Job started from. */
+  mergedBecause: string | null;
+}
+
+/** A Job with every Posting merged into it. */
+export interface JobDetail extends FeedJob {
+  postings: JobPosting[];
+  target: {
+    postingId: string;
+    /** "default" until Kris picks one ("Make target"). */
+    chosenBy: "default" | "you";
+    /** Why this is the target, in plain words. */
+    why: string;
+  };
 }
 
 /** The pass reasons Kris can choose from. None is ever chosen for him. */
@@ -185,6 +217,19 @@ export interface DiscoveryEngine {
   close(jobIds: string[], how: string): Promise<Decision>;
   /** Reopens closed Jobs: they go back to New. */
   reopen(jobIds: string[]): Promise<Decision>;
+  /**
+   * One Job with all its Postings and the target marked, or null if there's no such Job. A Job
+   * that was merged into another answers with the Job it now lives in (check the returned id).
+   */
+  getJob(jobId: string): Promise<JobDetail | null>;
+  /** Makes one of a Job's Postings its target posting ("Make target"); kept across later checks. */
+  setTarget(jobId: string, postingId: string): Promise<JobDetail>;
+  /**
+   * "Not the same job? Split": separates a Posting from its Job. The Job keeps its id, state and
+   * decisions with the Posting it was created from; the other side becomes its own Job (its old
+   * Job restored if it had one, else New). Remembered: later checks never merge them again.
+   */
+  splitPosting(jobId: string, postingId: string): Promise<{ jobIds: [string, string] }>;
 }
 
 /** How many recent Checks sourceHealth returns per Source. */
@@ -319,6 +364,75 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     );
   }
 
+  // A Job's display fields come from its earliest-seen Posting.
+  const jobSelect = `SELECT j.id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
+                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
+                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
+                (SELECT decision_id FROM decision_job
+                  WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
+         FROM job j
+         JOIN posting p ON p.id = (SELECT id FROM posting WHERE job_id = j.id ORDER BY first_seen_at, id LIMIT 1)`;
+
+  function toFeedJob(r: Record<string, unknown>): FeedJob {
+    return {
+      id: String(r.id),
+      title: String(r.title),
+      company: String(r.company),
+      location: sqlText(r.location),
+      salary: sqlText(r.salary),
+      postedAt: sqlText(r.posted_at),
+      postingCount: Number(r.n),
+      ...linksOf(String(r.id)),
+      state: String(r.state) as JobState,
+      ...(r.state === "passed" && {
+        passed: {
+          at: String(r.state_changed_at),
+          reason: (sqlText(r.pass_reason) as PassReason | null),
+          note: sqlText(r.pass_note),
+          decisionId: String(r.decision_id),
+        },
+      }),
+      ...(r.state === "closed" && {
+        closed: { at: String(r.state_changed_at), how: String(r.closed_how), decisionId: String(r.decision_id) },
+      }),
+    };
+  }
+
+  function jobDetail(requestedId: string): JobDetail | null {
+    const jobId = liveJobId(db, requestedId);
+    if (!jobId) return null;
+    const row = db.prepare(`${jobSelect} WHERE j.id = ?`).get(jobId);
+    if (!row) return null;
+    const target = targetOf(db, jobId);
+    const postings = db.prepare(
+      `SELECT p.*, s.name AS source_name, s.kind FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
+    ).all(jobId).map((p): JobPosting => {
+      const kind = String(p.kind);
+      const reason = sqlText(p.merge_reason);
+      return {
+        id: String(p.id),
+        source: { id: String(p.source_id), name: String(p.source_name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats" },
+        site: siteOf(String(p.url)),
+        url: String(p.url),
+        title: String(p.title),
+        company: String(p.company),
+        location: sqlText(p.location),
+        salary: sqlText(p.salary),
+        postedAt: sqlText(p.posted_at),
+        firstSeenAt: String(p.first_seen_at),
+        lastSeenAt: String(p.last_seen_at),
+        isTarget: p.id === target.postingId,
+        mergedBecause: reason ? describeMergeReason(JSON.parse(reason) as MergeReason) : null,
+      };
+    });
+    const t = postings.find((p) => p.isTarget)!;
+    const why = target.chosenBy === "you" ? "You chose this posting"
+      : t.source.category === "ats" ? `The company's own page (${t.source.label})`
+      : "First seen here: none of the postings is on the company's own page";
+    return { ...toFeedJob(row), postings, target: { ...target, why } };
+  }
+
   /** The target posting's link and how many sites list the Job. */
   function linksOf(jobId: string): { siteCount: number; url: string } {
     const rows = db.prepare("SELECT id, url FROM posting WHERE job_id = ?").all(jobId);
@@ -402,17 +516,24 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { jobIds: restored };
     },
 
+    async getJob(jobId) {
+      return jobDetail(jobId);
+    },
+
+    async setTarget(jobId, postingId) {
+      setTarget(db, jobId, postingId);
+      return jobDetail(jobId)!;
+    },
+
+    async splitPosting(jobId, postingId) {
+      return transaction(db, () => split(db, jobId, postingId, clock.now().toISOString()));
+    },
+
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source");
       const states = viewStates[query.view];
       const rows = db.prepare(
-        `SELECT j.id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
-                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
-                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
-                (SELECT decision_id FROM decision_job
-                  WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
-         FROM job j
-         JOIN posting p ON p.id = (SELECT id FROM posting WHERE job_id = j.id ORDER BY first_seen_at, id LIMIT 1)
+        `${jobSelect}
          WHERE j.merged_into IS NULL AND j.state IN (${states.map(() => "?").join(",")})
          ORDER BY ${query.view === "passed" ? "j.state_changed_at DESC, " : ""}p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all(...states);
@@ -420,28 +541,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         view: query.view,
         asOf: clock.now().toISOString(),
         firstRun: sources === 0,
-        jobs: rows.map((r) => ({
-          id: String(r.id),
-          title: String(r.title),
-          company: String(r.company),
-          location: r.location == null ? null : String(r.location),
-          salary: r.salary == null ? null : String(r.salary),
-          postedAt: r.posted_at == null ? null : String(r.posted_at),
-          postingCount: Number(r.n),
-          ...linksOf(String(r.id)),
-          state: String(r.state) as JobState,
-          ...(r.state === "passed" && {
-            passed: {
-              at: String(r.state_changed_at),
-              reason: (sqlText(r.pass_reason) as PassReason | null),
-              note: sqlText(r.pass_note),
-              decisionId: String(r.decision_id),
-            },
-          }),
-          ...(r.state === "closed" && {
-            closed: { at: String(r.state_changed_at), how: String(r.closed_how), decisionId: String(r.decision_id) },
-          }),
-        })),
+        jobs: rows.map(toFeedJob),
         counts: {
           new: countStates(viewStates.new),
           saved: countStates(viewStates.saved),
