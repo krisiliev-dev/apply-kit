@@ -28,6 +28,8 @@ import {
 import { jobLinkFrom, linkKey, protectedSite, robotsAllows } from "./capture/links.ts";
 import { readJobPage } from "./capture/page.ts";
 import { escapeHtml } from "./sources/shared.ts";
+import { senders } from "./sources/email/senders.ts";
+import { sofiaWatchlist, type AlertRoute, type WatchlistField, type WatchlistGroup } from "./watchlist.ts";
 
 /**
  * New, Saved, All open, Passed & closed, and the hidden pile: New Jobs kept out of the main Feed by
@@ -440,6 +442,54 @@ export interface CheckOptions {
   onSourceChecked?: (check: SourceCheck) => void;
 }
 
+/**
+ * Where a starter-watchlist company's Source stands: "to-add" (not on the watchlist yet), "added" (by
+ * this seed), "on-watchlist" (added before), or Kris's own "paused" or "removed", which seeding keeps.
+ */
+export type SeedStatus = "to-add" | "added" | "on-watchlist" | "paused" | "removed";
+
+/** A starter-watchlist company with a verified feed, and its Source. */
+export interface SeededSource {
+  company: string;
+  group: WatchlistGroup;
+  fields: WatchlistField[];
+  sourceId: string;
+  kind: string;
+  /** The Source type's display name ("Greenhouse"). */
+  label: string;
+  status: SeedStatus;
+  note: string;
+}
+
+/** A starter-watchlist company with no feed apply-kit may read, and the alert route that still catches its jobs. */
+export interface CompanyWithoutFeed {
+  company: string;
+  group: WatchlistGroup;
+  fields: WatchlistField[];
+  /** The company's own careers page. */
+  careers: string;
+  /** Why there's no feed. */
+  why: string;
+  route: {
+    via: AlertRoute;
+    /** The email-alert Source its alerts arrive through ("email:linkedin"). */
+    sourceId: string;
+    sourceName: string;
+    /** Whether that email-alert Source is on the watchlist and not paused, so alerts reach the Feed. */
+    connected: boolean;
+    /** What Kris sets up, in plain words. */
+    how: string;
+  };
+  note: string;
+}
+
+export interface WatchlistSeed {
+  /** Sources this call added (empty for a preview, or when everything was already there). */
+  added: SourceInfo[];
+  sources: SeededSource[];
+  withoutFeed: CompanyWithoutFeed[];
+}
+
 export interface DiscoveryEngine {
   queryFeed(query: FeedQuery): Promise<FeedResult>;
   /**
@@ -562,6 +612,17 @@ export interface DiscoveryEngine {
    * posting's text himself (`pasted`), which is never fetched.
    */
   addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult>;
+  /**
+   * The Sofia starter watchlist against Kris's watchlist: which companies' feeds are on it, and the
+   * companies without a feed with their alert route. Adds nothing.
+   */
+  starterWatchlist(): Promise<WatchlistSeed>;
+  /**
+   * Adds every starter-watchlist company with a verified feed as a Source, in one step, ready for the
+   * next check. Safe to repeat: Sources already there are left alone, and one Kris paused or removed
+   * stays that way. Companies without a feed are listed with their alert route; nothing is added for them.
+   */
+  seedWatchlist(): Promise<WatchlistSeed>;
 }
 
 /** What Kris can paste along with a link, when the page can't be read (or he'd rather paste it). */
@@ -1234,6 +1295,38 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return row;
   }
 
+  /** The starter watchlist against the Sources table; `added` holds the ids this seed just added. */
+  function starterWatchlist(added: Set<string>): WatchlistSeed {
+    const stateOf = (id: string): SeedStatus => {
+      if (added.has(id)) return "added";
+      const row = db.prepare("SELECT paused_at, removed_at FROM source WHERE id = ?").get(id);
+      if (!row) return "to-add";
+      return row.removed_at != null ? "removed" : row.paused_at != null ? "paused" : "on-watchlist";
+    };
+    const sources: SeededSource[] = [];
+    const withoutFeed: CompanyWithoutFeed[] = [];
+    for (const e of sofiaWatchlist) {
+      const base = { company: e.company, group: e.group, fields: [...e.fields], note: e.note };
+      if (e.feed) {
+        const sourceId = sourceIdOf(e.feed);
+        sources.push({ ...base, sourceId, kind: e.feed.kind, label: kindLabel(e.feed.kind), status: stateOf(sourceId) });
+        continue;
+      }
+      const sourceId = `email:${e.route}`;
+      withoutFeed.push({
+        ...base, careers: e.careers, why: e.why,
+        route: {
+          via: e.route, sourceId, sourceName: senders[e.route].name,
+          connected: stateOf(sourceId) === "on-watchlist",
+          how: e.route === "linkedin"
+            ? `Follow ${e.company} on LinkedIn and turn on its job alerts, sent to your job address`
+            : `Set up a jobs.bg alert for ${e.company}, sent to your job address`,
+        },
+      });
+    }
+    return { added: sources.filter((s) => s.status === "added").map((s) => sourceInfo(s.sourceId)), sources, withoutFeed };
+  }
+
   function sourceInfo(id: string): SourceInfo {
     const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
     return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
@@ -1685,6 +1778,20 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       }, options);
     },
 
+    starterWatchlist: async () => starterWatchlist(new Set()),
+
+    async seedWatchlist() {
+      const added = new Set<string>();
+      for (const entry of sofiaWatchlist) {
+        if (!entry.feed) continue;
+        const id = sourceIdOf(entry.feed);
+        if (db.prepare("SELECT 1 AS x FROM source WHERE id = ?").get(id)) continue;
+        await this.addSource({ ...entry.feed, name: entry.company }, { onlyIfNew: true });
+        added.add(id);
+      }
+      return starterWatchlist(added);
+    },
+
     async recordCoverageCheck(input) {
       const id = `coverage:${crypto.randomUUID()}`;
       const at = clock.now().toISOString();
@@ -1800,6 +1907,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
     },
   };
+}
+
+/** A Source's id from its kind and config, as addSource makes it. */
+function sourceIdOf({ kind, config }: { kind: string; config: unknown }): string {
+  const adapter = adapterFor(kind);
+  return `${kind}:${adapter.key(adapter.parseConfig(config))}`;
 }
 
 const ruleLabel: Record<DealbreakerRule, string> = {

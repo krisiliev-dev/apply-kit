@@ -82,6 +82,14 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     }
   });
 
+  // The Sofia starter watchlist: GET shows which companies' feeds are on the watchlist and the ones
+  // without a feed with their alert route; POST adds every feed not added before, in one step.
+  app.get("/api/watchlist/starter", async (c) => c.json(await engine.starterWatchlist()));
+  app.post("/api/watchlist/starter", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return c.json(await engine.seedWatchlist(), 201);
+  });
+
   // Pause, resume, what removing would do, and remove. Undoing a removal is POST /api/decisions/:id/undo.
   app.post("/api/sources/:id/pause", (c) => onSource(c, (id) => engine.pauseSource(id)));
   app.post("/api/sources/:id/resume", (c) => onSource(c, (id) => engine.resumeSource(id)));

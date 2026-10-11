@@ -2,15 +2,16 @@
 // failed-source banners with Try now, the job mailbox (status, errors with how to fix them), email
 // alerts quiet longer than usual, the sources table, adding a company (AddCompany.tsx), pausing, and
 // removing with an impact preview and Undo (RemoveDialog.tsx), each source's normal volume and its
-// unusual drop (same banner as the Feed, close with the count, Undo), and coverage checks
-// (Coverage.tsx). History charts arrive with their ticket.
-import type { CheckRecord, HealthReport, HealthSummary, MailboxHealth, NormalVolume, QuietSource, SourceHealth, UnusualDrop } from "@apply-kit/core";
+// unusual drop (same banner as the Feed, close with the count, Undo), coverage checks (Coverage.tsx)
+// and the Sofia starter watchlist (StarterWatchlist.tsx). History charts arrive with their ticket.
+import type { CheckRecord, HealthReport, HealthSummary, MailboxHealth, NormalVolume, QuietSource, SourceHealth, UnusualDrop, WatchlistSeed } from "@apply-kit/core";
 import { useEffect, useState } from "react";
 import { checkAndWait, checkSource, fetchSources, pauseSource, removeSource, resumeSource, undoDecision } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { AddCompany, type Added } from "./AddCompany.tsx";
 import { RemoveDialog } from "./RemoveDialog.tsx";
 import { CoverageCard, CoveragePage } from "./Coverage.tsx";
+import { StarterWatchlist } from "./StarterWatchlist.tsx";
 import {
   categoryLabel, Chip, clockTime, DropBanner, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useConfirmDrop, useTryNow,
 } from "../health.tsx";
@@ -112,6 +113,17 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
     return () => ctrl.abort();
   }, [attempt, onHealth]);
 
+  const seeded = (seed: WatchlistSeed) => {
+    reload();
+    const n = seed.added.length;
+    if (n === 0) {
+      say("Every company with a feed is already on your watchlist.");
+      return;
+    }
+    toaster.show({ message: `Added ${n} ${n === 1 ? "company" : "companies"} from the Sofia watchlist. Checking every source now…` });
+    if (load.state === "ready") checkAll(load.report.sources.length + n);
+  };
+
   const checkAll = (count: number) => {
     setCheckingAll(true);
     say(`Checking all ${count} sources…`);
@@ -164,6 +176,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
             onCloseDrop={drops.confirm}
           />
         )}
+        {screen === "list" && load.state === "ready" && <StarterWatchlist reloadKey={attempt} onSeeded={seeded} onError={say} />}
         {removing && (
           <RemoveDialog
             source={removing}
@@ -210,7 +223,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll, onAdd, onCoverage
     return (
       <div className="empty">
         <h1>No sources yet</h1>
-        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Add a company by its name or careers link and apply-kit finds its job system. Job sites and alert emails are set in the <code>APPLY_KIT_SOURCES</code> setting (the README lists every type).</p>
+        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Start with the Sofia starter watchlist below, or add a company by its name or careers link and apply-kit finds its job system. Job sites and alert emails are set in the <code>APPLY_KIT_SOURCES</code> setting (the README lists every type).</p>
         <button className="btn primary" type="button" onClick={onAdd}>Add company</button>
       </div>
     );
