@@ -1,4 +1,5 @@
 import type { SourceAdapter } from "./adapter.ts";
+import { ashby } from "./ashby.ts";
 import { greenhouse } from "./greenhouse.ts";
 import { lever } from "./lever.ts";
 
@@ -6,6 +7,7 @@ import { lever } from "./lever.ts";
 export const adapters: Record<string, SourceAdapter<unknown>> = {
   [greenhouse.kind]: greenhouse as SourceAdapter<unknown>,
   [lever.kind]: lever as SourceAdapter<unknown>,
+  [ashby.kind]: ashby as SourceAdapter<unknown>,
 };
 
 export function adapterFor(kind: string): SourceAdapter<unknown> {
