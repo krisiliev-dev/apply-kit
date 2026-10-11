@@ -95,4 +95,79 @@ describe("scheduler", () => {
       expect(checkedAt).toEqual(["09:00", "09:30"]);
     });
   });
+
+  describe("a check in progress", () => {
+    /** Two boards whose answers the test releases one at a time. */
+    async function twoHeldBoards() {
+      const clock = fakeClock("2026-10-12T07:00:00Z");
+      const gates = new Map<string, () => void>();
+      const fixtures = fixtureFetch({ [payhawkBoard]: "greenhouse-payhawkio.json" });
+      const fetch: typeof globalThis.fetch = async (input, init) => {
+        const url = String(input);
+        const board = /boards\/([^/]+)\/jobs/.exec(url)![1]!;
+        await new Promise<void>((r) => gates.set(board, r));
+        return url === payhawkBoard ? fixtures(input, init) : new Response(JSON.stringify({ jobs: [] }), { status: 200 });
+      };
+      const t = createTestEngine({ clock, fetch });
+      await t.engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+      await t.engine.addSource({ kind: "greenhouse", config: "slowco" });
+      const scheduler = createScheduler({ engine: t.engine, clock, timers: clock, timeZone: "UTC" });
+      const answer = async (board: string) => { gates.get(board)!(); await clock.advance(0); };
+      return { clock, scheduler, answer };
+    }
+
+    it("shows how many Sources are done, the new jobs so far and when it should finish", async () => {
+      const { clock, scheduler, answer } = await twoHeldBoards();
+
+      const check = scheduler.checkNow();
+      await clock.advance(0);
+      expect(scheduler.status().checking).toEqual({
+        startedAt: "2026-10-12T07:00:00.000Z", total: 2, done: 0, newJobs: 0, failed: 0, estimatedEndAt: null,
+      });
+
+      await clock.advance(20_000);
+      await answer("payhawkio");
+      // One of two Sources took 20 s, so the other should be done around 20 s later.
+      expect(scheduler.status().checking).toEqual({
+        startedAt: "2026-10-12T07:00:00.000Z", total: 2, done: 1, newJobs: 3, failed: 0, estimatedEndAt: "2026-10-12T07:00:40.000Z",
+      });
+
+      await clock.advance(10_000);
+      await answer("slowco");
+      await check;
+      expect(scheduler.status().checking).toBeNull();
+      expect(scheduler.status().lastCheck).toMatchObject({
+        startedAt: "2026-10-12T07:00:00.000Z", finishedAt: "2026-10-12T07:00:30.000Z", sources: [{ ok: true }, { ok: true }],
+      });
+    });
+
+    it("estimates the next check from how long the last one took before any Source is done", async () => {
+      const { clock, scheduler, answer } = await twoHeldBoards();
+      const first = scheduler.checkNow();
+      await clock.advance(30_000);
+      await answer("payhawkio");
+      await answer("slowco");
+      await first;
+
+      await clock.advance(30 * minutes);
+      void scheduler.checkNow();
+      await clock.advance(0);
+
+      expect(scheduler.status().checking).toMatchObject({ startedAt: "2026-10-12T07:30:30.000Z", done: 0, estimatedEndAt: "2026-10-12T07:31:00.000Z" });
+      await answer("payhawkio");
+      await answer("slowco");
+    });
+
+    it("joins the check already running instead of starting a second one", async () => {
+      const { clock, scheduler, answer } = await twoHeldBoards();
+
+      const a = scheduler.checkNow();
+      await clock.advance(0);
+      const b = scheduler.checkNow();
+      await answer("payhawkio");
+      await answer("slowco");
+
+      expect(await b).toBe(await a);
+    });
+  });
 });

@@ -64,6 +64,8 @@ export interface CheckResult {
 }
 
 export interface CheckOptions {
+  /** Called when the check starts, with how many Sources it will check. */
+  onStart?: (total: number) => void;
   /** Called once per Source the moment its check finishes; its jobs are already in the Feed. */
   onSourceChecked?: (check: SourceCheck) => void;
 }
@@ -160,6 +162,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
+      options.onStart?.(rows.length);
       const sources = await Promise.all(rows.map(async (r) => {
         const result = await checkOne(r, startedAt);
         options.onSourceChecked?.(result);

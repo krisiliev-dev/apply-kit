@@ -1,6 +1,6 @@
 // The scheduler: decides when the discovery engine checks its Sources. It runs inside the
 // long-lived service. Time and timers are injected, so tests drive it with a fake clock.
-import type { DiscoveryEngine } from "./engine.ts";
+import type { CheckResult, DiscoveryEngine } from "./engine.ts";
 import type { Clock, Timers } from "./ports.ts";
 
 export interface Schedule {
@@ -50,10 +50,36 @@ export interface SchedulerOptions {
   timeZone?: string;
 }
 
+/** A check that is running now. Times are ISO 8601 from the injected clock. */
+export interface CheckProgress {
+  startedAt: string;
+  /** Sources this check covers. */
+  total: number;
+  /** Sources finished so far, failed ones included. */
+  done: number;
+  /** New Postings found so far; they are already in the Feed. */
+  newJobs: number;
+  failed: number;
+  /** When the check should finish, or null while there is nothing to estimate from yet. */
+  estimatedEndAt: string | null;
+}
+
+export interface SchedulerStatus {
+  checking: CheckProgress | null;
+  lastCheck: (CheckResult & { finishedAt: string }) | null;
+  schedule: Schedule;
+}
+
 export interface Scheduler {
   /** Starts ticking and runs a check straight away if one is due. */
   start(): void;
+  /** Stops scheduling. A check already running carries on; await `settled()` for it. */
   stop(): void;
+  /** Checks every Source now, or joins the check already running. */
+  checkNow(): Promise<CheckResult>;
+  status(): SchedulerStatus;
+  /** Resolves once no check is running. */
+  settled(): Promise<void>;
 }
 
 /** How often the scheduler looks at the clock. A check is never more than this late. */
@@ -66,8 +92,43 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
   const end = toMinutes(schedule.window.end);
   const minuteOfDay = localMinuteOfDay(options.timeZone);
   let handle: unknown = null;
-  let running: Promise<unknown> | null = null;
+  let running: Promise<CheckResult> | null = null;
   let lastStartedAt: number | null = null;
+  let progress: Omit<CheckProgress, "estimatedEndAt"> | null = null;
+  let lastCheck: SchedulerStatus["lastCheck"] = null;
+  let lastDurationMs: number | null = null;
+
+  function run(): Promise<CheckResult> {
+    if (running) return running;
+    const started = clock.now();
+    lastStartedAt = started.getTime();
+    progress = { startedAt: started.toISOString(), total: 0, done: 0, newJobs: 0, failed: 0 };
+    const current = engine.checkAll({
+      onStart: (total) => { if (progress) progress.total = total; },
+      onSourceChecked: (s) => {
+        if (!progress) return;
+        progress.done++;
+        if (s.ok) progress.newJobs += s.newPostings;
+        else progress.failed++;
+      },
+    });
+    running = current
+      .then((result) => {
+        const finished = clock.now();
+        lastDurationMs = finished.getTime() - started.getTime();
+        lastCheck = { ...result, finishedAt: finished.toISOString() };
+        return result;
+      })
+      .finally(() => { running = null; progress = null; });
+    return running;
+  }
+
+  function estimate(p: Omit<CheckProgress, "estimatedEndAt">): string | null {
+    const start = new Date(p.startedAt).getTime();
+    if (p.done === 0) return lastDurationMs === null ? null : new Date(start + lastDurationMs).toISOString();
+    const elapsed = clock.now().getTime() - start;
+    return new Date(start + Math.round((elapsed * p.total) / p.done)).toISOString();
+  }
 
   function due(now: Date): boolean {
     const m = minuteOfDay(now);
@@ -78,8 +139,8 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
   function tick() {
     const now = clock.now();
     if (running || !due(now)) return;
-    lastStartedAt = now.getTime();
-    running = engine.checkAll().finally(() => { running = null; });
+    // A failed check is reported per Source in its result; nothing here should throw.
+    run().catch(() => {});
   }
 
   return {
@@ -92,6 +153,15 @@ export function createScheduler(options: SchedulerOptions): Scheduler {
       if (handle === null) return;
       timers.clearInterval(handle);
       handle = null;
+    },
+    checkNow: run,
+    status: () => ({
+      checking: progress && { ...progress, estimatedEndAt: estimate(progress) },
+      lastCheck,
+      schedule,
+    }),
+    async settled() {
+      while (running) await running.catch(() => {});
     },
   };
 }
