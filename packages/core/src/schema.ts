@@ -138,6 +138,46 @@ const migrations: string[] = [
   `ALTER TABLE source ADD COLUMN paused_at TEXT;
    ALTER TABLE source ADD COLUMN removed_at TEXT;
    ALTER TABLE source ADD COLUMN removed_decision_id TEXT;`,
+  // #12: dealbreakers. Kris's search settings as saved from the settings form (one row; none means
+  // the defaults). A Job Kris chose to show despite a dealbreaker ("Show this job") is remembered
+  // with the Decision that showed it, so undo hides it again. "Not a dealbreaker for me" changes a
+  // rule and is kept as a record of what changed, from which Job, so it can be listed and undone.
+  `CREATE TABLE search_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     value TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE job_unhidden (
+     job_id TEXT PRIMARY KEY REFERENCES job(id),
+     decision_id TEXT NOT NULL REFERENCES decision(id),
+     unhidden_at TEXT NOT NULL
+   );
+   CREATE TABLE rule_change (
+     id TEXT PRIMARY KEY,
+     job_id TEXT NOT NULL REFERENCES job(id),
+     rule TEXT NOT NULL,
+     reason_key TEXT NOT NULL,
+     reason_text TEXT NOT NULL,
+     change_text TEXT NOT NULL,
+     before_value TEXT NOT NULL,
+     after_value TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     undone_at TEXT
+   );`,
+  // #16: closing rules. A Posting its Source no longer lists is gone (when, and the Decision that
+  // marked it, so undoing that Decision brings it back). A Check far below the Source's normal volume
+  // is unusual: nothing is marked gone. Kris confirming an unusual drop is remembered until undone.
+  `ALTER TABLE posting ADD COLUMN gone_at TEXT;
+   ALTER TABLE posting ADD COLUMN gone_decision_id TEXT;
+   ALTER TABLE source_check ADD COLUMN unusual INTEGER NOT NULL DEFAULT 0;
+   CREATE TABLE drop_confirmation (
+     decision_id TEXT PRIMARY KEY REFERENCES decision(id),
+     source_id TEXT NOT NULL REFERENCES source(id),
+     check_id INTEGER NOT NULL REFERENCES source_check(id),
+     confirmed_at TEXT NOT NULL,
+     undone_at TEXT
+   );
+   CREATE INDEX drop_confirmation_source ON drop_confirmation(source_id);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

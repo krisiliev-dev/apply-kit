@@ -7,12 +7,15 @@ import {
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
+import type { Angle } from "./fit/angles.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
-import { defaultSearchSettings, type SearchSettings } from "./search-settings.ts";
+import { defaultSearchSettings, parseSearchSettings, type SearchSettings } from "./search-settings.ts";
+import { dealbreakersOf, monthlyEur, type DealbreakerRule, type HiddenReason } from "./dealbreakers.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
-import { isEmailAlertAdapter } from "./sources/adapter.ts";
+import { isEmailAlertAdapter, listsEverything, type SourceAdapter } from "./sources/adapter.ts";
+import { currentDrop, dropWording, isDrop, normalVolume, type NormalVolume, type UnusualDrop } from "./drops.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
 import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
 import { describeMergeReason, type MergeReason } from "./matching.ts";
@@ -22,7 +25,11 @@ import { escapeHtml } from "./sources/shared.ts";
 import { senders } from "./sources/email/senders.ts";
 import { sofiaWatchlist, type AlertRoute, type WatchlistField, type WatchlistGroup } from "./watchlist.ts";
 
-export type FeedView = "new" | "saved" | "open" | "passed";
+/**
+ * New, Saved, All open, Passed & closed, and the hidden pile: New Jobs kept out of the main Feed by
+ * a dealbreaker, each with its reasons. Saved, passed and closed Jobs are never hidden.
+ */
+export type FeedView = "new" | "saved" | "open" | "passed" | "hidden";
 
 export interface FeedQuery {
   view: FeedView;
@@ -82,6 +89,15 @@ export interface FeedJob {
   needsYou: number;
   /** Fit with its reasons and the why-line. Always present: before a read it is provisional, from the title and location. */
   fit: Fit;
+  /**
+   * Kris's dealbreakers this Job breaks, each with its reason in plain words. Empty until the
+   * posting is read (an unread or unscreened Job is never hidden).
+   */
+  dealbreakers: HiddenReason[];
+  /** True when it is in the hidden pile: a New Job with a dealbreaker that Kris hasn't chosen to show. */
+  hidden: boolean;
+  /** True when Kris chose "Show this job" despite its dealbreakers. */
+  shownByYou: boolean;
 }
 
 /** One Posting of a Job, as the Job page lists it. */
@@ -124,6 +140,10 @@ export interface JobDetail {
   /** Link to the target posting. */
   url: string;
   state: JobState;
+  /** Set on a closed Job: when, how it closed in plain words, and the Decision to undo. Null otherwise. */
+  closed: { at: string; how: string; decisionId: string } | null;
+  /** On a closed Job: open Jobs with the same closest angle, best Fit first (up to 5). Empty otherwise. */
+  similar: FeedJob[];
   /** How many Postings were merged into this Job, and on how many sites. */
   postingCount: number;
   siteCount: number;
@@ -149,6 +169,36 @@ export interface JobDetail {
   fit: Fit;
   /** This month's AI budget, so an unscreened Job can say why. */
   budget: BudgetInfo;
+  /** The dealbreaker check: the rules this Job breaks (empty when none apply or it isn't read yet). */
+  dealbreakers: HiddenReason[];
+  /** In the hidden pile (see FeedJob.hidden). */
+  hidden: boolean;
+  /** Kris chose "Show this job" despite its dealbreakers. */
+  shownByYou: boolean;
+}
+
+/** A rule Kris changed with "Not a dealbreaker for me", kept so it can be listed and undone. */
+export interface RuleChange {
+  id: string;
+  rule: DealbreakerRule;
+  /** What changed, in plain words: "German removed from the languages you don't speak". */
+  text: string;
+  /** The Job it was changed from, and the reason that Job was hidden. */
+  job: { id: string; title: string; company: string };
+  reason: string;
+  at: string;
+  /** When it was undone, or null. */
+  undoneAt: string | null;
+}
+
+/** Why the list is empty although Jobs exist in this view: which filter holds them back. */
+export interface FilteredToNothing {
+  /** Relocation Jobs left out because the Relocation filter is off. */
+  relocation: number;
+  /** Jobs in the hidden pile, per rule (a Job breaking two rules counts under each). */
+  hidden: { total: number; byRule: { rule: DealbreakerRule; jobs: number }[] };
+  /** The explanation in plain words, naming each filter responsible. */
+  text: string;
 }
 
 /** The pass reasons Kris can choose from. None is ever chosen for him. */
@@ -160,7 +210,8 @@ export interface PassInput {
   note?: string | null;
 }
 
-export type HealthState = "no-sources" | "working" | "failing";
+/** "unusual": no Source is failing, but one is in an unusual drop (its Jobs are kept open). */
+export type HealthState = "no-sources" | "working" | "failing" | "unusual";
 
 /** A Source whose latest Check failed, and what that means for the Feed. */
 export interface FailingSource {
@@ -203,6 +254,11 @@ export interface HealthSummary {
   /** Email-alert Sources quiet longer than usual. Never closes jobs; the user checks the alert is still on. */
   quiet: QuietSource[];
   /**
+   * Sources in an unusual drop, with the same wording the Feed and Sources show. Their Jobs stay
+   * open; `needsYou` marks one Kris is asked to confirm (only confirmDrop closes anything).
+   */
+  unusual: UnusualDrop[];
+  /**
    * The job mailbox, or null when no email-alert Source is connected. While it fails, its email
    * Sources are reported here once instead of one by one in `failing`.
    */
@@ -221,6 +277,11 @@ export interface FeedResult {
    * in this view (0 for Passed & closed), whether or not the Relocation filter is on.
    */
   counts: { new: number; saved: number; open: number; passed: number; hidden: number; relocation: number };
+  /**
+   * Set when this view shows no Jobs but some are held back by a filter (Relocation off, or the
+   * hidden pile): which filters, and how many each holds back. Null otherwise.
+   */
+  filteredToNothing: FilteredToNothing | null;
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
   budget: BudgetInfo;
@@ -275,6 +336,9 @@ export interface RemovalPreview {
 /** How "Source removed" reads on a closed Job. */
 export const sourceRemovedHow = "Source removed";
 
+/** How a Job reads once the last Source listing it stops: "No longer listed by Payhawk". */
+export const noLongerListedBy = (sourceName: string) => `No longer listed by ${sourceName}`;
+
 /** Why a Check failed: the Source errored, didn't answer in time, or asked us to slow down. */
 export type CheckFailure = "error" | "timeout" | "rate-limited";
 
@@ -292,10 +356,12 @@ export interface CheckRecord {
   /** Every Posting the Source listed. */
   total: number | null;
   error: string | null;
+  /** True when the Check listed far fewer than the Source's normal volume (an unusual drop). */
+  unusual: boolean;
 }
 
-/** Paused: Kris stopped its checks; its Jobs stay as they are. "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
-export type SourceStatus = "not-checked" | "working" | "failing" | "quiet" | "paused";
+/** "unusual": its latest good Check was an unusual drop, and its Jobs are kept open. Paused: Kris stopped its checks; its Jobs stay as they are. "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
+export type SourceStatus = "not-checked" | "working" | "failing" | "quiet" | "unusual" | "paused";
 
 /** An email-alert Source's rhythm, learned from the emails it received in the last 6 weeks. */
 export interface AlertRhythm {
@@ -336,6 +402,10 @@ export interface SourceHealth {
   history: CheckRecord[];
   /** Email-alert Sources only: their email rhythm. Null for every other Source. */
   alerts: AlertRhythm | null;
+  /** What it usually lists per Check, or null until a good Check is recorded (and for email alerts). */
+  normal: NormalVolume | null;
+  /** The unusual drop it is in, or null. */
+  drop: UnusualDrop | null;
 }
 
 export interface HealthReport {
@@ -353,7 +423,8 @@ export interface CheckResult {
 /** A save, pass, close or reopen. Its id undoes it. */
 export interface Decision {
   id: string;
-  kind: "save" | "pass" | "close" | "reopen";
+  /** "unhide": "Show this job" on a hidden Job; undoing it hides the Job again. */
+  kind: "save" | "pass" | "close" | "reopen" | "unhide";
   /** The Jobs it changed. Jobs it didn't apply to (say, saving a closed job) are left out. */
   jobIds: string[];
 }
@@ -456,6 +527,13 @@ export interface DiscoveryEngine {
   /** Reopens closed Jobs: they go back to New. */
   reopen(jobIds: string[]): Promise<Decision>;
   /**
+   * Kris confirms a Source's unusual drop is real ("Close 34 SumUp jobs"): the Postings its latest
+   * Check no longer listed are gone, and the open Jobs no other Source still lists close with "No
+   * longer listed by SumUp". The only way a drop closes anything. Undoing the Decision reopens them
+   * and the drop stands again. Throws if the Source isn't in an unusual drop.
+   */
+  confirmDrop(sourceId: string): Promise<Decision>;
+  /**
    * One Job with all its Postings and the target marked, or null if there's no such Job. A Job
    * that was merged into another answers with the Job it now lives in (check the returned id).
    */
@@ -490,6 +568,26 @@ export interface DiscoveryEngine {
    * other ways to catch its jobs, best first.
    */
   detectCompany(input: string, options?: DetectOptions): Promise<CompanyDetection>;
+  /** Kris's search settings, which Fit and dealbreakers are measured against. */
+  getSearchSettings(): Promise<SearchSettings>;
+  /** Saves Kris's search settings (the settings form). Throws with a plain message when invalid. */
+  saveSearchSettings(settings: unknown): Promise<SearchSettings>;
+  /**
+   * "Show this job": brings hidden Jobs back to New and changes nothing else (the rule stays).
+   * Jobs that aren't hidden are left out of the Decision. Undoing it hides them again.
+   */
+  unhide(jobIds: string[]): Promise<Decision>;
+  /**
+   * "Not a dealbreaker for me" on one of a Job's hidden reasons (its key): changes the rule behind it
+   * so it no longer hides this Job or future ones like it. A language is removed from the languages
+   * Kris doesn't speak, the years limit is raised to what the Job asks, the salary minimum is lowered
+   * to the Job's salary, and the location rule stops hiding. Returns the change and the new settings.
+   */
+  notADealbreaker(jobId: string, reasonKey: string): Promise<{ change: RuleChange; settings: SearchSettings }>;
+  /** Every rule changed with "Not a dealbreaker for me", newest first. */
+  ruleChanges(): Promise<RuleChange[]>;
+  /** Puts a changed rule back as it was before that change. */
+  undoRuleChange(changeId: string): Promise<{ change: RuleChange; settings: SearchSettings }>;
   /**
    * "Paste a job link": adds the job at a link to the Feed like any other Posting (merged with a Job
    * already there, ranked, read later within the budget). A link already in the Feed answers with its
@@ -564,6 +662,9 @@ export interface ReadResult {
   unscreened: number;
 }
 
+/** How many similar open Jobs a closed Job suggests. */
+const similarLimit = 5;
+
 /** How many recent Checks sourceHealth returns per Source. */
 const historyLength = 14;
 
@@ -597,6 +698,7 @@ const viewStates: Record<FeedView, JobState[]> = {
   saved: ["saved"],
   open: ["new", "saved"],
   passed: ["passed", "closed"],
+  hidden: ["new"],
 };
 
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
@@ -605,8 +707,28 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   backfillMatchKeys(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
-  /** Kris's search settings (#12 stores and edits them; until then the defaults). */
-  const searchSettings = (): SearchSettings => deps.searchSettings ?? defaultSearchSettings;
+  /** Kris's search settings: as he saved them, else the ones the engine was given, else the defaults. */
+  const searchSettings = (): SearchSettings => {
+    const stored = db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
+    return stored ? (JSON.parse(String(stored.value)) as SearchSettings) : (deps.searchSettings ?? defaultSearchSettings);
+  };
+  function storeSettings(settings: SearchSettings): SearchSettings {
+    db.prepare(
+      `INSERT INTO search_settings (id, value, updated_at) VALUES (1, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+    ).run(JSON.stringify(settings), clock.now().toISOString());
+    return settings;
+  }
+
+  /** The dealbreakers a read Job breaks. An unread, failed or unscreened Job breaks none: it is never hidden. */
+  function dealbreakersFor(read: ReturnType<typeof readOf>, facts: PostingFacts | null, fit: Fit): HiddenReason[] {
+    if (!read || !facts) return [];
+    const levels = Object.fromEntries(facts.languages.map((l) => [l.language, l.level]));
+    return dealbreakersOf(read.screening, fit.place, searchSettings(), levels);
+  }
+
+  const shownByYou = (jobId: string) => db.prepare("SELECT 1 AS y FROM job_unhidden WHERE job_id = ?").get(jobId) != null;
+  const isHidden = (state: string, dealbreakers: HiddenReason[], shown: boolean) => state === "new" && dealbreakers.length > 0 && !shown;
 
   /** Fit for one Job from what is known about it now. Learned adjustments (#15) plug in here. */
   function fitOf(job: { title: string; location: string | null; postedAt: string | null }, read: ReturnType<typeof readOf>, facts: PostingFacts | null): Fit {
@@ -741,15 +863,25 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
         for (const { email, postings } of emails) recordAlertEmail(db, sourceId, email, postings.length);
+        const back = found.flatMap((p) => db.prepare(
+          "SELECT id, gone_decision_id FROM posting WHERE id = ? AND gone_at IS NOT NULL",
+        ).all(`${sourceId}:${p.externalId}`));
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
-        recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null });
+        listedAgain(back);
+        const unusual = watchesVolume(adapter) && isDrop(db, sourceId, found.length);
+        recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null, unusual });
+        if (listsEverything(adapter) && !unusual) {
+          const missing = db.prepare("SELECT id FROM posting WHERE source_id = ? AND gone_at IS NULL AND last_seen_at < ? ORDER BY id")
+            .all(sourceId, startedAt).map((r) => String(r.id));
+          markGone(missing, noLongerListedBy(name));
+        }
         return fresh;
       });
       return { sourceId, name, ok: true, found: found.length, newPostings };
     } catch (err) {
       const outcome: CheckFailure = timedOut ? "timeout" : rateLimited ? "rate-limited" : "error";
       const error = err instanceof Error ? err.message : String(err);
-      recordCheck(db, sourceId, { at: startedAt, outcome, inLocations: null, total: null, error });
+      recordCheck(db, sourceId, { at: startedAt, outcome, inLocations: null, total: null, error, unusual: false });
       return { sourceId, name, ok: false, outcome, error };
     }
   }
@@ -881,24 +1013,102 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** Moves each Job currently in one of `from` to `to`, remembering its previous state. */
   function decide(kind: Decision["kind"], jobIds: string[], from: JobState[], to: JobState, fields: StateFields = {}): Decision {
+    return transaction(db, () => decideNow(kind, jobIds, from, to, fields));
+  }
+
+  /** `decide` inside a transaction the caller already holds. */
+  function decideNow(kind: Decision["kind"], jobIds: string[], from: JobState[], to: JobState, fields: StateFields = {}): Decision {
     const id = `decision:${crypto.randomUUID()}`;
     const now = clock.now().toISOString();
-    const changed = transaction(db, () => {
-      db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
-      const out: string[] = [];
-      for (const jobId of new Set(jobIds)) {
-        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ? AND merged_into IS NULL").get(jobId);
-        if (!job || !from.includes(String(job.state) as JobState)) continue;
-        db.prepare(
-          `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(id, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
-        setState(jobId, to, now, fields);
-        out.push(jobId);
+    db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
+    const changed = applyDecision(id, jobIds, from, to, fields);
+    if (kind === "unhide") {
+      for (const jobId of changed) {
+        db.prepare("INSERT OR REPLACE INTO job_unhidden (job_id, decision_id, unhidden_at) VALUES (?, ?, ?)").run(jobId, id, now);
       }
-      return out;
-    });
+    }
     return { id, kind, jobIds: changed };
+  }
+
+  /** Moves Jobs as part of an existing Decision, remembering each one's previous state. */
+  function applyDecision(decisionId: string, jobIds: Iterable<string>, from: JobState[], to: JobState, fields: StateFields = {}): string[] {
+    const now = clock.now().toISOString();
+    const changed: string[] = [];
+    for (const jobId of new Set(jobIds)) {
+      const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ? AND merged_into IS NULL").get(jobId);
+      if (!job || !from.includes(String(job.state) as JobState)) continue;
+      db.prepare(
+        `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(decisionId, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
+      setState(jobId, to, now, fields);
+      changed.push(jobId);
+    }
+    return changed;
+  }
+
+  /**
+   * Puts each of a Decision's Jobs (or only the given ones) back in its state from before, unless
+   * Kris decided on it again since. Runs in the caller's transaction; returns the Jobs restored.
+   */
+  function undoNow(decisionId: string, only?: string[]): string[] {
+    const now = clock.now().toISOString();
+    const rows = db.prepare(
+      `SELECT dj.rowid AS rid, dj.* FROM decision_job dj
+       WHERE dj.decision_id = ? AND dj.undone_at IS NULL
+         AND dj.rowid = (SELECT MAX(rowid) FROM decision_job WHERE job_id = dj.job_id AND undone_at IS NULL)
+       ORDER BY dj.rowid`,
+    ).all(decisionId);
+    const out: string[] = [];
+    for (const r of rows) {
+      const jobId = String(r.job_id);
+      if (only && !only.includes(jobId)) continue;
+      setState(jobId, String(r.prev_state), sqlText(r.prev_changed_at), {
+        passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
+      });
+      db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
+      db.prepare("DELETE FROM job_unhidden WHERE job_id = ? AND decision_id = ?").run(jobId, decisionId);
+      out.push(jobId);
+    }
+    return out;
+  }
+
+  /**
+   * Postings of a Source that it lists again after they were marked gone: each Job that closed
+   * because of it opens again as it was (a Job Kris closed or decided on since stays as he left it).
+   */
+  function listedAgain(gone: Record<string, unknown>[]): void {
+    for (const p of gone) {
+      const decisionId = sqlText(p.gone_decision_id);
+      const job = db.prepare("SELECT job_id FROM posting WHERE id = ?").get(String(p.id));
+      if (decisionId && job && stillListed(String(job.job_id))) undoNow(decisionId, [String(job.job_id)]);
+    }
+  }
+
+  /**
+   * Marks Postings gone (their Source no longer lists them) and closes each open Job left with no
+   * Posting a watchlist Source still lists, saying how. One Decision: undoing it reopens those Jobs
+   * and brings the Postings back. Null when there was nothing to mark. Runs in the caller's transaction.
+   */
+  function markGone(postingIds: string[], how: string): Decision | null {
+    if (postingIds.length === 0) return null;
+    const decision = decideNow("close", [], [], "closed");
+    const jobIds = new Set<string>();
+    for (const id of postingIds) {
+      db.prepare("UPDATE posting SET gone_at = ?, gone_decision_id = ? WHERE id = ? AND gone_at IS NULL").run(clock.now().toISOString(), decision.id, id);
+      const p = db.prepare("SELECT job_id FROM posting WHERE id = ?").get(id);
+      if (p) jobIds.add(String(p.job_id));
+    }
+    const closing = [...jobIds].filter((jobId) => !stillListed(jobId));
+    return { ...decision, jobIds: applyDecision(decision.id, closing, ["new", "saved"], "closed", { closedHow: how }) };
+  }
+
+  /** Whether a watchlist Source (paused ones included) still lists one of this Job's Postings. */
+  function stillListed(jobId: string): boolean {
+    return !!db.prepare(
+      `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL LIMIT 1`,
+    ).get(jobId);
   }
 
   function setState(jobId: string, state: string, changedAt: string | null, f: StateFields) {
@@ -921,6 +1131,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const reading = readingOf(links.targetId, money.reached);
     const read = readOf(links.targetId, reading);
     const base = { title: String(r.title), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
+    const fit = fitOf(base, read, reading.facts);
+    const dealbreakers = dealbreakersFor(read, reading.facts, fit);
+    const shown = shownByYou(String(r.id));
     return {
       id: String(r.id),
       title: base.title,
@@ -936,7 +1149,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       reading: reading.state,
       requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
       needsYou: read ? read.needsYou.length : 0,
-      fit: fitOf(base, read, reading.facts),
+      fit,
+      dealbreakers,
+      hidden: isHidden(String(r.state), dealbreakers, shown),
+      shownByYou: shown,
       state: String(r.state) as JobState,
       ...(r.state === "passed" && {
         passed: {
@@ -989,6 +1205,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const read = readOf(target.postingId, reading);
     const base = { title: String(row.title), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
     const language = reading.facts?.language ?? null;
+    const fit = fitOf(base, read, reading.facts);
+    const dealbreakers = dealbreakersFor(read, reading.facts, fit);
+    const shown = shownByYou(jobId);
+    const closed = row.state === "closed"
+      ? { at: String(row.state_changed_at), how: String(row.closed_how), decisionId: String(row.decision_id) }
+      : null;
     return {
       id: jobId,
       title: base.title,
@@ -1001,6 +1223,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       postedAt: base.postedAt,
       url: t.url,
       state: String(row.state) as JobState,
+      closed,
+      similar: closed && fit.angle ? similarOpenJobs(jobId, fit.angle, money) : [],
       postingCount: postings.length,
       siteCount: new Set(postings.map((p) => p.site)).size,
       postings,
@@ -1011,9 +1235,21 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       keyFacts: read?.keyFacts ?? [],
       needsYou: read?.needsYou ?? [],
       screening: read?.screening ?? null,
-      fit: fitOf(base, read, reading.facts),
+      fit,
       budget: money,
+      dealbreakers,
+      hidden: isHidden(String(row.state), dealbreakers, shown),
+      shownByYou: shown,
     };
+  }
+
+  /** Open Jobs (New and Saved) with the same closest angle, best Fit first. */
+  function similarOpenJobs(jobId: string, angle: Angle, money: BudgetInfo): FeedJob[] {
+    return db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved') AND j.id != ?`).all(jobId)
+      .map((r) => toFeedJob(r, money))
+      .filter((j) => j.fit.angle === angle)
+      .sort((a, b) => b.fit.value - a.fit.value)
+      .slice(0, similarLimit);
   }
 
   /** The target posting's link and how many sites list the Job. */
@@ -1030,7 +1266,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   function allSourceHealth(): SourceHealth[] {
     const rows = db.prepare(`SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL AND ${onWatchlist} ORDER BY created_at, id`).all();
     const history = db.prepare(
-      `SELECT checked_at, outcome, in_locations, total, error FROM source_check
+      `SELECT checked_at, outcome, in_locations, total, error, unusual FROM source_check
        WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
     );
     return rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord)));
@@ -1104,18 +1340,65 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
     const latest = history[0];
     const alerts = adapters[kind]?.category === "email" ? alertRhythm(db, id, clock.now()) : null;
-    const status: SourceStatus = r.paused_at != null ? "paused" : !latest ? "not-checked" : latest.outcome !== "ok" ? "failing" : alerts?.quietSince ? "quiet" : "working";
-    const failingSince = status !== "failing" ? null : String(db.prepare(
-      "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
-    ).get(id, lastGoodCheckAt ?? "")!.at);
+    const volume = watchesVolume(adapters[kind]) ? normalVolume(db, id) : null;
     const jobsKept = count(
       `SELECT COUNT(DISTINCT j.id) AS n FROM job j JOIN posting p ON p.job_id = j.id
        WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
     );
+    const drop = watchesVolume(adapters[kind]) ? unusualDrop(id, String(r.name), jobsKept) : null;
+    const status: SourceStatus = r.paused_at != null ? "paused" : !latest ? "not-checked" : latest.outcome !== "ok" ? "failing"
+      : drop ? "unusual" : alerts?.quietSince ? "quiet" : "working";
+    const failingSince = status !== "failing" ? null : String(db.prepare(
+      "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
+    ).get(id, lastGoodCheckAt ?? "")!.at);
     return {
       id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
-      status, failingSince, lastGoodCheckAt, jobsKept, history, alerts,
+      status, failingSince, lastGoodCheckAt, jobsKept, history, alerts, normal: volume, drop,
     };
+  }
+
+  function ruleChange(id: string): RuleChange {
+    const r = db.prepare(
+      `SELECT c.*, p.title, p.company FROM rule_change c JOIN job j ON j.id = c.job_id
+       JOIN posting p ON p.id = ${targetPostingSql("j.id")} WHERE c.id = ?`,
+    ).get(id)!;
+    return {
+      id, rule: String(r.rule) as DealbreakerRule, text: String(r.change_text),
+      job: { id: String(r.job_id), title: String(r.title), company: String(r.company) },
+      reason: String(r.reason_text), at: String(r.created_at), undoneAt: sqlText(r.undone_at),
+    };
+  }
+
+  /** The unusual drop a Source is in, with what it keeps open and what confirming would close. */
+  function unusualDrop(sourceId: string, name: string, jobsKept: number): UnusualDrop | null {
+    const d = currentDrop(db, sourceId);
+    if (!d) return null;
+    const closing = dropClosing(sourceId, d.latestAt).jobIds.length;
+    const { since, latestAt, listed, normal, checksSince, needsYou } = d;
+    return {
+      sourceId, name, since, latestAt, listed, normal, checksSince, needsYou, jobsKept, closing,
+      wording: dropWording({ name, listed, normal, checksSince, needsYou, jobsKept, closing }),
+    };
+  }
+
+  /**
+   * What confirming a drop would do: the Source's Postings missing from its latest Check (gone once
+   * confirmed), and the open Jobs among theirs that no other Source still lists (they close).
+   */
+  function dropClosing(sourceId: string, latestAt: string): { postingIds: string[]; jobIds: string[] } {
+    const missing = db.prepare(
+      "SELECT id, job_id FROM posting WHERE source_id = ? AND gone_at IS NULL AND last_seen_at < ? ORDER BY id",
+    ).all(sourceId, latestAt);
+    const jobIds = [...new Set(missing.map((p) => String(p.job_id)))].filter((jobId) => {
+      const open = db.prepare("SELECT 1 AS hit FROM job WHERE id = ? AND state IN ('new', 'saved')").get(jobId);
+      const elsewhere = db.prepare(
+        `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
+         WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL
+           AND NOT (p.source_id = ? AND p.last_seen_at < ?) LIMIT 1`,
+      ).get(jobId, sourceId, latestAt);
+      return !!open && !elsewhere;
+    });
+    return { postingIds: missing.map((p) => String(p.id)), jobIds };
   }
 
   /** The Source pasted links belong to, created the first time Kris pastes one. */
@@ -1241,24 +1524,29 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return decide("reopen", jobIds, ["closed"], "new");
     },
 
+    async confirmDrop(sourceId) {
+      const source = liveSource(sourceId);
+      const name = String(source.name);
+      const drop = currentDrop(db, sourceId);
+      if (!drop) throw new Error(`${name} isn't in an unusual drop`);
+      return transaction(db, () => {
+        const { postingIds } = dropClosing(sourceId, drop.latestAt);
+        const decision = markGone(postingIds, noLongerListedBy(name)) ?? decideNow("close", [], [], "closed");
+        db.prepare("INSERT INTO drop_confirmation (decision_id, source_id, check_id, confirmed_at) VALUES (?, ?, ?, ?)").run(
+          decision.id, sourceId, drop.latestCheckId, clock.now().toISOString(),
+        );
+        return decision;
+      });
+    },
+
     async undo(decisionId, only) {
       const now = clock.now().toISOString();
       const restored = transaction(db, () => {
-        const rows = db.prepare(
-          `SELECT dj.rowid AS rid, dj.* FROM decision_job dj
-           WHERE dj.decision_id = ? AND dj.undone_at IS NULL
-             AND dj.rowid = (SELECT MAX(rowid) FROM decision_job WHERE job_id = dj.job_id AND undone_at IS NULL)
-           ORDER BY dj.rowid`,
-        ).all(decisionId);
-        const out: string[] = [];
-        for (const r of rows) {
-          const jobId = String(r.job_id);
-          if (only && !only.includes(jobId)) continue;
-          setState(jobId, String(r.prev_state), sqlText(r.prev_changed_at), {
-            passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
-          });
-          db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
-          out.push(jobId);
+        const out = undoNow(decisionId, only);
+        if (!only) {
+          // Postings it marked gone are listed again, and a drop it confirmed stands unconfirmed.
+          db.prepare("UPDATE posting SET gone_at = NULL, gone_decision_id = NULL WHERE gone_decision_id = ?").run(decisionId);
+          db.prepare("UPDATE drop_confirmation SET undone_at = ? WHERE decision_id = ? AND undone_at IS NULL").run(now, decisionId);
         }
         return out;
       });
@@ -1292,8 +1580,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       ).all();
       const all = rows.map((r) => ({ job: toFeedJob(r, money), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
-      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state);
-      const countView = (v: FeedView) => all.filter(({ job }) => inView(v, job) && (v === "passed" || !relocating(job))).length;
+      // The hidden pile holds hidden Jobs only; every other view leaves them out.
+      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");
+      const countView = (v: FeedView) =>
+        all.filter(({ job }) => inView(v, job) && (v === "passed" || v === "hidden" || !relocating(job))).length;
 
       let jobs: FeedJob[];
       if (query.view === "passed") {
@@ -1305,8 +1595,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         const byFit = (a: FeedJob, b: FeedJob) => b.fit.value - a.fit.value;
         if ((query.sort ?? "fit") === "fit") listed.sort(byFit);
         const main = listed.filter((j) => !relocating(j));
-        jobs = query.relocation ? [...main, ...listed.filter(relocating)] : main;
+        jobs = query.view === "hidden" || query.relocation ? [...main, ...listed.filter(relocating)] : main;
       }
+      const ranked = query.view !== "passed" && query.view !== "hidden";
+      // Jobs of this view's states that a filter holds back: relocation ones (filter off) and hidden ones.
+      const heldBack = ranked ? all.map(({ job }) => job).filter((j) => viewStates[query.view].includes(j.state)) : [];
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
@@ -1317,9 +1610,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           saved: countView("saved"),
           open: countView("open"),
           passed: countView("passed"),
-          hidden: 0,
+          hidden: countView("hidden"),
           relocation: query.view === "passed" ? 0 : all.filter(({ job }) => inView(query.view, job) && relocating(job)).length,
         },
+        filteredToNothing: jobs.length > 0 || !ranked ? null : filteredToNothing(
+          query.view,
+          query.relocation ? 0 : heldBack.filter((j) => !j.hidden && relocating(j)).length,
+          heldBack.filter((j) => j.hidden),
+        ),
         health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
         budget: money,
@@ -1459,6 +1757,57 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return starterWatchlist(added);
     },
 
+    async getSearchSettings() {
+      return searchSettings();
+    },
+
+    async saveSearchSettings(input) {
+      return storeSettings(parseSearchSettings(input));
+    },
+
+    async unhide(jobIds) {
+      const hidden = jobIds.filter((id) => {
+        const row = db.prepare(`${jobSelect} WHERE j.id = ? AND j.merged_into IS NULL`).get(id);
+        return row != null && toFeedJob(row).hidden;
+      });
+      return decide("unhide", hidden, ["new"], "new");
+    },
+
+    async notADealbreaker(jobId, reasonKey) {
+      const job = await getJob(jobId);
+      if (!job) throw new Error(`No job with id "${jobId}"`);
+      const reason = job.dealbreakers.find((d) => d.key === reasonKey);
+      if (!reason) throw new Error(`"${reasonKey}" isn't a dealbreaker on this job`);
+      const before = searchSettings();
+      const { after, text } = relaxRule(before, reason, job.screening);
+      const id = `rule-change:${crypto.randomUUID()}`;
+      transaction(db, () => {
+        storeSettings(after);
+        db.prepare(
+          `INSERT INTO rule_change (id, job_id, rule, reason_key, reason_text, change_text, before_value, after_value, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, job.id, reason.rule, reason.key, reason.text, text, JSON.stringify(before), JSON.stringify(after), clock.now().toISOString());
+      });
+      return { change: ruleChange(id), settings: after };
+    },
+
+    async ruleChanges() {
+      return db.prepare("SELECT id FROM rule_change ORDER BY created_at DESC, rowid DESC").all().map((r) => ruleChange(String(r.id)));
+    },
+
+    async undoRuleChange(changeId) {
+      const row = db.prepare("SELECT rule, reason_key, before_value, undone_at FROM rule_change WHERE id = ?").get(changeId);
+      if (!row) throw new Error(`No rule change "${changeId}"`);
+      if (row.undone_at != null) return { change: ruleChange(changeId), settings: searchSettings() };
+      const restored = restoreRule(searchSettings(), String(row.rule) as DealbreakerRule, String(row.reason_key),
+        JSON.parse(String(row.before_value)) as SearchSettings);
+      transaction(db, () => {
+        storeSettings(restored);
+        db.prepare("UPDATE rule_change SET undone_at = ? WHERE id = ?").run(clock.now().toISOString(), changeId);
+      });
+      return { change: ruleChange(changeId), settings: restored };
+    },
+
     async sourceHealth() {
       const sources = allSourceHealth();
       return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
@@ -1471,6 +1820,84 @@ function sourceIdOf({ kind, config }: { kind: string; config: unknown }): string
   const adapter = adapterFor(kind);
   return `${kind}:${adapter.key(adapter.parseConfig(config))}`;
 }
+
+const ruleLabel: Record<DealbreakerRule, string> = {
+  language: "a language you don't speak",
+  years: "your years limit",
+  salary: "your salary minimum",
+  location: "your locations",
+};
+const ruleOrder: DealbreakerRule[] = ["language", "years", "salary", "location"];
+const jobsWord = (n: number) => `${n} ${n === 1 ? "job" : "jobs"}`;
+
+/** Why a view is empty: the Relocation filter and the hidden pile, each with how many it holds back. */
+function filteredToNothing(view: FeedView, relocation: number, hidden: FeedJob[]): FilteredToNothing | null {
+  if (relocation === 0 && hidden.length === 0) return null;
+  const byRule = ruleOrder
+    .map((rule) => ({ rule, jobs: hidden.filter((j) => j.dealbreakers.some((d) => d.rule === rule)).length }))
+    .filter((r) => r.jobs > 0);
+  const viewName = { new: "new jobs", saved: "saved jobs", open: "open jobs", passed: "jobs", hidden: "jobs" }[view];
+  const parts = [`No ${viewName} to show.`];
+  if (relocation > 0) {
+    parts.push(`${jobsWord(relocation)} ${relocation === 1 ? "is a relocation job" : "are relocation jobs"}, left out while the Relocation filter is off.`);
+  }
+  if (hidden.length > 0) {
+    const rules = byRule.map((r) => `${r.jobs} by ${ruleLabel[r.rule]}`).join(", ");
+    parts.push(`${jobsWord(hidden.length)} ${hidden.length === 1 ? "is" : "are"} hidden by your dealbreakers: ${rules}.`);
+  }
+  return { relocation, hidden: { total: hidden.length, byRule }, text: parts.join(" ") };
+}
+
+const euros = (n: number) => `€${Math.round(n).toLocaleString("en-GB")}`;
+const copySettings = (s: SearchSettings): SearchSettings => JSON.parse(JSON.stringify(s)) as SearchSettings;
+
+/** "Not a dealbreaker for me": the settings with the rule behind `reason` relaxed so it no longer hides this Job. */
+function relaxRule(before: SearchSettings, reason: HiddenReason, screening: Screening | null): { after: SearchSettings; text: string } {
+  const after = copySettings(before);
+  const rules = after.dealbreakers;
+  switch (reason.rule) {
+    case "language": {
+      const language = reason.key.slice("language:".length);
+      rules.languagesNotSpoken = rules.languagesNotSpoken.filter((l) => l.toLowerCase() !== language.toLowerCase());
+      return { after, text: `${language} removed from the languages you don't speak` };
+    }
+    case "years": {
+      const years = screening?.yearsRequired ?? rules.maxYearsRequired;
+      const was = rules.maxYearsRequired;
+      rules.maxYearsRequired = years;
+      return { after, text: `Years limit raised from ${was} to ${years}` };
+    }
+    case "salary": {
+      const money = screening?.salary ? monthlyEur(screening.salary) : null;
+      const floor = money ? Math.floor(money.high) : before.minMonthlySalaryEur;
+      after.minMonthlySalaryEur = floor;
+      return { after, text: `Salary minimum lowered from ${euros(before.minMonthlySalaryEur)} to ${euros(floor)} a month` };
+    }
+    case "location":
+      rules.outsideLocations = false;
+      return { after, text: "Jobs outside your locations are no longer hidden (they stay ranked lower)" };
+  }
+}
+
+/** Undoing a rule change: only that rule goes back to how it was; later changes to other rules stay. */
+function restoreRule(current: SearchSettings, rule: DealbreakerRule, key: string, before: SearchSettings): SearchSettings {
+  const out = copySettings(current);
+  switch (rule) {
+    case "language": {
+      const language = key.slice("language:".length);
+      if (!out.dealbreakers.languagesNotSpoken.some((l) => l.toLowerCase() === language.toLowerCase())) {
+        out.dealbreakers.languagesNotSpoken.push(language);
+      }
+      break;
+    }
+    case "years": out.dealbreakers.maxYearsRequired = before.dealbreakers.maxYearsRequired; break;
+    case "salary": out.minMonthlySalaryEur = before.minMonthlySalaryEur; break;
+    case "location": out.dealbreakers.outsideLocations = before.dealbreakers.outsideLocations; break;
+  }
+  return out;
+}
+/** Whether a Source's volume per Check is watched for drops (email alerts have a rhythm instead). */
+const watchesVolume = (a: SourceAdapter<unknown> | undefined) => a != null && a.category !== "email" && a.category !== "capture";
 
 function startNow(start: () => Promise<Response>): Promise<Response> {
   try {
@@ -1518,7 +1945,8 @@ function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: 
   });
   const times = sources.map((s) => s.history[0]?.at).filter((t): t is string => t != null).sort();
   return {
-    state: sources.length === 0 ? "no-sources" : failing.length > 0 || mailbox?.state === "error" ? "failing" : "working",
+    state: sources.length === 0 ? "no-sources" : failing.length > 0 || mailbox?.state === "error" ? "failing"
+      : sources.some((s) => s.status === "unusual") ? "unusual" : "working",
     sources: sources.length,
     lastCheckAt: times.at(-1) ?? null,
     failing,
@@ -1528,6 +1956,7 @@ function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: 
       const silentHours = toHours(now.getTime() - Date.parse(a.lastEmailAt));
       return [{ sourceId: s.id, name: s.name, lastEmailAt: a.lastEmailAt, usualGapHours: a.usualGapHours, silentHours }];
     }),
+    unusual: sources.flatMap((s) => (s.status === "unusual" && s.drop ? [s.drop] : [])),
     mailbox,
   };
 }
@@ -1584,8 +2013,8 @@ function median(xs: number[]): number {
 }
 
 function recordCheck(db: SqlDatabase, sourceId: string, c: CheckRecord): void {
-  db.prepare("INSERT INTO source_check (source_id, checked_at, outcome, in_locations, total, error) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(sourceId, c.at, c.outcome, c.inLocations, c.total, c.error);
+  db.prepare("INSERT INTO source_check (source_id, checked_at, outcome, in_locations, total, error, unusual) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(sourceId, c.at, c.outcome, c.inLocations, c.total, c.error, c.unusual ? 1 : 0);
 }
 
 function toCheckRecord(r: Record<string, unknown>): CheckRecord {
@@ -1595,6 +2024,7 @@ function toCheckRecord(r: Record<string, unknown>): CheckRecord {
     inLocations: r.in_locations == null ? null : Number(r.in_locations),
     total: r.total == null ? null : Number(r.total),
     error: r.error == null ? null : String(r.error),
+    unusual: Number(r.unusual) === 1,
   };
 }
 
@@ -1623,7 +2053,7 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
   if (existing) {
     db.prepare(
       `UPDATE posting SET url = ?, title = ?, company = ?, location = ?, salary = ?, posted_at = ?,
-              description_html = ?, last_seen_at = ? WHERE id = ?`,
+              description_html = ?, last_seen_at = ?, gone_at = NULL, gone_decision_id = NULL WHERE id = ?`,
     ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, id);
     refreshMatchKey(db, id, p);
     reconcile(db, id);
