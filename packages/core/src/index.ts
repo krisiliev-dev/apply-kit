@@ -4,7 +4,7 @@ export type {
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource,
   Decision, JobState, PassReason, PassInput,
 } from "./engine.ts";
-export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader } from "./ports.ts";
+export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, Settings } from "./ports.ts";
 export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";
 export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts";
