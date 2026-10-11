@@ -29,7 +29,7 @@ Decided with the user on 2026-10-11 through a grilling session. Product context:
 |---|---|---|
 | Browser | **Chrome** for applying; Safari stays the everyday browser. WXT keeps a Safari build possible later | Chrome loads unpacked extensions directly; Safari needs an Xcode wrapper and re-enabling unsigned extensions every launch |
 | App form | **Local service + browser tab**, no desktop app. launchd starts the service at login | Single user; background checks need a long-running process; a desktop shell adds installers and updates for nothing |
-| Stack | **TypeScript everywhere.** Hono (API + scheduler in one Node process), React + Vite UI styled from `docs/design/tokens.css`, WXT extension, Vercel AI SDK → OpenRouter | One language and shared types across service, UI and extension; lighter than the old Next.js app, which this tool doesn't need |
+| Stack | **TypeScript everywhere.** Hono (API + scheduler in one Node process), React + Vite UI styled from `app/ui/src/styles/tokens.css` + `components.css` (moved from `docs/design/`), WXT extension, Vercel AI SDK → OpenRouter | One language and shared types across service, UI and extension; lighter than the old Next.js app, which this tool doesn't need |
 | Data | **One SQLite file** in `~/Library/Application Support/apply-kit/`, with a gitignored `data` symlink in the repo. Nightly backup copy to a folder the user picks (iCloud Drive fine for backups); one-click export | One place to look; safe from `git clean`, repo copies and code searches |
 | Secrets | **Gitignored `.env`** in the repo holds config and keys (OpenRouter key, Gmail app password). Agents never open `.env` (rule in CLAUDE.md) | User's choice for simplicity; keys are removed once the search ends |
 | AI | DeepSeek V4.1 Flash for every task via OpenRouter, providers pinned to non-China hosts; hard monthly cap in the app and as the OpenRouter key's credit limit | PRODUCT.md constraint |
@@ -53,5 +53,5 @@ apply-kit/
 
 ## Open, to settle when building
 
-- Exact SQLite access layer (plain SQL vs a thin query builder) and migration tool.
+- ~~Exact SQLite access layer (plain SQL vs a thin query builder) and migration tool.~~ **Settled 2026-10-11:** Node's built-in `node:sqlite` (`DatabaseSync`, no native build step, synchronous like better-sqlite3; still flagged experimental in Node 22, so a swap to better-sqlite3 stays easy because the engine only sees a small `SqlDatabase` interface). Plain SQL, no query builder. Migrations are an append-only list in `packages/core/src/schema.ts`, applied on engine start and tracked with `PRAGMA user_version`. Tests use `:memory:`.
 - How tailoring prompts and the honesty-line checks are tested (fixture CVs and postings, snapshot plus rule assertions).

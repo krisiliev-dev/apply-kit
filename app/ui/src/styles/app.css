@@ -1,0 +1,8 @@
+/* App-level styles not yet in components.css. Tokens only. */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.toolbar .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
+.toolbar .segmented button { white-space: nowrap }
+.toolbar .end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-left: auto }
+.empty h1 { font-size: var(--fs-h3) }

@@ -1,0 +1,6 @@
+{
+  "name": "@apply-kit/extension",
+  "private": true,
+  "type": "module",
+  "description": "Chrome-first WXT extension (ADR 0002). Placeholder until the capture tickets."
+}

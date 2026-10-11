@@ -1,0 +1,54 @@
+/* apply-kit tokens, direction "Vitosha". Mirrors docs/design/tokens.json; change both together. Single copy used by the app UI and docs/design. */
+:root {
+  /* colour, light */
+  --ground: #edf1ee; --surface: #ffffff; --surface-sunken: #e1e8e3;
+  --ink: #1d2b25; --ink-2: #45554e; --ink-3: #5a6962;
+  --rule: #d5ddd8; --border-control: #879690;
+  --action: #2c6652; --action-hover: #24584a; --on-action: #ffffff;
+  --bloom: #a33d62; --bloom-soft: #f7e3ea;
+  --met: #2c6652; --met-soft: #e0eee7;
+  --partly: #75561a; --partly-soft: #f6ecd1;
+  --gap: #a33e46; --gap-soft: #f6e2e3;
+  --focus: #2c6652;
+  --shadow-raised: 0 1px 2px #1d2b250f, 0 4px 14px #1d2b250d;
+  --shadow-overlay: 0 12px 32px -6px #1d2b2524;
+
+  /* documents: always white paper */
+  --doc-paper: #ffffff; --doc-text: #1d2b25; --doc-muted: #4e5c56; --doc-accent: #24584a; --doc-rule: #d5ddd8;
+
+  /* type */
+  --font-display: "Geologica", ui-sans-serif, system-ui, sans-serif;
+  --font-text: "Onest", ui-sans-serif, system-ui, sans-serif;
+  --fs-caption: 12px; --fs-small: 13px; --fs-body: 15px; --fs-title: 18px;
+  --fs-h3: 22px; --fs-h2: 28px; --fs-h1: 35px; --fs-display: 44px;
+  --lh-tight: 1.15; --lh-snug: 1.3; --lh-body: 1.5;
+  --track-display: -0.02em;
+
+  /* space (4px base) */
+  --s-1: 2px; --s-2: 4px; --s-3: 8px; --s-4: 12px; --s-5: 16px; --s-6: 20px; --s-7: 24px; --s-8: 32px; --s-9: 40px; --s-10: 56px;
+
+  /* radius */
+  --r-sheet: 3px; --r-small: 6px; --r-control: 10px; --r-card: 14px; --r-pill: 999px;
+
+  /* motion */
+  --dur-fast: 120ms; --dur-base: 200ms; --dur-slow: 320ms;
+  --ease-standard: cubic-bezier(.2, 0, 0, 1); --ease-exit: cubic-bezier(.4, 0, 1, 1);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ground: #121a17; --surface: #19231f; --surface-sunken: #0e1513;
+  --ink: #e5ece8; --ink-2: #b8c6bf; --ink-3: #8fa199;
+  --rule: #2a3732; --border-control: #61746b;
+  --action: #7cc4a8; --action-hover: #93d4b9; --on-action: #0e1513;
+  --bloom: #e889aa; --bloom-soft: #3a2230;
+  --met: #93d4b9; --met-soft: #1b3129; --partly: #ecd08e; --partly-soft: #362d16; --gap: #efa3aa; --gap-soft: #3b2226;
+  --focus: #7cc4a8; --shadow-raised: none; --shadow-overlay: 0 12px 32px -6px #00000080;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --ground: #121a17; --surface: #19231f; --surface-sunken: #0e1513;
+  --ink: #e5ece8; --ink-2: #b8c6bf; --ink-3: #8fa199;
+  --rule: #2a3732; --border-control: #61746b;
+  --action: #7cc4a8; --action-hover: #93d4b9; --on-action: #0e1513;
+  --bloom: #e889aa; --bloom-soft: #3a2230;
+  --met: #93d4b9; --met-soft: #1b3129; --partly: #ecd08e; --partly-soft: #362d16; --gap: #efa3aa; --gap-soft: #3b2226;
+  --focus: #7cc4a8; --shadow-raised: none; --shadow-overlay: 0 12px 32px -6px #00000080;
+  color-scheme: dark }
