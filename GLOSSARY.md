@@ -89,7 +89,7 @@ A package that has been submitted for a job.
 _Avoid_: Package (once submitted), submission
 
 **Status**:
-Where an application stands: applied, screening, interviewing, offer, rejected or withdrawn.
+Where an application stands: applied, screening, interviewing, offer, accepted, rejected or withdrawn.
 _Avoid_: Stage, progress (for a single application)
 
 **Event**:

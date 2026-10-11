@@ -50,6 +50,27 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
 .checks li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap }
 .part { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 0; border-top: 1px solid var(--line); align-items: center }
 .part .meter { grid-column: 1 / -1 }
+/* segmented toggles (Changes / Preview, Fit / 100%) */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; flex: none }
+.seg button { border: 0; background: var(--paper); padding: 4px 12px; font-size: 0.85rem; font-weight: 600; color: var(--ink-2) }
+.seg button + button { border-left: 1px solid var(--line) }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper) }
+/* A4 PDF preview: fixed page ratio; type scales with the page width (container units) so Fit never reflows */
+.a4-scroll { overflow-x: auto; background: var(--fill); border-radius: 8px; padding: 12px; min-width: 0 }
+.a4 { container-type: inline-size; display: block; width: 100%; max-width: 560px; aspect-ratio: 1 / 1.414; margin-inline: auto; background: var(--paper); border: 1px solid var(--line); overflow: hidden; color: var(--ink-2) }
+.a4-scroll.z100 .a4 { width: 560px; max-width: none }
+.a4-in { padding: 8cqw 9cqw; font-size: 1.72cqw; line-height: 1.42; display: grid; gap: 2.6cqw; align-content: start }
+.a4-in p { margin: 0 }
+.cv-top { display: grid; gap: 0.8cqw; padding-bottom: 2cqw; border-bottom: 1px solid var(--line) }
+.cv-name { font-size: 4.4cqw; line-height: 1.1; font-weight: 700; letter-spacing: -0.01em; color: var(--ink) }
+.cv-contact { font-size: 1.6cqw; color: var(--ink-2) }
+.cv-sec { display: grid; gap: 1cqw }
+.cv-h { font-size: 1.55cqw; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink) }
+.cv-job { display: flex; justify-content: space-between; gap: 2cqw; color: var(--ink); font-weight: 600; margin-top: 0.6cqw }
+.cv-job span { font-weight: 400; color: var(--ink-2); white-space: nowrap }
+.a4-in ul { margin: 0; padding-left: 3cqw; display: grid; gap: 0.4cqw }
+.cl-body { display: grid; gap: 1.8cqw; color: var(--ink) }
+.a4-cap { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3); text-align: center; margin-top: 8px }
 </style>
 </head>
 <body>
@@ -81,7 +102,7 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
             <div class="row"><h2 class="step-h">Preparing your package</h2><span class="spacer"></span><span class="small muted" role="status" aria-live="polite">3 of 5 parts ready · about 20 s left</span></div>
             <div class="meter" aria-hidden="true"><span style="width:62%"></span></div>
             <div class="list">
-              <div class="part"><span><b>Target posting</b> <span class="muted small">· kestrel.greenhouse.io (company's own page)</span></span><span class="chip ok">Ready</span></div>
+              <div class="part"><span><b>Target posting</b> <span class="muted small">· kestrel.greenhouse.io (company's own page) · Language: English · from the posting</span></span><span class="chip ok">Ready</span></div>
               <div class="part"><span><b>CV version</b> <span class="muted small">· Security angle · 7 changes · 2 flags for you</span></span><a class="btn sm" href="#" data-goto="cv">Start reviewing</a></div>
               <div class="part"><span><b>Screening answers</b> <span class="muted small">· 6 questions · 3 from your answer bank</span></span><span class="chip ok">Ready</span></div>
               <div class="part"><span><b>Cover letter</b> <span class="muted small">· writing in your voice (7 samples)</span></span><span class="chip">Writing…</span><div class="meter" aria-label="Cover letter progress" role="progressbar" aria-valuenow="55" aria-valuemin="0" aria-valuemax="100"><span style="width:55%"></span></div></div>
@@ -104,6 +125,7 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
         <div class="stack" style="max-width:760px">
           <h2 class="step-h">Which posting will you apply through?</h2>
           <p class="small muted">The screening questions and the portal the extension fills come from this posting.</p>
+          <div class="row small"><span class="chip">Language: English · from the posting</span><span class="muted">The CV, cover letter and screening answers are all written in this language.</span><button class="btn ghost sm" type="button">Change ▾</button></div>
           <fieldset>
             <legend class="small faint" style="font-weight:500">3 postings of this job</legend>
             <label class="box opt" style="border-color:var(--ink)"><input type="radio" name="tp" checked>
@@ -121,7 +143,8 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
       <!-- ============ STEP 2 CV ============ -->
       <section data-state="cv" data-state-name="2 · CV" class="stack" style="gap:14px" hidden>
         <div class="pk-head" data-head="cv"></div>
-        <div class="row"><h2 class="step-h">CV version</h2><span class="chip">Security angle</span><span class="small muted">closest of your three angles: 4 of 6 requirements with evidence</span><span class="spacer"></span><button class="btn ghost sm" type="button">Switch angle ▾</button><button class="btn sm" type="button">Preview PDF</button></div>
+        <div class="row"><h2 class="step-h">CV version</h2><span class="chip">Security angle</span><span class="small muted">closest of your three angles: 4 of 6 requirements with evidence</span><span class="spacer"></span><button class="btn ghost sm" type="button">Switch angle ▾</button>
+          <div class="seg" role="group" aria-label="CV view"><button type="button" aria-pressed="true">Changes</button><button type="button" aria-pressed="false" data-goto="cvpdf">Preview</button></div></div>
         <div class="banner warn" role="status"><b>2 flags to resolve before approving:</b> <a href="#flag-ir">Incident response wording</a> · <a href="#flag-k8s">Kubernetes security gap</a></div>
         <div class="cols">
           <div class="stack" style="gap:16px">
@@ -148,10 +171,91 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
             <div class="box"><h3>Tailoring notes</h3><ul class="checks small" style="gap:4px">
               <li>Summary leads with detection engineering, the posting's first requirement.</li>
               <li>Freelance web work kept but shortened: the role asks for scripting, not product development.</li>
-              <li>2 pages, single column.</li></ul></div>
+              <li>1 page, single column (Standard template, no photo).</li></ul></div>
           </div>
         </div>
         <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span id="cv-why" class="small muted">2 flags left</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="cv-why">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ STEP 2 CV · PDF PREVIEW ============ -->
+      <section data-state="cvpdf" data-state-name="2 · CV · PDF preview" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="cvpdf"></div>
+        <div class="row"><h2 class="step-h">CV version</h2><span class="chip">Security angle</span><span class="small muted">the exact PDF that gets uploaded</span><span class="spacer"></span>
+          <div class="seg" role="group" aria-label="CV view"><button type="button" aria-pressed="false" data-goto="cv">Changes</button><button type="button" aria-pressed="true">Preview</button></div></div>
+        <div class="cols">
+          <div class="stack">
+            <div class="row small"><span class="chip">1 page</span><span class="muted">Page 1 of 1 · A4</span><span class="spacer"></span>
+              <div class="seg" role="group" aria-label="Zoom"><button type="button" aria-pressed="true" data-zoom="fit">Fit</button><button type="button" aria-pressed="false" data-zoom="100">100%</button></div></div>
+            <div class="a4-scroll">
+              <article class="a4" aria-label="CV PDF preview, page 1 of 1">
+                <div class="a4-in">
+                  <header class="cv-top">
+                    <div class="cv-name">Kris Marinov</div>
+                    <div class="cv-contact">Security Analyst · Sofia, Bulgaria · kris@krisiliev.dev · +359 87 555 0142 · linkedin.com/in/kris-marinov-sec</div>
+                  </header>
+                  <div class="cv-sec">
+                    <div class="cv-h">Summary</div>
+                    <p>Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing incident response in a bank SOC. Moving detection work to Elastic and comfortable scripting in Python.</p>
+                  </div>
+                  <div class="cv-sec">
+                    <div class="cv-h">Experience</div>
+                    <div class="cv-job">Junior Security Analyst · Orbital Bank, Sofia<span>Jan 2023 – Dec 2025</span></div>
+                    <ul>
+                      <li>Built 40 Splunk detections that cut false positives by about a third</li>
+                      <li>Rewrote noisy login rules around how staff actually signed in, not vendor templates</li>
+                      <li>Triaged about 25 alerts a day in a 6-person SOC</li>
+                      <li>Responded to 3 phishing incidents as part of the SOC team, from first alert to write-up</li>
+                    </ul>
+                    <div class="cv-job">SOC Intern · Varna Telecom, Varna<span>Summer 2022</span></div>
+                    <ul>
+                      <li>Monitored SIEM alerts on the night shift and escalated confirmed incidents</li>
+                      <li>Wrote Python scripts to enrich alerts with asset and owner data</li>
+                    </ul>
+                    <div class="cv-job">Freelance Full-stack Developer<span>2021 – 2023</span></div>
+                    <ul>
+                      <li>Built and hosted web apps for small businesses (React, Node.js, Linux servers)</li>
+                    </ul>
+                  </div>
+                  <div class="cv-sec">
+                    <div class="cv-h">Skills</div>
+                    <p>Splunk (SPL, detection engineering) · Elastic SIEM · Incident response · Python · Linux · Bash · React · Node.js</p>
+                  </div>
+                  <div class="cv-sec">
+                    <div class="cv-h">Education</div>
+                    <div class="cv-job">BSc Computer Science<span>2022</span></div>
+                  </div>
+                  <div class="cv-sec">
+                    <div class="cv-h">Languages &amp; certificates</div>
+                    <p>Bulgarian native · English C1 · Elastic SIEM course (2026)</p>
+                  </div>
+                </div>
+              </article>
+              <p class="a4-cap">Kris_CV_Kestrel_Security_Engineer.pdf · 1 page · 96 KB</p>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>This file</h3>
+              <p class="small" role="status"><span class="chip ok">✓</span> Fits on 1 page · ATS-safe single column · fonts embedded</p>
+              <p class="small muted">What you see is the file the extension uploads. Editing a change re-renders it.</p>
+              <button class="btn" type="button">Download PDF</button>
+            </div>
+            <div class="box">
+              <fieldset>
+                <legend>Template</legend>
+                <label class="opt"><input type="radio" name="tpl" checked> <span><b>Standard</b> <span class="faint small">· no photo</span></span></label>
+                <label class="opt"><input type="radio" name="tpl"> <span><b>Standard + photo</b><br><span class="small muted">Suggested for local Bulgarian employers. Same layout, photo top right. Off for Kestrel.</span></span></label>
+              </fieldset>
+              <fieldset>
+                <legend>Language</legend>
+                <label class="opt"><input type="radio" name="lang" checked> <span><b>English</b> <span class="faint small">· from the posting</span></span></label>
+                <label class="opt"><input type="radio" name="lang"> <span><b>Bulgarian</b><br><span class="small muted">Rewrites the whole package (CV, cover letter, screening answers) in Bulgarian, not just the headings.</span></span></label>
+              </fieldset>
+              <p class="small faint">Fixed layout from the design system; only the content is written for this job.</p>
+            </div>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="button" data-goto="cv">Back to changes</button><span class="spacer"></span><span class="small muted">Flags resolved</span><button class="btn primary" type="button">Approve and continue</button></div>
       </section>
 
       <!-- ============ BLOCKED ============ -->
@@ -171,7 +275,8 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
       <section data-state="cover" data-state-name="3 · Cover letter" class="stack" style="gap:14px" hidden>
         <div class="pk-head" data-head="cover"></div>
         <div class="row"><h2 class="step-h">Cover letter</h2><span class="small muted">written in your voice from 7 samples and 23 past edits</span><span class="spacer"></span>
-          <span class="pager"><button class="btn sm" type="button" aria-label="Previous draft">‹</button>Draft 2 of 2<button class="btn sm" type="button" aria-label="Next draft" disabled>›</button></span></div>
+          <span class="pager"><button class="btn sm" type="button" aria-label="Previous draft">‹</button>Draft 2 of 2<button class="btn sm" type="button" aria-label="Next draft" disabled>›</button></span>
+          <div class="seg" role="group" aria-label="Cover letter view"><button type="button" aria-pressed="true">Edit</button><button type="button" aria-pressed="false" data-goto="coverpdf">Preview</button></div></div>
         <div class="cols">
           <div class="stack" id="cover-wrap">
             <div class="row small"><label class="opt"><input type="checkbox" id="mark-toggle" checked> <span>Highlight sentences written for Kestrel (not from your usual letter)</span></label><span class="spacer"></span><span class="count" aria-live="polite">217 words · target 220</span></div>
@@ -180,7 +285,7 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
               <p><mark>Kestrel moves money for 12,000 merchants, which means every false alarm in your SOC costs an analyst's time and every missed one can cost a merchant.</mark> Telling those two apart is the part of security work I have spent the last two years on, and it is why the Security Engineer role stood out to me.</p>
               <p>At Orbital Bank I built 40 Splunk detections for a six-person SOC and cut our false positives by about a third, mostly by rewriting noisy rules around how our staff actually logged in rather than how the vendor templates assumed they did. Triaging around 25 alerts a day taught me which detections earn their place and which only create work. I was also part of the response to three phishing incidents, from the first alert to the write-up.</p>
               <p><mark>Your posting mentions moving detection work onto Elastic and hardening the Kubernetes platform.</mark> <mark>Elastic would be a short step from Splunk for me. Kubernetes security I haven't done in production, and I would want to close that gap early rather than talk around it.</mark> The rest of the role, detection engineering, alert tuning and incident write-ups, is work I could pick up in the first month. I would like to hear where the team wants its detections to be a year from now.</p>
-              <p>Kris</p>
+              <p>Kind regards,<br>Kris</p>
             </div>
             <form class="box" onsubmit="return false" aria-labelledby="regen-h">
               <h3 id="regen-h">Change something</h3>
@@ -207,6 +312,49 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
           </div>
         </div>
         <div class="actions"><button class="btn" type="button">Back</button><span class="spacer"></span><span class="small faint">Saved 10:51</span><button class="btn primary" type="button">Approve and continue</button></div>
+      </section>
+
+      <!-- ============ STEP 3 COVER · PDF PREVIEW ============ -->
+      <section data-state="coverpdf" data-state-name="3 · Cover letter · PDF preview" class="stack" style="gap:14px" hidden>
+        <div class="pk-head" data-head="coverpdf"></div>
+        <div class="row"><h2 class="step-h">Cover letter</h2><span class="small muted">the exact PDF that gets uploaded</span><span class="spacer"></span>
+          <div class="seg" role="group" aria-label="Cover letter view"><button type="button" aria-pressed="false" data-goto="cover">Edit</button><button type="button" aria-pressed="true">Preview</button></div></div>
+        <div class="cols">
+          <div class="stack">
+            <div class="row small"><span class="chip">1 page</span><span class="muted">Page 1 of 1 · A4</span><span class="spacer"></span>
+              <div class="seg" role="group" aria-label="Zoom"><button type="button" aria-pressed="true" data-zoom="fit">Fit</button><button type="button" aria-pressed="false" data-zoom="100">100%</button></div></div>
+            <div class="a4-scroll">
+              <article class="a4" aria-label="Cover letter PDF preview, page 1 of 1">
+                <div class="a4-in" style="gap:3.4cqw">
+                  <header class="cv-top">
+                    <div class="cv-name">Kris Marinov</div>
+                    <div class="cv-contact">Security Analyst · Sofia, Bulgaria · kris@krisiliev.dev · +359 87 555 0142 · linkedin.com/in/kris-marinov-sec</div>
+                  </header>
+                  <p>11 October 2026</p>
+                  <p style="color:var(--ink)">Hiring team<br>Kestrel Payments<br>Sofia, Bulgaria</p>
+                  <p style="color:var(--ink); font-weight:600">Re: Security Engineer (R-10482)</p>
+                  <div class="cl-body">
+                    <p>Dear Kestrel hiring team,</p>
+                    <p>Kestrel moves money for 12,000 merchants, which means every false alarm in your SOC costs an analyst's time and every missed one can cost a merchant. Telling those two apart is the part of security work I have spent the last two years on, and it is why the Security Engineer role stood out to me.</p>
+                    <p>At Orbital Bank I built 40 Splunk detections for a six-person SOC and cut our false positives by about a third, mostly by rewriting noisy rules around how our staff actually logged in rather than how the vendor templates assumed they did. Triaging around 25 alerts a day taught me which detections earn their place and which only create work. I was also part of the response to three phishing incidents, from the first alert to the write-up.</p>
+                    <p>Your posting mentions moving detection work onto Elastic and hardening the Kubernetes platform. Elastic would be a short step from Splunk for me. Kubernetes security I haven't done in production, and I would want to close that gap early rather than talk around it. The rest of the role, detection engineering, alert tuning and incident write-ups, is work I could pick up in the first month. I would like to hear where the team wants its detections to be a year from now.</p>
+                    <p>Kind regards,<br>Kris Marinov</p>
+                  </div>
+                </div>
+              </article>
+              <p class="a4-cap">Kris_Cover_Letter_Kestrel_Security_Engineer.pdf · 1 page · 41 KB</p>
+            </div>
+          </div>
+          <div class="stack" style="gap:14px">
+            <div class="box">
+              <h3>This file</h3>
+              <p class="small" role="status"><span class="chip ok">✓</span> Fits on 1 page · letterhead matches your CV · fonts embedded</p>
+              <p class="small muted">Draft 2, as edited. Highlights from the editor are not part of the file.</p>
+              <div class="row"><button class="btn" type="button">Download PDF</button><button class="btn ghost sm" type="button" data-goto="cover">‹ Back to edit</button></div>
+            </div>
+          </div>
+        </div>
+        <div class="actions"><button class="btn" type="button" data-goto="cover">Back to edit</button><span class="spacer"></span><button class="btn primary" type="button">Approve and continue</button></div>
       </section>
 
       <!-- ============ STEP 4 SCREENING ============ -->
@@ -254,9 +402,9 @@ legend { font-weight: 600; font-size: 0.9rem; padding: 0; margin-bottom: 6px }
         <div class="cols">
           <div class="stack">
             <div class="row"><h3>What the ATS reads</h3><span class="small muted">parsed text, in reading order</span></div>
-<pre class="parsed" aria-label="Parsed CV text">NAME       Kris
-EMAIL      kris@example.dev
-PHONE      +359 88 000 0000
+<pre class="parsed" aria-label="Parsed CV text">NAME       Kris Marinov
+EMAIL      kris@krisiliev.dev
+PHONE      +359 87 555 0142
 LOCATION   Sofia, Bulgaria
 
 SUMMARY    Security analyst with 3 years in security operations:
@@ -278,7 +426,7 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
             <div class="box">
               <h3>Checks</h3>
               <ul class="checks small">
-                <li><span class="chip ok">Pass</span> Text-based PDF, single column, 2 pages</li>
+                <li><span class="chip ok">Pass</span> Text-based PDF, single column, 1 page</li>
                 <li><span class="chip ok">Pass</span> Name, email, phone, location found</li>
                 <li><span class="chip ok">Pass</span> Education and skills found</li>
                 <li><span class="chip ok">Pass</span> 11 of 13 posting keywords found; missing: Kubernetes, CISSP (deliberate gaps)</li>
@@ -366,7 +514,7 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
             <div class="row"><button class="btn" type="button">Download CV (PDF)</button><button class="btn" type="button">Download cover letter</button></div>
             <dl class="kv">
               <dt>Target posting</dt><dd>kestrel.greenhouse.io · Security Engineer</dd>
-              <dt>CV version</dt><dd>Security · Kestrel · 2 pages · 7 changes from master</dd>
+              <dt>CV version</dt><dd>Security · Kestrel · 1 page · Standard template · 7 changes from master</dd>
               <dt>Cover letter</dt><dd>217 words · draft 2</dd>
               <dt>Screening answers</dt><dd>6 · salary €3,300 gross · 1 rule saved to your answer bank</dd>
               <dt>ATS check</dt><dd>7 of 7 pass</dd>
@@ -394,13 +542,22 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
     <li>Cost is shown per package because there's a hard monthly cap.</li></ul></aside>
   <aside class="notes" data-notes-for="target" hidden><span class="label">Design notes</span><ul>
     <li>Radio cards, all three visible, recommended one pre-selected with its reason. Each option says what you lose by choosing it (Easy Apply loses the tailored CV and the extension).</li>
-    <li>Usually a one-click step; it's still a step because the choice decides which screening questions and which portal the rest of the package is built for.</li></ul></aside>
+    <li>Usually a one-click step; it's still a step because the choice decides which screening questions and which portal the rest of the package is built for.</li>
+    <li>The posting also sets the language. When a posting is written in Bulgarian, the whole package (CV, cover letter and screening answers) is generated in Bulgarian by default, not English with Bulgarian phrases, and you can switch it per package.</li></ul></aside>
   <aside class="notes" data-notes-for="cv" hidden><span class="label">Design notes</span><ul>
     <li>Concept B inside A: each requirement shows the profile evidence and the exact CV line it became. The two flags sit inline under their requirement, in amber boxes, and are also listed at the top with jump links.</li>
     <li>Flag options have no pre-selection on purpose: honesty decisions should be conscious. Each option says how it holds up in an interview, and the "led" option asks for the fact that would justify it.</li>
     <li>Gaps are named, never covered: CISSP is shown as "left out, not claimed"; Kubernetes asks whether you have evidence, and if so it goes into the master profile first, not only this CV.</li>
     <li>Diff vs master profile is a list of discrete edits with an undo each, so every change is auditable and reversible.</li>
     <li>Approve is <code>aria-disabled</code> (still focusable, explains itself) rather than <code>disabled</code>; pressing it gives the Blocked state.</li></ul></aside>
+  <aside class="notes" data-notes-for="cvpdf" hidden><span class="label">Design notes</span><ul>
+    <li>Preview / Changes is a toggle inside the CV step, not a separate step: the review happens in Changes, the preview confirms what that review produced. It shows the wording you chose on each flag.</li>
+    <li>The layout is a fixed, ATS-tested template designed in design step 5 (single column, real text, embedded fonts). The AI only fills content; it never moves blocks, picks fonts or adds columns.</li>
+    <li>One restrained accent: headings and the name in <code>--ink</code>, everything else in body grey. No icons, no skill bars.</li>
+    <li>Photo is off by default and switchable per package ("Standard + photo", suggested for local Bulgarian employers that expect one). The choice is remembered per package, not globally.</li>
+    <li>Language follows the posting (Bulgarian posting → Bulgarian package by default) and can be switched per package here; switching regenerates the CV, letter and screening answers together so they never mix languages.</li>
+    <li>The preview is the exact file that gets uploaded and downloaded, rendered from the same PDF, not an HTML approximation. Fit shows the whole page; 100% scrolls inside the preview, never the page.</li>
+    <li>Warning variant: if content spills onto page 2 the page chip turns amber ("2 pages · 4 lines on page 2") with a banner: "This CV runs onto a second page. Tighten it?" → <i>Shorten the oldest role</i> / <i>Drop the summary's last sentence</i> / <i>Keep 2 pages</i>. Tightening shows as normal edits in Changes, each undoable; it never shrinks the font or margins.</li></ul></aside>
   <aside class="notes" data-notes-for="blocked" hidden><span class="label">Design notes</span><ul>
     <li>Pressing Approve with an open flag moves focus to an alert that names the flag, why it matters and links straight to it; the flag gets a strong outline. Resolved flags turn green and stay visible with what you chose.</li>
     <li>The same rule applies everywhere: editing an approved part later re-opens that step, so the final package can never contain an unresolved flag.</li></ul></aside>
@@ -408,6 +565,12 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
     <li>Editable in place; the word count is always visible against the target. Highlights show which sentences were written for this job versus carried over from your usual letter, so you can check the parts most likely to be wrong.</li>
     <li>"Regenerate with an instruction" keeps the current draft (drafts are paged), so nothing is lost by trying.</li>
     <li>Checks tie back to the CV step's decisions: the letter can't say "led" if the CV says "took part", and the gap you chose to name is named.</li></ul></aside>
+  <aside class="notes" data-notes-for="coverpdf" hidden><span class="label">Design notes</span><ul>
+    <li>Same letterhead as the CV (name and contact line, same type and rule), so the two files read as one set. Date, company address and a "Re:" line with the job ID are filled by the template, not the model.</li>
+    <li>The layout is a fixed, ATS-tested template designed in design step 5 (single column, real text, embedded fonts). The AI only fills content; it never moves blocks, picks fonts or adds columns.</li>
+    <li>One restrained accent: headings and the name in <code>--ink</code>, everything else in body grey. No icons, no skill bars.</li>
+    <li>The preview is the exact file that gets uploaded and downloaded, rendered from the same PDF, not an HTML approximation. Fit shows the whole page; 100% scrolls inside the preview, never the page.</li>
+    <li>Controls are deliberately few: download, back to edit. Wording changes happen in the editor; the "written for Kestrel" highlights never reach the file.</li></ul></aside>
   <aside class="notes" data-notes-for="screening" hidden><span class="label">Design notes</span><ul>
     <li>Questions in the portal's order, each with its origin: Answer bank, adapted (with what changed) or New draft. New company-specific answers are not saved to the bank; reusable ones offer to be.</li>
     <li>Salary is always "Needs you": the range, your floor and your last answer are shown, plus a suggested number. The field type follows the portal (single number).</li>
@@ -438,7 +601,9 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
     target: ["n", "t", "t", "t", "t", "t"],
     cv: ["d", "n!2 flags", "t", "t", "t", "t"],
     blocked: ["d", "n!1 flag", "t", "t", "t", "t"],
+    cvpdf: ["d", "n", "t", "t", "t", "t"],
     cover: ["d", "d", "n", "t", "t", "t"],
+    coverpdf: ["d", "d", "n", "t", "t", "t"],
     screening: ["d", "d", "d", "n!1 needs you", "t", "t"],
     ats: ["d", "d", "d", "d", "n!1 to fix", "t"],
     error: ["d", "d!2 flags", "x!failed", "d", "t", "t"],
@@ -500,7 +665,7 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
     ["Wording", '<del>phishing cases</del> <ins>phishing incidents</ins> · the posting\'s term for the same thing'],
     ["Freelance 2021–2023", 'Shortened from 3 bullets to 1: <del>Built client dashboards…</del> <del>Set up CI…</del>'],
     ["Skills", 'Reordered: <ins>Splunk, Elastic, incident response</ins> first; React and Node.js moved to the end'],
-    ["Layout", 'Projects section dropped to keep 2 pages (still in your master profile)'],
+    ["Layout", 'Projects section dropped to fit 1 page (still in your master profile)'],
   ];
   document.querySelectorAll("[data-diff]").forEach(el => el.innerHTML = diffs.map(([k, v]) =>
     `<div class="ch"><div class="stack" style="gap:2px"><span class="label">${k}</span><p class="small">${v}</p></div><button class="btn ghost sm" type="button">Undo</button></div>`).join(""));
@@ -512,6 +677,13 @@ SKILLS     Splunk, Elastic, incident response, Python, Linux, React, Node.js</pr
   // jump links that switch state (e.g. "Start reviewing" → CV step)
   document.querySelectorAll("[data-goto]").forEach(a => a.addEventListener("click", e => {
     e.preventDefault(); document.querySelector(`.state-tab[data-target="${a.dataset.goto}"]`)?.click();
+  }));
+
+  // PDF preview zoom: Fit scales the page to the column, 100% scrolls inside the preview
+  document.querySelectorAll("[data-zoom]").forEach(b => b.addEventListener("click", () => {
+    const sec = b.closest("[data-state]");
+    sec.querySelectorAll("[data-zoom]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+    sec.querySelector(".a4-scroll").classList.toggle("z100", b.dataset.zoom === "100");
   }));
 
   // budget indicator follows the state

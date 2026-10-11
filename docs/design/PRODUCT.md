@@ -71,8 +71,18 @@ One person: the owner (Kris). Personal tool, never released publicly. No account
 4. **Portal filling:** the extension can fill the main ATS portals (Workday, Greenhouse, Lever, SmartRecruiters, Workable) well enough to beat 10 minutes. Test: 5 real portals early.
 5. **Email matching:** forwarded emails can be matched to the right application automatically. Test: the user's real inbox history.
 
+## Decisions from the wireframe review (2026-10-11)
+
+- **Background work** runs on the laptop first: every 30 minutes, 07:00–23:00, while it's awake, catching up on wake. Move to a small always-on server only if jobs arrive late.
+- **Statuses** gain **Accepted**. Accepting an offer offers to withdraw the other open applications, each with a polite draft the user sends. Declining an offer counts as Withdrawn.
+- **Thank-you notes** are due within 24 hours of the interview time.
+- **Response rate** counts rejections as replies and excludes applications under 14 days old.
+- **Follow-ups** are sent by the user from their own mail; the app learns it via "Mark sent" (optional tip: BCC the job mailbox). iCloud forwards only incoming mail.
+- **Voice**: short excerpts of past letters are sent with each draft (via the pinned non-China hosts); full samples stay on the laptop.
+- **Bulgarian postings** are read directly and shown in English with the original quotes, and the **whole application (CV, cover letter, screening answers) is generated in Bulgarian** by default, switchable per package.
+- **CV design**: a fixed, ATS-tested template designed in step 5; the AI fills content only. Single column, one restrained accent, one page. Photo off by default, switchable per package and suggested for local Bulgarian employers. Package shows the exact PDF before approval.
+- **Extension capture**: click-only capture of a single job page or of a whole search-results page the user is viewing (LinkedIn included; the user accepts the small account risk). The extension never scrolls, pages or opens listings by itself. Email alerts stay a parallel route.
+
 ## Open questions for later steps
 
-- Where background work runs so discovery and email checks happen on schedule (laptop-only, an always-on home machine, or a small server).
 - Exactly how the voice samples and master profile are stored locally.
-- Bulgarian-language postings: translate, or extract directly.
