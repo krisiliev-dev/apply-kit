@@ -56,6 +56,20 @@ Fonts: Bricolage Grotesque and Figtree (the original Vitosha pair) were replaced
 - **Fixed template:** the AI fills content and never changes layout. The cover letter shares the letterhead.
 - **To validate when built:** run the generated PDFs through text extraction (e.g. `pdftotext`) and at least one ATS parser to confirm every field reads correctly, in both languages.
 
+## Rules from the Discover review (2026-10-11)
+
+From the heuristic evaluation and accessibility audit in `critique/`:
+
+- **Gaps are never hidden.** Feed rows always show every gap and every partly-met requirement; only met items may collapse into "+N met". Row counts match the Job page exactly. Preferred items are never gaps.
+- **Every job has a home.** Feed views are New, Saved, All open, and Passed & closed. Hidden jobs are one click away from the toolbar in every state.
+- **The ranking never learns silently.** Every learned adjustment is listed and undoable, why-lines mention it when it changed a rank, and learning options default to off. Pass reasons are never pre-selected.
+- **Nothing closes by itself.** An unusual drop keeps jobs open; after 2 more zero checks the user is asked. Any bulk close states the count and can be undone.
+- **Quiet alerts are flagged.** Email-alert sources learn their usual cadence; more than 3× the usual gap shows "Quiet longer than usual".
+- **Lists don't move under you.** Rows found while you're reading queue behind a "N new jobs found · show" bar.
+- **Keyboard shortcuts are opt-out and scoped.** Single-key shortcuts work only inside the jobs table, use real focus (roving tabindex), and can be turned off.
+- **Async changes are announced** politely (source checks, health, toasts); toasts give at least 10 seconds to undo and move focus sensibly.
+- `--bloom` (light) darkened to `#a33d62` so pink text passes on its soft background (5.0:1).
+
 ## How to use this in later steps
 
 - Hi-fi screens (step 6) apply these tokens to the wireframes in `wireframes/`. Tokens only: no raw hex, no one-off spacing.

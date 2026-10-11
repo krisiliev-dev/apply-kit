@@ -2,6 +2,8 @@
 * { box-sizing: border-box }
 [hidden] { display: none !important }
 html, body { margin: 0 }
+html { scroll-padding-top: 104px }
+@media (max-width: 720px) { html { scroll-padding-top: 168px } }
 body { background: var(--ground); color: var(--ink); font-family: var(--font-text); font-size: var(--fs-body); line-height: var(--lh-body); -webkit-font-smoothing: antialiased }
 h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; margin: 0; line-height: var(--lh-tight) }
 h1 { font-size: var(--fs-h1); font-weight: 700 }
@@ -26,7 +28,7 @@ a { color: var(--action) }
 .nav { display: flex; flex-wrap: wrap; gap: var(--s-2) }
 .nav a { color: var(--ink-2); text-decoration: none; font-weight: 500; font-size: var(--fs-small); padding: var(--s-2) var(--s-4); border-radius: var(--r-pill) }
 .nav a:hover { background: var(--surface-sunken) }
-.nav a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised) }
+.nav a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised) ; outline: 1px solid var(--border-control); outline-offset: -1px }
 .nav .badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; margin-left: var(--s-2); border-radius: var(--r-pill); background: var(--bloom); color: var(--on-action); font-size: 11px; font-weight: 700 }
 .health { display: inline-flex; align-items: center; gap: var(--s-3); font-size: var(--fs-small); color: var(--ink-2); text-decoration: none; padding: var(--s-2) var(--s-4); border-radius: var(--r-pill); border: 1px solid var(--rule); background: var(--surface) }
 .health i { width: 8px; height: 8px; border-radius: 50%; background: var(--met) }
@@ -39,11 +41,11 @@ a { color: var(--action) }
 .page-head .lead { display: grid; gap: var(--s-2) }
 
 /* ---------- panel ---------- */
-.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: var(--s-6); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
+.panel { grid-template-columns: minmax(0, 1fr); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-card); box-shadow: var(--shadow-raised); padding: var(--s-6); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
 .panel.flush { padding: 0; overflow: hidden }
 
 /* ---------- button ---------- */
-.btn { font: inherit; font-size: var(--fs-small); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: var(--s-3); min-height: 36px; padding: 0 var(--s-5); border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; white-space: nowrap; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard) }
+.btn { flex-shrink: 1; max-width: 100%; white-space: normal; font: inherit; font-size: var(--fs-small); font-weight: 600; display: inline-flex; align-items: center; justify-content: center; gap: var(--s-3); min-height: 36px; padding: 0 var(--s-5); border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); cursor: pointer; text-decoration: none; text-align: center; transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard) }
 .btn:hover { border-color: var(--ink-2) }
 .btn.primary { background: var(--action); border-color: var(--action); color: var(--on-action) }
 .btn.primary:hover { background: var(--action-hover); border-color: var(--action-hover) }
@@ -71,7 +73,7 @@ kbd { font-family: var(--font-text); font-size: 11px; font-weight: 600; color: v
 .chips { display: flex; flex-wrap: wrap; gap: var(--s-2) }
 .filter { font: inherit; font-size: var(--fs-small); font-weight: 500; display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-4); border-radius: var(--r-pill); border: 1px solid var(--rule); background: var(--surface); color: var(--ink-2); cursor: pointer }
 .filter[aria-pressed="true"] { background: var(--ink); color: var(--ground); border-color: var(--ink) }
-.filter .n { font-variant-numeric: tabular-nums; color: inherit; opacity: .75 }
+.filter .n { font-variant-numeric: tabular-nums; color: inherit }
 .status { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-caption); font-weight: 600; padding: 1px var(--s-3); border-radius: var(--r-pill); border: 1px solid var(--rule); color: var(--ink-2); background: var(--surface) }
 .status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor }
 .status.applied { color: var(--ink) }
@@ -85,7 +87,7 @@ kbd { font-family: var(--font-text); font-size: 11px; font-weight: 600; color: v
 /* ---------- segmented ---------- */
 .segmented { display: inline-flex; padding: 3px; gap: 2px; background: var(--surface-sunken); border-radius: var(--r-pill) }
 .segmented button { font: inherit; font-size: var(--fs-small); font-weight: 500; border: 0; background: transparent; color: var(--ink-2); padding: var(--s-2) var(--s-4); border-radius: var(--r-pill); cursor: pointer }
-.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised) }
+.segmented button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised) ; outline: 1px solid var(--border-control); outline-offset: -1px }
 
 /* ---------- inputs ---------- */
 .field { display: grid; gap: var(--s-2) }
@@ -93,7 +95,8 @@ kbd { font-family: var(--font-text); font-size: 11px; font-weight: 600; color: v
 .field .help { font-size: var(--fs-caption); color: var(--ink-3) }
 .field .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
 .input { font: inherit; font-size: var(--fs-body); width: 100%; min-height: 40px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink) }
-.input:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 3px var(--met-soft) }
+.input:focus { outline: 2px solid var(--focus); outline-offset: 1px; border-color: var(--focus) }
+.input::placeholder { color: var(--ink-3); opacity: 1 }
 .input[aria-invalid="true"] { border-color: var(--gap); box-shadow: 0 0 0 3px var(--gap-soft) }
 .search { position: relative; min-width: 0 }
 .search svg { position: absolute; left: 12px; top: 50%; translate: 0 -50%; width: 16px; height: 16px; color: var(--ink-3) }
@@ -115,6 +118,8 @@ kbd { font-family: var(--font-text); font-size: 11px; font-weight: 600; color: v
 .empty p { color: var(--ink-2); max-width: 56ch }
 .toast { position: fixed; left: 50%; bottom: calc(var(--s-7) + env(safe-area-inset-bottom, 0px)); translate: -50% 0; z-index: 30; display: inline-flex; align-items: center; gap: var(--s-4); padding: var(--s-3) var(--s-3) var(--s-3) var(--s-5); border-radius: var(--r-pill); background: var(--ink); color: var(--ground); box-shadow: var(--shadow-overlay); font-size: var(--fs-small); max-width: calc(100vw - 32px) }
 .toast .btn.ghost { color: var(--ground) }
+.toast .btn.ghost:hover { background: color-mix(in srgb, var(--ground) 18%, transparent) }
+.toast :focus-visible { outline-color: var(--ground) }
 
 /* ---------- table (feed) ---------- */
 .table-wrap { overflow-x: auto; position: relative }

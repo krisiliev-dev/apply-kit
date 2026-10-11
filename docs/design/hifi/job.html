@@ -12,8 +12,6 @@
 .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-3) }
 .crumbs a { color: var(--ink-2); text-decoration: none; font-weight: 500 }
 .crumbs a:hover { color: var(--action); text-decoration: underline }
-.crumbs .keys { margin-left: auto; display: inline-flex; gap: var(--s-2); align-items: center; font-size: var(--fs-caption) }
-@media (max-width: 520px) { .crumbs .keys { display: none } }
 .job-head { display: grid; gap: var(--s-3) }
 .job-head h1 { overflow-wrap: anywhere }
 .job-head h1 .orig { display: block; margin-top: var(--s-2); font-family: var(--font-text); font-size: var(--fs-title); font-weight: 500; letter-spacing: 0; color: var(--ink-3) }
@@ -51,12 +49,14 @@
 .decide .why-off { font-size: var(--fs-small); color: var(--ink-2) }
 .decide .lang { display: grid; gap: var(--s-3); padding-top: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small) }
 
-/* requirement chips beyond the system set */
-.chip.ask { background: var(--bloom-soft); color: var(--bloom) }
-.chip.closed { background: transparent; color: var(--ink-3); border: 1px solid var(--rule) }
-.chip.target { background: var(--action); color: var(--on-action) }
-.status.rejected { color: var(--ink-3) }
-.status.rejected i { background: transparent; border: 1.5px solid currentColor }
+/* skip link, toast, fit explanation */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.toast .x { min-width: 30px; padding: 0 var(--s-3) }
+.toast .cd { font-variant-numeric: tabular-nums; opacity: .85 }
+.fit-why { display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.fit-why .kv { padding: 0; border: 0 }
+.crumbs .nav-jobs { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center }
 
 /* requirement table */
 .req .ev { color: var(--ink-2); min-width: 22ch }
@@ -137,6 +137,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <div class="review" role="region" aria-label="Hi-fi review controls">
   <span class="label">Hi-fi · Job</span>
   <a href="index.html">All Discover screens</a>
@@ -148,23 +149,23 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
     <nav class="nav" aria-label="Main">
       <a href="feed.html" aria-current="page">Feed</a>
-      <a href="#">Applications<span class="badge" aria-label="4 need you">4</span></a>
-      <a href="#">Profile</a>
+      <a href="#">Applications<span class="badge" aria-hidden="true">4</span><span class="sr-only">, 4 need you</span></a>
+      <a href="../wireframes/profile.html">Profile</a>
       <a href="sources.html">Settings</a>
     </nav>
     <span class="grow"></span>
-    <a class="health" id="health" href="sources.html"><i></i><span>14 sources OK · 07:30</span></a>
+    <a class="health warn" id="health" href="sources.html"><i aria-hidden="true"></i><span>1 source unusual · 07:30</span></a>
   </header>
 
-  <main class="main" id="main">
+  <main class="main" id="main" tabindex="-1">
 
     <!-- ================= NORMAL ================= -->
     <section data-state="normal" data-state-name="Normal" class="stack" style="gap:var(--s-6)">
-      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span><span class="keys"><span>1 of 23 new</span><kbd>J</kbd><kbd>K</kbd> next / previous</span></nav>
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span><span class="nav-jobs"><span class="meta">1 of 23 new</span><a class="btn ghost sm" aria-disabled="true" role="link" aria-describedby="first-why">Previous</a><span id="first-why" class="sr-only">This is the first new job</span><a class="btn sm" href="#">Next job<span class="sr-only">: Full-stack Developer at Brightwave</span></a></span></nav>
       <div class="job-head">
         <h1>Security Engineer</h1>
         <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid, 2 days in office</span><span class="num">€2,800–3,600 gross/month</span><span>Posted 9 Oct, 2 days ago</span></div>
-        <div class="chips"><span class="chip met" data-i="met">Strong fit</span><span class="chip neutral">Security angle</span><span class="chip met" data-i="met">No dealbreakers</span><span class="chip neutral">3 postings merged</span></div>
+        <div class="chips"><span class="chip met" data-i="met">Strong fit</span><span class="chip neutral">Security angle</span><span class="chip met" data-i="met">No dealbreakers</span><span class="chip neutral">Seen in 3 postings</span></div>
       </div>
 
       <div class="cols">
@@ -174,18 +175,30 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
               <div class="fit-num">91<small>fit · #1 today</small></div>
               <div class="verdict">
                 <div class="sec-head"><h2 id="fit-n">Fit check: strong fit</h2><span class="meta">Effort to tailor: low</span></div>
-                <p>4 of 6 requirements met with evidence, no dealbreakers, and the salary floor (€2,800) is above your minimum (€2,300).</p>
+                <p>6 requirements: 4 met with evidence, 1 partly (CISSP, preferred), 1 gap (Kubernetes security). No dealbreakers, and the salary floor (€2,800) is above your minimum (€2,000).</p>
+                <div><button class="btn ghost sm" type="button" data-toggle="fit-why-n" aria-expanded="false" aria-controls="fit-why-n"><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>What makes up 91?</button></div>
+                <div id="fit-why-n" class="fit-why" hidden>
+                  <p class="muted">Fit is how well this job matches your profile and preferences, 0–100. Strong is 85 and up, good 70–84, stretch below 70.</p>
+                  <dl class="kv">
+                    <dt>Requirements</dt><dd>4 of 6 met, 1 partly, 1 gap: the biggest part</dd>
+                    <dt>Angle</dt><dd>Security, a close match for your SOC work</dd>
+                    <dt>Dealbreakers</dt><dd>None apply</dd>
+                    <dt>Location, salary</dt><dd>Sofia hybrid, salary above your minimum</dd>
+                    <dt>Learned adjustments</dt><dd>None affect this job · <a href="../wireframes/profile.html#search">review all 3</a></dd>
+                  </dl>
+                </div>
               </div>
               <dl class="kv">
                 <dt>Closest angle</dt><dd>Security. Your SOC and detection work covers the core of the role. The developer angle would score lower: no coding beyond scripting.</dd>
-                <dt>Gaps</dt><dd><div class="chips"><span class="chip gap" data-i="gap">Kubernetes security</span><span class="chip partly" data-i="partly">CISSP preferred</span></div></dd>
+                <dt>Gaps</dt><dd><div class="chips"><span class="chip gap" data-i="gap" data-sr="missing">Kubernetes security</span></div></dd>
+                <dt>Partly met</dt><dd><div class="chips"><span class="chip partly" data-i="partly" data-sr="partly met">CISSP (preferred, not held)</span></div><span class="meta">Left out, not claimed. Preferred items never count as gaps.</span></dd>
                 <dt>Honest take</dt><dd>Apply. The Kubernetes gap is real: it will be named, not covered up, and you'll be asked about it in the CV step.</dd>
               </dl>
             </div>
           </article>
 
           <div class="panel flush o3">
-            <div class="sec-head"><h2>Requirements</h2><span class="meta">6 found · 4 met · 1 not held · 1 gap</span></div>
+            <div class="sec-head"><h2>Requirements</h2><span class="meta">6 found · 4 met · 1 partly · 1 gap</span></div>
             <div class="table-wrap"><table class="table req" aria-label="Requirements against your master profile"><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead><tbody data-reqs="kestrel"></tbody></table></div>
           </div>
 
@@ -206,11 +219,10 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
         </div>
 
         <div class="col side">
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <a class="btn primary" href="package.html">Prepare package</a>
-            <div class="pair"><button class="btn" type="button" aria-pressed="false" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
+            <div class="pair"><button class="btn" type="button" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
             <p class="meta">English package from your Security angle, submitted through kestrel.greenhouse.io.</p>
-            <p class="meta"><kbd>S</kbd> save · <kbd>X</kbd> pass</p>
           </div>
           <div class="panel o4">
             <div class="sec-head"><h2>Postings</h2><span class="meta">3 merged into this job</span></div>
@@ -228,7 +240,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     <!-- ================= APPLIED BEFORE ================= -->
     <section data-state="applied" data-state-name="Applied before" class="stack" style="gap:var(--s-6)">
       <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span></nav>
-      <div class="banner warning" role="status"><span class="text"><b>You applied to Kestrel Payments 4 months ago.</b> SOC Analyst, applied 3 Jun, rejected 18 Jun after the screening call. This is a different role, so applying again is normal.</span><a class="btn sm" href="#">Open that application</a></div>
+      <div class="banner warning"><span class="text"><b>You applied to Kestrel Payments 4 months ago.</b> SOC Analyst, applied 3 Jun, rejected 18 Jun after the screening call. This is a different role, so applying again is normal.</span><a class="btn sm" href="#">Open that application</a></div>
       <div class="job-head">
         <h1>Security Engineer</h1>
         <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid, 2 days in office</span><span class="num">€2,800–3,600 gross/month</span><span>Posted 9 Oct</span></div>
@@ -252,14 +264,14 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
             </div>
           </article>
           <div class="panel flush o3">
-            <div class="sec-head"><h2>Requirements</h2><span class="meta">4 met · 1 not held · 1 gap</span></div>
+            <div class="sec-head"><h2>Requirements</h2><span class="meta">6 found · 4 met · 1 partly · 1 gap</span></div>
             <div class="table-wrap"><table class="table req" aria-label="Requirements against your master profile"><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead><tbody data-reqs="kestrel"></tbody></table></div>
           </div>
         </div>
         <div class="col side">
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <a class="btn primary" href="package.html">Prepare package</a>
-            <div class="pair"><button class="btn" type="button" aria-pressed="false" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
+            <div class="pair"><button class="btn" type="button" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
             <p class="meta">The cover letter draft will mention your June application.</p>
           </div>
           <div class="panel o4">
@@ -280,7 +292,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     <!-- ================= LOW CONFIDENCE ================= -->
     <section data-state="low-confidence" data-state-name="Partial · low-confidence facts" class="stack" style="gap:var(--s-6)">
       <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span></nav>
-      <div class="needs" role="status"><div><b>2 facts need you</b><div class="meta">The posting is unclear about salary and years. Until you answer, the fit check uses the cautious reading.</div></div><a class="btn" href="#q-salary">Answer now</a></div>
+      <div class="needs"><div><b>2 facts need you</b><div class="meta">The posting is unclear about salary and years. Until you answer, the fit check uses the cautious reading.</div></div><a class="btn" href="#q-salary">Answer now</a></div>
       <div class="job-head">
         <h1>Security Engineer</h1>
         <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid</span><span class="chip ask" data-i="ask">Salary unclear</span><span>Posted 9 Oct</span></div>
@@ -288,7 +300,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
       </div>
       <div class="cols">
         <div class="col">
-          <div class="stack o1" style="gap:var(--s-6)">
+          <div class="stack o3" style="gap:var(--s-6)">
             <form class="panel ask-panel" id="q-salary" aria-labelledby="qs-h" onsubmit="return false">
               <div class="sec-head"><h2 id="qs-h">Salary: couldn't read it reliably</h2><span class="chip ask" data-i="ask">Needs you</span></div>
               <div class="src"><span>"Package: <mark>5.5–7k</mark> + annual bonus, paid monthly."</span><span class="where">kestrel.greenhouse.io, line 41</span></div>
@@ -309,7 +321,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
               <fieldset>
                 <legend>Which one is the requirement?</legend>
                 <label class="opt"><input type="radio" name="yrs" checked><span>3+ required, 5+ preferred<span class="meta">Suggested: the 5+ line sits under "Nice to have"</span></span></label>
-                <label class="opt"><input type="radio" name="yrs"><span>5+ required<span class="meta">This would become a gap for you: you have 3</span></span></label>
+                <label class="opt"><input type="radio" name="yrs"><span>5+ required<span class="meta">This would hide the job: your limit is 4 years, and you have 3</span></span></label>
               </fieldset>
               <div class="row"><button class="btn sm" type="submit">Use this reading</button></div>
             </form>
@@ -320,19 +332,19 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
           </div>
         </div>
         <div class="col side">
-          <article class="panel o2">
+          <article class="panel o1">
             <div class="fitcheck">
               <div class="fit-num provisional">~72<small>fit · #4 today</small></div>
               <div class="verdict">
                 <h2>Fit check: provisional</h2>
-                <p class="mini">Cautious reading: salary not stated, 5+ years required. Even so, it ranks #4.</p>
-                <p class="meta">Answering both would likely make it a strong fit, #1.</p>
+                <p class="mini">Until you answer, it uses the cautious reading: salary not stated, and 3+ years required with 5+ preferred. Fit is how well this job matches your profile and preferences, 0–100.</p>
+                <p class="meta">If 5+ years turned out to be required, the job would be hidden by your 4-year limit. The Feed shows this job as "~72" with "2 facts need you".</p>
               </div>
             </div>
           </article>
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <a class="btn primary" href="package.html">Prepare package</a>
-            <div class="pair"><button class="btn" type="button" aria-pressed="false" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
+            <div class="pair"><button class="btn" type="button" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
             <p class="meta">Not blocked: these answers change ranking, not your CV. An open salary question comes back in the screening answers step.</p>
           </div>
           <div class="panel o4">
@@ -346,20 +358,20 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     <!-- ================= BULGARIAN ================= -->
     <section data-state="bulgarian" data-state-name="Bulgarian posting" class="stack" style="gap:var(--s-6)">
       <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">SOC Analyst L2</span></nav>
-      <div class="banner info" role="status"><span class="text"><b>This posting is in Bulgarian.</b> Requirements and facts were read from the original and are shown in English. Quotes stay in Bulgarian, with a translation under each.</span><button class="btn sm" type="button" data-toggle="orig-bg" aria-expanded="false" aria-controls="orig-bg"><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>View original</button></div>
-      <div id="orig-bg" class="panel" lang="bg" hidden>
-        <p class="meta" lang="en">Original · jobs.bg alert email · Ardent Labs</p>
-        <div class="posting-text">
-          <h3>Анализатор SOC, ниво 2</h3>
-          <p>Търсим анализатор с минимум 2 години опит в SOC среда, работа със SIEM системи и готовност за работа на смени, включително нощни (една седмица от четири).</p>
-          <p>Изисквания: свободно владеене на български език, английски за писане на доклади. Автобиография на български или английски език.</p>
-        </div>
-      </div>
+      <div class="banner info"><span class="text"><b>This posting is in Bulgarian.</b> Requirements and facts were read from the original and are shown in English. Quotes stay in Bulgarian, with a translation under each.</span><button class="btn sm" type="button" data-toggle="orig-bg" aria-expanded="false" aria-controls="orig-bg"><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>View original</button></div>
       <div class="job-head">
         <h1>SOC Analyst L2<span class="orig" lang="bg">Анализатор SOC, ниво 2</span></h1>
         <div class="job-meta"><b>Ardent Labs</b><span>Sofia · on-site</span><span>Salary not stated</span><span>Posted 8 Oct</span></div>
-        <div class="chips"><span class="chip met" data-i="met">Good fit</span><span class="chip neutral">Security angle</span><span class="chip neutral">Bulgarian original</span><span class="chip neutral">1 posting</span></div>
+        <div class="chips"><span class="chip met" data-i="met">Good fit</span><span class="chip neutral">Security angle</span><span class="chip neutral">Bulgarian original</span><span class="chip neutral">Seen in 1 posting</span></div>
       </div>
+      <section id="orig-bg" class="panel" role="region" aria-labelledby="orig-h" hidden>
+        <p class="meta">Original · jobs.bg alert email · Ardent Labs</p>
+        <div class="posting-text" lang="bg">
+          <h2 id="orig-h" style="font-size:var(--fs-body)">Анализатор SOC, ниво 2</h2>
+          <p>Търсим анализатор с минимум 2 години опит в SOC среда, работа със SIEM системи и готовност за работа на смени, включително нощни (една седмица от четири).</p>
+          <p>Изисквания: свободно владеене на български език, английски за писане на доклади. Автобиография на български или английски език.</p>
+        </div>
+      </section>
       <div class="cols">
         <div class="col">
           <article class="panel o1">
@@ -381,18 +393,18 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
           </div>
         </div>
         <div class="col side">
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <a class="btn primary" href="package.html" id="bg-prep">Prepare package in Bulgarian</a>
-            <div class="pair"><button class="btn" type="button" aria-pressed="false" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
+            <div class="pair"><button class="btn" type="button" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
             <div class="lang">
-              <span id="bg-lang-text">The posting is in Bulgarian, so your CV, cover letter and screening answers will be in <b>Bulgarian</b>.</span>
+              <span id="bg-lang-text" aria-live="polite">The posting is in Bulgarian, so your CV, cover letter and screening answers will be in <b>Bulgarian</b>.</span>
               <button class="btn sm" type="button" id="bg-switch">Switch to English</button>
             </div>
           </div>
           <div class="panel o4">
             <div class="sec-head"><h2>Postings</h2><span class="meta">1</span></div>
             <div class="postings">
-              <div class="posting target"><div class="row"><span class="name">jobs.bg alert email</span><span class="chip target" data-i="target">Target posting</span></div><span class="note">Target by default: Ardent has no careers page in your sources.</span><div class="row acts"><a class="btn ghost sm" href="#">Open ↗</a></div></div>
+              <div class="posting target"><div class="row"><span class="name">jobs.bg alert email</span><span class="chip target" data-i="target">Target posting</span></div><span class="note">Target by default: Ardent has no careers page in your sources.</span><div class="row acts"><a class="btn ghost sm" href="#">Open<span class="sr-only"> the jobs.bg alert email</span><span aria-hidden="true"> ↗</span></a></div></div>
             </div>
           </div>
         </div>
@@ -402,7 +414,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     <!-- ================= CLOSED ================= -->
     <section data-state="closed" data-state-name="Closed" class="stack" style="gap:var(--s-6)">
       <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span></nav>
-      <div class="banner info" role="status"><span class="text"><b>This job closed on 10 Oct.</b> kestrel.greenhouse.io stopped listing it at the 07:30 check and dev.bg marked it expired. It stays here so nothing you saved or noted is lost.</span></div>
+      <div class="banner info"><span class="text"><b>This job closed on 10 Oct.</b> kestrel.greenhouse.io stopped listing it at the 07:30 check and dev.bg marked it expired. It stays here so nothing you saved or noted is lost, and you can find it later in <a href="feed.html#passed">Feed › Passed &amp; closed</a>.</span></div>
       <div class="job-head">
         <h1>Security Engineer</h1>
         <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid</span><span class="num">€2,800–3,600 gross/month</span><span>Open 9–10 Oct</span></div>
@@ -420,15 +432,15 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
           </div>
         </div>
         <div class="col side">
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <button class="btn primary" type="button" disabled aria-describedby="closed-why">Prepare package</button>
             <p class="why-off" id="closed-why">Can't prepare a package: the target posting no longer accepts applications. The LinkedIn copy links to the same closed form.</p>
-            <button class="btn ghost" type="button">It's still open: reopen</button>
+            <button class="btn ghost" type="button" id="reopen">It's still open: reopen</button>
           </div>
           <div class="panel o4">
             <h2>Hear about the next one</h2>
-            <label class="check"><input type="checkbox" checked> Put new Kestrel security jobs at the top of the Feed</label>
-            <p class="meta">Kestrel is already on your watchlist. This only boosts its security roles.</p>
+            <label class="check"><input type="checkbox" id="boost"> Boost new Kestrel security jobs in the Feed</label>
+            <p class="meta">Off unless you turn it on. Kestrel is already on your watchlist, and its new jobs reach the Feed either way. A boost is listed under <a href="../wireframes/profile.html#search">Profile › Dealbreakers &amp; search</a>, where you can undo it, and why-lines say when it moved a job.</p>
           </div>
           <div class="panel o4">
             <div class="sec-head"><h2>Postings</h2><span class="meta">3, all closed</span></div>
@@ -439,24 +451,24 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     </section>
 
     <!-- ================= LOADING ================= -->
-    <section data-state="loading" data-state-name="Loading · reading posting" class="stack" style="gap:var(--s-6)" aria-busy="true">
+    <section data-state="loading" data-state-name="Loading · reading posting" class="stack" style="gap:var(--s-6)">
       <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span></nav>
       <div class="job-head">
         <h1>Security Engineer</h1>
-        <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid</span><span class="skel w40" style="display:inline-block;width:140px;align-self:center" aria-label="Salary loading"></span><span>Posted 9 Oct</span></div>
-        <div class="chips"><span class="chip neutral">3 postings merged</span></div>
+        <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid</span><span class="skel w40" style="display:inline-block;width:140px;align-self:center" aria-hidden="true"></span><span class="sr-only">Salary loading</span><span>Posted 9 Oct</span></div>
+        <div class="chips"><span class="chip neutral">Seen in 3 postings</span></div>
       </div>
       <div class="cols">
         <div class="col">
           <div class="panel o1" role="status" aria-live="polite">
             <div class="sec-head"><h2>Reading the posting</h2><span class="grow"></span><span class="meta">Usually 5–10 seconds</span></div>
             <ol class="steps">
-              <li class="done"><span class="ic" data-i-raw="met"></span>Fetched 3 postings and chose the target posting</li>
-              <li class="now"><span class="ic"><span class="spin" aria-hidden="true"></span></span>Pulling out requirements and key facts</li>
-              <li class="next"><span class="ic" aria-hidden="true"></span>Comparing against your master profile for the fit check</li>
+              <li class="done"><span class="ic" data-i-raw="met"></span><span class="sr-only">Done: </span>Fetched 3 postings and chose the target posting</li>
+              <li class="now" aria-current="step"><span class="ic"><span class="spin" aria-hidden="true"></span></span><span class="sr-only">In progress: </span>Pulling out requirements and key facts</li>
+              <li class="next"><span class="ic" aria-hidden="true"></span><span class="sr-only">Next: </span>Comparing against your master profile for the fit check</li>
             </ol>
           </div>
-          <div class="panel flush o3" aria-hidden="true">
+          <div class="panel flush o3" aria-hidden="true" aria-busy="true">
             <div class="sec-head"><h2>Requirements</h2></div>
             <div class="table-wrap"><table class="table req"><thead><tr><th>Requirement</th><th>Asked as</th><th>You</th><th>Evidence in your master profile</th></tr></thead><tbody>
               <tr><td><span class="skel w80"></span></td><td><span class="skel w60"></span></td><td><span class="skel w40"></span></td><td><span class="skel w90"></span></td></tr>
@@ -464,13 +476,13 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
               <tr><td><span class="skel w80"></span></td><td><span class="skel w40"></span></td><td><span class="skel w40"></span></td><td><span class="skel w60"></span></td></tr>
             </tbody></table></div>
           </div>
-          <div class="panel o3" aria-hidden="true"><span class="skel w30"></span><span class="skel w90"></span><span class="skel w80"></span></div>
+          <div class="panel o3" aria-hidden="true" aria-busy="true"><span class="skel w30"></span><span class="skel w90"></span><span class="skel w80"></span></div>
         </div>
         <div class="col side">
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <button class="btn primary" type="button" disabled aria-describedby="load-why">Prepare package</button>
             <p class="why-off" id="load-why">Unlocks once the requirements are read. Save and Pass work now.</p>
-            <div class="pair"><button class="btn" type="button" aria-pressed="false" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
+            <div class="pair"><button class="btn" type="button" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
           </div>
           <div class="panel o4">
             <div class="sec-head"><h2>Postings</h2><span class="meta">3 merged</span></div>
@@ -483,11 +495,11 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     <!-- ================= ERROR ================= -->
     <section data-state="error" data-state-name="Error · couldn't read" class="stack" style="gap:var(--s-6)">
       <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><span aria-current="page">Security Engineer</span></nav>
-      <div class="banner error" role="alert"><span class="text"><b>Couldn't read this posting's requirements.</b> The model didn't answer within 60 seconds (OpenRouter timeout). The posting itself is saved, nothing was lost.</span><button class="btn sm" type="button">Try again</button></div>
+      <div class="banner error"><span class="text"><b>Couldn't read this posting's requirements.</b> The model didn't answer within 60 seconds (OpenRouter timeout). The posting itself is saved, nothing was lost.</span><button class="btn sm" type="button" id="try-again">Try again</button></div>
       <div class="job-head">
         <h1>Security Engineer</h1>
         <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid</span><span>Posted 9 Oct</span></div>
-        <div class="chips"><span class="chip neutral">Fit check not run</span><span class="chip neutral">3 postings merged</span></div>
+        <div class="chips"><span class="chip neutral">Fit check not run</span><span class="chip neutral">Seen in 3 postings</span></div>
       </div>
       <div class="cols">
         <div class="col">
@@ -497,10 +509,10 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
           </div>
         </div>
         <div class="col side">
-          <div class="panel decide o2" aria-label="Decide">
+          <div class="panel decide o2" role="group" aria-label="Decide">
             <button class="btn primary" type="button" disabled aria-describedby="err-why">Prepare package</button>
-            <p class="why-off" id="err-why">A package needs the requirements first. Save the job and it's retried automatically at the next check, 08:00.</p>
-            <div class="pair"><button class="btn" type="button" aria-pressed="false" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
+            <p class="why-off" id="err-why">A package needs the requirements first. Reading is retried automatically at the next check, 08:00, whether you save the job or not. Until then the Feed pins it at the top as "Not read yet".</p>
+            <div class="pair"><button class="btn" type="button" data-save>Save</button><button class="btn ghost" type="button" data-go="pass">Pass…</button></div>
           </div>
           <div class="panel o4">
             <div class="sec-head"><h2>Postings</h2><span class="meta">3 merged</span></div>
@@ -518,24 +530,26 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
         <div class="job-meta"><b>Kestrel Payments</b><span>Sofia · hybrid</span><span class="num">€2,800–3,600 gross/month</span></div>
       </div>
       <form class="panel pass-form" aria-labelledby="pass-h" id="pass-form">
-        <div class="stack"><h2 id="pass-h">Pass on this job</h2><p class="muted mini">The reason trains the ranking. The job moves to Passed, it's never deleted.</p></div>
+        <div class="stack"><h2 id="pass-h">Pass on this job</h2><p class="muted mini">The job moves to <a href="feed.html#passed">Feed › Passed &amp; closed</a>, with your reason. It's never deleted, and you can undo it there. The reason changes the ranking only if you tick the box below.</p></div>
         <fieldset>
-          <legend>Why?</legend>
-          <label class="opt"><input type="radio" name="why" checked><span>Skills gap too big<span class="meta">Kubernetes security</span></span></label>
+          <legend>Why? <span class="meta" style="font-weight:400">(optional)</span></legend>
+          <label class="opt"><input type="radio" name="why"><span>Skills gap too big<span class="meta">This job's gap: Kubernetes security</span></span></label>
           <label class="opt"><input type="radio" name="why"><span>Salary too low</span></label>
           <label class="opt"><input type="radio" name="why"><span>Location or remote rules</span></label>
           <label class="opt"><input type="radio" name="why"><span>Not interested in this company</span></label>
           <label class="opt"><input type="radio" name="why"><span>Other</span></label>
         </fieldset>
         <div class="field"><label for="pass-note">Note <span class="meta">(optional)</span></label><input class="input" type="text" id="pass-note" placeholder="For example: revisit after the CKS course"></div>
-        <label class="check"><input type="checkbox"> Rank jobs that need Kubernetes security lower from now on</label>
-        <div class="row"><button class="btn primary" type="submit">Pass</button><button class="btn ghost" type="button" data-go="normal">Cancel</button><span class="grow"></span><span class="meta"><kbd>X</kbd> opens this · <kbd>Esc</kbd> cancels</span></div>
+        <div class="field"><label class="check"><input type="checkbox" id="learn" aria-describedby="learn-help"> Rank jobs that need Kubernetes security lower from now on</label><span class="help" id="learn-help">Off unless you tick it. If you do, it's listed under Profile › Dealbreakers &amp; search, where you can undo it, and why-lines say when it moved a job.</span></div>
+        <div class="row"><button class="btn primary" type="submit">Pass</button><button class="btn ghost" type="button" data-go="normal">Cancel</button><span class="grow"></span><span class="meta"><kbd>Esc</kbd> cancels</span></div>
       </form>
-      <p class="meta">After passing, a toast says "Passed · Security Engineer at Kestrel" with Undo, and the next job opens.</p>
-      <div class="toast" role="status" id="pass-toast" hidden>Passed · Security Engineer at Kestrel <button class="btn ghost sm" type="button" id="undo">Undo</button></div>
+      <p class="meta">After passing, the next job opens with focus on its title (in this prototype, SOC Analyst L2), and a toast offers Undo for 15 seconds, with a countdown that pauses while you hover or focus it.</p>
     </section>
   </main>
 </div>
+
+<div id="toast-host" role="status" aria-live="polite"></div>
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
 
 <script>
 (function () {
@@ -549,10 +563,11 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     target: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" stroke-width="1.4"/><circle cx="6" cy="6" r="1.7" fill="currentColor"/></svg>',
   };
   const chev = '<svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
-  const chip = (k, l) => `<span class="chip ${k}">${icon[k] || ""}${l}</span>`;
+  const srState = { met: "met", partly: "partly met", gap: "missing", ask: "needs you" };
+  const chip = (k, l, sr) => `<span class="chip ${k}">${icon[k] || ""}${l}${sr && srState[k] ? `<span class="sr-only">, ${srState[k]}</span>` : ""}</span>`;
 
   // static chips get their state icon
-  document.querySelectorAll("[data-i]").forEach(el => el.insertAdjacentHTML("afterbegin", icon[el.dataset.i]));
+  document.querySelectorAll("[data-i]").forEach(el => { el.insertAdjacentHTML("afterbegin", icon[el.dataset.i]); if (el.dataset.sr) el.insertAdjacentHTML("beforeend", `<span class="sr-only">, ${el.dataset.sr}</span>`); });
   document.querySelectorAll("[data-i-raw]").forEach(el => el.innerHTML = icon[el.dataset.iRaw]);
 
   // requirements
@@ -562,7 +577,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
       ["SIEM: Splunk or Elastic", "Required", "met", "Met", "Built 40 Splunk detections, false positives down by about a third"],
       ["Incident response", "Required", "met", "Met", "Part of the response to 3 phishing incidents"],
       ["Kubernetes security", "Required", "gap", "Gap", "No evidence in your master profile"],
-      ["CISSP", "Preferred", "partly", "Not held", "Left out, not claimed. Preferred items never count as gaps"],
+      ["CISSP", "Preferred", "partly", "Partly: not held", "Left out, not claimed. Preferred items never count as gaps"],
       ["English, professional", "Required", "met", "Met", "English C1 · all work at Orbital Bank in English"],
     ],
     ardent: [
@@ -572,7 +587,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
       ["Night shifts", "Required", "partly", "Partly", "Not one of your dealbreakers, but you haven't worked nights"],
     ],
   };
-  reqs["kestrel-low"] = reqs.kestrel.map((r, i) => i === 0 ? ["3+ or 5+ years in security operations?", "Unclear", "ask", "Needs you", "You have 3 years: met at 3+, a gap at 5+"] : r);
+  reqs["kestrel-low"] = reqs.kestrel.map((r, i) => i === 0 ? ["3+ or 5+ years in security operations?", "Unclear", "ask", "Needs you", "You have 3 years: met at 3+. At 5+ required, your 4-year limit would hide the job"] : r);
   document.querySelectorAll("[data-reqs]").forEach(tb => tb.innerHTML = reqs[tb.dataset.reqs].map(r =>
     `<tr${r[2] === "ask" ? ' class="is-ask"' : ""}><td>${r[0]}</td><td class="asked">${r[1]}</td><td>${chip(r[2], r[3])}</td><td class="ev">${r[4]}</td></tr>`).join(""));
 
@@ -580,8 +595,8 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
   document.querySelectorAll('[data-deal="kestrel"]').forEach(ul => ul.innerHTML = [
     ["Location", "Sofia, hybrid: your first-priority area"],
     ["Language", "English only"],
-    ["Years asked", "3+, under your 5-year cut-off"],
-    ["Salary", "€2,800 floor, above your €2,300 minimum"],
+    ["Years asked", "3+, within your limit (hidden above 4 years)"],
+    ["Salary", "€2,800 floor, above your €2,000 minimum"],
     ["Work authorisation", "Right to work in Bulgaria: you're an EU citizen"],
   ].map(([k, v]) => `<li>${chip("met", "OK")}<b>${k}</b><span>${v}</span></li>`).join(""));
 
@@ -607,7 +622,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     dl.innerHTML = facts[dl.dataset.facts].map((f, i) => {
       const id = `fact-${dl.dataset.prefix}-${i}`;
       const quote = bg ? `<span lang="bg">${f[2][0]}</span><span class="tr">${f[2][1]}</span>` : `<span>${f[2][0]}</span>`;
-      return `<div class="fact"><dt>${f[0]}</dt><dd>${f[1]}</dd><dd><button class="btn ghost sm" type="button" data-toggle="${id}" aria-expanded="${!!f[4]}" aria-controls="${id}">${chev}Show where</button></dd>
+      return `<div class="fact"><dt>${f[0]}</dt><dd>${f[1]}</dd><dd><button class="btn ghost sm" type="button" data-toggle="${id}" aria-expanded="${!!f[4]}" aria-controls="${id}">${chev}Show where<span class="sr-only">: ${f[0]}</span></button></dd>
         <div id="${id}" class="src"${f[4] ? "" : " hidden"}>${quote}<span class="where">${f[3]}</span></div></div>`;
     }).join("");
   });
@@ -628,7 +643,7 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
   document.querySelectorAll("[data-postings]").forEach(el => el.innerHTML = postings[el.dataset.postings].map(p =>
     `<div class="posting${p[3] ? " target" : ""}"><div class="row"><span class="name">${p[0]}</span>${p[3] ? chip("target", "Target posting") : ""}${p[4] ? chip("closed", p[4]) : ""}</div>
      <span class="meta">${p[1]}</span>${p[2] ? `<span class="note">${p[2]}</span>` : ""}
-     <div class="row acts">${p[3] || p[4] ? "" : '<button class="btn ghost sm" type="button">Make target</button>'}<a class="btn ghost sm" href="#">Open ↗</a></div></div>`).join(""));
+     <div class="row acts">${p[3] || p[4] ? "" : `<button class="btn ghost sm" type="button">Make target<span class="sr-only">: ${p[0]}</span></button>`}<a class="btn ghost sm" href="#">Open<span class="sr-only"> ${p[0]} posting</span><span aria-hidden="true"> ↗</span></a></div></div>`).join(""));
 
   // full posting text (fictional)
   const text = `<p>Kestrel's security team protects payment flows for 12,000 merchants across South-East Europe. We're a team of seven in Sofia, working closely with platform and fraud engineering.</p>
@@ -647,16 +662,16 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
   const label = { met: "met", partly: "partly met", gap: "missing" };
   document.querySelectorAll("[data-similar]").forEach(tb => tb.innerHTML = similar.map(s =>
     `<tr><td><a class="t" href="#bulgarian" data-go="${s[0] === "SOC Analyst L2" ? "bulgarian" : "normal"}">${s[0]}</a><span class="co">${s[1]}</span><div class="why">${s[2]}</div></td><td>${s[3]}</td>
-     <td><div class="chips">${s[4].map(([l, k]) => `<span class="chip ${k}" title="${label[k]}">${icon[k]}${l}<span class="sr-only">, ${label[k]}</span></span>`).join("")}</div></td><td class="num">${s[5]}</td><td class="fit">${s[6]}<small>fit</small></td></tr>`).join(""));
+     <td><div class="chips">${s[4].map(([l, k]) => `<span class="chip ${k}">${icon[k]}${l}<span class="sr-only">, ${label[k]}</span></span>`).join("")}</div></td><td class="num">${s[5]}</td><td class="fit">${s[6]}<small>fit</small></td></tr>`).join(""));
 
   // toggles (Show where, full posting, view original)
   document.addEventListener("click", e => {
     const t = e.target.closest("[data-toggle]");
     if (t) { const el = document.getElementById(t.dataset.toggle); el.hidden = !el.hidden; t.setAttribute("aria-expanded", String(!el.hidden)); return; }
     const s = e.target.closest("[data-save]");
-    if (s) { const on = s.getAttribute("aria-pressed") !== "true"; s.setAttribute("aria-pressed", String(on)); s.textContent = on ? "Saved" : "Save"; return; }
+    if (s) { const on = s.textContent !== "Saved"; s.textContent = on ? "Saved" : "Save"; announce(on ? "Saved. It's in Feed › Saved." : "No longer saved."); return; }
     const g = e.target.closest("[data-go]");
-    if (g) { e.preventDefault(); show(g.dataset.go); window.scrollTo(0, 0); }
+    if (g) { e.preventDefault(); show(g.dataset.go); window.scrollTo(0, 0); focusH1(g.dataset.go); }
   });
 
   // Bulgarian package language switch
@@ -668,10 +683,34 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
     sw.textContent = bgLang ? "Switch to English" : "Switch back to Bulgarian";
   });
 
-  // pass toast
-  const toast = document.getElementById("pass-toast");
-  document.getElementById("pass-form").addEventListener("submit", e => { e.preventDefault(); toast.hidden = false; });
-  document.getElementById("undo").addEventListener("click", () => toast.hidden = true);
+  // announcements and toast: one always-present polite region; Undo for 15 s with a visible countdown, paused on hover or focus
+  const live = document.getElementById("live"), host = document.getElementById("toast-host");
+  const announce = msg => { live.textContent = ""; setTimeout(() => live.textContent = msg, 60); };
+  let tTimer = null, tLeft = 0, tPaused = false, tReturn = null;
+  const closeToast = () => { clearInterval(tTimer); const had = host.contains(document.activeElement); host.innerHTML = ""; if (had && tReturn && document.contains(tReturn)) tReturn.focus(); };
+  const toast = (msg, undo, ret) => {
+    clearInterval(tTimer); tReturn = ret || null;
+    host.innerHTML = `<div class="toast"><span>${msg}</span>${undo ? '<button class="btn ghost sm" type="button" data-undo>Undo<span class="cd" aria-hidden="true"> · 15 s</span></button>' : ""}<button class="btn ghost sm x" type="button" data-dismiss aria-label="Dismiss">✕</button></div>`;
+    const t = host.firstElementChild; tLeft = undo ? 15 : 6; tPaused = false;
+    t.addEventListener("mouseenter", () => tPaused = true); t.addEventListener("mouseleave", () => tPaused = t.contains(document.activeElement));
+    t.addEventListener("focusin", () => tPaused = true); t.addEventListener("focusout", e => { if (!t.contains(e.relatedTarget)) tPaused = t.matches(":hover"); });
+    if (undo) t.querySelector("[data-undo]").addEventListener("click", () => { closeToast(); undo(); });
+    t.querySelector("[data-dismiss]").addEventListener("click", closeToast);
+    tTimer = setInterval(() => { if (tPaused) return; tLeft--; const cd = t.querySelector(".cd"); if (cd) cd.textContent = ` · ${tLeft} s`; if (tLeft <= 0) closeToast(); }, 1000);
+  };
+  const focusH1 = id => { const h = document.querySelector(`[data-state="${id}"] h1`); if (h) { h.tabIndex = -1; h.focus(); } };
+
+  // pass: the next job opens with focus on its title, and the toast offers Undo
+  document.getElementById("pass-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const learned = document.getElementById("learn").checked;
+    show("bulgarian"); window.scrollTo(0, 0); focusH1("bulgarian");
+    toast(`Passed · Security Engineer at Kestrel${learned ? ". Kubernetes jobs will rank lower" : ""}. Next: SOC Analyst L2.`, () => { show("normal"); focusH1("normal"); announce("Pass undone. Security Engineer is back in New."); }, document.querySelector('[data-state="bulgarian"] h1'));
+  });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !document.querySelector('[data-state="pass"]').hidden && !host.contains(e.target)) { show("normal"); focusH1("normal"); } });
+  document.getElementById("try-again").addEventListener("click", () => { announce("Reading the posting again…"); setTimeout(() => announce("Still no answer from the model. It's retried at 08:00."), 1500); });
+  document.getElementById("reopen").addEventListener("click", e => toast("Reopened · Security Engineer at Kestrel. It's back in All open.", () => announce("Undone. The job is closed again."), e.currentTarget));
+  document.getElementById("boost").addEventListener("change", e => announce(e.target.checked ? "Boost on. Listed under Profile, Dealbreakers and search." : "Boost off."));
 
   // review state switcher
   const states = [...document.querySelectorAll("[data-state]")], bar = document.querySelector(".review .states"), health = document.getElementById("health");
@@ -679,11 +718,11 @@ legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom
   const show = id => {
     states.forEach(s => s.hidden = s.dataset.state !== id);
     bar.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === id)));
-    const [cls, txt] = healthFor[id] || ["", "14 sources OK · 07:30"];
+    const [cls, txt] = healthFor[id] || ["warn", "1 source unusual · 07:30"];
     health.className = "health " + cls; health.querySelector("span").textContent = txt;
-    if (id !== "pass") toast.hidden = true;
   };
-  states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => show(s.dataset.state); bar.appendChild(b); });
+  states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => { closeToast(); show(s.dataset.state); }; bar.appendChild(b); });
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (states.some(s => s.dataset.state === h)) { show(h); window.scrollTo(0, 0); } });
   show(states.some(s => s.dataset.state === location.hash.slice(1)) ? location.hash.slice(1) : "normal");
 })();
 </script>

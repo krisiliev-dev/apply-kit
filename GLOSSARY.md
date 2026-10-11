@@ -46,6 +46,10 @@ _Avoid_: Filtered out, rejected, removed
 The quick verdict on a job: closest angle, dealbreakers and gaps.
 _Avoid_: Score, match rating
 
+**Fit**:
+A 0–100 number for how well a job matches the user's profile and preferences, always shown with the reasons behind it; it orders the feed.
+_Avoid_: Score, match %, rating
+
 ## Preparing
 
 **Master profile**:

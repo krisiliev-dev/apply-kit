@@ -8,17 +8,75 @@
 <link rel="stylesheet" href="../tokens.css">
 <link rel="stylesheet" href="../components.css">
 <style>
+/* page-local layout for the Feed: tokens only */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
 .toolbar .sep { width: 1px; height: 22px; background: var(--rule) }
+.toolbar .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
+.toolbar .segmented button { white-space: nowrap }
+.toolbar .end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-left: auto }
+.filter.set { background: var(--ink); color: var(--ground); border-color: var(--ink) }
+.filter .n { font-weight: 600 }
+.rank-link { font-size: var(--fs-small); font-weight: 500 }
+.pop-wrap { position: relative }
+.pop { position: absolute; z-index: 20; top: calc(100% + var(--s-2)); left: 0; min-width: 190px; max-width: calc(100vw - 2 * var(--s-5)); display: grid; gap: var(--s-1); padding: var(--s-2); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); box-shadow: var(--shadow-overlay) }
+.pop.end-align { left: auto; right: 0 }
+.pop button { font: inherit; font-size: var(--fs-small); text-align: left; padding: var(--s-3) var(--s-4); border: 0; background: transparent; color: var(--ink); border-radius: var(--r-small); cursor: pointer; display: flex; gap: var(--s-3); align-items: center }
+.pop button:hover { background: var(--surface-sunken) }
+.pop button svg { width: 12px; height: 12px; visibility: hidden; color: var(--action) }
+.pop button[aria-pressed="true"] { font-weight: 600 }
+.pop button[aria-pressed="true"] svg { visibility: visible }
+.active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-2) }
+.rm { font: inherit; font-size: var(--fs-small); font-weight: 500; display: inline-flex; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-4); border-radius: var(--r-pill); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); cursor: pointer }
+.rm:hover { border-color: var(--ink-2) }
+
+.hint { align-items: center }
 .bulk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--surface); font-size: var(--fs-small); color: var(--ink-2) }
 .bulk .keys { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; font-size: var(--fs-caption) }
+.linkish { font: inherit; background: none; border: 0; padding: 0 var(--s-1); color: var(--action); text-decoration: underline; cursor: pointer; font-weight: 600 }
+.queue { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--met-soft); color: var(--met); font-size: var(--fs-small); font-weight: 600 }
 .foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small); color: var(--ink-2) }
-.foot .pager { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s-3) }
-.progress-head { display: grid; gap: var(--s-3) }
+.foot .grow { flex: 1 1 auto }
 .mark { color: var(--action) }
+
+/* job rows: two-line titles, real focus, hover actions */
+.jobs .t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 52ch }
+.jobs tbody tr[data-id]:focus-within td { background: var(--met-soft) }
+.jobs tbody tr[data-id]:focus-within td:first-child { box-shadow: inset 3px 0 0 var(--action) }
+.jobs tbody tr[data-id]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
+.jobs tr.group th { background: var(--surface-sunken); color: var(--ink-2); font-weight: 600; text-align: left }
+.jobs .saved-chip { margin-left: var(--s-2); vertical-align: 1px }
+.why-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4) }
+.row-acts { display: flex; gap: var(--s-2) }
+@media (hover: hover) and (min-width: 761px) {
+  .why-row { flex-wrap: nowrap; align-items: flex-start }
+  .why-row .why { flex: 1 1 auto; min-width: 0 }
+  .row-acts { flex: none; opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard) }
+  .jobs tbody tr:hover .row-acts, .jobs tbody tr:focus-within .row-acts { opacity: 1 }
+}
+.fit-h .fit-hw { display: inline-flex; align-items: center; gap: var(--s-2); position: relative }
+.fit-h .info { font: inherit; font-size: 11px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-control); background: var(--surface); color: var(--ink-2); cursor: help; display: inline-grid; place-items: center; padding: 0 }
+.tip { display: none; position: absolute; right: 0; top: calc(100% + var(--s-3)); z-index: 5; width: 240px; max-width: 70vw; white-space: normal; text-align: left; font-size: var(--fs-caption); font-weight: 400; line-height: var(--lh-snug); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-small); padding: var(--s-3) var(--s-4); box-shadow: var(--shadow-overlay) }
+.fit-h .info:hover + .tip, .fit-h .info:focus-visible + .tip, .tip.open { display: block }
+.fit.provisional { color: var(--ink-3) }
+.narrow { display: none }
+@media (max-width: 760px) {
+  .jobs .wide { display: none }
+  .jobs .narrow { display: block }
+  .jobs .narrow.chips { display: flex; margin: var(--s-2) 0 var(--s-1) }
+}
+.status-line { font-size: var(--fs-small); color: var(--ink-2) }
+.reason { color: var(--ink-2) }
+.learned { display: block; margin-top: var(--s-1); font-size: var(--fs-caption); color: var(--ink-3) }
+.progress-head { display: grid; gap: var(--s-3) }
+.toast .x { min-width: 30px; padding: 0 var(--s-3) }
+.toast .cd { font-variant-numeric: tabular-nums; opacity: .85 }
+.empty h1 { font-size: var(--fs-h3) }
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <div class="review" role="region" aria-label="Hi-fi review controls">
   <span class="label">Hi-fi · Feed</span>
   <a href="index.html">All Discover screens</a>
@@ -30,155 +88,447 @@
     <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
     <nav class="nav" aria-label="Main">
       <a href="feed.html" aria-current="page">Feed</a>
-      <a href="#">Applications<span class="badge" aria-label="4 need you">4</span></a>
-      <a href="#">Profile</a>
+      <a href="#">Applications<span class="badge" aria-hidden="true">4</span><span class="sr-only">, 4 need you</span></a>
+      <a href="../wireframes/profile.html">Profile</a>
       <a href="sources.html">Settings</a>
     </nav>
     <span class="grow"></span>
-    <a class="health" id="health" href="sources.html"><i></i><span>14 sources OK · 07:30</span></a>
+    <a class="health" id="health" href="sources.html"><i aria-hidden="true"></i><span>1 source unusual · 07:30</span></a>
   </header>
 
-  <main class="main" id="main">
+  <main class="main" id="main" tabindex="-1">
 
     <!-- NORMAL -->
     <section data-state="normal" data-state-name="Normal" class="stack" style="gap:var(--s-6)">
       <div class="page-head">
-        <div class="lead"><h1>23 new since yesterday</h1><p class="meta">143 open jobs across 14 sources · sorted by fit</p></div>
+        <div class="lead"><h1>23 new since yesterday</h1><p class="meta">30 found since yesterday: 23 new here, 7 hidden by your dealbreakers · 143 open across 14 sources · sorted by fit</p></div>
         <span class="grow"></span>
-        <div class="search" style="width:min(320px,100%)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m11 11 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input class="input" type="search" id="q1" placeholder="Search title, company or skill" aria-label="Search jobs"></div>
+        <div class="search" style="width:min(320px,100%)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m11 11 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input class="input" type="search" id="q1" name="q" autocomplete="off" placeholder="Search title, company or skill…" aria-label="Search jobs"></div>
       </div>
-      <div class="toolbar">
-        <div class="segmented" role="group" aria-label="Show"><button aria-pressed="true">New <span class="num">23</span></button><button aria-pressed="false">Saved <span class="num">6</span></button><button aria-pressed="false">All open <span class="num">143</span></button></div>
-        <span class="sep" aria-hidden="true"></span>
-        <button class="filter" aria-pressed="false">Angle: all ▾</button>
-        <button class="filter" aria-pressed="true">Sofia + Remote EU</button>
-        <button class="filter" aria-pressed="false">Relocation</button>
-        <span class="grow"></span>
-        <button class="filter" aria-pressed="false">Sort: best fit ▾</button>
-      </div>
-      <div class="panel flush">
-        <div class="bulk" id="bulk1"><span id="selCount">Select jobs to save or pass several at once</span><button class="btn sm" disabled>Save</button><button class="btn sm" disabled>Pass…</button><span class="keys"><kbd>J</kbd><kbd>K</kbd> move <kbd>Enter</kbd> open <kbd>S</kbd> save <kbd>X</kbd> pass</span></div>
-        <div class="table-wrap"><table class="table" aria-label="New jobs, sorted by fit">
-          <thead><tr><th class="col-check"><input type="checkbox" aria-label="Select all"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th aria-sort="descending" style="text-align:right"><button>Fit ↓</button></th></tr></thead>
-          <tbody data-rows="normal"></tbody>
-        </table></div>
-        <div class="foot"><button class="btn ghost sm">Show 7 hidden jobs and why</button><span class="pager"><span class="num">1–23 of 23</span><button class="btn sm" disabled>Previous</button><button class="btn sm" disabled>Next</button></span></div>
-      </div>
+      <div data-toolbar="normal"></div>
+      <div class="banner info hint" id="fit-hint"><span class="text"><b>New here? Fit</b> is how well a job matches your profile and preferences, 0–100. The grey line under each title says why it ranks there, including anything the ranking learned from you.</span><button class="btn sm" type="button" id="fit-hint-ok">Got it</button></div>
+      <div data-list="normal"></div>
     </section>
 
-    <!-- LOADING -->
+    <!-- CHECKING SOURCES -->
     <section data-state="loading" data-state-name="Checking sources" class="stack" style="gap:var(--s-6)">
-      <div class="page-head"><div class="lead"><h1>Checking your sources</h1><p class="meta">9 of 14 done · about 20 seconds left · new jobs appear as each source finishes</p></div></div>
-      <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="14" aria-valuenow="9" aria-label="Sources checked"><span style="width:64%"></span></div>
-      <div class="panel flush">
-        <div class="table-wrap"><table class="table" aria-label="Jobs found so far">
-          <thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead>
-          <tbody data-rows="loading"></tbody>
-          <tbody aria-hidden="true">
-            <tr><td></td><td><span class="skel" style="width:70%"></span><span class="skel" style="width:40%;margin-top:8px"></span></td><td><span class="skel" style="width:70%"></span></td><td><span class="skel" style="width:85%"></span></td><td><span class="skel" style="width:60%"></span></td><td><span class="skel" style="width:28px;margin-left:auto"></span></td></tr>
-            <tr><td></td><td><span class="skel" style="width:55%"></span><span class="skel" style="width:30%;margin-top:8px"></span></td><td><span class="skel" style="width:60%"></span></td><td><span class="skel" style="width:70%"></span></td><td><span class="skel" style="width:50%"></span></td><td><span class="skel" style="width:28px;margin-left:auto"></span></td></tr>
-          </tbody>
-        </table></div>
+      <div class="progress-head">
+        <div class="page-head"><div class="lead"><h1>Checking your sources</h1><p class="meta" id="load-meta" aria-live="polite">Checked 9 of 14 sources · 5 new jobs so far · new jobs wait under a bar so the list doesn't move</p></div></div>
+        <div class="meter" id="load-meter" role="progressbar" aria-valuemin="0" aria-valuemax="14" aria-valuenow="9" aria-valuetext="9 of 14 sources" aria-label="Sources checked"><span style="width:64%"></span></div>
       </div>
+      <div data-toolbar="loading"></div>
+      <div data-list="loading"></div>
     </section>
 
     <!-- FIRST RUN -->
-    <section data-state="first-run" data-state-name="First run">
+    <section data-state="first-run" data-state-name="First run" class="stack" style="gap:var(--s-6)">
+      <div data-toolbar="first-run"></div>
       <div class="empty">
         <svg viewBox="0 0 120 48" width="120" height="48" aria-hidden="true"><path d="M2 46 32 12l18 20 14-14 26 28z" fill="var(--met-soft)" stroke="var(--action)" stroke-width="2" stroke-linejoin="round"/><circle cx="96" cy="10" r="5" fill="var(--bloom)"/></svg>
-        <h2>Your feed fills up once sources are connected</h2>
-        <p>Pick companies from the Sofia watchlist and connect your job mailbox. The first check takes about a minute, and jobs appear as each source answers.</p>
+        <h1>Your feed fills up once sources are connected</h1>
+        <p>Pick companies from the Sofia watchlist and connect your job mailbox. The first check takes about a minute, and new jobs wait under a bar until you choose to show them.</p>
         <div class="row"><a class="btn primary" href="sources.html">Choose companies</a><a class="btn" href="sources.html">Connect mailbox</a></div>
-        <div class="field" style="width:min(460px,100%)"><label for="paste1">Or start with one job</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="paste1" placeholder="Paste a job link"><button class="btn">Add</button></div></div>
+        <div class="field" style="width:min(460px,100%)"><label for="paste1">Or start with one job</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="paste1" name="job-link" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="Paste a job link…"><button class="btn" type="button">Add</button></div></div>
       </div>
     </section>
 
     <!-- SOURCE FAILED -->
     <section data-state="source-failed" data-state-name="Source failed" class="stack" style="gap:var(--s-6)">
-      <div class="banner error" role="status"><span class="text"><b>dev.bg didn't respond at 07:30.</b> Its 12 jobs are kept as they were, not closed. Next try at 08:00.</span><button class="btn sm">Try now</button><a class="btn sm" href="sources.html">Source health</a></div>
-      <div class="page-head"><div class="lead"><h1>19 new since yesterday</h1><p class="meta">13 of 14 sources checked · sorted by fit</p></div></div>
-      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="New jobs"><thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead><tbody data-rows="failed"></tbody></table></div></div>
+      <div class="banner error"><span class="text"><b>dev.bg didn't respond at 07:30.</b> Its 12 jobs are kept as they were, not closed. Next try at 08:00.</span><button class="btn sm" type="button" data-try="dev.bg">Try now</button><a class="btn sm" href="sources.html#failing">Source health</a></div>
+      <div class="page-head"><div class="lead"><h1>19 new since yesterday</h1><p class="meta">13 of 14 sources answered · 25 found since yesterday: 19 new here, 6 hidden · sorted by fit</p></div></div>
+      <div data-toolbar="source-failed"></div>
+      <div data-list="source-failed"></div>
     </section>
 
     <!-- UNUSUAL DROP -->
     <section data-state="drop" data-state-name="Unusual drop" class="stack" style="gap:var(--s-6)">
-      <div class="banner warning" role="status"><span class="text"><b>SumUp returned 0 jobs. It usually has about 30.</b> That could be a hiring freeze or a broken feed, so its jobs stay open until the next check confirms it.</span><a class="btn sm" href="https://sumup.com/careers">Check their site</a><button class="btn sm">They're gone, close them</button></div>
-      <div class="page-head"><div class="lead"><h1>21 new since yesterday</h1><p class="meta">14 sources checked · 1 looks unusual</p></div></div>
-      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="New jobs"><thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead><tbody data-rows="drop"></tbody></table></div></div>
+      <div class="banner warning"><span class="text"><b>SumUp returned 0 jobs at 07:30. It usually has 30–36.</b> Its 34 jobs stay open: nothing closes on its own. If the next 2 checks also return 0, a Needs-you item asks you to confirm.</span><a class="btn sm" href="https://sumup.com/careers">Check their site</a><a class="btn sm" href="sources.html#drop">Details</a><button class="btn sm" type="button" id="close-sumup">Close 34 SumUp jobs</button></div>
+      <div class="page-head"><div class="lead"><h1>21 new since yesterday</h1><p class="meta">14 sources checked, 2 look unusual · 26 found since yesterday: 21 new here, 5 hidden · sorted by fit</p></div></div>
+      <div data-toolbar="drop"></div>
+      <div data-list="drop"></div>
     </section>
 
     <!-- NO MATCH -->
     <section data-state="no-match" data-state-name="Filtered to nothing" class="stack" style="gap:var(--s-6)">
-      <div class="page-head"><div class="lead"><h1>No new jobs match these filters</h1><p class="meta">23 new jobs today · 0 match</p></div></div>
-      <div class="toolbar"><button class="filter" aria-pressed="true">Angle: design ✕</button><button class="filter" aria-pressed="true">Remote EU only ✕</button><button class="filter" aria-pressed="true">Salary from €4,000 ✕</button><button class="btn ghost sm">Clear all</button></div>
-      <div class="empty"><h2>Close, but not quite</h2><p>2 remote design jobs list no salary, and 1 more is hidden because it asks for 5+ years. Loosen one filter to see them.</p><div class="row"><button class="btn primary">Include jobs without a salary</button><button class="btn">Show the hidden one</button></div></div>
+      <div class="page-head"><div class="lead"><h1>No new jobs match these filters</h1><p class="meta">23 new since yesterday · 0 match these 3 filters · 7 hidden</p></div></div>
+      <div data-toolbar="no-match"></div>
+      <div class="active-filters"><span>Filters on:</span>
+        <button class="rm" type="button" aria-label="Remove filter: Angle, design">Angle: design <span aria-hidden="true">✕</span></button>
+        <button class="rm" type="button" aria-label="Remove filter: Location, Remote EU only">Location: Remote EU only <span aria-hidden="true">✕</span></button>
+        <button class="rm" type="button" aria-label="Remove filter: Salary, from €4,000">Salary: from €4,000 <span aria-hidden="true">✕</span></button>
+        <button class="btn ghost sm" type="button">Clear all</button></div>
+      <div class="empty"><h2>Close, but not quite</h2><p>2 remote design jobs list no salary, and 1 more is hidden because it asks for 5+ years (your limit is 4). Loosen one filter to see them.</p><div class="row"><button class="btn primary" type="button">Include jobs without a salary</button><button class="btn" type="button" data-go="hidden">Show the hidden one</button></div></div>
     </section>
 
     <!-- HIDDEN -->
     <section data-state="hidden" data-state-name="Hidden jobs" class="stack" style="gap:var(--s-6)">
-      <div class="page-head"><div class="lead"><h1>7 hidden today</h1><p class="meta">Hidden, never deleted. If a reason is wrong, unhide the job and the rule learns.</p></div><span class="grow"></span><a class="btn" href="#">Edit dealbreakers</a></div>
-      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="Hidden jobs"><thead><tr><th>Job</th><th>Where</th><th>Why it's hidden</th><th></th></tr></thead><tbody data-rows="hidden"></tbody></table></div></div>
+      <div class="page-head"><div class="lead"><h1>7 hidden since yesterday</h1><p class="meta" style="max-width:72ch">Hidden by your dealbreakers, never deleted. <b>Show this job</b> brings back one job and changes nothing else. <b>Change this rule…</b> opens the dealbreaker, shows how many jobs it affects, and can be undone.</p></div><span class="grow"></span><a class="btn" href="../wireframes/profile.html#search">Edit dealbreakers</a></div>
+      <div data-toolbar="hidden"></div>
+      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="Hidden jobs"><thead><tr><th scope="col">Job</th><th scope="col">Where</th><th scope="col">Why it's hidden</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody data-rows="hidden"></tbody></table></div>
+        <div class="foot"><span class="num">7 of 7 hidden since yesterday</span></div></div>
+    </section>
+
+    <!-- PASSED & CLOSED -->
+    <section data-state="passed" data-state-name="Passed &amp; closed" class="stack" style="gap:var(--s-6)">
+      <div class="page-head"><div class="lead"><h1>Passed &amp; closed</h1><p class="meta">11 in the last 30 days: 5 you passed, 6 that closed · nothing here is deleted, and each one can come back</p></div></div>
+      <div data-toolbar="passed"></div>
+      <div class="panel flush">
+        <div class="sec-pad" style="padding:var(--s-5) var(--s-5) var(--s-3)"><h2>Passed <span class="num meta" data-count-pc="passed">5</span></h2><p class="meta">Your reason is kept with each job. It changed the ranking only where it says so.</p></div>
+        <div class="table-wrap"><table class="table" aria-label="Passed jobs"><thead><tr><th scope="col">Job</th><th scope="col">Passed</th><th scope="col">Your reason</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody data-rows="passed"></tbody></table></div>
+      </div>
+      <div class="panel flush">
+        <div style="padding:var(--s-5) var(--s-5) var(--s-3)"><h2>Closed <span class="num meta" data-count-pc="closed">6</span></h2><p class="meta">How each one closed. A job only closes when its sources stop listing it or when you close it.</p></div>
+        <div class="table-wrap"><table class="table" aria-label="Closed jobs"><thead><tr><th scope="col">Job</th><th scope="col">Closed</th><th scope="col">How it closed</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead><tbody data-rows="closed"></tbody></table></div>
+      </div>
     </section>
 
     <!-- OVERFLOW -->
     <section data-state="overflow" data-state-name="After a week away" class="stack" style="gap:var(--s-6)">
-      <div class="page-head"><div class="lead"><h1>212 new since you were last here</h1><p class="meta">Your last visit was 7 days ago · sorted by fit</p></div></div>
-      <div class="banner info"><span class="text">The best 25 are on this page. Save the ones worth a closer look and come back to the rest later.</span><button class="btn sm">Save top 10</button></div>
-      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="New jobs"><thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead><tbody data-rows="overflow"></tbody></table></div>
-        <div class="foot"><span class="num">1–25 of 212</span><span class="pager"><button class="btn sm" disabled>Previous</button><button class="btn sm">Next</button></span></div></div>
+      <div class="page-head"><div class="lead"><h1>212 new since you were last here</h1><p class="meta">Last visit 7 days ago · 243 found since then: 212 new here, 31 hidden · sorted by fit</p></div></div>
+      <div class="banner info"><span class="text">Start with the best ones: save the jobs worth a closer look and come back to the rest later. Nothing new is lost while you're away.</span><button class="btn sm" type="button" id="save-top">Save top 10</button></div>
+      <div data-toolbar="overflow"></div>
+      <div data-list="overflow"></div>
     </section>
   </main>
 </div>
 
+<div id="toast-host" role="status" aria-live="polite"></div>
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
+
 <script>
 (function () {
-  const icon = { met: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>', partly: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>', gap: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' };
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const icon = {
+    met: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    partly: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>',
+    gap: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    ask: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.3 4.4a1.8 1.8 0 1 1 2.5 1.7c-.5.2-.8.6-.8 1.1v.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="9.8" r=".9" fill="currentColor"/></svg>',
+    check: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+  };
   const label = { met: "met", partly: "partly met", gap: "missing" };
-  const jobs = [
-    { t: "Security Engineer", c: "Kestrel Payments", w: "Sofia · hybrid", r: [["3+ years", "met"], ["SIEM", "met"], ["CISSP preferred", "partly"]], s: "€2,800–3,600", f: 91, why: "Security angle · 2 of 3 met · above your floor", n: 3 },
-    { t: "Full-stack Developer (React, Node)", c: "Brightwave", w: "Remote · EU", r: [["2+ years", "met"], ["TypeScript", "met"], ["English", "met"]], s: "€3,200–4,200", f: 88, why: "Developer angle · every requirement met", n: 2 },
-    { t: "SOC Analyst L2", c: "Ardent Labs", w: "Sofia · on-site", r: [["2+ years", "met"], ["Bulgarian", "met"], ["Night shifts", "partly"]], s: "Not stated", f: 84, why: "Matches your SOC experience · shift work flagged", n: 1 },
-    { t: "Cloud Security Engineer", c: "Halden Systems", w: "Remote · EU", r: [["AWS", "met"], ["Kubernetes", "gap"], ["4+ years", "partly"]], s: "€4,000–5,000", f: 76, why: "One gap you could answer", n: 4 },
-    { t: "Product Designer", c: "Lumen Health", w: "Sofia · hybrid", r: [["Portfolio", "met"], ["Figma", "met"], ["3+ years", "partly"]], s: "€2,050–2,800", f: 71, why: "Design angle · slightly short on years", n: 2 },
-    { t: "Backend Engineer (Go)", c: "Corvid Logistics", w: "Sofia · hybrid", r: [["Go", "partly"], ["Postgres", "met"], ["2+ years", "met"]], s: "€3,050–4,100", f: 68, why: "Developer angle · Go would be new", n: 2 },
-    { t: "IT Security Specialist", c: "Ostrava Bank", w: "Sofia · on-site", r: [["ISO 27001", "partly"], ["Bulgarian", "met"]], s: "Not stated", f: 63, why: "Security angle · bank, on-site", n: 1 },
-  ];
+  const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+
+  // ---------- data (fictional). Requirement counts match the Job page exactly ----------
+  // r: [label, state]; preferred items can be "partly" but are never gaps
+  const J = {
+    kestrel:  { t: "Security Engineer", c: "Kestrel Payments", w: "Sofia · hybrid", s: "€2,800–3,600", f: 91, a: "Security angle", n: 3, r: [["3+ years in security operations", "met"], ["SIEM", "met"], ["Incident response", "met"], ["English", "met"], ["Kubernetes security", "gap"], ["CISSP (preferred)", "partly"]], x: "salary above your minimum" },
+    bright:   { t: "Full-stack Developer (React, Node)", c: "Brightwave", w: "Remote · EU", s: "€3,200–4,200", f: 88, a: "Developer angle", n: 2, r: [["2+ years", "met"], ["TypeScript", "met"], ["Node", "met"], ["English", "met"]] },
+    ardent:   { t: "SOC Analyst L2", c: "Ardent Labs", w: "Sofia · on-site", s: "Not stated", f: 84, a: "Security angle", n: 1, r: [["2+ years in a SOC", "met"], ["SIEM", "met"], ["Bulgarian", "met"], ["Night shifts", "partly"]], x: "shown because you turned off the night-shift dealbreaker (6 Oct)" },
+    halden:   { t: "Cloud Security Engineer", c: "Halden Systems", w: "Remote · EU", s: "€4,000–5,000", f: 76, a: "Security angle", n: 4, r: [["AWS", "met"], ["Terraform", "met"], ["Kubernetes", "gap"], ["4+ years", "partly"]] },
+    nordlys:  { t: "Detection Engineer", c: "Nordlys Security", w: "Sofia · hybrid", s: "Unclear", f: 74, prov: true, a: "Security angle", n: 1, r: [["SIEM", "met"], ["Sigma rules", "met"], ["Python", "partly"]], x: "2 facts need you, so the fit is provisional" },
+    lumen:    { t: "Product Designer", c: "Lumen Health", w: "Sofia · hybrid", s: "€2,050–2,800", f: 71, a: "Design angle", n: 2, r: [["Portfolio", "met"], ["Figma", "met"], ["User research", "met"], ["3+ years in design", "partly"]], x: "ranked higher: you boosted Lumen Health" },
+    corvid:   { t: "Backend Engineer (Go)", c: "Corvid Logistics", w: "Sofia · hybrid", s: "€3,050–4,100", f: 68, a: "Developer angle", n: 2, r: [["Postgres", "met"], ["2+ years", "met"], ["Docker", "met"], ["Go", "partly"]] },
+    paylane:  { t: "Frontend Developer (Vue)", c: "Paylane", w: "Sofia · hybrid", s: "€2,600–3,300", f: 66, a: "Developer angle", n: 1, r: [["JavaScript", "met"], ["English", "met"], ["Vue", "gap"]] },
+    ostrava:  { t: "IT Security Specialist", c: "Ostrava Bank", w: "Sofia · on-site", s: "Not stated", f: 63, a: "Security angle", n: 1, r: [["Bulgarian", "met"], ["3+ years", "met"], ["ISO 27001", "partly"]], x: "ranked lower: you passed 2 similar bank roles" },
+    sentra:   { t: "Junior Security Consultant", c: "Sentra", w: "Sofia · hybrid", s: "€2,200–2,700", f: 60, a: "Security angle", n: 1, r: [["1+ years", "met"], ["Client-facing English", "met"], ["OSCP", "gap"]] },
+    fieldnote:{ t: "UX Designer", c: "Fieldnote", w: "Remote · EU", s: "€2,400–3,000", f: 58, a: "Design angle", n: 2, r: [["Figma", "met"], ["Prototyping", "met"], ["Accessibility", "met"], ["Dutch", "gap"]] },
+    postbank: { t: "Information Security Analyst", c: "Postbank", w: "Sofia · on-site", s: "Not read", unread: true, n: 1 },
+  };
+  Object.entries(J).forEach(([k, j]) => j.k = k);
+  const ranked = ["kestrel", "bright", "ardent", "halden", "nordlys", "lumen", "corvid", "paylane", "ostrava", "sentra", "fieldnote"];
+
+  const chip = (l, k) => `<span class="chip ${k}">${icon[k]}${esc(l)}<span class="sr-only">, ${label[k]}</span></span>`;
+  const chipsFor = j => {
+    if (j.unread) return `<span class="chip neutral">Fit check not run yet</span>`;
+    const met = j.r.filter(r => r[1] === "met").length;
+    const out = j.r.filter(r => r[1] === "gap").map(r => chip(r[0], "gap")).concat(j.r.filter(r => r[1] === "partly").map(r => chip(r[0], "partly")));
+    if (met) out.push(`<span class="chip met">${icon.met}${met === j.r.length ? `All ${met} met` : `+${met} met`}</span>`);
+    if (j.prov) out.push(`<span class="chip ask">${icon.ask}2 facts need you</span>`);
+    return out.join("");
+  };
+  const whyFor = j => {
+    if (j.unread) return "Not read yet: the model timed out at 07:30. Retried at 08:00, saved or not.";
+    const n = k => j.r.filter(r => r[1] === k).length, met = n("met"), p = n("partly"), g = n("gap");
+    return `${j.a} · ${met} of ${j.r.length} met${p ? `, ${p} partly` : ""}${g ? `, ${g} gap` : ""}${j.x ? ` · ${j.x}` : ""}`;
+  };
+  const row = (j, first, unreadDot) => `<tr data-id="${j.k}" tabindex="${first ? 0 : -1}">
+    <td class="col-check"><input type="checkbox" tabindex="-1" aria-label="Select ${esc(j.t)} at ${esc(j.c)}"></td>
+    <td class="job"><a class="t" href="job.html" tabindex="-1">${unreadDot ? '<span class="new-dot" aria-hidden="true"></span><span class="sr-only">Unseen: </span>' : ""}${esc(j.t)}</a><span class="co">${esc(j.c)}</span>${j.n > 1 ? `<span class="meta"> · seen in ${j.n} postings</span>` : ""}
+      <span class="narrow meta">${esc(j.w)} · ${esc(j.s)}</span>
+      <div class="narrow chips">${chipsFor(j)}</div>
+      <div class="why-row"><div class="why">${whyFor(j)}</div><div class="row-acts"><button class="btn ghost sm" type="button" data-act="save" tabindex="-1">Save<span class="sr-only"> ${esc(j.t)} at ${esc(j.c)}</span></button><button class="btn ghost sm" type="button" data-act="pass" tabindex="-1">Pass<span class="sr-only"> ${esc(j.t)} at ${esc(j.c)}</span></button></div></div></td>
+    <td class="wide">${esc(j.w)}</td><td class="wide"><div class="chips">${chipsFor(j)}</div></td><td class="num wide">${esc(j.s)}</td>
+    <td class="fit${j.prov || j.unread ? " provisional" : ""}">${j.unread ? "–" : (j.prov ? "~" : "") + j.f}<small>${j.unread ? "not read" : j.prov ? "provisional" : "fit"}</small></td></tr>`;
+
+  // ---------- toolbar ----------
+  const menus = {
+    angle: ["Angle", ["all", "developer", "security", "design"]],
+    loc: ["Location", ["Sofia + Remote EU", "Sofia only", "Remote EU only"]],
+    salary: ["Salary", ["any", "from €3,000", "from €4,000"]],
+    sort: ["Sort", ["best fit", "newest", "salary"]],
+  };
+  const menu = (pre, key, val, set, end) => `<span class="pop-wrap"><button class="filter${set ? " set" : ""}" type="button" aria-expanded="false" aria-controls="${pre}-${key}">${menus[key][0]}: <span data-val>${val}</span><span aria-hidden="true"> ▾</span></button>
+    <span class="pop${end ? " end-align" : ""}" id="${pre}-${key}" hidden>${menus[key][1].map(o => `<button type="button" aria-pressed="${o === val}">${icon.check}${o}</button>`).join("")}</span></span>`;
+  const T = {
+    normal:        { v: "new", c: [23, 6, 143, 11], h: 7 },
+    loading:       { v: "new", c: [5, 6, 125, 11], h: 1 },
+    "first-run":   { v: "new", c: [0, 0, 0, 0], h: 0, noRank: true },
+    "source-failed": { v: "new", c: [19, 6, 139, 11], h: 6 },
+    drop:          { v: "new", c: [21, 6, 143, 11], h: 5 },
+    "no-match":    { v: "new", c: [23, 6, 143, 11], h: 7, f: { angle: "design", loc: "Remote EU only", salary: "from €4,000" } },
+    hidden:        { v: "new", c: [23, 6, 143, 11], h: 7, hOn: true },
+    passed:        { v: "passed", c: [23, 6, 143, 11], h: 7 },
+    overflow:      { v: "new", c: [212, 6, 318, 58], h: 31 },
+  };
+  const views = [["new", "New"], ["saved", "Saved"], ["open", "All open"], ["passed", "Passed &amp; closed"]];
+  const toolbar = (pre, o) => {
+    const f = o.f || {};
+    return `<div class="toolbar">
+      <div class="segmented" role="group" aria-label="View">${views.map(([k, l], i) => `<button type="button" data-view="${k}" aria-pressed="${o.v === k}">${l} <span class="num" data-count="${k}">${o.c[i]}</span></button>`).join("")}</div>
+      <button class="filter" type="button" data-hidden aria-pressed="${!!o.hOn}">Hidden <span class="n num" data-count="hidden">${o.h}</span></button>
+      <span class="sep" aria-hidden="true"></span>
+      ${menu(pre, "angle", f.angle || "all", !!f.angle)}${menu(pre, "loc", f.loc || "Sofia + Remote EU", !!f.loc)}${menu(pre, "salary", f.salary || "any", !!f.salary)}
+      <button class="filter" type="button" aria-pressed="false">Relocation</button>
+      <span class="end">${o.noRank ? '<span class="meta">Ranking: nothing learned yet</span>' : '<a class="rank-link" href="../wireframes/profile.html#search">Ranking: 3 learned adjustments · review</a>'}${menu(pre, "sort", "best fit", false, true)}</span>
+    </div>`;
+  };
+  $$("[data-toolbar]").forEach(el => el.innerHTML = toolbar(el.dataset.toolbar, T[el.dataset.toolbar]));
+
+  // ---------- list panels ----------
+  let keysOn = true;
+  const keysHtml = () => keysOn
+    ? `<span>Keyboard shortcuts in the list: <b>on</b> ·</span><kbd>J</kbd><kbd>K</kbd> move <kbd>Enter</kbd> open <kbd>S</kbd> save <kbd>X</kbd> pass <button class="linkish" type="button" data-keys>Turn off</button>`
+    : `<span>Keyboard shortcuts: <b>off</b> · arrow keys and Enter still work</span><button class="linkish" type="button" data-keys>Turn on</button>`;
+  const L = {
+    normal: { label: "New jobs, sorted by fit", pinned: ["postbank"], rows: ranked.slice(0, 10), total: 23, unseen: 3 },
+    loading: { label: "Jobs found so far, sorted by fit", rows: ["kestrel", "bright", "ardent"], queue: ["halden", "nordlys"], later: ["lumen", "corvid", "paylane", "ostrava"], unseen: 3 },
+    "source-failed": { label: "New jobs, sorted by fit", rows: ["kestrel", "bright", "ardent", "halden", "lumen", "corvid"], total: 19, unseen: 2 },
+    drop: { label: "New jobs, sorted by fit", rows: ["bright", "ardent", "halden", "nordlys", "lumen", "corvid"], total: 21, unseen: 2 },
+    overflow: { label: "New jobs since your last visit, sorted by fit", rows: ranked, total: 212, unseen: 0, long: true },
+  };
+  const head = pre => `<tr><th class="col-check" scope="col"><input type="checkbox" aria-label="Select all shown" data-all></th><th scope="col">Job</th><th scope="col" class="wide">Where</th><th scope="col" class="wide">Requirements</th><th scope="col" class="wide">Salary</th>
+    <th scope="col" class="fit-h" aria-sort="descending" style="text-align:right"><span class="fit-hw"><button type="button" aria-describedby="${pre}-fitdef">Fit<span aria-hidden="true"> ↓</span></button><button type="button" class="info fit-info" aria-label="What Fit means" aria-expanded="false" aria-controls="${pre}-fitdef">?</button><span class="tip" id="${pre}-fitdef">How well this job matches your profile and preferences, 0–100. The line under each title says why.</span></span></th></tr>`;
+  const renderList = key => {
+    const o = L[key], el = $(`[data-list="${key}"]`);
+    const j = k => key === "overflow" && k === "kestrel" ? { ...J.kestrel, t: "Senior Application Security Engineer, Payments Platform (Fraud and Risk Engineering)", c: "International Clearing and Settlement Services Bulgaria EAD", n: 5 } : J[k];
+    let idx = 0;
+    const r = k => row(j(k), idx++ === 0, idx <= o.unseen);
+    const pinned = o.pinned ? `<tbody><tr class="group"><th colspan="6" scope="colgroup">Not read yet · 1 · pinned here, never sorted to the bottom</th></tr>${o.pinned.map(r).join("")}</tbody>` : "";
+    const rankedHead = o.pinned ? `<tr class="group"><th colspan="6" scope="colgroup">Ranked by fit</th></tr>` : "";
+    const shown = o.rows.length + (o.pinned ? o.pinned.length : 0);
+    const foot = key === "loading" ? `<div class="foot"><span>More appear as sources finish. They wait under the bar above, so nothing moves while you work.</span></div>`
+      : `<div class="foot"><span class="num">Showing <span data-shown>${shown}</span> of <span data-total>${o.total}</span></span><span class="grow"></span><button class="btn sm" type="button">Show ${Math.min(25, o.total - shown)} more</button></div>`;
+    el.innerHTML = `<div class="panel flush">
+      <div class="bulk"><span data-sel>Select jobs to save or pass several at once</span><button class="btn sm" type="button" data-bulk="save" disabled>Save</button><button class="btn sm" type="button" data-bulk="pass" disabled>Pass</button><span class="keys" data-keys-wrap>${keysHtml()}</span></div>
+      ${o.queue ? `<div class="queue" data-queue><span data-queue-text>${o.queue.length} new jobs found</span><button class="btn sm" type="button" data-show-queue>Show them</button></div>` : ""}
+      <div class="table-wrap"><table class="table jobs" aria-label="${o.label}"><thead>${head(key)}</thead>${pinned}<tbody data-body>${rankedHead}${o.rows.map(r).join("")}</tbody></table></div>
+      ${foot}</div>`;
+    if (o.queue) { el._queue = o.queue.slice(); el._later = o.later.slice(); }
+  };
+  Object.keys(L).forEach(renderList);
+
+  // hidden / passed / closed
   const hidden = [
     ["Penetration Tester", "Vollmer GmbH", "Remote · Germany", "Requires fluent German"],
-    ["Senior Security Architect", "Northgate Group", "Sofia", "Requires 7+ years"],
+    ["Senior Security Architect", "Northgate Group", "Sofia · hybrid", "Asks for 7+ years (your limit: 4)"],
     ["Frontend Developer", "Pixelforge", "Plovdiv · on-site", "On-site outside Sofia"],
     ["DevOps Engineer", "Tallis", "Remote · US only", "Remote limited to the US"],
+    ["Senior Product Designer", "Mirela Studio", "Remote · EU", "Asks for 5+ years (your limit: 4)"],
+    ["Support Engineer", "Telenix", "Sofia · hybrid", "Salary stated, below your €2,000 minimum"],
+    ["Security Consultant", "Grayhawk", "Sofia · hybrid", "Travel more than half the time"],
   ];
-  const chips = r => `<div class="chips">${r.map(([l, k]) => `<span class="chip ${k}" title="${label[k]}">${icon[k]}${l}<span class="sr-only">, ${label[k]}</span></span>`).join("")}</div>`;
-  const row = (j, i) => `<tr${i === 0 ? ' class="is-focused"' : ""}>
-    <td class="col-check"><input type="checkbox" aria-label="Select ${j.t} at ${j.c}"></td>
-    <td><a class="t" href="job.html" title="${j.t}">${i < 3 ? '<span class="new-dot" aria-label="New"></span>' : ""}${j.t}</a><span class="co">${j.c}</span>${j.n > 1 ? `<span class="meta"> · on ${j.n} sites</span>` : ""}<div class="why">${j.why}</div></td>
-    <td>${j.w}</td><td>${chips(j.r)}</td><td class="num">${j.s}</td><td class="fit">${j.f}<small>fit</small></td></tr>`;
-  const fill = (k, list) => document.querySelectorAll(`[data-rows="${k}"]`).forEach(tb => tb.innerHTML = list.map(row).join(""));
-  fill("normal", jobs); fill("loading", jobs.slice(0, 3)); fill("failed", jobs.slice(0, 5)); fill("drop", jobs.slice(1, 6));
-  fill("overflow", [{ ...jobs[0], t: "Senior Application Security Engineer, Payments Platform (Fraud and Risk Engineering)", c: "International Clearing and Settlement Services Bulgaria EAD", n: 5 }, ...jobs.slice(1, 5)]);
-  document.querySelectorAll('[data-rows="hidden"]').forEach(tb => tb.innerHTML = hidden.map(h => `<tr class="is-hidden"><td><span class="t" style="font-weight:500;color:var(--ink-2)">${h[0]}</span><span class="co">${h[1]}</span></td><td>${h[2]}</td><td><span class="chip hidden-reason">${h[3]}</span></td><td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn sm">Unhide</button><button class="btn ghost sm">Not a dealbreaker for me</button></div></td></tr>`).join(""));
+  $('[data-rows="hidden"]').innerHTML = hidden.map(h => `<tr class="is-hidden"><td><span class="t" style="font-weight:500;color:var(--ink-2)">${h[0]}</span><span class="co">${h[1]}</span></td><td>${h[2]}</td><td><span class="chip hidden-reason">${h[3]}</span></td>
+    <td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn sm" type="button" data-unhide>Show this job<span class="sr-only">: ${h[0]} at ${h[1]}</span></button><a class="btn ghost sm" href="../wireframes/profile.html#search">Change this rule…<span class="sr-only"> (${h[3]})</span></a></div></td></tr>`).join("");
+  const passed = [
+    ["Cloud Engineer (Azure)", "Northwind Retail", "Today, 08:02", "Skills gap too big · Azure", ""],
+    ["IT Auditor", "Sofia Commercial Bank", "10 Oct", "Not interested in this company", "Ranking learned: similar bank roles ranked lower"],
+    ["Security Analyst", "Unity Bank", "9 Oct", "Location or remote rules · on-site 5 days", "Ranking learned: similar bank roles ranked lower"],
+    ["Junior Pentester", "RedLine", "8 Oct", "No reason given", ""],
+    ["Frontend Developer (Angular)", "Mapwise", "7 Oct", "Salary too low · €2,000–2,300", ""],
+  ];
+  $('[data-rows="passed"]').innerHTML = passed.map(p => `<tr class="is-hidden" data-pc="passed"><td><a class="t" href="job.html">${p[0]}</a><span class="co">${p[1]}</span></td><td class="num">${p[2]}</td>
+    <td><span class="reason">${p[3]}</span>${p[4] ? `<span class="learned">${p[4]} · <a href="../wireframes/profile.html#search">review or undo</a></span>` : '<span class="learned">Ranking not changed</span>'}</td>
+    <td style="text-align:right"><button class="btn sm" type="button" data-restore="passed">Undo pass<span class="sr-only">: ${p[0]} at ${p[1]}</span></button></td></tr>`).join("");
+  const closed = [
+    ["Security Engineer", "Kestrel Payments", "10 Oct", "No longer listed by kestrel.greenhouse.io, and dev.bg marked it expired"],
+    ["Backend Engineer", "Delasport", "9 Oct", "You removed the Delasport source. Your draft package is kept"],
+    ["QA Automation Engineer", "Playtech", "9 Oct", "No longer listed by Playtech's SmartRecruiters feed"],
+    ["Data Engineer", "Trading 212", "8 Oct", "Ashby marked it filled"],
+    ["UX Researcher", "Kraken", "7 Oct", "You closed it: \"It's not open any more\""],
+    ["Site Reliability Engineer", "Canonical", "5 Oct", "No longer listed by Greenhouse"],
+  ];
+  $('[data-rows="closed"]').innerHTML = closed.map(p => `<tr class="is-hidden" data-pc="closed"><td><a class="t" href="job.html#closed">${p[0]}</a><span class="co">${p[1]}</span></td><td class="num">${p[2]}</td><td><span class="reason">${p[3]}</span></td>
+    <td style="text-align:right"><button class="btn sm" type="button" data-restore="closed">Reopen<span class="sr-only">: ${p[0]} at ${p[1]}</span></button></td></tr>`).join("");
 
-  // selection count
-  document.addEventListener("change", e => {
-    if (!e.target.matches('[data-rows="normal"] input')) return;
-    const n = document.querySelectorAll('[data-rows="normal"] input:checked').length;
-    document.getElementById("selCount").textContent = n ? `${n} selected` : "Select jobs to save or pass several at once";
-    document.querySelectorAll("#bulk1 .btn").forEach(b => b.disabled = !n);
-    e.target.closest("tr").classList.toggle("is-selected", e.target.checked);
+  // ---------- announcements and toast (polite; Undo for 15 s with a visible countdown, paused on hover or focus) ----------
+  const live = $("#live"), host = $("#toast-host");
+  const announce = msg => { live.textContent = ""; setTimeout(() => live.textContent = msg, 60); };
+  let tTimer = null, tLeft = 0, tPaused = false, tReturn = null;
+  const closeToast = () => { clearInterval(tTimer); const had = host.contains(document.activeElement); host.innerHTML = ""; if (had && tReturn && document.contains(tReturn)) tReturn.focus(); };
+  const toast = (msg, undo, ret) => {
+    clearInterval(tTimer); tReturn = ret || null;
+    host.innerHTML = `<div class="toast"><span>${msg}</span>${undo ? '<button class="btn ghost sm" type="button" data-undo>Undo<span class="cd" aria-hidden="true"> · 15 s</span></button>' : ""}<button class="btn ghost sm x" type="button" data-dismiss aria-label="Dismiss">✕</button></div>`;
+    const t = host.firstElementChild; tLeft = undo ? 15 : 6; tPaused = false;
+    t.addEventListener("mouseenter", () => tPaused = true); t.addEventListener("mouseleave", () => tPaused = t.contains(document.activeElement));
+    t.addEventListener("focusin", () => tPaused = true); t.addEventListener("focusout", e => { if (!t.contains(e.relatedTarget)) tPaused = t.matches(":hover"); });
+    if (undo) $("[data-undo]", t).addEventListener("click", () => { closeToast(); undo(); });
+    $("[data-dismiss]", t).addEventListener("click", closeToast);
+    tTimer = setInterval(() => { if (tPaused) return; tLeft--; const cd = $(".cd", t); if (cd) cd.textContent = ` · ${tLeft} s`; if (tLeft <= 0) closeToast(); }, 1000);
+  };
+
+  // ---------- health pill (changes announced politely) ----------
+  const health = $("#health");
+  let healthTxt = "";
+  const setHealth = (cls, txt, say) => { health.className = "health " + cls; $("span", health).textContent = txt; if (say && txt !== healthTxt) announce("Source health: " + txt); healthTxt = txt; };
+
+  // ---------- counts ----------
+  const bump = (sec, key, d) => $$(`[data-count="${key}"]`, sec).forEach(n => n.textContent = Math.max(0, +n.textContent + d));
+  const bumpShown = (sec, d) => { const s = $("[data-shown]", sec), t = $("[data-total]", sec); if (s) s.textContent = +s.textContent + d; if (t) t.textContent = +t.textContent + d; };
+
+  // ---------- row actions ----------
+  const rows = tb => $$("tr[data-id]", tb.closest("table"));
+  const focusRow = tr => { if (!tr) return; rows(tr.parentElement).forEach(r => r.tabIndex = -1); tr.tabIndex = 0; tr.focus(); };
+  const passRows = list => {
+    if (!list.length) return;
+    const sec = list[0].closest("section"), all = rows(list[0].parentElement);
+    const after = all.slice(all.indexOf(list[list.length - 1]) + 1).find(r => !list.includes(r)) || all.slice(0, all.indexOf(list[0])).reverse().find(r => !list.includes(r));
+    const saved = list.map(tr => ({ tr, parent: tr.parentElement, next: tr.nextElementSibling }));
+    list.forEach(tr => tr.remove());
+    bump(sec, "new", -list.length); bump(sec, "passed", list.length); bumpShown(sec, -list.length);
+    updateSel(sec);
+    if (after) focusRow(after);
+    const j = J[list[0].dataset.id];
+    toast(list.length === 1 ? `Passed · ${esc(j.t)} at ${esc(j.c)}. It's in Passed &amp; closed.` : `Passed ${list.length} jobs. They're in Passed &amp; closed.`, () => {
+      saved.slice().reverse().forEach(s => s.parent.insertBefore(s.tr, s.next && s.next.parentElement === s.parent ? s.next : null));
+      bump(sec, "new", list.length); bump(sec, "passed", -list.length); bumpShown(sec, list.length);
+      $$('input[type="checkbox"]', sec).forEach(c => { c.checked = false; c.closest("tr")?.classList.remove("is-selected"); }); updateSel(sec);
+      focusRow(list[0]); announce(list.length === 1 ? "Pass undone. The job is back in New." : `Pass undone. ${list.length} jobs are back in New.`);
+    }, after);
+  };
+  const saveRows = list => {
+    if (!list.length) return;
+    const sec = list[0].closest("section");
+    const fresh = list.filter(tr => !tr.querySelector(".saved-chip"));
+    fresh.forEach(tr => $(".co", tr).insertAdjacentHTML("afterend", `<span class="chip met saved-chip">${icon.met}Saved</span>`));
+    bump(sec, "saved", fresh.length);
+    const j = J[list[0].dataset.id];
+    toast(list.length === 1 ? `Saved · ${esc(j.t)} at ${esc(j.c)}` : `Saved ${list.length} jobs`, () => {
+      fresh.forEach(tr => tr.querySelector(".saved-chip")?.remove()); bump(sec, "saved", -fresh.length); announce("Save undone.");
+    }, document.activeElement);
+  };
+  const updateSel = sec => {
+    const bulk = $(".bulk", sec); if (!bulk) return;
+    const n = $$('tbody input[type="checkbox"]:checked', sec).length;
+    $("[data-sel]", bulk).textContent = n ? `${n} selected` : "Select jobs to save or pass several at once";
+    $$("[data-bulk]", bulk).forEach(b => b.disabled = !n);
+  };
+
+  // single-key shortcuts: only while focus is inside a jobs table, and they can be turned off
+  document.addEventListener("keydown", e => {
+    const table = e.target.closest && e.target.closest("table.jobs"); if (!table) return;
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const tr = e.target.closest("tr[data-id]"); if (!tr) return;
+    const all = rows(tr.parentElement), i = all.indexOf(tr), k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const move = d => { e.preventDefault(); focusRow(all[Math.min(all.length - 1, Math.max(0, i + d))]); };
+    if (k === "ArrowDown") return move(1);
+    if (k === "ArrowUp") return move(-1);
+    if (k === "Enter" && e.target === tr) { e.preventDefault(); location.href = "job.html"; return; }
+    if (!keysOn) return;
+    if (k === "j") return move(1);
+    if (k === "k") return move(-1);
+    if (k === "s") { e.preventDefault(); saveRows([tr]); return; }
+    if (k === "x") { e.preventDefault(); passRows([tr]); }
   });
-  document.querySelectorAll(".segmented").forEach(g => g.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; g.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); }));
+  document.addEventListener("focusin", e => { const tr = e.target.closest && e.target.closest("table.jobs tr[data-id]"); if (tr) { rows(tr.parentElement).forEach(r => r.tabIndex = r === tr ? 0 : -1); $$("a, button, input", tr).forEach(b => b.tabIndex = 0); } });
+  document.addEventListener("focusout", e => { const tr = e.target.closest && e.target.closest("table.jobs tr[data-id]"); if (tr && !tr.contains(e.relatedTarget)) $$("a, button, input", tr).forEach(b => b.tabIndex = -1); });
 
-  // review state switcher
-  const states = [...document.querySelectorAll("[data-state]")], bar = document.querySelector(".review .states"), health = document.getElementById("health");
-  const healthFor = { "source-failed": ["bad", "1 source failing"], drop: ["warn", "1 source unusual"], "first-run": ["warn", "No sources yet"], loading: ["", "Checking… 9 of 14"] };
+  // clicks
+  document.addEventListener("click", e => {
+    const t = e.target;
+    // menus (disclosure popovers)
+    const mb = t.closest("[aria-controls][aria-expanded]:not(.info)");
+    $$(".pop:not([hidden])").forEach(p => { if (!p.parentElement.contains(t)) { p.hidden = true; p.parentElement.querySelector("[aria-expanded]").setAttribute("aria-expanded", "false"); } });
+    if (mb && mb.closest(".pop-wrap")) { const p = document.getElementById(mb.getAttribute("aria-controls")); p.hidden = !p.hidden; mb.setAttribute("aria-expanded", String(!p.hidden)); if (!p.hidden) $('[aria-pressed="true"]', p)?.focus(); return; }
+    const opt = t.closest(".pop button");
+    if (opt) { const p = opt.parentElement, b = p.parentElement.querySelector("[aria-expanded]"); $$("button", p).forEach(x => x.setAttribute("aria-pressed", String(x === opt))); $("[data-val]", b).textContent = opt.textContent; p.hidden = true; b.setAttribute("aria-expanded", "false"); b.focus(); return; }
+    const info = t.closest(".fit-info");
+    if (info) { const tip = document.getElementById(info.getAttribute("aria-controls")); tip.classList.toggle("open"); info.setAttribute("aria-expanded", String(tip.classList.contains("open"))); return; }
+    // views
+    const vb = t.closest("[data-view]");
+    if (vb) { const v = vb.dataset.view; if (v === "passed") return go("passed", '[data-view="passed"]'); if (v === "new") return go("normal", '[data-view="new"]'); vb.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === vb))); return; }
+    if (t.closest("[data-hidden]")) { const on = t.closest("[data-hidden]").getAttribute("aria-pressed") === "true"; return go(on ? "normal" : "hidden", "[data-hidden]"); }
+    const g = t.closest("[data-go]"); if (g) return go(g.dataset.go, "h1");
+    if (t.closest(".filter[aria-pressed]:not([data-hidden])")) { const f = t.closest(".filter"); f.setAttribute("aria-pressed", String(f.getAttribute("aria-pressed") !== "true")); return; }
+    // shortcuts toggle
+    if (t.closest("[data-keys]")) { const sec = t.closest("section"); keysOn = !keysOn; $$("[data-keys-wrap]").forEach(w => w.innerHTML = keysHtml()); announce(keysOn ? "Keyboard shortcuts on" : "Keyboard shortcuts off"); $("[data-keys]", sec).focus(); return; }
+    // row and bulk actions
+    const act = t.closest("[data-act]");
+    if (act) { const tr = act.closest("tr"); return act.dataset.act === "pass" ? passRows([tr]) : saveRows([tr]); }
+    const bulk = t.closest("[data-bulk]");
+    if (bulk) { const sec = bulk.closest("section"), sel = $$('tbody input[type="checkbox"]:checked', sec).map(c => c.closest("tr")); sel.forEach(tr => { $('input[type="checkbox"]', tr).checked = false; tr.classList.remove("is-selected"); }); updateSel(sec); return bulk.dataset.bulk === "pass" ? passRows(sel) : saveRows(sel); }
+    if (t.closest("[data-show-queue]")) return showQueue(t.closest("section"));
+    if (t.closest("[data-unhide]")) { const tr = t.closest("tr"), nx = tr.nextElementSibling || tr.previousElementSibling, parent = tr.parentElement, sib = tr.nextElementSibling, name = $(".t", tr).textContent; tr.remove(); const hs = $('[data-state="hidden"]'); bump(hs, "hidden", -1); bump(hs, "new", 1); (nx && $("button", nx) || $("h1", $('[data-state="hidden"]'))).focus(); toast(`Shown in New · ${esc(name)}. Your dealbreakers are unchanged.`, () => { parent.insertBefore(tr, sib); bump(hs, "hidden", 1); bump(hs, "new", -1); $("button", tr).focus(); announce("Hidden again."); }); return; }
+    const rs = t.closest("[data-restore]");
+    if (rs) { const tr = rs.closest("tr"), parent = tr.parentElement, sib = tr.nextElementSibling, kind = rs.dataset.restore, name = $(".t", tr).textContent, cnt = $(`[data-count-pc="${kind}"]`), nx = sib || tr.previousElementSibling; tr.remove(); cnt.textContent = +cnt.textContent - 1; bump($('[data-state="passed"]'), "passed", -1); (nx ? $("button", nx) : $("h1", $('[data-state="passed"]'))).focus();
+      toast(kind === "passed" ? `Back in New · ${esc(name)}` : `Reopened · ${esc(name)}. It's back in All open.`, () => { parent.insertBefore(tr, sib); cnt.textContent = +cnt.textContent + 1; bump($('[data-state="passed"]'), "passed", 1); $("button", tr).focus(); announce("Undone."); }); return; }
+    if (t.closest("[data-try]")) { announce("Trying dev.bg now…"); setTimeout(() => announce("dev.bg still didn't answer. Its 12 jobs stay open. Next try 08:00."), 1500); return; }
+    if (t.closest("#close-sumup")) { const b = t.closest("#close-sumup"); toast("Closed 34 SumUp jobs with the reason \"no longer listed by SumUp\". They're in Passed &amp; closed.", () => announce("Undone. SumUp's 34 jobs are open again."), b); return; }
+    if (t.closest("#save-top")) { const sec = t.closest("section"); saveRows($$("tr[data-id]", sec).slice(0, 10)); return; }
+    if (t.closest("#fit-hint-ok")) { $("#fit-hint").remove(); focusRow($('[data-list="normal"] tr[data-id][tabindex="0"]') || $('[data-list="normal"] tr[data-id]')); return; }
+    // whole-row click opens the job
+    const tr = t.closest("table.jobs tr[data-id]");
+    if (tr && !t.closest("a, button, input, label, .col-check")) location.href = "job.html";
+  });
+  document.addEventListener("change", e => {
+    const sec = e.target.closest("section"); if (!sec) return;
+    if (e.target.matches("[data-all]")) { $$('tbody input[type="checkbox"]', sec).forEach(c => { c.checked = e.target.checked; c.closest("tr").classList.toggle("is-selected", c.checked); }); }
+    else if (e.target.matches('tbody input[type="checkbox"]')) e.target.closest("tr").classList.toggle("is-selected", e.target.checked);
+    updateSel(sec);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key !== "Escape") return;
+    const open = $$(".pop:not([hidden])"); if (open.length) { open.forEach(p => { p.hidden = true; const b = p.parentElement.querySelector("[aria-expanded]"); b.setAttribute("aria-expanded", "false"); b.focus(); }); return; }
+    $$(".tip.open").forEach(tp => { tp.classList.remove("open"); }); $$(".fit-info").forEach(i => i.setAttribute("aria-expanded", "false"));
+  });
+
+  // ---------- checking sources: new rows queue under a bar instead of moving the list ----------
+  let loadTimer = null, done = 9;
+  const loadMeta = () => { const el = $('[data-list="loading"]'); const shown = $$("tr[data-id]", el).length, q = el._queue.length; return { shown, q, total: shown + q }; };
+  const showQueue = sec => {
+    const el = $('[data-list="loading"]'), tb = $("[data-body]", el), q = el._queue.splice(0);
+    q.forEach(k => { const html = row(J[k], false, true), all = $$("tr[data-id]", tb), before = all.find(r => J[r.dataset.id].f < J[k].f); before ? before.insertAdjacentHTML("beforebegin", html) : tb.insertAdjacentHTML("beforeend", html); });
+    $("[data-queue]", el).hidden = true;
+    announce(`${q.length} jobs added in fit order. Your place in the list is kept.`);
+  };
+  const tick = () => {
+    const el = $('[data-list="loading"]');
+    done++;
+    const nxt = el._later.shift(); if (nxt) el._queue.push(nxt);
+    const m = loadMeta(), sec = $('[data-state="loading"]');
+    $("[data-count=\"new\"]", sec).textContent = m.total;
+    const bar = $("[data-queue]", el); bar.hidden = !m.q; $("[data-queue-text]", el).textContent = `${m.q} new job${m.q === 1 ? "" : "s"} found`;
+    const meter = $("#load-meter"); meter.setAttribute("aria-valuenow", done); meter.setAttribute("aria-valuetext", `${done} of 14 sources`); $("span", meter).style.width = Math.round(done / 14 * 100) + "%";
+    if (done >= 14) {
+      clearInterval(loadTimer);
+      $("#load-meta").textContent = `Check finished at 07:31 · 14 of 14 sources · ${m.total} new jobs${m.q ? `, ${m.q} waiting under the bar` : ""} · 1 source quiet longer than usual`;
+      setHealth("warn", "1 source unusual · 07:31", true);
+    } else {
+      $("#load-meta").textContent = `Checked ${done} of 14 sources · ${m.total} new jobs so far${m.q ? `, ${m.q} waiting under the bar` : ""}`;
+      setHealth("", `Checking… ${done} of 14`, false);
+    }
+  };
+  const startLoading = () => {
+    clearInterval(loadTimer); done = 9; renderList("loading");
+    $("#load-meta").textContent = "Checked 9 of 14 sources · 5 new jobs so far, 2 waiting under the bar";
+    const meter = $("#load-meter"); meter.setAttribute("aria-valuenow", 9); meter.setAttribute("aria-valuetext", "9 of 14 sources"); $("span", meter).style.width = "64%";
+    $('[data-state="loading"] [data-count="new"]').textContent = 5;
+    loadTimer = setInterval(tick, 4000);
+  };
+
+  // ---------- review state switcher ----------
+  const states = $$("[data-state]"), bar = $(".review .states");
+  const healthFor = { "source-failed": ["bad", "1 failing · 1 unusual"], drop: ["warn", "2 sources unusual"], "first-run": ["warn", "No sources yet"], loading: ["", "Checking… 9 of 14"] };
   const show = id => {
     states.forEach(s => s.hidden = s.dataset.state !== id);
     bar.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === id)));
-    const [cls, txt] = healthFor[id] || ["", "14 sources OK · 07:30"];
-    health.className = "health " + cls; health.querySelector("span").textContent = txt;
+    const [cls, txt] = healthFor[id] || ["warn", "1 source unusual · 07:30"];
+    setHealth(cls, txt, healthTxt !== "");
+    clearInterval(loadTimer); if (id === "loading") startLoading();
+    closeToast();
   };
-  states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => show(s.dataset.state); bar.appendChild(b); });
+  const go = (id, focusSel) => { show(id); history.replaceState(null, "", "#" + id); const el = $(`[data-state="${id}"] ${focusSel}`); if (el) { if (el.tagName === "H1") el.tabIndex = -1; el.focus(); } };
+  states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => { history.replaceState(null, "", "#" + s.dataset.state); show(s.dataset.state); }; bar.appendChild(b); });
+  window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (states.some(s => s.dataset.state === h)) { show(h); window.scrollTo(0, 0); } });
   show(states.some(s => s.dataset.state === location.hash.slice(1)) ? location.hash.slice(1) : "normal");
 })();
 </script>

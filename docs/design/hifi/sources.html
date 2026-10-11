@@ -14,10 +14,11 @@
 .rail .rail-h { font-size: var(--fs-caption); font-weight: 600; color: var(--ink-3); padding: 0 var(--s-4) var(--s-3) }
 .rail a { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-control); color: var(--ink-2); text-decoration: none; font-size: var(--fs-small); font-weight: 500 }
 .rail a:hover { background: var(--surface-sunken) }
-.rail a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised) }
-.rail .dot { width: 8px; height: 8px; border-radius: 50%; margin-left: auto; flex: none }
-.rail .dot.bad { background: var(--gap) }
-.rail .dot.warn { background: var(--partly) }
+.rail a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised); outline: 1px solid var(--border-control); outline-offset: -1px }
+.rail .dot { width: 14px; height: 14px; margin-left: auto; flex: none; display: inline-grid; place-items: center }
+.rail .dot svg { width: 12px; height: 12px }
+.rail .dot.bad { color: var(--gap) }
+.rail .dot.warn { color: var(--partly) }
 @media (max-width: 760px) {
   .set { grid-template-columns: minmax(0, 1fr); gap: var(--s-5) }
   .rail { position: static; display: flex; overflow-x: auto; gap: var(--s-2); padding-bottom: var(--s-3); border-bottom: 1px solid var(--rule) }
@@ -29,8 +30,25 @@
 .crumb { font-size: var(--fs-small); color: var(--ink-3) }
 .crumb a { color: var(--ink-2) }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
-.toolbar .segmented { max-width: 100%; overflow-x: auto }
-.toolbar .segmented button { white-space: nowrap; flex: none }
+.toolbar .segmented { max-width: 100%; flex-wrap: wrap; border-radius: var(--r-control) }
+.toolbar .segmented button { white-space: nowrap }
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.src-btn { font: inherit; font-weight: 600; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; display: flex; align-items: center; gap: var(--s-2); text-align: left }
+.src-btn:hover { color: var(--action); text-decoration: underline }
+.src-btn .chev { width: 10px; height: 10px; flex: none; transition: rotate var(--dur-fast) var(--ease-standard) }
+.src-btn[aria-expanded="true"] .chev { rotate: 90deg }
+.table tr.detail-row td { background: var(--surface); padding: 0 }
+.table tr.detail-row:hover td { background: var(--surface) }
+.detail-inner { position: sticky; left: 0; display: grid; gap: var(--s-4); padding: var(--s-5); border-left: 3px solid var(--action); min-width: 0 }
+.detail-inner h2 { font-size: var(--fs-title) }
+.quiet-note { color: var(--partly); font-weight: 500 }
+@media (max-width: 1100px) { .table .c-type, .table .c-normal { display: none } }
+@media (max-width: 560px) { .table .c-last { display: none } }
+.toast .x { min-width: 30px; padding: 0 var(--s-3) }
+.toast .cd { font-variant-numeric: tabular-nums; opacity: .85 }
+dialog.dialog { color: var(--ink); margin: auto; width: min(620px, calc(100vw - 2 * var(--s-5))); max-height: calc(100vh - 2 * var(--s-5)); overflow: auto }
+dialog.dialog::backdrop { background: color-mix(in srgb, var(--ink) 45%, transparent) }
 .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--s-4) }
 .tile { display: grid; gap: var(--s-2); align-content: start; padding: var(--s-5); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); text-decoration: none; color: inherit; min-width: 0 }
 .tile .n { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h2); line-height: 1; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: var(--s-3) }
@@ -48,7 +66,7 @@
 .table-wrap { position: relative } /* keeps .sr-only cells inside the scroller */
 .table td.r, .table th.r { text-align: right }
 .table .total { color: var(--ink-3) }
-.table .act { width: 44px; text-align: right; padding-block: var(--s-3) }
+.table .act { text-align: right; padding-block: var(--s-3) }
 .table-foot { padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-caption); color: var(--ink-3) }
 .chart { display: grid; gap: var(--s-2) }
 .chart svg { display: block; width: 100%; height: 164px; overflow: visible }
@@ -56,7 +74,8 @@
 .legend span { display: inline-flex; align-items: center; gap: var(--s-2) }
 .legend i { display: inline-block; width: 14px; height: 8px; border-radius: 2px }
 .legend .k-line { height: 2px; background: var(--action) }
-.legend .k-band { background: var(--surface-sunken); border: 1px dashed var(--border-control) }
+.legend .k-band { background: var(--surface-sunken); border: 1px dashed var(--ink-3) }
+.legend .k-quiet { background: var(--partly-soft); border: 1px dashed var(--partly) }
 .legend .k-fail { width: 10px; height: 10px; background: none; color: var(--gap) }
 .legend .k-warn { width: 10px; height: 10px; border-radius: 50%; background: var(--partly) }
 .rule-box { display: grid; gap: var(--s-2); padding: var(--s-4) var(--s-5); background: var(--surface-sunken); border-radius: var(--r-control); font-size: var(--fs-small); color: var(--ink-2) }
@@ -94,6 +113,7 @@ details pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 </style>
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 <div class="review" role="region" aria-label="Hi-fi review controls">
   <span class="label">Hi-fi · Sources &amp; watchlist</span>
   <a href="index.html">All Discover screens</a>
@@ -105,19 +125,19 @@ details pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
     <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
     <nav class="nav" aria-label="Main">
       <a href="feed.html">Feed</a>
-      <a href="#">Applications<span class="badge" aria-label="4 need you">4</span></a>
-      <a href="#">Profile</a>
+      <a href="#">Applications<span class="badge" aria-hidden="true">4</span><span class="sr-only">, 4 need you</span></a>
+      <a href="../wireframes/profile.html">Profile</a>
       <a href="sources.html" aria-current="page">Settings</a>
     </nav>
     <span class="grow"></span>
-    <a class="health" id="health" href="sources.html"><i></i><span>14 sources OK · 07:30</span></a>
+    <a class="health warn" id="health" href="sources.html"><i aria-hidden="true"></i><span>1 source unusual · 07:30</span></a>
   </header>
 
-  <main class="main" id="main">
+  <main class="main" id="main" tabindex="-1">
     <div class="set">
       <nav class="rail" aria-label="Settings sections">
         <span class="rail-h">Settings</span>
-        <a href="sources.html" aria-current="page" id="rail-sources">Sources &amp; watchlist<span class="dot" hidden></span></a>
+        <a href="sources.html" aria-current="page" id="rail-sources">Sources &amp; watchlist<span class="dot" aria-hidden="true" hidden></span><span class="sr-only" id="rail-status"></span></a>
         <a href="#mailbox">Mailbox</a>
         <a href="#model">Model &amp; budget</a>
         <a href="#data">Data &amp; privacy</a>
@@ -128,33 +148,31 @@ details pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
         <!-- NORMAL -->
         <section data-state="normal" data-state-name="Normal">
           <div class="page-head">
-            <div class="lead"><h1>All 14 sources are working</h1><p class="meta">Last check 07:30 · next 08:00 · checked every 30 min, 07:00–23:00, while this laptop is awake</p></div>
+            <div class="lead"><h1>13 of 14 sources look normal</h1><p class="meta">Google Careers alerts has been quiet longer than usual · last check 07:30 · next 08:00 · checked every 30 min, 07:00–23:00, while this laptop is awake</p></div>
             <span class="grow"></span>
-            <div class="row"><button class="btn">Check all now</button><a class="btn primary" href="#add">Add company</a></div>
+            <div class="row"><button class="btn" type="button" data-check-all>Check all now</button><a class="btn primary" href="#add">Add company</a></div>
           </div>
-          <div class="board" aria-label="Source health summary">
-            <div class="tile ok"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>13</span><span class="l">answered with a normal count</span></div>
+          <div class="board" role="group" aria-label="Source health summary, 14 sources">
+            <div class="tile ok"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>12</span><span class="l">normal: a usual count or email rhythm</span></div>
             <div class="tile"><span class="n">1</span><span class="l">quiet, as usual (Amazon has 0–1 in Bulgaria)</span></div>
-            <div class="tile"><span class="n">0</span><span class="l">failing or unusual</span></div>
+            <div class="tile warn"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="9.6" r="1.1" fill="currentColor"/></svg>1</span><span class="l">quiet longer than usual: Google Careers alerts, no email for 8 days</span></div>
             <a class="tile" href="#mailbox"><span class="n word">Connected</span><span class="l">job mailbox · last email 06:12</span></a>
           </div>
           <div class="panel flush">
             <div class="toolbar" style="padding:var(--s-4);border-bottom:1px solid var(--rule)">
-              <div class="segmented" role="group" aria-label="Show sources"><button aria-pressed="true">All <span class="num">15</span></button><button aria-pressed="false">ATS feeds <span class="num">8</span></button><button aria-pressed="false">Aggregators <span class="num">2</span></button><button aria-pressed="false">Email alerts <span class="num">3</span></button></div>
+              <div class="segmented" role="group" aria-label="Show sources"><button type="button" aria-pressed="true">All <span class="num">14</span></button><button type="button" aria-pressed="false">ATS feeds <span class="num">8</span></button><button type="button" aria-pressed="false">Public API <span class="num">1</span></button><button type="button" aria-pressed="false">Aggregators <span class="num">2</span></button><button type="button" aria-pressed="false">Email alerts <span class="num">3</span></button></div>
               <span class="grow"></span>
-              <button class="btn ghost sm">Add search or alert</button>
+              <button class="btn ghost sm" type="button">Add search or alert</button>
             </div>
             <div class="table-wrap"><table class="table" aria-label="Sources and watchlist">
               <thead data-head></thead>
               <tbody data-sources="normal"></tbody>
             </table></div>
-            <p class="table-foot"><b>In your locations</b> counts postings in Sofia or remote within ±2h of Sofia; the grey number is everything the source listed. <b>Normal</b> is the range over the last 14 checks, used by the drop rule. Select a row to see its history.</p>
+            <p class="table-foot"><b>In your locations</b> counts postings in Sofia or remote within ±2h of Sofia; the grey number is everything the source listed. <b>Normal</b> is the range over the last 14 checks, or for email alerts the usual rhythm learned from their history. Open a source's name to see its history and actions. <b>Manual capture</b> (jobs you add with the extension or a link, 3 this month) isn't checked on a schedule, so it isn't one of the 14.</p>
           </div>
           <div class="two">
-            <div class="panel" id="detail-normal" aria-live="polite"></div>
-            <div class="stack" style="gap:var(--s-6)">
               <div class="panel">
-                <div class="panel-h"><h3>Coverage check</h3><span class="grow"></span><span class="chip neutral">Due today</span></div>
+                <div class="panel-h"><h2>Coverage check</h2><span class="grow"></span><span class="chip neutral">Due today</span></div>
                 <p class="muted" style="font-size:var(--fs-small)">Is the Feed missing anything you'd find by hand? Search a site the normal way, tell apply-kit what you searched, and it lists anything missing and why.</p>
                 <dl class="kv"><dt>Last check</dt><dd>4 Oct · dev.bg "security Sofia"</dd><dt>Result</dt><dd><span data-chip="ok">38 of 38 found</span></dd><dt>Rhythm</dt><dd>Weekly for the first month</dd></dl>
                 <div class="row"><a class="btn" href="#coverage">Run a coverage check</a></div>
@@ -163,28 +181,28 @@ details pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
                 <div class="mailcard">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5.5" width="18" height="13" rx="2.5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m4 7.5 8 5.5 8-5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
                   <div class="stack" style="gap:var(--s-2)">
-                    <div class="panel-h"><h3>Job mailbox</h3><span data-chip="ok">Connected · read-only</span></div>
+                    <div class="panel-h"><h2>Job mailbox</h2><span data-chip="ok">Connected · read-only</span></div>
                     <div class="chain" aria-label="Mail path"><span class="node">Job address</span><span class="via">iCloud rule →</span><span class="node">Gmail job mailbox</span><span class="via">IMAP, read-only →</span><span class="node">apply-kit</span></div>
-                    <p class="meta">Feeds the 3 email-alert sources · read every 10 min · last 07:40</p>
+                    <p class="meta">Feeds the 3 email-alert sources · read every 10 min · last email 06:12 · warns if no mail at all arrives for 24 hours</p>
                   </div>
                   <a class="btn sm" href="#mailbox">Mailbox settings</a>
                 </div>
               </div>
-            </div>
           </div>
         </section>
 
         <!-- SOURCE FAILING -->
         <section data-state="failing" data-state-name="Source failing">
-          <div class="banner error" role="alert"><span class="text"><b>dev.bg hasn't answered the last 3 checks.</b> Its 12 jobs stay open exactly as they were at 07:00. Next try 09:00.</span><button class="btn sm">Try now</button></div>
+          <div class="banner error"><span class="text"><b>dev.bg hasn't answered the last 3 checks.</b> Its 12 jobs stay open exactly as they were at 07:00. Next try 09:00.</span><button class="btn sm" type="button" data-try="dev.bg">Try now</button></div>
           <div class="page-head">
-            <div class="lead"><h1>13 of 14 sources are working</h1><p class="meta">Last check 08:30 · next 09:00 · dev.bg failing since 07:30</p></div>
+            <div class="lead"><h1>1 source failing, 1 quiet longer than usual</h1><p class="meta">Last check 08:30 · next 09:00 · dev.bg failing since 07:30 · Google Careers alerts: no email for 8 days</p></div>
             <span class="grow"></span>
-            <div class="row"><button class="btn">Check all now</button><a class="btn primary" href="#add">Add company</a></div>
+            <div class="row"><button class="btn" type="button" data-check-all>Check all now</button><a class="btn primary" href="#add">Add company</a></div>
           </div>
-          <div class="board" aria-label="Source health summary">
-            <div class="tile ok"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>12</span><span class="l">answered with a normal count</span></div>
+          <div class="board" role="group" aria-label="Source health summary, 14 sources">
+            <div class="tile ok"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>11</span><span class="l">normal: a usual count or email rhythm</span></div>
             <div class="tile"><span class="n">1</span><span class="l">quiet, as usual</span></div>
+            <div class="tile warn"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="9.6" r="1.1" fill="currentColor"/></svg>1</span><span class="l">quiet longer than usual: Google Careers alerts</span></div>
             <div class="tile bad"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>1</span><span class="l">failing: dev.bg, no answer</span></div>
             <a class="tile" href="#mailbox"><span class="n word">Connected</span><span class="l">job mailbox · last email 08:12</span></a>
           </div>
@@ -195,7 +213,7 @@ details pre { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
               <div class="stack">
                 <h3>What happened</h3>
                 <p class="muted" style="font-size:var(--fs-small)">At 07:30, 08:00 and 08:30 dev.bg didn't reply within 30 seconds. Nothing changed on our side: same address, same search. Their site is probably down or very slow, which usually fixes itself within hours.</p>
-                <div class="row"><button class="btn primary">Try now</button><a class="btn" href="#">Open dev.bg</a><button class="btn ghost">Pause this source</button></div>
+                <div class="row"><button class="btn primary" type="button" data-try="dev.bg">Try now</button><a class="btn" href="#">Open dev.bg</a><button class="btn ghost" type="button">Pause this source</button></div>
                 <p class="meta">After 3 failures apply-kit retries hourly instead of every 30 min, to stay polite. If it's still failing after 3 days, it asks whether to remove it. It never removes a source on its own.</p>
                 <details><summary>Technical details</summary><pre>GET dev.bg/company/jobs/it-security/?city=sofia
 07:30:02  timeout after 30 s (no response)
@@ -224,32 +242,32 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
 
         <!-- UNUSUAL DROP -->
         <section data-state="drop" data-state-name="Unusual drop">
-          <div class="banner warning" role="status"><span class="text"><b>SumUp returned 0 jobs at 07:30. It usually has 30–36.</b> Its 34 jobs are kept open until you decide or the next 2 checks agree.</span></div>
+          <div class="banner warning"><span class="text"><b>SumUp returned 0 jobs at 07:30. It usually has 30–36.</b> Its 34 jobs stay open: nothing closes on its own. If the next 2 checks also return 0, a Needs-you item asks you to confirm.</span></div>
           <div class="page-head">
-            <div class="lead"><h1>14 sources answered, 1 looks unusual</h1><p class="meta">Last check 07:30 · next 08:00</p></div>
+            <div class="lead"><h1>14 sources checked, 2 look unusual</h1><p class="meta">Last check 07:30 · next 08:00 · SumUp listed 0 jobs · Google Careers alerts: no email for 8 days</p></div>
             <span class="grow"></span>
-            <div class="row"><button class="btn">Check all now</button><a class="btn primary" href="#add">Add company</a></div>
+            <div class="row"><button class="btn" type="button" data-check-all>Check all now</button><a class="btn primary" href="#add">Add company</a></div>
           </div>
-          <div class="board" aria-label="Source health summary">
-            <div class="tile ok"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>12</span><span class="l">answered with a normal count</span></div>
+          <div class="board" role="group" aria-label="Source health summary, 14 sources">
+            <div class="tile ok"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>11</span><span class="l">normal: a usual count or email rhythm</span></div>
             <div class="tile"><span class="n">1</span><span class="l">quiet, as usual</span></div>
-            <div class="tile warn"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="9.6" r="1.1" fill="currentColor"/></svg>1</span><span class="l">unusual drop: SumUp, 0 jobs</span></div>
+            <div class="tile warn"><span class="n"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="9.6" r="1.1" fill="currentColor"/></svg>2</span><span class="l">unusual: SumUp listed 0 jobs; Google Careers alerts quiet longer than usual</span></div>
             <a class="tile" href="#mailbox"><span class="n word">Connected</span><span class="l">job mailbox · last email 06:12</span></a>
           </div>
           <div class="panel">
             <div class="panel-h"><div class="stack" style="gap:var(--s-1)"><span class="crumb"><a href="#normal">Sources &amp; watchlist</a> › SumUp</span><h2>SumUp · Greenhouse</h2></div><span class="grow"></span><span data-chip="warn">Unusual drop</span></div>
             <div class="chart" data-chart='{"v":[34,34,35,34,34,33,34,34,34,34,35,34,34,0],"t":["17:30","18:00","18:30","19:00","19:30","20:00","20:30","21:00","21:30","22:00","22:30","23:00","07:00","07:30"],"brk":11,"band":[30,36],"warn":[13],"label":"SumUp postings in your locations per check, last 14 checks: 33 to 35 each check, then 0 at 07:30"}'></div>
-            <div class="needs"><div class="text"><b>Your call: are SumUp's 34 jobs really gone?</b> Greenhouse answered normally with an empty list, so this isn't a broken connection. SumUp either took everything down or moved to another job system.</div><span></span></div>
+            <div class="needs"><div class="text"><b>Are SumUp's 34 jobs really gone?</b> Greenhouse answered normally with an empty list, so this isn't a broken connection. SumUp either took everything down or moved to another job system. You can decide now, or wait: the jobs stay open either way.</div><span></span></div>
             <div class="two" style="gap:var(--s-6)">
               <div class="stack">
                 <h3>Check, then decide</h3>
-                <div class="row"><a class="btn" href="#">Check SumUp's careers page</a><button class="btn">Detect their job system again</button></div>
-                <div class="row"><button class="btn primary">Wait for the next 2 checks</button><button class="btn ghost">It's real: close the 34 jobs</button></div>
-                <p class="meta">Closing gives each job the reason "no longer listed by SumUp", visible under All jobs › Closed. Your 1 Application at SumUp is not affected.</p>
+                <div class="row"><a class="btn" href="#">Check SumUp's careers page</a><button class="btn" type="button">Detect their job system again</button></div>
+                <div class="row"><button class="btn primary" type="button" data-wait>Keep them open and wait</button><button class="btn ghost" type="button" data-close-sumup>Close 34 SumUp jobs</button></div>
+                <p class="meta">Closing gives each job the reason "no longer listed by SumUp", and they move to <a href="feed.html#passed">Feed › Passed &amp; closed</a>. A toast offers Undo for 15 seconds, and you can reopen any of them later. Your 1 Application at SumUp is not affected.</p>
               </div>
               <div class="stack">
                 <h3>If nobody acts</h3>
-                <p class="muted" style="font-size:var(--fs-small)">After 2 more checks with 0, the jobs close with the reason "SumUp listed 0 jobs for 3 checks in a row", and the Feed shows one line saying so.</p>
+                <p class="muted" style="font-size:var(--fs-small)">Nothing closes. The 34 jobs stay open. If SumUp is still at 0 after the next 2 checks, a Needs-you item asks you to confirm, with the same choices as here.</p>
                 <h3>If SumUp moved</h3>
                 <p class="muted" style="font-size:var(--fs-small)">Detecting again checks all 9 job systems. If SumUp turns up on a new one, apply-kit offers to switch the source and match the 34 old jobs to the new postings, so nothing duplicates.</p>
               </div>
@@ -271,21 +289,21 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
               <div class="field">
                 <label for="co1">Company name or careers page link</label>
                 <span class="help" id="co1-help">A name is enough. A link to their careers page makes detection faster and surer.</span>
-                <input class="input" id="co1" aria-describedby="co1-help" placeholder="e.g. Kestrel Payments or kestrel.com/careers">
+                <input class="input" id="co1" name="company" autocomplete="off" aria-describedby="co1-help" placeholder="e.g. Kestrel Payments or kestrel.com/careers…">
               </div>
               <div class="row"><a class="btn primary" href="#detecting">Find their jobs</a><a class="btn ghost" href="#normal">Cancel</a></div>
             </form>
           </div>
           <div class="panel">
-            <div class="panel-h"><h3>From the Sofia watchlist, not added yet</h3><span class="grow"></span><span class="meta">23 suggestions</span></div>
+            <div class="panel-h"><h2>From the Sofia watchlist, not added yet</h2><span class="grow"></span><span class="meta">23 suggestions</span></div>
             <div>
-              <div class="sug"><div><span class="src-name">Accedia</span><span class="meta">Recruitee · 5 in Sofia · developer</span></div><button class="btn sm">Add</button></div>
-              <div class="sug"><div><span class="src-name">AMPECO</span><span class="meta">Lever · 7 in Bulgaria · developer, design</span></div><button class="btn sm">Add</button></div>
-              <div class="sug"><div><span class="src-name">Tide</span><span class="meta">Greenhouse · 19 in Bulgaria · developer, security, design</span></div><button class="btn sm">Add</button></div>
-              <div class="sug"><div><span class="src-name">Grafana Labs</span><span class="meta">Greenhouse · remote EMEA · developer, security</span></div><button class="btn sm">Add</button></div>
-              <div class="sug"><div><span class="src-name">1Password</span><span class="meta">Ashby · remote EU, check eligibility · security</span></div><button class="btn sm">Add</button></div>
+              <div class="sug" data-sug="Accedia"><div><span class="src-name">Accedia</span><span class="meta">Recruitee · 5 in Sofia · developer</span></div><button class="btn sm" type="button" data-add>Add</button></div>
+              <div class="sug" data-sug="AMPECO"><div><span class="src-name">AMPECO</span><span class="meta">Lever · 7 in Bulgaria · developer, design</span></div><button class="btn sm" type="button" data-add>Add</button></div>
+              <div class="sug" data-sug="Tide"><div><span class="src-name">Tide</span><span class="meta">Greenhouse · 19 in Bulgaria · developer, security, design</span></div><button class="btn sm" type="button" data-add>Add</button></div>
+              <div class="sug" data-sug="Grafana Labs"><div><span class="src-name">Grafana Labs</span><span class="meta">Greenhouse · remote EMEA · developer, security</span></div><button class="btn sm" type="button" data-add>Add</button></div>
+              <div class="sug" data-sug="1Password"><div><span class="src-name">1Password</span><span class="meta">Ashby · remote EU, check eligibility · security</span></div><button class="btn sm" type="button" data-add>Add</button></div>
             </div>
-            <div><button class="btn ghost sm">Show all 23 suggestions</button></div>
+            <div><button class="btn ghost sm" type="button">Show all 23 suggestions</button></div>
           </div>
         </section>
 
@@ -293,7 +311,7 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
         <section data-state="detecting" data-state-name="Add · detecting">
           <div class="page-head"><div class="lead"><span class="crumb"><a href="#normal">Sources &amp; watchlist</a> › Add company</span><h1>Looking for Kestrel Payments' jobs</h1><p class="meta">Checked 5 of 9 job systems · about 6 seconds left</p></div></div>
           <div class="panel narrow">
-            <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="9" aria-valuenow="5" aria-label="Job systems checked"><span style="width:56%"></span></div>
+            <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="9" aria-valuenow="5" aria-valuetext="5 of 9 job systems" aria-label="Job systems checked"><span style="width:56%"></span></div>
             <ul class="list detect" aria-live="polite">
               <li><span class="st"><span data-chip="none">Not there</span></span><span class="grow">Lever · kestrelpayments</span></li>
               <li><span class="st"><span data-chip="none">Not there</span></span><span class="grow">Ashby · kestrelpayments</span></li>
@@ -304,13 +322,13 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
               <li><span class="st"><span class="chip outline">Waiting</span></span><span class="grow muted">Personio, Teamtailor, Workday</span></li>
             </ul>
             <p class="meta">It keeps going after a hit, because some companies use two systems (say, Greenhouse for engineering and Workday for everyone else).</p>
-            <div class="row"><button class="btn">Stop and use Greenhouse</button><a class="btn ghost" href="#add">Cancel</a></div>
+            <div class="row"><button class="btn" type="button">Stop and use Greenhouse</button><a class="btn ghost" href="#add">Cancel</a></div>
           </div>
           <div class="panel narrow">
             <span class="meta">When it finishes</span>
-            <div class="panel-h"><h3>Kestrel Payments · Greenhouse</h3><span class="grow"></span><span data-chip="ok">Found</span></div>
+            <div class="panel-h"><h2>Kestrel Payments · Greenhouse</h2><span class="grow"></span><span data-chip="ok">Found</span></div>
             <p class="muted" style="font-size:var(--fs-small)"><b>41 open jobs, 6 in your locations</b> (5 Sofia, 1 remote EU). The 6 appear in the Feed after the first check; the other 35 are kept but hidden as "outside your locations".</p>
-            <div class="row"><button class="btn primary">Add to watchlist</button><button class="btn">Preview the 6 jobs</button></div>
+            <div class="row"><button class="btn primary" type="button">Add to watchlist</button><button class="btn" type="button">Preview the 6 jobs</button></div>
           </div>
         </section>
 
@@ -318,47 +336,48 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
         <section data-state="not-found" data-state-name="Add · not found">
           <div class="page-head"><div class="lead"><span class="crumb"><a href="#normal">Sources &amp; watchlist</a> › Add company</span><h1>No job feed found for Nexo</h1><p class="meta">Checked 9 job systems and their careers page, which returned "page not found". Nexo probably runs its own site, which apply-kit doesn't scrape.</p></div></div>
           <div class="stack" style="gap:var(--s-4)">
-            <h3>Other ways to still catch Nexo's jobs</h3>
+            <h2>Other ways to still catch Nexo's jobs</h2>
             <div class="alt">
               <div class="panel-h"><h3>1 · Email alert from LinkedIn</h3><span class="chip met">Recommended</span></div>
               <p class="muted" style="font-size:var(--fs-small)">Follow Nexo on LinkedIn and turn on job alerts for the company, sent to your job address. They forward to your job mailbox and appear in the Feed under "LinkedIn job alerts".</p>
-              <div class="row"><button class="btn primary">Show me the steps</button><span class="meta">About 2 minutes in LinkedIn</span></div>
+              <div class="row"><button class="btn primary" type="button">Show me the steps</button><span class="meta">About 2 minutes in LinkedIn</span></div>
             </div>
             <div class="alt">
               <h3>2 · Aggregators already watching</h3>
               <p class="muted" style="font-size:var(--fs-small)">dev.bg and Jooble listed 4 Nexo jobs in the last month, so many reach you anyway. Add Nexo as a company filter there to be sure.</p>
-              <div class="row"><button class="btn">Add Nexo to dev.bg and Jooble searches</button></div>
+              <div class="row"><button class="btn" type="button">Add Nexo to dev.bg and Jooble searches</button></div>
             </div>
             <div class="alt">
               <h3>3 · Try a different link</h3>
               <div class="field">
                 <label for="nf-link">Careers page link</label>
                 <span class="help" id="nf-help">If you've seen their job page, paste its address and apply-kit checks again.</span>
-                <div class="row" style="flex-wrap:nowrap"><input class="input" id="nf-link" aria-describedby="nf-help" placeholder="https://"><button class="btn">Check</button></div>
+                <div class="row" style="flex-wrap:nowrap"><input class="input" id="nf-link" name="careers-link" type="url" inputmode="url" autocomplete="off" spellcheck="false" aria-describedby="nf-help" placeholder="https://…"><button class="btn" type="button">Check</button></div>
               </div>
             </div>
           </div>
-          <div class="banner info"><span class="text">Nexo is saved to your watchlist as <b>"no feed, watched via alerts"</b>, so coverage checks notice if its jobs never arrive.</span><a class="btn sm" href="#normal">Back to sources</a></div>
+          <div class="banner info"><span class="text">Nexo is saved to your watchlist as <b>"no feed, watched via alerts"</b>, so coverage checks notice if its jobs never arrive. Don't want that?</span><button class="btn sm" type="button" data-unwatch>Remove Nexo from watchlist</button><a class="btn sm" href="#normal">Back to sources</a></div>
         </section>
 
         <!-- REMOVE COMPANY -->
         <section data-state="remove" data-state-name="Remove company">
-          <div class="page-head"><div class="lead"><span class="crumb"><a href="#normal">Sources &amp; watchlist</a> › Delasport</span></div></div>
-          <div class="panel dialog" role="dialog" aria-labelledby="rm-h" aria-describedby="rm-d">
+          <div class="page-head"><div class="lead"><span class="crumb"><a href="#normal">Sources &amp; watchlist</a> › Delasport</span><h1>Delasport · Greenhouse</h1><p class="meta">delasportbulgaria · 9 jobs in your locations · working</p></div><span class="grow"></span><div class="row"><button class="btn" type="button">Pause</button><button class="btn danger" type="button" id="rm-open">Remove from watchlist…</button></div></div>
+          <p class="meta">The confirmation is a modal dialog: it opens with focus on "Pause instead" (the safe choice), Esc or Cancel closes it, and focus returns to "Remove from watchlist…".</p>
+          <dialog class="panel dialog" id="rm-dialog" aria-labelledby="rm-h" aria-describedby="rm-d">
             <h2 id="rm-h">Remove Delasport from your watchlist?</h2>
             <p id="rm-d" class="muted" style="font-size:var(--fs-small)">apply-kit stops checking delasportbulgaria on Greenhouse. Here's what happens to its 9 jobs:</p>
             <ul>
-              <li><b>7 found only here close</b> with the reason "source removed". They stay findable under All jobs › Closed; nothing is deleted.</li>
+              <li><b>7 found only here close</b> with the reason "source removed". They move to <a href="feed.html#passed">Feed › Passed &amp; closed</a>; nothing is deleted.</li>
               <li><b>2 also on dev.bg stay open</b> and keep being checked there.</li>
               <li>Your draft package for <b>Backend Engineer · Delasport</b> is kept, with a note that its job is closed.</li>
               <li>Applications are never touched.</li>
             </ul>
-            <div class="row"><button class="btn danger">Remove and close 7 jobs</button><button class="btn">Pause instead</button><a class="btn ghost" href="#normal">Cancel</a></div>
+            <div class="row"><button class="btn danger" type="button" id="rm-confirm">Remove and close 7 jobs</button><button class="btn" type="button" id="rm-pause" autofocus>Pause instead</button><button class="btn ghost" type="button" id="rm-cancel">Cancel</button></div>
             <p class="meta">Pause stops checking but leaves the jobs open, marked "not being checked", in case you only want a break.</p>
-          </div>
+          </dialog>
           <div class="stack" style="gap:var(--s-3)">
-            <span class="meta">After confirming: 10 seconds to undo, then the row leaves the table</span>
-            <div class="toast static" role="status">Delasport removed · 7 jobs closed with "source removed" <button class="btn ghost sm">Undo</button></div>
+            <span class="meta">After confirming, this toast appears. Undo stays for 15 seconds with a countdown, paused while you hover or focus it; the jobs can also be reopened later from Passed &amp; closed. Example (not interactive):</span>
+            <div class="toast static" inert aria-hidden="true">Delasport removed · 7 jobs closed with "source removed" <span class="btn ghost sm">Undo · 15 s</span></div>
           </div>
         </section>
 
@@ -371,23 +390,23 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
                 <div class="segmented" role="group" aria-labelledby="cv-site" style="justify-self:start;flex-wrap:wrap"><button type="button" aria-pressed="true">dev.bg</button><button type="button" aria-pressed="false">jobs.bg</button><button type="button" aria-pressed="false">LinkedIn</button><button type="button" aria-pressed="false">Google Jobs</button></div>
               </div>
               <div class="form-grid">
-                <div class="field"><label for="cv-q">Search words</label><input class="input" id="cv-q" value="security"></div>
-                <div class="field"><label for="cv-loc">Location</label><input class="input" id="cv-loc" value="Sofia"></div>
-                <div class="field"><label for="cv-n">Results you saw</label><input class="input num" id="cv-n" inputmode="numeric" value="41"></div>
+                <div class="field"><label for="cv-q">Search words</label><input class="input" id="cv-q" name="search-words" autocomplete="off" value="security"></div>
+                <div class="field"><label for="cv-loc">Location</label><input class="input" id="cv-loc" name="location" autocomplete="off" value="Sofia"></div>
+                <div class="field"><label for="cv-n">Results you saw <span class="meta" style="font-weight:400">(optional with a link)</span></label><input class="input num" id="cv-n" name="results" inputmode="numeric" autocomplete="off" value="41" aria-describedby="cv-n-help"><span class="help" id="cv-n-help">Leave empty if you paste the results link below: apply-kit reads the count from the page.</span></div>
               </div>
-              <div class="field"><label for="cv-url">Results page link <span class="meta" style="font-weight:400">(optional)</span></label><span class="help" id="cv-url-help">For dev.bg and jobs.bg apply-kit reads the page once and lists exactly what's missing. For LinkedIn, capture the results page with the extension instead.</span><input class="input" id="cv-url" aria-describedby="cv-url-help" placeholder="https://"></div>
-              <div class="row"><button class="btn primary">Compare</button></div>
+              <div class="field"><label for="cv-url">Results page link <span class="meta" style="font-weight:400">(optional)</span></label><span class="help" id="cv-url-help">For dev.bg and jobs.bg apply-kit reads the page once and lists exactly what's missing. For LinkedIn, capture the results page with the extension instead.</span><input class="input" id="cv-url" name="results-link" type="url" inputmode="url" autocomplete="off" spellcheck="false" aria-describedby="cv-url-help" placeholder="https://…"></div>
+              <div class="row"><button class="btn primary" type="button">Compare</button></div>
             </form>
           </div>
           <div class="panel" aria-live="polite">
-            <div class="panel-h"><h2>39 of 41 already in the Feed</h2><span class="grow"></span><span data-chip="warn">2 missing</span></div>
-            <p class="meta">You searched dev.bg for "security" in Sofia and saw 41 results.</p>
-            <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="41" aria-valuenow="39" aria-label="Found by apply-kit"><span style="width:95%"></span></div>
+            <div class="panel-h"><h2>39 of 41 found: 37 in the Feed, 2 hidden, 2 missing</h2><span class="grow"></span><span data-chip="warn">2 missing</span></div>
+            <p class="meta">You searched dev.bg for "security" in Sofia and saw 41 results. The 2 hidden ones were hidden by your dealbreakers (both ask for more than 4 years) and are in the Feed's Hidden view.</p>
+            <div class="meter" role="meter" aria-valuemin="0" aria-valuemax="41" aria-valuenow="39" aria-valuetext="39 of 41 found" aria-label="Found by apply-kit"><span style="width:95%"></span></div>
             <div>
               <div class="miss">
                 <div class="panel-h"><span class="src-name">Information Security Officer · Fibank</span></div>
                 <p class="why"><b>Why missed:</b> dev.bg filed it under "IT management", which you don't watch, and Fibank isn't on your watchlist.</p>
-                <div class="row"><button class="btn sm">Add the job</button><button class="btn sm primary">Also watch "IT management"</button></div>
+                <div class="row"><button class="btn sm" type="button">Add the job<span class="sr-only">: Information Security Officer at Fibank</span></button><button class="btn sm primary" type="button">Also watch "IT management"</button></div>
               </div>
               <div class="miss">
                 <div class="panel-h"><span class="src-name">Security Engineer · Paynetics</span></div>
@@ -397,7 +416,7 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
             </div>
           </div>
           <div class="panel flush">
-            <div style="padding:var(--s-5) var(--s-5) var(--s-3)"><h3>Coverage history</h3><p class="meta">Gaps that repeat point to a source or category to add.</p></div>
+            <div style="padding:var(--s-5) var(--s-5) var(--s-3)"><h2>Coverage history</h2><p class="meta">Gaps that repeat point to a source or category to add.</p></div>
             <div class="table-wrap"><table class="table" aria-label="Coverage history">
               <thead><tr><th>Date</th><th>Site and search</th><th class="r">You saw</th><th class="r">apply-kit had</th><th>Result</th></tr></thead>
               <tbody>
@@ -414,21 +433,26 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
   </main>
 </div>
 
+<div id="toast-host" role="status" aria-live="polite"></div>
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
+
 <script>
 (function () {
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
   const icon = {
     ok: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     bad: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
     warn: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2.2v5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="9.6" r="1.1" fill="currentColor"/></svg>',
     quiet: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
-    manual: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="3.8" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
     none: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6h7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
   };
-  const chipCls = { ok: "met", bad: "gap", warn: "partly", quiet: "neutral", manual: "neutral", none: "neutral" };
+  const chev = '<svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  const chipCls = { ok: "met", bad: "gap", warn: "partly", quiet: "neutral", none: "neutral" };
   const chip = (st, text) => `<span class="chip ${chipCls[st]}">${icon[st]}${text}</span>`;
   document.querySelectorAll("[data-chip]").forEach(el => el.outerHTML = chip(el.dataset.chip, el.innerHTML));
+  $$(".chain[aria-label]").forEach(el => el.setAttribute("role", "group"));
 
-  // sources: name, identifier, type, last check, in-location, total, normal [lo, hi], status, note
+  // the 14 checked sources. Email alerts carry a cadence learned from their history (hist = jobs per day, last 14 days)
   const S = [
     { n: "SumUp", id: "Greenhouse · sumup", type: "ATS feed", last: "07:30", loc: 34, tot: 346, band: [30, 36], st: "ok" },
     { n: "Playtech", id: "SmartRecruiters · Playtech", type: "ATS feed", last: "07:30", loc: 33, tot: 122, band: [28, 36], st: "ok" },
@@ -441,62 +465,71 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
     { n: "Amazon Jobs", id: "amazon.jobs · country BGR", type: "Public API", last: "07:30", loc: 0, tot: 0, band: [0, 1], st: "quiet" },
     { n: "dev.bg", id: "it-security · Sofia", type: "Aggregator", last: "07:30", loc: 12, tot: 12, band: [10, 16], st: "ok" },
     { n: "Jooble", id: "cyber security · Bulgaria", type: "Aggregator", last: "07:30", loc: 11, tot: 14, band: [8, 14], st: "ok" },
-    { n: "LinkedIn job alerts", id: "4 saved searches, by email", type: "Email alert", last: "email 06:12", loc: "9 this week", band: [6, 12], unit: "week", st: "ok" },
-    { n: "jobs.bg alerts", id: "2 saved searches, by email", type: "Email alert", last: "email yesterday", loc: "5 this week", band: [3, 8], unit: "week", st: "ok" },
-    { n: "Google Careers alerts", id: "security · Europe, by email", type: "Email alert", last: "email 3 Oct", loc: "1 this week", band: [0, 2], unit: "week", st: "ok" },
-    { n: "Manual capture", id: "jobs you add with the extension or a link", type: "Manual", last: "not checked", loc: "3 this month", st: "manual" },
+    { n: "LinkedIn job alerts", id: "4 saved searches, by email", type: "Email alert", last: "email 06:12", lastEmail: "today, 06:12", loc: "9 this week", cad: "daily", gap: "1 day", warnAfter: "3 days", week: "6–12 a week", hist: [1, 2, 1, 1, 2, 1, 1, 2, 1, 1, 2, 1, 2, 1], st: "ok" },
+    { n: "jobs.bg alerts", id: "2 saved searches, by email", type: "Email alert", last: "email yesterday", lastEmail: "yesterday, 18:40", loc: "5 this week", cad: "daily", gap: "1 day", warnAfter: "3 days", week: "3–8 a week", hist: [1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0], st: "ok" },
+    { n: "Google Careers alerts", id: "security · Europe, by email", type: "Email alert", last: "email 3 Oct", lastEmail: "3 Oct, 8 days ago", loc: "0 this week", cad: "every 2 days", gap: "2 days", warnAfter: "6 days", week: "2–4 a week", hist: [0, 1, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], quiet: 8, st: "warn", stText: "Quiet longer than usual", rowNote: "No email for 8 days; usually one every 2 days. Check the alert is still on." },
   ];
-  const statusText = { ok: "Working", quiet: "Quiet, as usual", manual: "Added by you", bad: "Failing since 07:30", warn: "Unusual drop" };
-  const head = `<tr><th>Company / source</th><th>Status</th><th>Last check</th><th class="r">In your locations</th><th class="r">Normal</th><th>Type</th><th class="act"><span class="sr-only">Actions</span></th></tr>`;
-  document.querySelectorAll("[data-head]").forEach(h => h.innerHTML = head);
+  const statusText = { ok: "Working", quiet: "Quiet, as usual", bad: "Failing since 07:30", warn: "Unusual drop" };
+  const head = `<tr><th scope="col">Company / source</th><th scope="col">Status</th><th scope="col" class="c-last">Last check</th><th scope="col" class="r">In your locations</th><th scope="col" class="r c-normal">Normal</th><th scope="col" class="c-type">Type</th><th scope="col" class="act"><span class="sr-only">Actions</span></th></tr>`;
+  $$("[data-head]").forEach(h => h.innerHTML = head);
 
-  const row = (s, i, over = {}) => {
-    const o = over[s.n] || {}, st = o.st || s.st;
+  const row = (key, s, i, over = {}) => {
+    const o = over[s.n] || {}, st = o.st || s.st, txt = o.text || s.stText || statusText[st];
     const found = typeof s.loc === "number" ? `${o.loc ?? s.loc}${s.tot !== s.loc ? ` <span class="total">of ${s.tot}</span>` : ""}` : s.loc;
-    const normal = s.band ? `${s.band[0]}–${s.band[1]}${s.unit ? ` / ${s.unit}` : ""}` : "–";
-    const cls = o.focus ? ' class="is-focused"' : "";
-    return `<tr data-i="${i}"${cls}><td><span class="src-name">${s.n}</span><span class="src-id">${s.id}</span>${s.note ? `<div class="note">${s.note}</div>` : ""}</td>
-      <td>${chip(st, o.text || statusText[st])}</td><td class="num">${o.last || s.last}</td><td class="r num">${found}</td><td class="r num">${normal}</td><td>${s.type}</td>
-      <td class="act"><button class="btn ghost sm" aria-label="More for ${s.n}" title="Check now, pause, remove">⋯</button></td></tr>`;
+    const normal = s.hist ? `${s.week} · ${s.cad}` : `${s.band[0]}–${s.band[1]}`;
+    const note = o.note || s.rowNote || s.note;
+    return `<tr data-i="${i}"><td><button class="src-btn" type="button" aria-expanded="false" aria-controls="det-${key}-${i}">${chev}${s.n}</button><span class="src-id">${s.id}</span>${note ? `<div class="note${st === "warn" || st === "bad" ? " quiet-note" : ""}">${note}</div>` : ""}</td>
+      <td>${chip(st, txt)}</td><td class="num c-last">${o.last || s.last}</td><td class="r num">${found}</td><td class="r num c-normal">${normal}</td><td class="c-type">${s.type}</td>
+      <td class="act">${st === "bad" || st === "warn" ? `<button class="btn sm" type="button" data-check="${s.n}">${s.hist ? "Check mailbox" : "Check now"}<span class="sr-only">: ${s.n}</span></button>` : ""}</td></tr>`;
   };
-  const fill = (k, over) => document.querySelectorAll(`[data-sources="${k}"]`).forEach(tb => tb.innerHTML = S.map((s, i) => row(s, i, over)).join(""));
-  fill("normal", { "dev.bg": { focus: true } });
-  fill("failing", { "dev.bg": { st: "bad", focus: true, last: "08:30 · no answer" } });
-  fill("drop", { SumUp: { st: "warn", focus: true, loc: 0 } });
+  const OVER = {
+    normal: {},
+    failing: { "dev.bg": { st: "bad", last: "08:30 · no answer" } },
+    drop: { SumUp: { st: "warn", loc: 0, note: "Listed 0 jobs at 07:30; usually 30–36. Its 34 jobs stay open." } },
+  };
+  const fill = k => $$(`[data-sources="${k}"]`).forEach(tb => tb.innerHTML = S.map((s, i) => row(k, s, i, OVER[k])).join(""));
+  Object.keys(OVER).forEach(fill);
 
-  // per-check history for the detail panel (fictional, deterministic)
+  // per-check history (fictional, deterministic)
   const checkTimes = ["17:30", "18:00", "18:30", "19:00", "19:30", "20:00", "20:30", "21:00", "21:30", "22:00", "22:30", "23:00", "07:00", "07:30"];
   const days = ["28 Sep", "29", "30", "1 Oct", "2", "3", "4 Oct", "5", "6", "7", "8", "9", "10", "11 Oct"];
   const series = (s, i) => {
+    if (s.hist) return s.hist.slice();
     const [lo, hi] = s.band, span = hi - lo, v = [];
-    for (let k = 0; k < 14; k++) { const r = Math.abs(Math.sin((i + 1) * 12.9898 + k * 78.233)) % 1; v.push(s.unit ? Math.round(lo / 7 + r * (span / 7 + 1)) : Math.round(lo + span * 0.2 + r * span * 0.6)); }
-    if (!s.unit) v[13] = s.loc;
+    for (let k = 0; k < 14; k++) { const r = Math.abs(Math.sin((i + 1) * 12.9898 + k * 78.233)) % 1; v.push(Math.round(lo + span * 0.2 + r * span * 0.6)); }
+    v[13] = s.loc;
     return v;
   };
-  const detail = document.getElementById("detail-normal");
-  const showDetail = i => {
-    const s = S[i];
-    if (s.st === "manual") {
-      detail.innerHTML = `<div class="panel-h"><h3>Source health · Manual capture</h3><span class="grow"></span>${chip("manual", "Added by you")}</div><p class="muted" style="font-size:var(--fs-small)">Jobs you add with the extension or a pasted link aren't checked on a schedule, so there's no history. 3 added this month.</p>`;
-      return;
-    }
-    const em = !!s.unit, v = series(s, i);
-    const data = { v, t: em ? days : checkTimes, brk: em ? -1 : 11, band: em ? null : s.band, label: `${s.n}, ${em ? "jobs from alert emails per day, last 14 days" : "postings in your locations per check, last 14 checks"}: ${v.join(", ")}` };
-    detail.innerHTML = `<div class="panel-h"><h3>Source health · ${s.n}</h3><span class="grow"></span>${chip(s.st, statusText[s.st])}</div>
+  const detailHtml = (key, s, i) => {
+    const o = OVER[key][s.n] || {}, st = o.st || s.st, em = !!s.hist, v = series(s, i);
+    if (o.loc === 0) v[13] = 0;
+    const data = { v, t: em ? days : checkTimes, brk: em ? -1 : 11, band: em ? null : s.band, quiet: s.quiet ? [14 - s.quiet, 13] : null, warn: o.loc === 0 ? [13] : [], label: `${s.n}, ${em ? "jobs from alert emails per day, last 14 days" : "postings in your locations per check, last 14 checks"}: ${v.join(", ")}${s.quiet ? `. No email for the last ${s.quiet} days` : ""}` };
+    const kv = em
+      ? `<dt>Last email</dt><dd>${s.lastEmail}</dd><dt>Usual rhythm</dt><dd>One email ${s.cad} (learned from the last 6 weeks), ${s.week}</dd><dt>Warns after</dt><dd>${s.warnAfter} without an email: 3× the usual gap of ${s.gap}</dd><dt>Arrives via</dt><dd>Job mailbox, read every 10 min</dd>`
+      : `<dt>Last answer</dt><dd>${o.last || s.last} · ${(1 + (i % 5) * 0.3).toFixed(1)} s · ${o.loc ?? s.loc} in your locations${s.tot !== s.loc ? `, ${s.tot} in total` : ""}</dd><dt>Normal</dt><dd>${s.band[0]}–${s.band[1]} over the last 14 checks</dd><dt>Failures, 30 days</dt><dd>${s.n === "dev.bg" ? "1 · timed out 2 Oct 22:00, fine at 22:30" : "None"}</dd><dt>Next check</dt><dd>08:00</dd>`;
+    const rule = em
+      ? `<b>When apply-kit warns about an email alert</b><span>When no email arrives for more than 3× its usual gap. The rhythm is learned per alert from its history. The job mailbox as a whole also warns after 24 hours without any mail. A warning never closes jobs.</span>`
+      : `<b>When apply-kit warns</b><span>A check that returns less than half of its lowest count in the last 14 checks, or 0 when it normally has 3 or more. Nothing closes on its own: the jobs stay open, and after 2 more checks like that a Needs-you item asks you. A failed check changes nothing at all.</span>`;
+    const quietBox = st === "warn" && em ? `<div class="banner warning"><span class="text"><b>${icon.warn.replace('aria-hidden="true"', 'aria-hidden="true" style="width:12px;height:12px;vertical-align:-1px"')} Quiet longer than usual.</b> No Google Careers alert email for 8 days; it usually sends one every 2 days. The alert may be switched off, or the iCloud forward may have stopped for this sender. Its jobs already in the Feed stay open.</span></div>` : "";
+    return `<div class="detail-inner"><div class="panel-h"><h2>History · ${s.n}</h2><span class="grow"></span>${chip(st, o.text || s.stText || statusText[st])}</div>
+      ${quietBox}
       <p class="meta">${s.id} · ${em ? "jobs per day from alert emails, last 14 days" : "postings in your locations per check, last 14 checks"}</p>
-      <div class="chart" data-chart='${JSON.stringify(data)}'></div>
-      <dl class="kv">${em
-        ? `<dt>Last email</dt><dd>${s.last.replace("email ", "")}</dd><dt>Arrives via</dt><dd>Job mailbox, read every 10 min</dd><dt>Normal</dt><dd>${s.band[0]}–${s.band[1]} jobs a week</dd>`
-        : `<dt>Last answer</dt><dd>${s.last} · ${(1 + (i % 5) * 0.3).toFixed(1)} s · ${s.loc} in your locations${s.tot !== s.loc ? `, ${s.tot} in total` : ""}</dd><dt>Failures, 30 days</dt><dd>${i === 9 ? "1 · timed out 2 Oct 22:00, fine at 22:30" : "None"}</dd><dt>Next check</dt><dd>08:00</dd>`}</dl>
-      <div class="rule-box"><b>When apply-kit warns</b><span>A check that returns less than half of its lowest count in the last 14 checks, or 0 when it normally has 3 or more. A warning never closes jobs, and a failed check changes nothing at all.</span></div>`;
-    draw(detail.querySelector("[data-chart]"));
+      <div class="chart" data-chart='${JSON.stringify(data).replace(/'/g, "&#39;")}'></div>
+      <dl class="kv">${kv}</dl>
+      <div class="rule-box">${rule}</div>
+      <div class="row">${em ? `<a class="btn sm" href="#mailbox">Open the job mailbox</a><a class="btn sm" href="#">Check the alert on Google Careers</a>` : `<button class="btn sm" type="button" data-check="${s.n}">Check now<span class="sr-only">: ${s.n}</span></button>`}<button class="btn ghost sm" type="button">Pause<span class="sr-only"> ${s.n}</span></button><a class="btn ghost sm" href="#remove">Remove…<span class="sr-only"> ${s.n}</span></a></div></div>`;
   };
-  document.querySelector('[data-sources="normal"]').addEventListener("click", e => {
-    const tr = e.target.closest("tr"); if (!tr || e.target.closest("button")) return;
-    tr.parentElement.querySelectorAll("tr").forEach(r => r.classList.toggle("is-focused", r === tr));
-    showDetail(+tr.dataset.i);
-  });
-  showDetail(9);
+  const sizeDetail = tr => { const inner = $(".detail-inner", tr), wrap = tr.closest(".table-wrap"); inner.style.width = wrap.clientWidth + "px"; draw($("[data-chart]", tr)); };
+  const toggleDetail = (btn, open) => {
+    const tr = btn.closest("tr"), tb = tr.parentElement, key = tb.dataset.sources, i = +tr.dataset.i;
+    $$("tr.detail-row", tb).forEach(d => d.remove());
+    $$(".src-btn", tb).forEach(b => b.setAttribute("aria-expanded", "false"));
+    $$("tr", tb).forEach(r => r.classList.remove("is-focused"));
+    if (!open) return;
+    tr.insertAdjacentHTML("afterend", `<tr class="detail-row" id="det-${key}-${i}"><td colspan="7">${detailHtml(key, S[i], i)}</td></tr>`);
+    btn.setAttribute("aria-expanded", "true"); tr.classList.add("is-focused");
+    sizeDetail(tr.nextElementSibling);
+  };
 
   // history chart, drawn to scale at the element's real width
   function draw(el) {
@@ -508,11 +541,11 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
     const n = d.v.length, gap = d.brk >= 0 ? 1 : 0, unit = (W - L - R) / (n - 1 + gap);
     const x = k => L + (k + (d.brk >= 0 && k > d.brk ? gap : 0)) * unit, y = val => T + (H - T - B) * (1 - val / ymax);
     let s = "";
-    if (d.band) s += `<rect x="${L}" y="${y(d.band[1])}" width="${W - L - R}" height="${y(d.band[0]) - y(d.band[1])}" fill="var(--surface-sunken)"/><line x1="${L}" x2="${W - R}" y1="${y(d.band[1])}" y2="${y(d.band[1])}" stroke="var(--border-control)" stroke-dasharray="3 4"/><line x1="${L}" x2="${W - R}" y1="${y(d.band[0])}" y2="${y(d.band[0])}" stroke="var(--border-control)" stroke-dasharray="3 4"/>`;
+    if (d.band) s += `<rect x="${L}" y="${y(d.band[1])}" width="${W - L - R}" height="${y(d.band[0]) - y(d.band[1])}" fill="var(--surface-sunken)"/><line x1="${L}" x2="${W - R}" y1="${y(d.band[1])}" y2="${y(d.band[1])}" stroke="var(--ink-3)" stroke-dasharray="3 4"/><line x1="${L}" x2="${W - R}" y1="${y(d.band[0])}" y2="${y(d.band[0])}" stroke="var(--ink-3)" stroke-dasharray="3 4"/>`;
+    if (d.quiet) { const qx = x(d.quiet[0]) - unit / 2, qw = x(d.quiet[1]) - qx + Math.min(unit / 2, R); s += `<rect x="${qx}" y="${T}" width="${qw}" height="${y(0) - T}" fill="var(--partly-soft)" stroke="var(--partly)" stroke-dasharray="3 3"/><text x="${qx + qw / 2}" y="${T - 8}" text-anchor="middle" font-size="10" fill="var(--partly)" font-family="Onest, sans-serif">no email for ${d.quiet[1] - d.quiet[0] + 1} days</text>`; }
     [0, ymax / 2, ymax].filter(Number.isInteger).forEach(g => { s += `<text x="${L - 6}" y="${y(g) + 3.5}" text-anchor="end" font-size="10" fill="var(--ink-3)" font-family="Onest, sans-serif">${g}</text>`; });
     s += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="var(--rule)"/>`;
     if (d.brk >= 0) { const bx = (x(d.brk) + x(d.brk + 1)) / 2; s += `<line x1="${bx}" x2="${bx}" y1="${T}" y2="${y(0)}" stroke="var(--rule)" stroke-dasharray="2 3"/><text x="${bx}" y="10" text-anchor="middle" font-size="10" fill="var(--ink-3)" font-family="Onest, sans-serif">paused overnight</text>`; }
-    // runs of answered checks (warned points get their own dashed segment)
     const warn = d.warn || [], runs = []; let cur = [];
     d.v.forEach((val, k) => { if (val === null || warn.includes(k)) { if (cur.length) runs.push(cur); cur = []; } else cur.push(k); });
     if (cur.length) runs.push(cur);
@@ -534,29 +567,72 @@ Last good answer 07:00:04 · 200 · 12 postings</pre></details>
       s += `<text x="${x(k)}" y="${H - 6}" text-anchor="${anchor}" font-size="10" fill="var(--ink-3)" font-family="Onest, sans-serif">${d.t[k]}</text>`;
     });
     el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${d.label.replace(/"/g, "&quot;")}">${s}</svg>
-      <div class="legend" aria-hidden="true"><span><i class="k-line"></i>count per ${d.brk >= 0 ? "check" : "day"}</span>${d.band ? `<span><i class="k-band"></i>normal ${d.band[0]}–${d.band[1]}</span>` : ""}${d.v.includes(null) ? `<span><svg class="k-fail" viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>no answer</span>` : ""}${warn.length ? `<span><i class="k-warn"></i>below the drop rule</span>` : ""}</div>`;
+      <div class="legend" aria-hidden="true"><span><i class="k-line"></i>count per ${d.brk >= 0 ? "check" : "day"}</span>${d.band ? `<span><i class="k-band"></i>normal ${d.band[0]}–${d.band[1]}</span>` : ""}${d.quiet ? `<span><i class="k-quiet"></i>quiet longer than usual</span>` : ""}${d.v.includes(null) ? `<span><svg class="k-fail" viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>no answer</span>` : ""}${warn.length ? `<span><i class="k-warn"></i>below the drop rule</span>` : ""}</div>`;
   }
-  const drawAll = () => document.querySelectorAll("section:not([hidden]) [data-chart]").forEach(draw);
+  const drawAll = () => { $$("section:not([hidden]) > .panel > [data-chart], section:not([hidden]) .panel > .chart").forEach(draw); $$("section:not([hidden]) tr.detail-row").forEach(sizeDetail); };
   let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(drawAll, 80); });
 
-  document.querySelectorAll(".segmented").forEach(g => g.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; g.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); }));
+  // announcements and toast: polite; Undo for 15 s with a visible countdown, paused on hover or focus
+  const live = $("#live"), host = $("#toast-host");
+  const announce = msg => { live.textContent = ""; setTimeout(() => live.textContent = msg, 60); };
+  let tTimer = null, tLeft = 0, tPaused = false, tReturn = null;
+  const closeToast = () => { clearInterval(tTimer); const had = host.contains(document.activeElement); host.innerHTML = ""; if (had && tReturn && document.contains(tReturn)) tReturn.focus(); };
+  const toast = (msg, undo, ret) => {
+    clearInterval(tTimer); tReturn = ret || null;
+    host.innerHTML = `<div class="toast"><span>${msg}</span>${undo ? '<button class="btn ghost sm" type="button" data-undo>Undo<span class="cd" aria-hidden="true"> · 15 s</span></button>' : ""}<button class="btn ghost sm x" type="button" data-dismiss aria-label="Dismiss">✕</button></div>`;
+    const t = host.firstElementChild; tLeft = undo ? 15 : 6; tPaused = false;
+    t.addEventListener("mouseenter", () => tPaused = true); t.addEventListener("mouseleave", () => tPaused = t.contains(document.activeElement));
+    t.addEventListener("focusin", () => tPaused = true); t.addEventListener("focusout", e => { if (!t.contains(e.relatedTarget)) tPaused = t.matches(":hover"); });
+    if (undo) $("[data-undo]", t).addEventListener("click", () => { closeToast(); undo(); });
+    $("[data-dismiss]", t).addEventListener("click", closeToast);
+    tTimer = setInterval(() => { if (tPaused) return; tLeft--; const cd = $(".cd", t); if (cd) cd.textContent = ` · ${tLeft} s`; if (tLeft <= 0) closeToast(); }, 1000);
+  };
 
-  // review state switcher
-  const states = [...document.querySelectorAll("[data-state]")], bar = document.querySelector(".review .states"), health = document.getElementById("health");
-  const healthFor = { failing: ["bad", "1 source failing"], drop: ["warn", "1 source unusual"] };
-  const railDot = document.querySelector("#rail-sources .dot");
+  document.addEventListener("click", e => {
+    const t = e.target;
+    const sb = t.closest(".src-btn"); if (sb) return toggleDetail(sb, sb.getAttribute("aria-expanded") !== "true");
+    const seg = t.closest(".segmented button"); if (seg) { seg.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === seg))); return; }
+    const ck = t.closest("[data-check]"); if (ck) { const n = ck.dataset.check; announce(`Checking ${n} now…`); setTimeout(() => announce(n === "dev.bg" ? "dev.bg still didn't answer. Its 12 jobs stay open. Next try 09:00." : n === "SumUp" ? "SumUp still lists 0 jobs. Its 34 jobs stay open." : n.startsWith("Google") ? "Still no Google Careers alert email in the job mailbox." : `${n} answered normally.`), 1500); return; }
+    const tr = t.closest("[data-try]"); if (tr) { announce("Trying dev.bg now…"); setTimeout(() => announce("dev.bg still didn't answer. Its 12 jobs stay open. Next try 09:00."), 1500); return; }
+    if (t.closest("[data-check-all]")) { announce("Checking all 14 sources…"); setTimeout(() => announce("Check finished: 13 sources normal, 1 quiet longer than usual."), 2000); return; }
+    if (t.closest("[data-wait]")) { announce("SumUp's 34 jobs stay open. You'll be asked again if the next 2 checks also return 0."); return; }
+    if (t.closest("[data-close-sumup]")) { const b = t.closest("[data-close-sumup]"); toast('Closed 34 SumUp jobs with the reason "no longer listed by SumUp". They\'re in Feed › Passed &amp; closed.', () => announce("Undone. SumUp's 34 jobs are open again."), b); return; }
+    const add = t.closest("[data-add]"); if (add) { const n = add.closest("[data-sug]").dataset.sug; add.disabled = true; add.textContent = "Added"; toast(`Added ${n} to your watchlist. Its jobs arrive after the next check.`, () => { add.disabled = false; add.innerHTML = `Add<span class="sr-only"> ${n}</span>`; add.focus(); announce(`${n} removed from your watchlist.`); }, add); return; }
+    if (t.closest("[data-unwatch]")) { const b = t.closest("[data-unwatch]"); toast("Removed Nexo from your watchlist.", () => announce("Nexo is back on your watchlist."), b); return; }
+  });
+  $$("[data-add]").forEach(b => b.insertAdjacentHTML("beforeend", `<span class="sr-only"> ${b.closest("[data-sug]").dataset.sug}</span>`));
+
+  // remove: native modal dialog, safe initial focus, focus returns to the trigger
+  const dlg = $("#rm-dialog"), rmOpen = $("#rm-open");
+  rmOpen.addEventListener("click", () => { dlg.showModal(); $("#rm-pause").focus(); });
+  dlg.addEventListener("close", () => { if (dlg.returnValue !== "removed") rmOpen.focus(); });
+  $("#rm-cancel").addEventListener("click", () => dlg.close("cancel"));
+  $("#rm-pause").addEventListener("click", () => { dlg.close("pause"); announce("Delasport paused. Its 9 jobs stay open, marked not being checked."); });
+  $("#rm-confirm").addEventListener("click", () => { dlg.close("removed"); toast('Delasport removed · 7 jobs closed with "source removed"', () => { announce("Undone. Delasport is back on your watchlist and its 7 jobs are open."); rmOpen.focus(); }, rmOpen); rmOpen.focus(); });
+
+  // review state switcher; health pill and rail mark (icon + text) follow the state, changes announced politely
+  const states = $$("[data-state]"), bar = $(".review .states"), health = $("#health");
+  const healthFor = { failing: ["bad", "1 failing · 1 unusual", "1 source failing, 1 unusual"], drop: ["warn", "2 sources unusual", "2 sources unusual"] };
+  const railDot = $("#rail-sources .dot"), railStatus = $("#rail-status");
+  let healthTxt = "";
   const show = id => {
     states.forEach(s => s.hidden = s.dataset.state !== id);
     bar.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === id)));
-    const [cls, txt] = healthFor[id] || ["", "14 sources OK · 07:30"];
-    health.className = "health " + cls; health.querySelector("span").textContent = txt;
-    railDot.hidden = !cls; railDot.className = "dot " + cls;
+    const [cls, txt, said] = healthFor[id] || ["warn", "1 source unusual · 07:30", "1 source unusual"];
+    health.className = "health " + cls; $("span", health).textContent = txt;
+    if (healthTxt && healthTxt !== txt) announce("Source health: " + said);
+    healthTxt = txt;
+    railDot.hidden = !cls; railDot.className = "dot " + cls; railDot.innerHTML = icon[cls] || ""; railStatus.textContent = cls ? `, ${said}` : "";
+    if (dlg.open) dlg.close("cancel");
+    closeToast();
     drawAll();
   };
   states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => { history.replaceState(null, "", "#" + s.dataset.state); show(s.dataset.state); }; bar.appendChild(b); });
   const fromHash = () => states.some(s => s.dataset.state === location.hash.slice(1)) ? location.hash.slice(1) : null;
   window.addEventListener("hashchange", () => { const h = fromHash(); if (h) { show(h); window.scrollTo(0, 0); } });
   show(fromHash() || "normal");
+  // Google Careers alerts is today's example of a quiet email alert: open its history
+  toggleDetail($('[data-sources="normal"] tr[data-i="13"] .src-btn'), true);
 })();
 </script>
 </body>
