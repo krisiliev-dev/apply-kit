@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
-  createEngine, type EngineDeps, type Clock, type Timers, type Extractor, type ExtractionInput, type PostingFacts,
+  createEngine, type EngineDeps, type Clock, type Timers, type Extractor, type ExtractionInput, type PostingFacts, type MailReader,
 } from "../src/index.ts";
 
 const fixturesDir = fileURLToPath(new URL("./fixtures/", import.meta.url));
@@ -75,6 +75,38 @@ export function fixtureFetch(routes: Record<string, string> = {}): typeof fetch 
   };
 }
 
+export type AlertEmail = Awaited<ReturnType<MailReader["fetchSince"]>>[number];
+
+/**
+ * A job mailbox held in memory. `deliver` puts an email in it; `fail` makes every read throw
+ * (an expired app password, say) until `recover`. Reads return the emails received since the asked time;
+ * with a clock, emails dated in its future haven't arrived yet, so they can be delivered up front.
+ */
+export interface FakeMailbox extends MailReader {
+  deliver(email: AlertEmail): void;
+  fail(err: Error): void;
+  recover(): void;
+  reads: Date[];
+}
+
+export function fakeMailbox(clock?: Clock): FakeMailbox {
+  const emails: AlertEmail[] = [];
+  let failure: Error | null = null;
+  const reads: Date[] = [];
+  return {
+    reads,
+    deliver: (email) => { emails.push(email); },
+    fail: (err) => { failure = err; },
+    recover: () => { failure = null; },
+    async fetchSince(since) {
+      reads.push(since);
+      if (failure) throw failure;
+      const now = clock?.now().getTime() ?? Infinity;
+      return emails.filter((e) => e.receivedAt.getTime() >= since.getTime() && e.receivedAt.getTime() <= now);
+    },
+  };
+}
+
 /** Facts for a posting that states nothing: tests override only what they care about. */
 export function cannedFacts(overrides: Partial<PostingFacts> = {}): PostingFacts {
   return {
@@ -114,6 +146,11 @@ export function fakeExtractor(
       return { facts: answer, costUsd, model: "fake/extractor" };
     },
   };
+}
+
+/** An alert email whose HTML body is a fixture in test/fixtures (synthetic, no personal data). */
+export function alertEmail(fixture: string, fields: { id: string; from: string; subject: string; receivedAt: string }): AlertEmail {
+  return { ...fields, receivedAt: new Date(fields.receivedAt), html: loadFixture(fixture), text: "" };
 }
 
 export function createTestEngine(overrides: Partial<EngineDeps> = {}) {

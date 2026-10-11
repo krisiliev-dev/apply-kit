@@ -54,6 +54,18 @@ A Source whose key setting is missing shows as failing on the Sources screen wit
 
 While the service runs it checks Sources every 30 minutes between 07:00 and 23:00 (local time), and after the Mac wakes it catches up within a minute if a check was missed. Change this with `APPLY_KIT_CHECK_EVERY_MINUTES` and `APPLY_KIT_CHECK_WINDOW` (e.g. `08:00-20:00`). **Check now** on the Feed checks straight away.
 
+### Job mailbox (email alerts)
+
+Job-alert emails (LinkedIn, jobs.bg, Google Careers, Workday, MyGreenhouse) are read from a Gmail address used only for job mail, over IMAP and **read-only**: apply-kit opens one folder with EXAMINE, never marks mail read, moves or deletes anything.
+
+1. Create the dedicated Gmail account and turn on 2-Step Verification (Google requires it for app passwords).
+2. Create an app password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (name it "apply-kit").
+3. In `.env`: `GMAIL_ADDRESS` (the job address), `GMAIL_APP_PASSWORD` (spaces are fine) and optionally `GMAIL_MAILBOX` (a Gmail label; default `INBOX`).
+4. On icloud.com › Mail › Settings › Rules, forward job mail from your usual address to the job Gmail. Either forward everything, or add one rule per alert sender (from contains `linkedin.com`, `jobs.bg`, `google.com`, `myworkday.com`, `greenhouse`). Point each site's alerts at your usual address, or straight at the job Gmail.
+5. Add the alert Sources to `APPLY_KIT_SOURCES`: `email:linkedin,email:jobsbg,email:google,email:workday,email:mygreenhouse` (only the ones you use), then restart.
+
+The mailbox is read at each scheduled check. Each alert learns its usual rhythm; one with no email for more than 3× its usual gap shows **Quiet longer than usual** on Sources. If Gmail refuses the app password (revoked, or the Google password changed), Sources says so with these steps; create a new app password and restart.
+
 ### Start at login
 
 ```sh

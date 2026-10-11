@@ -1,13 +1,15 @@
 import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
-import type { EngineDeps, SqlDatabase } from "./ports.ts";
+import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
 import {
   jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
 import { isInYourLocations } from "./locations.ts";
+import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
+import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters } from "./sources/registry.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
@@ -107,6 +109,23 @@ export interface FailingSource {
   jobsKept: number;
 }
 
+/** The job mailbox that feeds every email-alert Source, as Sources shows it. */
+export interface MailboxHealth {
+  /** "not-read" until the first read; "error" when the latest read failed. */
+  state: "not-read" | "connected" | "error";
+  problem: MailboxProblem | null;
+  /** The reader's own message for the latest failure. */
+  error: string | null;
+  /** What the user does about it, naming the settings involved. */
+  fix: string | null;
+  /** First failed read in the current run of failures. */
+  since: string | null;
+  /** The latest good read. */
+  lastReadAt: string | null;
+  /** The latest alert email any email Source received. */
+  lastEmailAt: string | null;
+}
+
 /** Overall source health: drives the top-bar pill and the Feed's failed-source banner. */
 export interface HealthSummary {
   state: HealthState;
@@ -114,6 +133,13 @@ export interface HealthSummary {
   /** The most recent Check of any Source, or null if nothing has been checked yet. */
   lastCheckAt: string | null;
   failing: FailingSource[];
+  /** Email-alert Sources quiet longer than usual. Never closes jobs; the user checks the alert is still on. */
+  quiet: QuietSource[];
+  /**
+   * The job mailbox, or null when no email-alert Source is connected. While it fails, its email
+   * Sources are reported here once instead of one by one in `failing`.
+   */
+  mailbox: MailboxHealth | null;
 }
 
 export interface FeedResult {
@@ -171,7 +197,30 @@ export interface CheckRecord {
   error: string | null;
 }
 
-export type SourceStatus = "not-checked" | "working" | "failing";
+/** "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
+export type SourceStatus = "not-checked" | "working" | "failing" | "quiet";
+
+/** An email-alert Source's rhythm, learned from the emails it received in the last 6 weeks. */
+export interface AlertRhythm {
+  /** The latest alert email from this sender, or null if none has arrived yet. */
+  lastEmailAt: string | null;
+  /** The usual (median) gap between emails, or null until there are at least 4 emails to learn from. */
+  usualGapHours: number | null;
+  /** 3× the usual gap: a silence longer than this is "quiet longer than usual". */
+  warnAfterHours: number | null;
+  /** When the silence passed 3× the usual gap, or null if it hasn't. */
+  quietSince: string | null;
+}
+
+/** An email-alert Source that has been quiet longer than usual. */
+export interface QuietSource {
+  sourceId: string;
+  name: string;
+  lastEmailAt: string;
+  usualGapHours: number;
+  /** Hours since its latest email. */
+  silentHours: number;
+}
 
 export interface SourceHealth {
   id: string;
@@ -188,6 +237,8 @@ export interface SourceHealth {
   jobsKept: number;
   /** Recent Checks, newest first. */
   history: CheckRecord[];
+  /** Email-alert Sources only: their email rhythm. Null for every other Source. */
+  alerts: AlertRhythm | null;
 }
 
 export interface HealthReport {
@@ -272,6 +323,9 @@ export interface ReadResult {
 /** How many recent Checks sourceHealth returns per Source. */
 const historyLength = 14;
 
+/** How far back a mailbox read looks. Alerts older than this are left alone. */
+const mailLookbackMs = 14 * 24 * 60 * 60_000;
+
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
 
@@ -332,7 +386,48 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const countStates = (states: string[]) =>
     count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
 
-  async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
+  /** One read of the job mailbox, shared by every email Source in a check and made only if one needs it. */
+  function mailboxRead(): () => Promise<AlertEmail[]> {
+    let read: Promise<AlertEmail[]> | null = null;
+    return () => (read ??= readMailbox());
+  }
+
+  async function readMailbox(): Promise<AlertEmail[]> {
+    const at = clock.now().toISOString();
+    const record = db.prepare("INSERT INTO mailbox_read (read_at, outcome, reason, error, emails) VALUES (?, ?, ?, ?, ?)");
+    try {
+      const emails = await deps.mailReader.fetchSince(new Date(clock.now().getTime() - mailLookbackMs));
+      record.run(at, "ok", null, null, emails.length);
+      return emails;
+    } catch (err) {
+      record.run(at, "error", mailboxProblemOf(err), err instanceof Error ? err.message : String(err), null);
+      throw err;
+    }
+  }
+
+  function mailboxHealth(sources: SourceHealth[]): MailboxHealth | null {
+    if (!sources.some((s) => s.category === "email")) return null;
+    const latest = db.prepare("SELECT read_at, outcome, reason, error FROM mailbox_read ORDER BY id DESC LIMIT 1").get();
+    const lastOk = db.prepare("SELECT MAX(read_at) AS at FROM mailbox_read WHERE outcome = 'ok'").get()?.at;
+    const lastEmail = db.prepare("SELECT MAX(received_at) AS at FROM alert_email").get()?.at;
+    const lastReadAt = lastOk == null ? null : String(lastOk);
+    const lastEmailAt = lastEmail == null ? null : String(lastEmail);
+    if (!latest || latest.outcome === "ok") {
+      return { state: latest ? "connected" : "not-read", problem: null, error: null, fix: null, since: null, lastReadAt, lastEmailAt };
+    }
+    const problem = String(latest.reason) as MailboxProblem;
+    const since = String(db.prepare("SELECT MIN(read_at) AS at FROM mailbox_read WHERE outcome != 'ok' AND read_at > ?").get(lastReadAt ?? "")!.at);
+    return {
+      state: "error", problem, error: latest.error == null ? null : String(latest.error), fix: mailboxFix[problem] ?? mailboxFix.error,
+      since, lastReadAt, lastEmailAt,
+    };
+  }
+
+  function summary(sources: SourceHealth[]): HealthSummary {
+    return summarise(sources, mailboxHealth(sources), clock.now());
+  }
+
+  async function checkOne(row: Record<string, unknown>, startedAt: string, mail: () => Promise<AlertEmail[]>): Promise<SourceCheck> {
     const sourceId = String(row.id);
     const name = String(row.name);
     let rateLimited = false;
@@ -356,9 +451,17 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
-      const found = await adapter.fetchPostings(config, { fetch: watched, setting });
+      let emails: { email: AlertEmail; postings: FoundPosting[] }[] = [];
+      let found: FoundPosting[];
+      if (isEmailAlertAdapter(adapter)) {
+        emails = (await mail()).filter((e) => adapter.isFrom(config, e)).map((email) => ({ email, postings: adapter.parseEmail(config, email) }));
+        found = emails.flatMap((e) => e.postings);
+      } else {
+        found = await adapter.fetchPostings(config, { fetch: watched, setting, mail });
+      }
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
+        for (const { email, postings } of emails) recordAlertEmail(db, sourceId, email, postings.length);
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
         recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null });
         return fresh;
@@ -535,7 +638,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const lastGood = db.prepare("SELECT MAX(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome = 'ok'").get(id)?.at;
     const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
     const latest = history[0];
-    const status: SourceStatus = !latest ? "not-checked" : latest.outcome === "ok" ? "working" : "failing";
+    const alerts = adapters[kind]?.category === "email" ? alertRhythm(db, id, clock.now()) : null;
+    const status: SourceStatus = !latest ? "not-checked" : latest.outcome !== "ok" ? "failing" : alerts?.quietSince ? "quiet" : "working";
     const failingSince = status !== "failing" ? null : String(db.prepare(
       "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
     ).get(id, lastGoodCheckAt ?? "")!.at);
@@ -545,7 +649,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     );
     return {
       id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
-      status, failingSince, lastGoodCheckAt, jobsKept, history,
+      status, failingSince, lastGoodCheckAt, jobsKept, history, alerts,
     };
   }
 
@@ -682,7 +786,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           passed: countStates(viewStates.passed),
           hidden: 0,
         },
-        health: summarise(allSourceHealth()),
+        health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
         budget: money,
       };
@@ -730,8 +834,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
       options.onStart?.(rows.length);
+      const mail = mailboxRead();
       const sources = await Promise.all(rows.map(async (r) => {
-        const result = await checkOne(r, startedAt);
+        const result = await checkOne(r, startedAt, mail);
         options.onSourceChecked?.(result);
         return result;
       }));
@@ -741,12 +846,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async checkSource(sourceId) {
       const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ?").get(sourceId);
       if (!row) throw new Error(`No source "${sourceId}"`);
-      return checkOne(row, clock.now().toISOString());
+      return checkOne(row, clock.now().toISOString(), mailboxRead());
     },
 
     async sourceHealth() {
       const sources = allSourceHealth();
-      return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
+      return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
     },
   };
 }
@@ -763,10 +868,12 @@ function kindLabel(kind: string): string {
   return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
-function summarise(sources: SourceHealth[]): HealthSummary {
+function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: Date): HealthSummary {
   const failing: FailingSource[] = sources.flatMap((s) => {
     const latest = s.history[0];
     if (s.status !== "failing" || !latest || latest.outcome === "ok") return [];
+    // A mailbox failure is shown once, on the mailbox, not once per email Source.
+    if (s.category === "email" && mailbox?.state === "error") return [];
     return [{
       sourceId: s.id, name: s.name, outcome: latest.outcome, error: latest.error ?? "",
       at: latest.at, since: s.failingSince ?? latest.at, jobsKept: s.jobsKept,
@@ -774,11 +881,69 @@ function summarise(sources: SourceHealth[]): HealthSummary {
   });
   const times = sources.map((s) => s.history[0]?.at).filter((t): t is string => t != null).sort();
   return {
-    state: sources.length === 0 ? "no-sources" : failing.length > 0 ? "failing" : "working",
+    state: sources.length === 0 ? "no-sources" : failing.length > 0 || mailbox?.state === "error" ? "failing" : "working",
     sources: sources.length,
     lastCheckAt: times.at(-1) ?? null,
     failing,
+    quiet: sources.flatMap((s) => {
+      const a = s.alerts;
+      if (s.status !== "quiet" || !a?.lastEmailAt || a.usualGapHours == null) return [];
+      const silentHours = toHours(now.getTime() - Date.parse(a.lastEmailAt));
+      return [{ sourceId: s.id, name: s.name, lastEmailAt: a.lastEmailAt, usualGapHours: a.usualGapHours, silentHours }];
+    }),
+    mailbox,
   };
+}
+
+function recordAlertEmail(db: SqlDatabase, sourceId: string, email: AlertEmail, postings: number): void {
+  db.prepare("INSERT OR IGNORE INTO alert_email (source_id, email_id, received_at, subject, postings) VALUES (?, ?, ?, ?, ?)")
+    .run(sourceId, email.id, email.receivedAt.toISOString(), email.subject, postings);
+}
+
+const hourMs = 60 * 60_000;
+const toHours = (ms: number) => Math.round((ms / hourMs) * 10) / 10;
+
+/** How far back an alert's rhythm is learned from. */
+const rhythmWindowMs = 42 * 24 * hourMs;
+/** Emails closer together than this count as one (a duplicate sent twice, two alerts in one batch). */
+const sameBatchMs = hourMs;
+/** Gaps needed before a rhythm is trusted: 4 emails. */
+const minGaps = 3;
+/** "Quiet longer than usual" is a silence of more than this many usual gaps (DESIGN.md). */
+const quietFactor = 3;
+
+/**
+ * An email-alert Source's rhythm: the median gap between its emails over the last 6 weeks, and
+ * whether the silence since the latest one is more than 3× that.
+ */
+function alertRhythm(db: SqlDatabase, sourceId: string, now: Date): AlertRhythm {
+  const last = db.prepare("SELECT MAX(received_at) AS at FROM alert_email WHERE source_id = ?").get(sourceId)?.at;
+  const lastEmailAt = last == null ? null : String(last);
+  const times = db.prepare("SELECT received_at FROM alert_email WHERE source_id = ? AND received_at >= ? ORDER BY received_at")
+    .all(sourceId, new Date(now.getTime() - rhythmWindowMs).toISOString())
+    .map((r) => Date.parse(String(r.received_at)));
+  const gaps: number[] = [];
+  let prev: number | null = null;
+  for (const t of times) {
+    if (prev !== null && t - prev < sameBatchMs) continue;
+    if (prev !== null) gaps.push(t - prev);
+    prev = t;
+  }
+  if (!lastEmailAt || gaps.length < minGaps) return { lastEmailAt, usualGapHours: null, warnAfterHours: null, quietSince: null };
+  const usualGap = median(gaps);
+  const quietAt = Date.parse(lastEmailAt) + quietFactor * usualGap;
+  return {
+    lastEmailAt,
+    usualGapHours: toHours(usualGap),
+    warnAfterHours: toHours(quietFactor * usualGap),
+    quietSince: now.getTime() > quietAt ? new Date(quietAt).toISOString() : null,
+  };
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
 function recordCheck(db: SqlDatabase, sourceId: string, c: CheckRecord): void {

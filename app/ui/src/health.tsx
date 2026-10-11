@@ -1,6 +1,6 @@
 // Shared source-health wording and pieces: the top-bar pill, the failed-source banner, status chips
 // and the polite "Try now" announcement. Wording follows the Feed and Sources hi-fi screens.
-import type { CheckFailure, FailingSource, HealthSummary, SourceCategory, SourceCheck } from "@apply-kit/core";
+import type { CheckFailure, FailingSource, HealthSummary, MailboxHealth, MailboxProblem, SourceCategory, SourceCheck } from "@apply-kit/core";
 import { useState, type ReactNode } from "react";
 import { checkSource } from "./api.ts";
 
@@ -16,12 +16,53 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** Class and text for the top-bar health pill. */
 export function healthPill(h: HealthSummary): [cls: string, text: string] {
   if (h.state === "no-sources") return ["warn", "No sources yet"];
+  const when = h.lastCheckAt ? ` · ${clockTime(h.lastCheckAt)}` : "";
   if (h.state === "failing") {
-    const when = h.lastCheckAt ? ` · ${clockTime(h.lastCheckAt)}` : "";
-    return ["bad", `${plural(h.failing.length, "source")} failing${when}`];
+    const parts = [
+      ...(h.failing.length > 0 ? [`${plural(h.failing.length, "source")} failing`] : []),
+      ...(h.mailbox?.state === "error" ? ["job mailbox not read"] : []),
+    ];
+    const text = parts.join(", ");
+    return ["bad", `${text[0]!.toUpperCase()}${text.slice(1)}${when}`];
   }
   if (!h.lastCheckAt) return ["", "Not checked yet"];
-  return ["", `All sources working · ${clockTime(h.lastCheckAt)}`];
+  if (h.quiet.length > 0) return ["warn", `${plural(h.quiet.length, "alert")} quiet longer than usual${when}`];
+  return ["", `All sources working${when}`];
+}
+
+/** "8 days", "20 hours": a span of hours as people say it. */
+export function spanText(hours: number): string {
+  if (hours < 36) return plural(Math.max(1, Math.round(hours)), "hour");
+  return plural(Math.round(hours / 24), "day");
+}
+
+/** "No email for 8 days; usually one every 2 days." */
+export function quietText(silentHours: number, usualGapHours: number): string {
+  return `No email for ${spanText(silentHours)}; usually one every ${spanText(usualGapHours).replace(/^1 /, "")}.`;
+}
+
+const mailboxHead: Record<MailboxProblem, string> = {
+  "not-configured": "The job mailbox isn't set up yet.",
+  auth: "Gmail refused the job mailbox's app password.",
+  "mailbox-missing": "The job mailbox folder wasn't found.",
+  unreachable: "Couldn't reach Gmail to read the job mailbox.",
+  error: "Couldn't read the job mailbox.",
+};
+
+/** The job mailbox can't be read: what happened, what it means, how to fix it (Feed and Sources). */
+export function MailboxBanner({ mailbox, showHealthLink }: { mailbox: MailboxHealth; showHealthLink?: boolean }) {
+  const problem = mailbox.problem ?? "error";
+  return (
+    <div className="banner error" role="alert">
+      <span className="text">
+        <b>{mailboxHead[problem]}</b>
+        {mailbox.since && ` Since ${clockTime(mailbox.since)}.`} Email alerts can't bring new jobs until it's fixed; jobs they already found stay as they were.
+        {" "}<span>{mailbox.fix}</span>
+        {mailbox.error && <span className="sr-only"> Details: {mailbox.error}</span>}
+      </span>
+      {showHealthLink && <a className="btn sm" href="/settings/sources">Source health</a>}
+    </div>
+  );
 }
 
 /** "didn't respond", "asked us to slow down", "couldn't be read" */
@@ -55,8 +96,9 @@ const icons = {
   ok: <path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />,
   bad: <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />,
   none: <path d="M2.5 6h7" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />,
+  warn: <><path d="M6 2.2v5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><circle cx="6" cy="9.6" r="1.1" fill="currentColor" /></>,
 };
-const chipClass = { ok: "met", bad: "gap", none: "neutral" };
+const chipClass = { ok: "met", bad: "gap", none: "neutral", warn: "partly" };
 
 /** Status chip: icon plus text, never colour alone. */
 export function Chip({ tone, children }: { tone: keyof typeof icons; children: ReactNode }) {

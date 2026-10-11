@@ -49,9 +49,24 @@ export interface Extractor {
   extract(input: ExtractionInput): Promise<ExtractionResult>;
 }
 
-/** Reads alert emails from the dedicated job mailbox, read-only. */
+/** One email from the job mailbox. `id` is its Message-ID, so a re-delivered copy keeps it. */
+export interface AlertEmail {
+  id: string;
+  /** The From header as sent: "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>". */
+  from: string;
+  subject: string;
+  receivedAt: Date;
+  html: string;
+  text: string;
+}
+
+/**
+ * Reads alert emails from the dedicated job mailbox, read-only and only from the configured
+ * mailbox folder. Throws a MailboxError when the mailbox can't be read (see mailbox.ts).
+ */
 export interface MailReader {
-  fetchSince(since: Date): Promise<{ id: string; from: string; subject: string; receivedAt: Date; html: string; text: string }[]>;
+  /** Emails received at or after `since` (a reader may return a few earlier ones; IMAP SINCE is by day). */
+  fetchSince(since: Date): Promise<AlertEmail[]>;
 }
 
 /** Named settings (the service reads them from .env). Values are secrets: never log them. */

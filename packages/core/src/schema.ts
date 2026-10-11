@@ -98,6 +98,25 @@ const migrations: string[] = [
      confirmed_at TEXT NOT NULL,
      PRIMARY KEY (posting_id, fact_key)
    );`,
+  // #17: alert emails each email Source received (by Message-ID, so a re-delivered copy is one row),
+  // for its usual rhythm; and every read of the job mailbox, for mailbox errors on Sources.
+  `CREATE TABLE alert_email (
+     source_id TEXT NOT NULL REFERENCES source(id),
+     email_id TEXT NOT NULL,
+     received_at TEXT NOT NULL,
+     subject TEXT NOT NULL,
+     postings INTEGER NOT NULL,
+     PRIMARY KEY (source_id, email_id)
+   );
+   CREATE INDEX alert_email_received ON alert_email(source_id, received_at);
+   CREATE TABLE mailbox_read (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     read_at TEXT NOT NULL,
+     outcome TEXT NOT NULL,
+     reason TEXT,
+     error TEXT,
+     emails INTEGER
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
