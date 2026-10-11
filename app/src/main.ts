@@ -32,8 +32,9 @@ const engine = createEngine({
   settings: { get: (name) => process.env[name] },
 });
 
-// Sources from config are added on every start; adding one that exists changes nothing.
-for (const source of config.sources) await engine.addSource(source);
+// Sources from config seed the watchlist on each start, but only ones never added before: a Source
+// paused or removed on the Sources screen stays paused or removed (add it again there to bring it back).
+for (const source of config.sources) await engine.addSource(source, { onlyIfNew: true });
 
 // Reads unread postings in the background, within the monthly budget: once at start (postings
 // left unread when the service stopped) and after every check. Rows show "Reading" meanwhile.

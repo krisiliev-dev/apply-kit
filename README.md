@@ -25,7 +25,7 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). Source types and their values:
+Add companies on the Sources screen (**Add company**: a name or a careers link; apply-kit detects the job system). Sources can also be seeded in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`), which is the only way to add search, aggregator and email-alert Sources for now. Source types and their values:
 
 | Type | Value | Notes |
 |---|---|---|
@@ -37,7 +37,7 @@ Until adding companies on the Sources screen is built, Sources are set in `.env`
 | `teamtailor` | company (`superhosting`) or careers-site link | |
 | `smartrecruiters` | company id, optionally with a country (`Gameloft:bg`) | |
 
-Lever and Ashby don't state the company's name, so the Source's name is a guess from its value. Every Source request identifies apply-kit and goes one at a time per host. They are added on every start. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
+Lever and Ashby don't state the company's name, so the Source's name is a guess from its value. Every Source request identifies apply-kit and goes one at a time per host. On each start, `APPLY_KIT_SOURCES` adds only Sources that were never added before: one you paused or removed on the Sources screen stays paused or removed even though it is still in the setting (add it again on the Sources screen to bring it back, or take it out of the setting). Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
 
 | Kind | Value | Notes |
 |---|---|---|
