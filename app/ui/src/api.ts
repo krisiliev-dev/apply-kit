@@ -1,4 +1,4 @@
-import type { CheckResult, Decision, FeedResult, FeedView, HealthReport, PassInput, SchedulerStatus, SourceCheck } from "@apply-kit/core";
+import type { CheckResult, Decision, FeedResult, JobDetail, FeedView, HealthReport, PassInput, SchedulerStatus, SourceCheck } from "@apply-kit/core";
 
 export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<FeedResult> {
   const res = await fetch(`/api/feed?view=${view}`, { signal });
@@ -57,3 +57,16 @@ export const passJobs = (jobIds: string[], input: PassInput) => post<Decision>("
 export const reopenJobs = (jobIds: string[]) => post<Decision>("/api/jobs/reopen", { jobIds });
 export const undoDecision = (id: string, jobIds?: string[]) =>
   post<{ jobIds: string[] }>(`/api/decisions/${encodeURIComponent(id)}/undo`, jobIds ? { jobIds } : {});
+
+/** One Job with its Postings; null if there's no such Job. */
+export async function fetchJob(jobId: string, signal?: AbortSignal): Promise<JobDetail | null> {
+  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { signal });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`The service answered ${res.status}`);
+  return (await res.json()) as JobDetail;
+}
+
+export const makeTarget = (jobId: string, postingId: string) =>
+  post<JobDetail>(`/api/jobs/${encodeURIComponent(jobId)}/target`, { postingId });
+export const splitPosting = (jobId: string, postingId: string) =>
+  post<{ jobIds: [string, string] }>(`/api/jobs/${encodeURIComponent(jobId)}/split`, { postingId });
