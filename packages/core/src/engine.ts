@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
 import type { EngineDeps, SqlDatabase } from "./ports.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
-import { feedRequirements, type FeedRequirement } from "./extraction/reading.ts";
+import { feedRequirements, jobReading, type FeedRequirement, type JobRequirement, type KeyFact } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
 import type { FoundPosting } from "./sources/adapter.ts";
 import { adapterFor } from "./sources/registry.ts";
@@ -40,6 +40,27 @@ export interface FeedJob {
   reading: ReadingState;
   /** Every requirement read from the posting (empty until it is read). */
   requirements: FeedRequirement[];
+}
+
+/** One Job in full, for the Job page. */
+export interface JobDetail {
+  id: string;
+  title: string;
+  company: string;
+  location: string | null;
+  /** Salary as the Source's structured data states it, or null. The read salary is in keyFacts. */
+  salary: string | null;
+  postedAt: string | null;
+  url: string;
+  state: string;
+  postings: { id: string; source: string; url: string; firstSeenAt: string }[];
+  reading: { state: ReadingState; error: string | null };
+  /** The posting as plain text, one line per paragraph or list item; fact sources point at its lines. */
+  postingText: string;
+  requirements: JobRequirement[];
+  keyFacts: KeyFact[];
+  /** The Fit check (Fit, closest angle, gaps) arrives with Fit; null until then. */
+  fit: null;
 }
 
 export type HealthState = "no-sources" | "working";
@@ -91,6 +112,8 @@ export interface DiscoveryEngine {
    * failed), newest first, within the monthly AI budget. Never throws for a single posting.
    */
   readPending(): Promise<ReadResult>;
+  /** One Job in full, or null if there is no such Job. */
+  getJob(id: string): Promise<JobDetail | null>;
 }
 
 export interface ReadResult {
@@ -138,14 +161,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
   const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
 
-  function readingOf(postingId: string): { state: ReadingState; facts: PostingFacts | null; error: string | null } {
-    if (inFlight.has(postingId)) return { state: "reading", facts: null, error: null };
+  function readingOf(postingId: string): { state: ReadingState; facts: PostingFacts | null; error: string | null; text: string } {
     const p = db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
+    const text = postingText(p?.description_html);
+    if (inFlight.has(postingId)) return { state: "reading", facts: null, error: null, text };
     const e = db.prepare("SELECT status, text_hash, facts, error FROM extraction WHERE posting_id = ?").get(postingId);
-    const current = e && e.text_hash === hashText(postingText(p?.description_html));
-    if (current && e.status === "read") return { state: "read", facts: JSON.parse(String(e.facts)) as PostingFacts, error: null };
-    if (current && e.status === "failed") return { state: "failed", facts: null, error: String(e.error) };
-    return { state: "unread", facts: null, error: null };
+    const current = e && e.text_hash === hashText(text);
+    if (current && e.status === "read") return { state: "read", facts: JSON.parse(String(e.facts)) as PostingFacts, error: null, text };
+    if (current && e.status === "failed") return { state: "failed", facts: null, error: String(e.error), text };
+    return { state: "unread", facts: null, error: null, text };
   }
 
   async function readAllPending(): Promise<ReadResult> {
@@ -247,7 +271,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           postingCount: Number(r.n),
           url: String(r.url),
           reading: reading.state,
-          requirements: reading.facts ? feedRequirements(reading.facts) : [],
+          requirements: reading.facts ? feedRequirements(reading.facts, reading.text) : [],
           };
         }),
         counts: {
@@ -271,6 +295,36 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       );
       const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
       return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
+    },
+
+    async getJob(id) {
+      const j = db.prepare(
+        `SELECT j.id, j.state, p.id AS posting_id, p.title, p.company, p.location, p.salary, p.posted_at, p.url
+         FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")} WHERE j.id = ?`,
+      ).get(id);
+      if (!j) return null;
+      const postings = db.prepare(
+        `SELECT p.id, s.name, p.url, p.first_seen_at FROM posting p JOIN source s ON s.id = p.source_id
+         WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
+      ).all(id);
+      const reading = readingOf(String(j.posting_id));
+      const read = reading.facts ? jobReading(reading.facts, reading.text) : { requirements: [], keyFacts: [] };
+      return {
+        id: String(j.id),
+        title: String(j.title),
+        company: String(j.company),
+        location: j.location == null ? null : String(j.location),
+        salary: j.salary == null ? null : String(j.salary),
+        postedAt: j.posted_at == null ? null : String(j.posted_at),
+        url: String(j.url),
+        state: String(j.state),
+        postings: postings.map((p) => ({ id: String(p.id), source: String(p.name), url: String(p.url), firstSeenAt: String(p.first_seen_at) })),
+        reading: { state: reading.state, error: reading.error },
+        postingText: reading.text,
+        requirements: read.requirements,
+        keyFacts: read.keyFacts,
+        fit: null,
+      };
     },
 
     readPending() {

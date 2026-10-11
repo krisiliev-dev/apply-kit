@@ -53,3 +53,39 @@ describe("reading postings: requirements in the Feed", () => {
     ]);
   });
 });
+
+async function jobId(t: ReturnType<typeof kestrelEngine>, title: string) {
+  return (await t.engine.queryFeed({ view: "new" })).jobs.find((j) => j.title === title)!.id;
+}
+
+describe("reading postings: the Job view", () => {
+  it("gives every key fact and requirement the line it came from and a confidence", async () => {
+    const t = await checked(kestrelEngine());
+    await t.engine.readPending();
+
+    const job = (await t.engine.getJob(await jobId(t, "Security Engineer")))!;
+
+    expect(job.reading).toEqual({ state: "read", error: null });
+    expect(job.keyFacts).toEqual([
+      { key: "years:0", label: "Experience", value: "3+ years in security operations", confidence: 0.95, needsYou: false,
+        source: { quote: "You have 3+ years in a security operations or SOC role", translation: null, line: 3 } },
+      { key: "languages:0", label: "Language", value: "English, professional", confidence: 0.95, needsYou: false,
+        source: { quote: "Professional English: our working language is English", translation: null, line: 6 } },
+      { key: "remote", label: "Remote rules", value: "Hybrid: 2 days a week at Business Park Sofia", confidence: 0.9, needsYou: false,
+        source: { quote: "We work hybrid, two days a week together at Business Park Sofia.", translation: null, line: 10 } },
+      { key: "workAuthorisation", label: "Work authorisation", value: "No visa sponsorship", confidence: 0.95, needsYou: false,
+        source: { quote: "We are unable to sponsor visas for this role.", translation: null, line: 12 } },
+      { key: "salary", label: "Salary", value: "Not stated", confidence: 1, needsYou: false, source: null },
+    ]);
+    expect(job.requirements[3]).toEqual({
+      key: "requirements:3", text: "CISSP", askedAs: "Preferred", kind: "preferred", status: "unknown", needsYou: false, confidence: 0.9,
+      source: { quote: "CISSP or a similar certification", translation: null, line: 8 },
+    });
+    expect(job.postingText.split("\n")[2]).toBe("• You have 3+ years in a security operations or SOC role");
+  });
+
+  it("answers null for a Job that doesn't exist", async () => {
+    const t = await checked(kestrelEngine());
+    expect(await t.engine.getJob("job:nope")).toBeNull();
+  });
+});
