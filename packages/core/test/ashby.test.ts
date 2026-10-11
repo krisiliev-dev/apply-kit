@@ -13,9 +13,9 @@ describe("Ashby source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "ashby:Dext-Careers", name: "Dext", ok: true, found: 3, newPostings: 3 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Account Executive - B2B Saas", company: "Dext", location: "Dext UK · Hybrid", salary: null, postedAt: "2026-09-29T15:42:32.378Z", postingCount: 1, siteCount: 1, state: "new", url: "https://jobs.ashbyhq.com/Dext-Careers/e75937ef-d2cf-407b-9ce6-8ec1d764e40b" },
-      { id: expect.any(String), title: "Software Developer", company: "Dext", location: "Dext Bulgaria · Remote", salary: null, postedAt: "2026-09-22T07:30:48.059Z", postingCount: 1, siteCount: 1, state: "new", url: "https://jobs.ashbyhq.com/Dext-Careers/db5174a5-8675-48fb-8544-323e5d6debc9" },
-      { id: expect.any(String), title: "Chargé(e) d'Acquisition Marketing & Partenariats | B2B Saas", company: "Dext", location: "Dext France · Hybrid", salary: "€40K – €45K • €6K Bonus", postedAt: "2026-09-10T13:12:21.919Z", postingCount: 1, siteCount: 1, state: "new", url: "https://jobs.ashbyhq.com/Dext-Careers/8c997fa2-d2c0-4f86-873c-b2c578bb8c66" },
+      { id: expect.any(String), title: "Account Executive - B2B Saas", company: "Dext", location: "Dext UK · Hybrid", salary: null, postedAt: "2026-09-29T15:42:32.378Z", postingCount: 1, siteCount: 1, state: "new", url: "https://jobs.ashbyhq.com/Dext-Careers/e75937ef-d2cf-407b-9ce6-8ec1d764e40b", reading: "unread", requirements: [], needsYou: 0 },
+      { id: expect.any(String), title: "Software Developer", company: "Dext", location: "Dext Bulgaria · Remote", salary: null, postedAt: "2026-09-22T07:30:48.059Z", postingCount: 1, siteCount: 1, state: "new", url: "https://jobs.ashbyhq.com/Dext-Careers/db5174a5-8675-48fb-8544-323e5d6debc9", reading: "unread", requirements: [], needsYou: 0 },
+      { id: expect.any(String), title: "Chargé(e) d'Acquisition Marketing & Partenariats | B2B Saas", company: "Dext", location: "Dext France · Hybrid", salary: "€40K – €45K • €6K Bonus", postedAt: "2026-09-10T13:12:21.919Z", postingCount: 1, siteCount: 1, state: "new", url: "https://jobs.ashbyhq.com/Dext-Careers/8c997fa2-d2c0-4f86-873c-b2c578bb8c66", reading: "unread", requirements: [], needsYou: 0 },
     ]);
   });
 

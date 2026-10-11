@@ -2,20 +2,32 @@ import { serve } from "@hono/node-server";
 import { createEngine, createScheduler } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
+import { createImapMailReader, readMailSettings } from "./mail.ts";
 import { createServer } from "./server.ts";
+import { createOpenRouterExtractor } from "./extraction/openrouter.ts";
+import type { Extractor } from "@apply-kit/core";
 
 loadEnv();
 const config = readConfig();
 const db = openDatabase(config.dbPath);
+
+const extractor: Extractor = config.ai.openRouterApiKey
+  ? createOpenRouterExtractor({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
+  : {
+      estimateCostUsd: () => 0,
+      extract: async () => { throw new Error("The OpenRouter key isn't set: add OPENROUTER_API_KEY to .env and restart"); },
+    };
 
 const clock = { now: () => new Date() };
 const engine = createEngine({
   db,
   clock,
   fetch: globalThis.fetch,
-  // Real extractor (OpenRouter) and IMAP mail reader arrive with their tickets.
-  extractor: { extract: async () => { throw new Error("Extractor not configured yet"); } },
-  mailReader: { fetchSince: async () => [] },
+  extractor,
+  aiMonthlyCapUsd: config.ai.monthlyCapUsd,
+  // The Gmail job mailbox, read-only. Only read when an email-alert Source exists, during checks
+  // the scheduler runs; missing settings show on Sources as "not configured" with how to fix it.
+  mailReader: createImapMailReader(readMailSettings(process.env)),
   // Sources read their keys (JOOBLE_API_KEY, REED_API_KEY) by name; values are never logged.
   settings: { get: (name) => process.env[name] },
 });
@@ -23,10 +35,17 @@ const engine = createEngine({
 // Sources from config are added on every start; adding one that exists changes nothing.
 for (const source of config.sources) await engine.addSource(source);
 
+// Reads unread postings in the background, within the monthly budget: once at start (postings
+// left unread when the service stopped) and after every check. Rows show "Reading" meanwhile.
+const readInBackground = () => {
+  engine.readPending().catch((err: unknown) => console.error("Reading postings failed:", err));
+};
+readInBackground();
+
 // Checks due Sources inside the window; after the Mac wakes, the next tick (within a minute)
-// catches up with one check if any were missed.
+// catches up with one check if any were missed. Each finished check is followed by a read.
 const scheduler = createScheduler({
-  engine,
+  engine: { ...engine, checkAll: (options) => engine.checkAll(options).finally(readInBackground) },
   clock,
   timers: { setInterval: (fn, ms) => setInterval(fn, ms), clearInterval: (h) => clearInterval(h as NodeJS.Timeout) },
   schedule: config.schedule,

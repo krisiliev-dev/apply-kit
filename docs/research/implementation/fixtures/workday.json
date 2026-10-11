@@ -1,0 +1,62 @@
+{
+  "total": 33,
+  "jobPostings": [
+    {
+      "title": "Country Communications Associate Manager with English and French",
+      "externalPath": "/job/BGR---SOFIA/Country-Communications-Associate-Manager_51570859",
+      "locationsText": "BGR - SOFIA",
+      "postedOn": "Posted 30+ Days Ago",
+      "bulletFields": [
+        "51570859"
+      ]
+    },
+    {
+      "title": "People Operations Specialist with French",
+      "externalPath": "/job/BGR---SOFIA/People-Operations-Specialist-with-French_51562726",
+      "locationsText": "BGR - SOFIA",
+      "postedOn": "Posted 11 Days Ago",
+      "bulletFields": [
+        "51562726"
+      ]
+    },
+    {
+      "title": "Inside Sales Professional",
+      "externalPath": "/job/BGR---SOFIA/Inside-Sales-Professional_51576112",
+      "locationsText": "BGR - SOFIA",
+      "postedOn": "Posted 30+ Days Ago",
+      "bulletFields": [
+        "51576112"
+      ]
+    }
+  ],
+  "facets": [
+    {
+      "facetParameter": "timeType",
+      "descriptor": "Time Type",
+      "values": [
+        {
+          "descriptor": "Full time",
+          "id": "8a7480f0434410567eef42818e83005b",
+          "count": 33
+        }
+      ]
+    },
+    {
+      "facetParameter": "locationMainGroup",
+      "values": [
+        {
+          "facetParameter": "locationCountry",
+          "descriptor": "Country",
+          "values": [
+            {
+              "descriptor": "Bulgaria",
+              "id": "25f4875dc598484dbeee857eb2d81652",
+              "count": 33
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "userAuthenticated": false
+}

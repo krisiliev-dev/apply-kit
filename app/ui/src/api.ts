@@ -1,4 +1,6 @@
-import type { CheckResult, Decision, FeedResult, JobDetail, FeedView, HealthReport, PassInput, SchedulerStatus, SourceCheck } from "@apply-kit/core";
+import type {
+  CheckResult, Decision, FactAnswer, FeedResult, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+} from "@apply-kit/core";
 
 export async function fetchFeed(view: FeedView, signal?: AbortSignal): Promise<FeedResult> {
   const res = await fetch(`/api/feed?view=${view}`, { signal });
@@ -58,15 +60,38 @@ export const reopenJobs = (jobIds: string[]) => post<Decision>("/api/jobs/reopen
 export const undoDecision = (id: string, jobIds?: string[]) =>
   post<{ jobIds: string[] }>(`/api/decisions/${encodeURIComponent(id)}/undo`, jobIds ? { jobIds } : {});
 
-/** One Job with its Postings; null if there's no such Job. */
-export async function fetchJob(jobId: string, signal?: AbortSignal): Promise<JobDetail | null> {
-  const res = await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { signal });
-  if (res.status === 404) return null;
-  if (!res.ok) throw new Error(`The service answered ${res.status}`);
-  return (await res.json()) as JobDetail;
+const jobPath = (id: string) => `/api/jobs/${encodeURIComponent(id)}`;
+
+async function json<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? `The service answered ${res.status}`);
+  }
+  return (await res.json()) as T;
 }
 
-export const makeTarget = (jobId: string, postingId: string) =>
-  post<JobDetail>(`/api/jobs/${encodeURIComponent(jobId)}/target`, { postingId });
-export const splitPosting = (jobId: string, postingId: string) =>
-  post<{ jobIds: [string, string] }>(`/api/jobs/${encodeURIComponent(jobId)}/split`, { postingId });
+const postJson = (url: string, body: unknown = {}) =>
+  fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+export async function fetchJob(id: string, signal?: AbortSignal): Promise<JobDetail> {
+  return json(await fetch(jobPath(id), { signal }));
+}
+
+/** Asks the service to read the Job's posting now; resolves when the read has finished or failed. */
+export async function readJob(id: string): Promise<JobDetail> {
+  return json(await postJson(`${jobPath(id)}/read`));
+}
+
+export async function confirmFact(id: string, key: string, answer: FactAnswer): Promise<JobDetail> {
+  return json(await postJson(`${jobPath(id)}/facts/${encodeURIComponent(key)}`, { answer }));
+}
+
+/** "Make target": one of the Job's Postings becomes the one Kris applies through. */
+export async function makeTarget(jobId: string, postingId: string): Promise<JobDetail> {
+  return json(await postJson(`${jobPath(jobId)}/target`, { postingId }));
+}
+
+/** "Not the same job? Split": the Posting leaves the Job; answers with both Jobs' ids (this one first). */
+export async function splitPosting(jobId: string, postingId: string): Promise<{ jobIds: [string, string] }> {
+  return json(await postJson(`${jobPath(jobId)}/split`, { postingId }));
+}

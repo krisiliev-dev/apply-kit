@@ -3,7 +3,9 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { createEngine, type EngineDeps, type Clock, type Timers } from "../src/index.ts";
+import {
+  createEngine, type EngineDeps, type Clock, type Timers, type Extractor, type ExtractionInput, type PostingFacts, type MailReader,
+} from "../src/index.ts";
 
 const fixturesDir = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
@@ -73,14 +75,93 @@ export function fixtureFetch(routes: Record<string, string> = {}): typeof fetch 
   };
 }
 
+export type AlertEmail = Awaited<ReturnType<MailReader["fetchSince"]>>[number];
+
+/**
+ * A job mailbox held in memory. `deliver` puts an email in it; `fail` makes every read throw
+ * (an expired app password, say) until `recover`. Reads return the emails received since the asked time;
+ * with a clock, emails dated in its future haven't arrived yet, so they can be delivered up front.
+ */
+export interface FakeMailbox extends MailReader {
+  deliver(email: AlertEmail): void;
+  fail(err: Error): void;
+  recover(): void;
+  reads: Date[];
+}
+
+export function fakeMailbox(clock?: Clock): FakeMailbox {
+  const emails: AlertEmail[] = [];
+  let failure: Error | null = null;
+  const reads: Date[] = [];
+  return {
+    reads,
+    deliver: (email) => { emails.push(email); },
+    fail: (err) => { failure = err; },
+    recover: () => { failure = null; },
+    async fetchSince(since) {
+      reads.push(since);
+      if (failure) throw failure;
+      const now = clock?.now().getTime() ?? Infinity;
+      return emails.filter((e) => e.receivedAt.getTime() >= since.getTime() && e.receivedAt.getTime() <= now);
+    },
+  };
+}
+
+/** Facts for a posting that states nothing: tests override only what they care about. */
+export function cannedFacts(overrides: Partial<PostingFacts> = {}): PostingFacts {
+  return {
+    language: "en",
+    requirements: [],
+    years: [],
+    languages: [],
+    certificates: [],
+    workAuthorisation: { summary: "Not stated", visaSponsorship: "not-stated", source: null, confidence: 1 },
+    remote: { mode: "not-stated", summary: "Not stated", locations: [], source: null, confidence: 1 },
+    salary: { stated: false, min: null, max: null, currency: null, period: null, basis: "not-stated", source: null, confidence: 1 },
+    ...overrides,
+  };
+}
+
+export interface FakeExtractor extends Extractor {
+  /** Every input the engine sent, in order. */
+  calls: ExtractionInput[];
+}
+
+/**
+ * A fake extractor answering with canned facts per posting title (or a function of the input).
+ * A title with no canned facts gets empty facts. Each call costs `costUsd`, estimated at `estimateUsd`.
+ */
+export function fakeExtractor(
+  canned: Record<string, PostingFacts | Error> | ((input: ExtractionInput) => PostingFacts) = {},
+  { costUsd = 0.001, estimateUsd = costUsd }: { costUsd?: number; estimateUsd?: number } = {},
+): FakeExtractor {
+  const calls: ExtractionInput[] = [];
+  return {
+    calls,
+    estimateCostUsd: () => estimateUsd,
+    async extract(input) {
+      calls.push(input);
+      const answer = typeof canned === "function" ? canned(input) : (canned[input.title] ?? cannedFacts());
+      if (answer instanceof Error) throw answer;
+      return { facts: answer, costUsd, model: "fake/extractor" };
+    },
+  };
+}
+
+/** An alert email whose HTML body is a fixture in test/fixtures (synthetic, no personal data). */
+export function alertEmail(fixture: string, fields: { id: string; from: string; subject: string; receivedAt: string }): AlertEmail {
+  return { ...fields, receivedAt: new Date(fields.receivedAt), html: loadFixture(fixture), text: "" };
+}
+
 export function createTestEngine(overrides: Partial<EngineDeps> = {}) {
   const clock = fakeClock();
   const deps: EngineDeps = {
     db: memoryDb(),
     clock,
     fetch: fixtureFetch(),
-    extractor: { extract: async () => { throw new Error("fake extractor: no canned facts set"); } },
+    extractor: fakeExtractor(),
     mailReader: { fetchSince: async () => [] },
+    aiMonthlyCapUsd: 10,
     ...overrides,
   };
   return { engine: createEngine(deps), clock, deps };

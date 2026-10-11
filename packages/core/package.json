@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "fast-xml-parser": "5.11.1",
-    "node-html-parser": "9.0.4"
+    "node-html-parser": "9.0.4",
+    "zod": "4.6.5"
   }
 }

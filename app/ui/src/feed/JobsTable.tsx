@@ -4,7 +4,9 @@ import { passJobs, saveJobs, undoDecision } from "../api.ts";
 import { PassDialog } from "./PassDialog.tsx";
 import { useShortcutsSetting } from "./shortcuts.ts";
 import type { Toaster } from "./toast.tsx";
+import { RowChips } from "../requirements.tsx";
 
+const jobPage = (id: string) => `/jobs/${encodeURIComponent(id)}`;
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const named = (j: FeedJob) => `${j.title} at ${j.company}`;
 const backIn: Record<FeedView, string> = { new: "New", saved: "Saved", open: "All open", passed: "Passed & closed" };
@@ -143,7 +145,7 @@ export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued
     if (e.key === "End" && e.target === tr) return move(jobs.length - 1);
     if (e.key === "Enter" && e.target === tr) {
       e.preventDefault();
-      window.open(jobs[i]!.url, "_blank", "noopener,noreferrer");
+      window.location.assign(jobPage(jobs[i]!.id));
       return;
     }
     // Single-key shortcuts: opt-out, scoped to the table, never with Shift (so typed capitals and
@@ -211,6 +213,7 @@ export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued
               </th>
               <th scope="col">Job</th>
               <th scope="col" className="wide">Where</th>
+              <th scope="col" className="wide">Requirements</th>
               <th scope="col" className="wide">Salary</th>
               <th scope="col" className="wide" aria-sort="descending">Posted</th>
             </tr>
@@ -235,7 +238,7 @@ export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued
         </table>
       </div>
       <p className="sr-only" id="jobs-keys-help">
-        Up and down arrows move between jobs; Enter opens the posting.{shortcutsOn ? " J and K also move, S saves, X passes." : ""}
+        Up and down arrows move between jobs; Enter opens the job.{shortcutsOn ? " J and K also move, S saves, X passes." : ""}
       </p>
       <div className="foot">
         {checking
@@ -268,7 +271,8 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
   // Roving focus: only the active row (and its controls) is in the Tab order.
   const tab = active ? 0 : -1;
   const where = job.location ?? "Location not stated";
-  const salary = job.salary ?? "Not stated";
+  // "Not stated" is only claimed once the posting has been read.
+  const salary = job.salary ?? (job.reading === "read" ? "Not stated" : "Not read yet");
   const posted = job.postedAt ? ago(job.postedAt, asOf) : "Unknown";
   return (
     <tr ref={rowRef} data-id={job.id} tabIndex={tab} className={checked ? "is-selected" : undefined} onFocus={onFocus}>
@@ -276,13 +280,12 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         <input type="checkbox" tabIndex={tab} aria-label={`Select ${named(job)}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} />
       </td>
       <td className="job">
-        <a className="t" href={job.url} target="_blank" rel="noopener noreferrer" tabIndex={tab}>
-          {job.title}<span className="sr-only"> (opens the posting in a new tab)</span>
-        </a>
+        <a className="t" href={jobPage(job.id)} tabIndex={tab}>{job.title}</a>
         <span className="co">{job.company}</span>
         {showSavedChip && job.state === "saved" && <span className="chip met saved-chip">Saved</span>}
         {job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
         <span className="narrow meta">{where} · {salary} · {posted}</span>
+        <div className="narrow"><RowChips job={job} /></div>
         <div className="row-acts">
           {job.state === "new" && (
             <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onSave}>Save<span className="sr-only"> {named(job)}</span></button>
@@ -291,6 +294,7 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         </div>
       </td>
       <td className="wide">{where}</td>
+      <td className="wide"><RowChips job={job} /></td>
       <td className="num wide">{salary}</td>
       <td className="num wide">
         {job.postedAt ? <time dateTime={job.postedAt} title={new Date(job.postedAt).toLocaleDateString("en-GB", { dateStyle: "long" })}>{posted}</time> : posted}

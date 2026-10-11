@@ -17,7 +17,7 @@ describe("Microsoft source", () => {
     expect(feed.jobs[0]).toEqual({
       id: "job:microsoft:security engineer|dublin:1970393557007211", title: "Software Engineer - Observability", company: "Microsoft",
       location: "Ireland, Dublin, Dublin", salary: null, postedAt: "2026-10-08T13:15:24.000Z", postingCount: 1, siteCount: 1, state: "new",
-      url: "https://apply.careers.microsoft.com/careers/job/1970393557007211",
+      url: "https://apply.careers.microsoft.com/careers/job/1970393557007211", reading: "unread", requirements: [], needsYou: 0,
     });
     expect(feed.jobs[1]!.location).toBe("Ireland, Dublin, Dublin; Germany, Multiple Locations, Multiple Locations; United Kingdom, Multiple Locations, Multiple Locations; Portugal, Lisbon, Lisbon; Netherlands, Multiple Locations, Multiple Locations");
     expect((await engine.sourceHealth()).sources[0]).toMatchObject({ label: "Microsoft", category: "api" });

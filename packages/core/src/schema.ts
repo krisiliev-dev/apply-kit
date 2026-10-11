@@ -70,6 +70,53 @@ const migrations: string[] = [
      PRIMARY KEY (decision_id, job_id)
    );
    CREATE INDEX decision_job_job ON decision_job(job_id);`,
+  // #10: reading postings. One extraction per Posting (re-read when its text changes), the AI
+  // spending ledger the monthly cap is checked against, and Kris's answers to low-confidence facts.
+  `CREATE TABLE extraction (
+     posting_id TEXT PRIMARY KEY REFERENCES posting(id),
+     text_hash TEXT NOT NULL,
+     status TEXT NOT NULL,
+     facts TEXT,
+     model TEXT,
+     error TEXT,
+     attempts INTEGER NOT NULL DEFAULT 1,
+     read_at TEXT NOT NULL
+   );
+   CREATE TABLE ai_spend (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     at TEXT NOT NULL,
+     month TEXT NOT NULL,
+     task TEXT NOT NULL,
+     posting_id TEXT,
+     cost_usd REAL NOT NULL
+   );
+   CREATE INDEX ai_spend_month ON ai_spend(month);
+   CREATE TABLE fact_confirmation (
+     posting_id TEXT NOT NULL REFERENCES posting(id),
+     fact_key TEXT NOT NULL,
+     choice TEXT NOT NULL,
+     confirmed_at TEXT NOT NULL,
+     PRIMARY KEY (posting_id, fact_key)
+   );`,
+  // #17: alert emails each email Source received (by Message-ID, so a re-delivered copy is one row),
+  // for its usual rhythm; and every read of the job mailbox, for mailbox errors on Sources.
+  `CREATE TABLE alert_email (
+     source_id TEXT NOT NULL REFERENCES source(id),
+     email_id TEXT NOT NULL,
+     received_at TEXT NOT NULL,
+     subject TEXT NOT NULL,
+     postings INTEGER NOT NULL,
+     PRIMARY KEY (source_id, email_id)
+   );
+   CREATE INDEX alert_email_received ON alert_email(source_id, received_at);
+   CREATE TABLE mailbox_read (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     read_at TEXT NOT NULL,
+     outcome TEXT NOT NULL,
+     reason TEXT,
+     error TEXT,
+     emails INTEGER
+   );`,
   // #9: merging Postings into Jobs. Each Posting carries its match key (normalised company and title)
   // and why it joined its Job. A Job merged into another keeps its row (state and decisions intact)
   // and points at the Job that absorbed it, so a split can bring it back. Kris's chosen target

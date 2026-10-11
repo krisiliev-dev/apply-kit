@@ -1,5 +1,6 @@
 // Dependencies the discovery engine needs from the outside world. The service passes real ones;
 // tests pass fakes (see test/harness.ts).
+import type { ExtractionInput, ExtractionResult } from "./extraction/facts.ts";
 
 export interface Clock {
   now(): Date;
@@ -30,14 +31,42 @@ export interface SqlStatement {
   all(...params: SqlValue[]): Record<string, unknown>[];
 }
 
-/** Turns posting text into structured facts (AI seam). Shape is settled by the extraction ticket. */
+/**
+ * Turns one Posting's text into structured facts (the AI seam). The service passes the OpenRouter
+ * implementation; tests pass a fake with canned facts. See extraction/facts.ts for the fact shape.
+ */
 export interface Extractor {
-  extract(posting: { text: string; language?: string }): Promise<unknown>;
+  /**
+   * A cautious (high) estimate of what extracting this input will cost in USD. The engine checks it
+   * against what is left of the monthly budget before calling `extract`; it must not do any I/O.
+   */
+  estimateCostUsd(input: ExtractionInput): number;
+  /**
+   * Reads the posting. Throws on any failure (timeout, refusal, output that doesn't fit the schema);
+   * the engine records the failure and retries at a later read. An error may carry a numeric
+   * `costUsd` if the failed call was still billed.
+   */
+  extract(input: ExtractionInput): Promise<ExtractionResult>;
 }
 
-/** Reads alert emails from the dedicated job mailbox, read-only. */
+/** One email from the job mailbox. `id` is its Message-ID, so a re-delivered copy keeps it. */
+export interface AlertEmail {
+  id: string;
+  /** The From header as sent: "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>". */
+  from: string;
+  subject: string;
+  receivedAt: Date;
+  html: string;
+  text: string;
+}
+
+/**
+ * Reads alert emails from the dedicated job mailbox, read-only and only from the configured
+ * mailbox folder. Throws a MailboxError when the mailbox can't be read (see mailbox.ts).
+ */
 export interface MailReader {
-  fetchSince(since: Date): Promise<{ id: string; from: string; subject: string; receivedAt: Date; html: string; text: string }[]>;
+  /** Emails received at or after `since` (a reader may return a few earlier ones; IMAP SINCE is by day). */
+  fetchSince(since: Date): Promise<AlertEmail[]>;
 }
 
 /** Named settings (the service reads them from .env). Values are secrets: never log them. */
@@ -53,4 +82,9 @@ export interface EngineDeps {
   mailReader: MailReader;
   /** Settings some Sources need, such as API keys. Missing means every setting is unset. */
   settings?: Settings;
+  /**
+   * Hard monthly cap on AI spending in USD (AI_MONTHLY_CAP_USD). Reading stops before a call
+   * would cross it; Postings then stay in the Feed unscreened. Unset or 0 means no AI spending.
+   */
+  aiMonthlyCapUsd?: number;
 }

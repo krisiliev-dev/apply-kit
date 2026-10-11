@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTestEngine } from "./harness.ts";
+import { createTestEngine, fakeExtractor } from "./harness.ts";
 import { routedFetch } from "./http.ts";
 
 // Payhawk's own Greenhouse board (the recorded fixture) plus the same jobs as dev.bg and Jooble list
@@ -36,16 +36,17 @@ const apmCard: Card = { id: "570001", slug: "payhawk-associate-product-manager",
 const apmJooble: JoobleJob = { id: "3333333333333333333", title: "Associate Product Manager", company: "Payhawk EOOD", location: "Sofia, Bulgaria", salary: "3000 - 4000 BGN" };
 
 /** An engine with Payhawk's Greenhouse board, a dev.bg category and a Jooble search, answering with these. */
-function threeSources(devbg: Card[], jooble: JoobleJob[]) {
+function threeSources(devbg: Card[], jooble: JoobleJob[], extractor = fakeExtractor()) {
   const http = routedFetch((r) => {
     if (r.url === greenhouseBoard) return { fixture: "greenhouse-payhawkio.json" };
     if (r.url === devbgPage) return new Response(devbgCards(devbg));
     if (r.url === joobleApi) return { json: joobleJobs(jooble) };
     return undefined;
   });
-  const t = createTestEngine({ fetch: http.fetch, settings: { get: (n) => (n === "JOOBLE_API_KEY" ? "test-jooble-key" : undefined) } });
+  const t = createTestEngine({ fetch: http.fetch, extractor, settings: { get: (n) => (n === "JOOBLE_API_KEY" ? "test-jooble-key" : undefined) } });
   return {
     ...t,
+    extractor,
     async addAll() {
       await t.engine.addSource({ kind: "greenhouse", config: "payhawkio" });
       await t.engine.addSource({ kind: "devbg", config: "product-management" });
@@ -277,5 +278,24 @@ describe("merging postings into jobs", () => {
 
     expect(forwards).toContainEqual(["job:devbg:product-management:570001", 3]);
     expect(await grouped([...order].reverse())).toEqual(forwards);
+  });
+
+  it("a merged Job is read from its target posting, even when another site listed it first", async () => {
+    const { engine, clock, addAll, extractor } = threeSources([apmCard], []);
+    await addAll();
+    await engine.checkSource("devbg:product-management");
+    await clock.advance(60_000);
+    await engine.checkSource("greenhouse:payhawkio");
+    const devbgFirst = "job:devbg:product-management:570001";
+
+    const job = await engine.readJob(devbgFirst);
+
+    expect(job).toMatchObject({ id: devbgFirst, postingCount: 2, reading: { state: "read" } });
+    expect(job.target.postingId).toBe("greenhouse:payhawkio:4998241101");
+    expect(extractor.calls).toHaveLength(1);
+    expect(extractor.calls[0]!.text).toContain("Payhawk is one AI-powered spend management platform");
+    expect(job.postingText).toContain("Payhawk is one AI-powered spend management platform");
+    const row = (await engine.queryFeed({ view: "new" })).jobs.find((j) => j.id === devbgFirst)!;
+    expect(row.reading).toBe("read");
   });
 });

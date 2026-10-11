@@ -1,0 +1,4 @@
+- index.html served with browser caching: stale UI after rebuild (from #14)
+- For #16 (drops/closing): search sources (microsoft, amazon, jooble, reed, eures) return capped lists — never expire their postings just because they're missing from one check. Workday is complete-or-fails.
+- First real run: confirm Amazon result_limit/country param, dev.bg page links and .job-list wrapper (assumed from trimmed fixtures).
+- Don't send email-only postings (no description) to extraction until full text is fetched (from #17)
