@@ -1,6 +1,9 @@
-import type { CheckResult, FeedJob, FeedResult, FeedView } from "@apply-kit/core";
-import { useEffect, useState } from "react";
+import type { CheckResult, FeedResult, FeedView } from "@apply-kit/core";
+import { useCallback, useEffect, useState } from "react";
 import { checkNow, fetchFeed } from "../api.ts";
+import { JobsTable } from "./JobsTable.tsx";
+import { PassedClosed } from "./PassedClosed.tsx";
+import { useToaster } from "./toast.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -15,6 +18,8 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   const [view, setView] = useState<FeedView>("new");
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const toaster = useToaster();
+  const refresh = useCallback(() => setAttempt((n) => n + 1), []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -27,6 +32,9 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
     return () => ctrl.abort();
   }, [view, attempt, onHealth]);
 
+  return <>{content()}{toaster.element}</>;
+
+  function content() {
   if (load.state === "loading") return <p className="meta" role="status">Loading the Feed…</p>;
   if (load.state === "error") {
     return (
@@ -56,12 +64,15 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
           </p>
         </div>
         <span className="grow" />
-        <CheckNow onChecked={() => setAttempt((n) => n + 1)} />
+        <CheckNow onChecked={refresh} />
       </div>
       <Toolbar feed={feed} view={view} onView={setView} />
-      <JobsTable feed={feed} view={view} />
+      {view === "passed"
+        ? <PassedClosed feed={feed} toaster={toaster} onChanged={refresh} />
+        : <JobsTable feed={feed} view={view} toaster={toaster} onChanged={refresh} />}
     </section>
   );
+  }
 }
 
 function viewTitle(view: FeedView, feed: FeedResult): string {
@@ -106,71 +117,6 @@ function summary(result: CheckResult): string {
   const fresh = ok.reduce((n, s) => n + (s.ok ? s.newPostings : 0), 0);
   const total = result.sources.length;
   return `Checked ${ok.length} of ${total} ${total === 1 ? "source" : "sources"} · ${found} jobs listed, ${fresh} new`;
-}
-
-function JobsTable({ feed, view }: { feed: FeedResult; view: FeedView }) {
-  if (feed.jobs.length === 0) {
-    return (
-      <div className="empty">
-        <h2>Nothing here yet</h2>
-        <p>{view === "new" ? "No new jobs. Run a check to look again." : "No jobs in this view yet."}</p>
-      </div>
-    );
-  }
-  return (
-    <div className="panel flush">
-      <div className="table-wrap">
-        <table className="table jobs" aria-label="Jobs, newest first">
-          <thead>
-            <tr>
-              <th scope="col">Job</th>
-              <th scope="col" className="wide">Where</th>
-              <th scope="col" className="wide">Salary</th>
-              <th scope="col" className="wide" aria-sort="descending">Posted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {feed.jobs.map((j) => <JobRow key={j.id} job={j} asOf={feed.asOf} />)}
-          </tbody>
-        </table>
-      </div>
-      <div className="foot"><span className="num">Showing {feed.jobs.length} of {feed.jobs.length}</span></div>
-    </div>
-  );
-}
-
-function JobRow({ job, asOf }: { job: FeedJob; asOf: string }) {
-  const where = job.location ?? "Location not stated";
-  const salary = job.salary ?? "Not stated";
-  const posted = job.postedAt ? ago(job.postedAt, asOf) : "Unknown";
-  return (
-    <tr>
-      <td className="job">
-        <a className="t" href={job.url} target="_blank" rel="noopener noreferrer">
-          {job.title}<span className="sr-only"> (opens the posting in a new tab)</span>
-        </a>
-        <span className="co">{job.company}</span>
-        {job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
-        <span className="narrow meta">{where} · {salary} · {posted}</span>
-      </td>
-      <td className="wide">{where}</td>
-      <td className="num wide">{salary}</td>
-      <td className="num wide">
-        {job.postedAt ? <time dateTime={job.postedAt} title={new Date(job.postedAt).toLocaleDateString("en-GB", { dateStyle: "long" })}>{posted}</time> : posted}
-      </td>
-    </tr>
-  );
-}
-
-const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-/** "today", "3 days ago", "6 months ago", relative to when the Feed was computed. */
-function ago(iso: string, asOf: string): string {
-  const days = Math.floor((new Date(asOf).getTime() - new Date(iso).getTime()) / 86_400_000);
-  if (days < 1) return "today";
-  if (days < 45) return rtf.format(-days, "day");
-  if (days < 365) return rtf.format(-Math.round(days / 30), "month");
-  return rtf.format(-Math.floor(days / 365), "year");
 }
 
 function Toolbar({ feed, view, onView }: { feed: FeedResult; view: FeedView; onView: (v: FeedView) => void }) {
