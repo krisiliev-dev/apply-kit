@@ -3,17 +3,27 @@ import { createEngine } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
 import { createServer } from "./server.ts";
+import { createOpenRouterExtractor } from "./extraction/openrouter.ts";
+import type { Extractor } from "@apply-kit/core";
 
 loadEnv();
 const config = readConfig();
 const db = openDatabase(config.dbPath);
 
+const extractor: Extractor = config.ai.openRouterApiKey
+  ? createOpenRouterExtractor({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
+  : {
+      estimateCostUsd: () => 0,
+      extract: async () => { throw new Error("The OpenRouter key isn't set: add OPENROUTER_API_KEY to .env and restart"); },
+    };
+
 const engine = createEngine({
   db,
   clock: { now: () => new Date() },
   fetch: globalThis.fetch,
-  // Real extractor (OpenRouter) and IMAP mail reader arrive with their tickets.
-  extractor: { estimateCostUsd: () => 0, extract: async () => { throw new Error("Extractor not configured yet"); } },
+  extractor,
+  aiMonthlyCapUsd: config.ai.monthlyCapUsd,
+  // The IMAP mail reader arrives with its ticket.
   mailReader: { fetchSince: async () => [] },
 });
 
