@@ -143,9 +143,9 @@ describe("source health: overall summary for the top bar and Feed", () => {
 describe("source health: try one Source now", () => {
   it("retries only the Source asked for and reports its result", async () => {
     const { engine, deps, clock } = await checkedPayhawk();
+    clock.set("2026-10-12T08:00:00Z");
     await engine.addSource({ kind: "greenhouse", config: "otherboard" });
     deps.fetch = failures[0]![1];
-    clock.set("2026-10-12T08:00:00Z");
     await engine.checkAll();
 
     deps.fetch = goodFetch;
