@@ -16,6 +16,8 @@ const engine = createEngine({
   // Real extractor (OpenRouter) and IMAP mail reader arrive with their tickets.
   extractor: { extract: async () => { throw new Error("Extractor not configured yet"); } },
   mailReader: { fetchSince: async () => [] },
+  // Sources read their keys (JOOBLE_API_KEY, REED_API_KEY) by name; values are never logged.
+  settings: { get: (name) => process.env[name] },
 });
 
 // Sources from config are added on every start; adding one that exists changes nothing.

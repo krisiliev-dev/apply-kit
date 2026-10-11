@@ -39,6 +39,19 @@ Until adding companies on the Sources screen is built, Sources are set in `.env`
 
 Lever and Ashby don't state the company's name, so the Source's name is a guess from its value. Every Source request identifies apply-kit and goes one at a time per host. They are added on every start. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
 
+| Kind | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token, e.g. `payhawkio` | |
+| `workday` | careers link, optionally `\|Country`, e.g. `https://dxctechnology.wd1.myworkdayjobs.com/DXCJobs\|Bulgaria` | the country uses the site's own location filter |
+| `microsoft` | `query\|place`, e.g. `security engineer\|Dublin` | newest 100 |
+| `amazon` | `query\|ISO3 country`, e.g. `security engineer\|BGR` | newest 100 |
+| `devbg` | dev.bg category, e.g. `it-security` | |
+| `jooble` | `keywords\|location`, e.g. `security\|Bulgaria` | needs `JOOBLE_API_KEY` |
+| `reed` | `keywords\|location`, e.g. `security\|London` | needs `REED_API_KEY` |
+| `eures` | `keywords\|ISO2 country`, e.g. `cyber\|bg` | cyber keywords search by ESCO occupation |
+
+A Source whose key setting is missing shows as failing on the Sources screen with the setting's name.
+
 While the service runs it checks Sources every 30 minutes between 07:00 and 23:00 (local time), and after the Mac wakes it catches up within a minute if a check was missed. Change this with `APPLY_KIT_CHECK_EVERY_MINUTES` and `APPLY_KIT_CHECK_WINDOW` (e.g. `08:00-20:00`). **Check now** on the Feed checks straight away.
 
 ### Start at login

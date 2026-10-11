@@ -165,7 +165,7 @@ function SourceRow({ source: s, busy, onTry }: { source: SourceHealth; busy: boo
     <tr>
       <td>
         <span className="src-name">{s.name}</span>
-        <span className="src-id">{s.typeLabel} · {s.id.slice(s.kind.length + 1)}</span>
+        <span className="src-id">{s.label} · {s.id.slice(s.kind.length + 1)}</span>
         {s.status === "failing" && (
           <div className="note quiet-note">
             {failureNote(latest)} {s.jobsKept === 0 ? "Nothing in your Feed depends on it." : `Its ${s.jobsKept} open ${s.jobsKept === 1 ? "job stays" : "jobs stay"} as ${s.jobsKept === 1 ? "it was" : "they were"}.`}

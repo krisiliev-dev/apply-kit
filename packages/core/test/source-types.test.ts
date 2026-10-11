@@ -12,7 +12,7 @@ describe("Source types on the Sources screen", () => {
     const { sources } = await engine.sourceHealth();
 
     // Added in the same instant, so listed by id.
-    expect(sources.map((s) => [s.typeLabel, s.id, s.name, s.category, s.status])).toEqual([
+    expect(sources.map((s) => [s.label, s.id, s.name, s.category, s.status])).toEqual([
       ["Ashby", "ashby:Dext-Careers", "Dext Careers", "ats", "not-checked"],
       ["Greenhouse", "greenhouse:payhawkio", "payhawkio", "ats", "not-checked"],
       ["Lever", "lever:eu:siteground", "Siteground", "ats", "not-checked"],

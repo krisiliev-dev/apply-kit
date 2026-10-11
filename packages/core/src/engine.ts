@@ -116,8 +116,8 @@ export interface SourceHealth {
   id: string;
   name: string;
   kind: string;
-  /** The Source type's name as people write it ("Lever", "SmartRecruiters"). */
-  typeLabel: string;
+  /** The Source type's display name ("Greenhouse", "dev.bg"). */
+  label: string;
   category: SourceCategory;
   status: SourceStatus;
   /** First failed Check in the current run of failures; null unless failing. */
@@ -214,6 +214,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
 
+  const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
+
   // Polite polling: one request at a time per host, across every Source and Check, spaced by the
   // Source type's crawl delay (Lever asks for 1 s).
   const hosts = new Map<string, { tail: Promise<void> | null; lastStartMs: number }>();
@@ -269,7 +271,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
-      const found = await adapter.fetchPostings(config, { fetch: watched });
+      const found = await adapter.fetchPostings(config, { fetch: watched, setting });
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
@@ -337,8 +339,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
        WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
     );
     return {
-      id, name: String(r.name), kind, typeLabel: adapters[kind]?.label ?? kind[0]!.toUpperCase() + kind.slice(1),
-      category: adapters[kind]?.category ?? "ats",
+      id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
       status, failingSince, lastGoodCheckAt, jobsKept, history,
     };
   }
@@ -481,6 +482,10 @@ function startNow(start: () => Promise<Response>): Promise<Response> {
   } catch (err) {
     return Promise.reject(err);
   }
+}
+
+function kindLabel(kind: string): string {
+  return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function summarise(sources: SourceHealth[]): HealthSummary {
