@@ -37,3 +37,8 @@ export function adapterFor(kind: string): SourceAdapter<unknown> {
   if (!a) throw new Error(`Unknown source type "${kind}". Known: ${Object.keys(adapters).join(", ")}`);
   return a;
 }
+
+/** A Source type's display name ("Greenhouse", "dev.bg"). */
+export function kindLabel(kind: string): string {
+  return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+}

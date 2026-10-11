@@ -6,9 +6,10 @@ import {
   jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
+import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations } from "./locations.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
-import { adapterFor, adapters } from "./sources/registry.ts";
+import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
@@ -260,6 +261,13 @@ export interface DiscoveryEngine {
    * Resolves with the Job once the read has finished, failed or been refused by the cap.
    */
   readJob(jobId: string): Promise<JobDetail>;
+  /**
+   * Finds which job system a company uses, from its name or a careers link: one request per job
+   * system, through the same polite fetch as Checks. Reports progress as each system answers. Adds
+   * nothing: Kris adds what was found with addSource. When nothing is found, `fallbacks` lists
+   * other ways to catch its jobs, best first.
+   */
+  detectCompany(input: string, options?: DetectOptions): Promise<CompanyDetection>;
 }
 
 export interface ReadResult {
@@ -332,27 +340,38 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const countStates = (states: string[]) =>
     count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
 
-  async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
-    const sourceId = String(row.id);
-    const name = String(row.name);
-    let rateLimited = false;
-    let timedOut = false;
-    const gapMs = adapters[String(row.kind)]?.crawlDelayMs ?? 0;
-    // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
-    const watched: typeof fetch = async (input, init) => {
+  /**
+   * The fetch every Source request goes through: polite per host (spaced by the Source type's crawl
+   * delay), identified by the user agent, and timed out. `watch` sees each answer and failure.
+   */
+  function fetchFor(kind: string, watch: { status?(s: number): void; failed?(err: unknown): void } = {}): typeof fetch {
+    const gapMs = adapters[kind]?.crawlDelayMs ?? 0;
+    return async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const headers = new Headers(init?.headers);
       if (!headers.has("user-agent")) headers.set("user-agent", userAgent);
       try {
         const res = await politely(url, gapMs, () =>
           deps.fetch(input, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) }));
-        if (res.status === 429) rateLimited = true;
+        watch.status?.(res.status);
         return res;
       } catch (err) {
-        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true;
+        watch.failed?.(err);
         throw err;
       }
     };
+  }
+
+  async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
+    const sourceId = String(row.id);
+    const name = String(row.name);
+    let rateLimited = false;
+    let timedOut = false;
+    // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
+    const watched = fetchFor(String(row.kind), {
+      status: (s) => { if (s === 429) rateLimited = true; },
+      failed: (err) => { if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true; },
+    });
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
@@ -744,6 +763,31 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return checkOne(row, clock.now().toISOString());
     },
 
+    async detectCompany(input, options) {
+      const monthAgo = new Date(clock.now().getTime() - 30 * 86_400_000).toISOString();
+      return detectCompany(input, {
+        fetchFor: (kind) => fetchFor(kind),
+        setting,
+        existingSource: (id) => (db.prepare("SELECT id FROM source WHERE id = ?").get(id) ? id : undefined),
+        aggregatorJobs: (_company, slug) => {
+          const rows = db.prepare(
+            `SELECT s.id, s.name, s.kind, p.company, COUNT(DISTINCT p.job_id) AS n FROM posting p JOIN source s ON s.id = p.source_id
+             WHERE p.last_seen_at >= ? GROUP BY s.id, p.company ORDER BY s.created_at, s.id`,
+          ).all(monthAgo);
+          const bySource = new Map<string, { id: string; name: string; jobs: number }>();
+          for (const r of rows) {
+            if ((adapters[String(r.kind)]?.category ?? "ats") === "ats") continue;
+            const company = slugFor(String(r.company));
+            if (!slug || !(company === slug || (slug.length >= 4 && company.startsWith(slug)))) continue;
+            const entry = bySource.get(String(r.id)) ?? { id: String(r.id), name: String(r.name), jobs: 0 };
+            entry.jobs += Number(r.n);
+            bySource.set(entry.id, entry);
+          }
+          return [...bySource.values()];
+        },
+      }, options);
+    },
+
     async sourceHealth() {
       const sources = allSourceHealth();
       return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
@@ -757,10 +801,6 @@ function startNow(start: () => Promise<Response>): Promise<Response> {
   } catch (err) {
     return Promise.reject(err);
   }
-}
-
-function kindLabel(kind: string): string {
-  return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function summarise(sources: SourceHealth[]): HealthSummary {
