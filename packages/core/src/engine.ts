@@ -83,6 +83,16 @@ export interface FeedResult {
   counts: { new: number; saved: number; open: number; passed: number; hidden: number };
   health: { state: HealthState; sources: number };
   ranking: { learnedAdjustments: number };
+  budget: BudgetInfo;
+}
+
+/** This month's AI spending against the cap. Once reached, unread Postings show as unscreened. */
+export interface BudgetInfo {
+  /** Calendar month the spending counts towards (UTC), e.g. "2026-10". */
+  month: string;
+  capUsd: number;
+  spentUsd: number;
+  reached: boolean;
 }
 
 export interface NewSource {
@@ -173,8 +183,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const spentThisMonth = () =>
     Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
   const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
+  /** The month in which a read was last refused because it would have crossed the cap. */
+  let refusedInMonth: string | null = null;
+  const budget = (): BudgetInfo => {
+    const spentUsd = Math.round(spentThisMonth() * 1e6) / 1e6;
+    const capUsd = cap();
+    return { month: month(), capUsd, spentUsd, reached: capUsd <= 0 || spentUsd >= capUsd || refusedInMonth === month() };
+  };
 
-  function readingOf(postingId: string): { state: ReadingState; facts: PostingFacts | null; error: string | null; text: string } {
+  function readingOf(postingId: string, budgetReached = budget().reached): { state: ReadingState; facts: PostingFacts | null; error: string | null; text: string } {
     const p = db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
     const text = postingText(p?.description_html);
     if (inFlight.has(postingId)) return { state: "reading", facts: null, error: null, text };
@@ -182,7 +199,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const current = e && e.text_hash === hashText(text);
     if (current && e.status === "read") return { state: "read", facts: JSON.parse(String(e.facts)) as PostingFacts, error: null, text };
     if (current && e.status === "failed") return { state: "failed", facts: null, error: String(e.error), text };
-    return { state: "unread", facts: null, error: null, text };
+    return { state: budgetReached ? "unscreened" : "unread", facts: null, error: null, text };
   }
 
   const answersFor = (postingId: string): Record<string, FactAnswer> =>
@@ -205,7 +222,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
        ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
     ).all();
     for (const row of rows) {
-      const state = readingOf(String(row.id)).state;
+      const state = readingOf(String(row.id), false).state;
       if (state === "read" || state === "reading") continue;
       const outcome = await readPosting(row);
       result[outcome]++;
@@ -240,7 +257,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       text: text.slice(0, MAX_TEXT_CHARS),
     };
     const estimate = deps.extractor.estimateCostUsd(input);
-    if (spentThisMonth() + estimate > cap()) return "unscreened";
+    if (spentThisMonth() + estimate > cap()) {
+      refusedInMonth = month();
+      return "unscreened";
+    }
 
     inFlight.add(postingId);
     try {
@@ -272,6 +292,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   return {
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source");
+      const money = budget();
       const states = viewStates[query.view];
       const rows = db.prepare(
         `SELECT j.id, p.id AS posting_id, p.title, p.company, p.location, p.salary, p.posted_at, p.url,
@@ -286,7 +307,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         asOf: clock.now().toISOString(),
         firstRun: sources === 0,
         jobs: rows.map((r) => {
-          const reading = readingOf(String(r.posting_id));
+          const reading = readingOf(String(r.posting_id), money.reached);
           const read = readOf(String(r.posting_id), reading);
           return {
           id: String(r.id),
@@ -311,6 +332,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         },
         health: { state: sources === 0 ? "no-sources" : "working", sources },
         ranking: { learnedAdjustments: 0 },
+        budget: money,
       };
     },
 

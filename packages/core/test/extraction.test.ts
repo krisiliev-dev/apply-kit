@@ -186,3 +186,51 @@ describe("reading postings: Kris confirms a fact", () => {
     await expect(t.engine.confirmFact("job:nope", "salary", "extracted")).rejects.toThrow(/No job/);
   });
 });
+
+describe("reading postings: the monthly AI budget", () => {
+  it("stops reading at the cap and keeps the rest of the Postings in the Feed, unscreened", async () => {
+    // Each read costs $0.004; the cap of $0.01 fits two (the Office Manager posting has no text, so it costs nothing).
+    const extractor = fakeExtractor({ "Security Engineer": securityEngineer }, { costUsd: 0.004 });
+    const t = await checked(kestrelEngine(extractor, { aiMonthlyCapUsd: 0.01 }));
+    await t.engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+    t.deps.fetch = fixtureFetch({
+      [kestrelBoard]: "greenhouse-kestrel.json",
+      "https://boards-api.greenhouse.io/v1/boards/payhawkio/jobs?content=true": "greenhouse-payhawkio.json",
+    });
+    await t.engine.checkAll();
+
+    const result = await t.engine.readPending();
+    const feed = await t.engine.queryFeed({ view: "new" });
+
+    expect(extractor.calls).toHaveLength(2);
+    expect(result).toEqual({ read: 2, failed: 1, unscreened: 3 });
+    expect(feed.jobs).toHaveLength(6);
+    expect(feed.counts.new).toBe(6);
+    expect(feed.jobs.filter((j) => j.reading === "unscreened")).toHaveLength(3);
+    expect(feed.budget).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0.008, reached: true });
+  });
+
+  it("reads nothing and screens nothing when no budget is set, but still shows every Posting", async () => {
+    const extractor = fakeExtractor();
+    const t = await checked(kestrelEngine(extractor, { aiMonthlyCapUsd: undefined }));
+
+    await t.engine.readPending();
+    const feed = await t.engine.queryFeed({ view: "new" });
+
+    expect(extractor.calls).toHaveLength(0);
+    expect(feed.jobs.map((j) => j.reading)).toEqual(["unscreened", "unscreened", "failed"]);
+    expect(feed.budget).toMatchObject({ capUsd: 0, reached: true });
+  });
+
+  it("starts reading again when a new month begins", async () => {
+    const extractor = fakeExtractor({}, { costUsd: 0.01 });
+    const t = await checked(kestrelEngine(extractor, { aiMonthlyCapUsd: 0.01 }));
+    await t.engine.readPending();
+    expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "unscreened", "failed"]);
+
+    t.clock.set("2026-11-01T07:00:00Z");
+    await t.engine.readPending();
+
+    expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "read", "failed"]);
+  });
+});

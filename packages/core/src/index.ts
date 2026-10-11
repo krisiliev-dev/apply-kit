@@ -1,7 +1,7 @@
 export { createEngine } from "./engine.ts";
 export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
-  NewSource, SourceInfo, SourceCheck, CheckResult, ReadingState, ReadResult, JobDetail,
+  NewSource, SourceInfo, SourceCheck, CheckResult, ReadingState, ReadResult, JobDetail, BudgetInfo,
 } from "./engine.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {
