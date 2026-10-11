@@ -25,8 +25,8 @@ describe("Jooble source", () => {
     expect(check.sources[0]).toMatchObject({ ok: true, found: 2, newPostings: 2 });
     expect(feed.jobs).toEqual([
       // The id comes from the link exactly: as a JSON number it's too big to survive parsing.
-      { id: "job:jooble:security|bulgaria:-1111111111111111111", title: "Security Operations Analyst", company: "Synthetic Systems", location: "Sofia, Bulgaria", salary: "4000 - 5500 BGN", postedAt: "2026-10-09T00:00:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/-1111111111111111111") },
-      { id: "job:jooble:security|bulgaria:2222222222222222222", title: "Penetration Tester", company: "Company not stated", location: "Bulgaria", salary: null, postedAt: "2026-10-07T14:30:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/2222222222222222222") },
+      { id: "job:jooble:security|bulgaria:-1111111111111111111", title: "Security Operations Analyst", company: "Synthetic Systems", location: "Sofia, Bulgaria", salary: "4000 - 5500 BGN", postedAt: "2026-10-09T00:00:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/-1111111111111111111"), reading: "unread", requirements: [], needsYou: 0 },
+      { id: "job:jooble:security|bulgaria:2222222222222222222", title: "Penetration Tester", company: "Company not stated", location: "Bulgaria", salary: null, postedAt: "2026-10-07T14:30:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/2222222222222222222"), reading: "unread", requirements: [], needsYou: 0 },
     ]);
   });
 

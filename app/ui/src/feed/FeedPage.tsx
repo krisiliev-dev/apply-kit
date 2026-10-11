@@ -70,6 +70,15 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
     return () => ctrl.abort();
   }, [refreshKey, nudge, view, onHealth]);
 
+  // While postings are being read, look again every few seconds so chips fill in place
+  // (rows keep their order: receive() only updates rows already on screen).
+  const reading = load.state === "ready" && load.rows.shown.some((j) => j.reading === "reading");
+  useEffect(() => {
+    if (!reading) return;
+    const timer = setTimeout(() => setNudge((n) => n + 1), 3_000);
+    return () => clearTimeout(timer);
+  }, [reading, load]);
+
   // After "Show them", move focus to the first job that joined so keyboard users land on it.
   useEffect(() => {
     const id = focusAfterShow.current;
