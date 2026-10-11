@@ -112,3 +112,21 @@ describe("email alerts: Google Careers", () => {
     expect(check.sources).toEqual([expect.objectContaining({ ok: true, found: 0 })]);
   });
 });
+
+describe("email alerts: Workday", () => {
+  it("reads jobs from any company's Workday alert, named after the sending company", async () => {
+    const { engine, mailbox, source } = await withEmailSource("workday");
+    mailbox.deliver(alertEmail("email-workday.html", {
+      id: "<alert-w1@myworkday.example>", receivedAt: "2026-10-12T05:00:00Z",
+      from: "Tailspin Systems <tailspin@myworkday.com>", subject: "New Jobs Posted: Security - Bulgaria",
+    }));
+
+    await engine.checkAll();
+
+    expect(source.name).toBe("Workday job alerts");
+    expect(await feedFacts(engine)).toEqual([
+      { title: "Cyber Security Analyst", company: "Tailspin Systems", location: "Sofia, Bulgaria", salary: null, url: "https://tailspin.wd3.myworkdayjobs.com/TailspinCareers/job/Sofia-Bulgaria/Cyber-Security-Analyst_R-0012345" },
+      { title: "Senior IAM Engineer", company: "Tailspin Systems", location: "Remote - Europe", salary: null, url: "https://tailspin.wd3.myworkdayjobs.com/TailspinCareers/job/Remote---Europe/Senior-IAM-Engineer_R-0012399" },
+    ]);
+  });
+});

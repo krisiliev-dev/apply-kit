@@ -58,7 +58,25 @@ const google: AlertSender = {
   readCard: ({ lines }) => ({ ...splitCompanyLine(lines[0]), salary: salaryLine(lines.slice(1)) }),
 };
 
-export const senders = { linkedin, jobsbg, google } satisfies Record<string, AlertSender>;
+const workday: AlertSender = {
+  name: "Workday job alerts",
+  isFrom: ({ address }) => /@(\w+\.)*myworkday(jobs)?\.com$/i.test(address),
+  // {tenant}.wdN.myworkdayjobs.com/[locale/]{site}/job/{location}/{slug}_{requisition id}
+  jobLink(href) {
+    const m = /^https?:\/\/([\w-]+\.wd\d+\.myworkdayjobs\.com)\/(?:[a-z]{2}-[A-Z]{2}\/)?([\w-]+)\/job\/([^?#]+)_([\w-]+?)(?:[/?#]|$)/.exec(unwrapRedirect(href));
+    if (!m) return null;
+    const [, host, site, path, req] = m;
+    return { id: `${host!.toLowerCase()}/${site}/${req}`, url: `https://${host}/${site}/job/${path}_${req}` };
+  },
+  // The email comes from the employer's own Workday ("Tailspin Systems <tailspin@myworkday.com>").
+  readCard({ lines }, email) {
+    const location = lines.find((l) => !/^(R-?\d|JR\d|REQ|posted\b)/i.test(l)) ?? null;
+    const company = parseFrom(email.from).name.replace(/\s+(via|through)\s+workday$/i, "").trim() || null;
+    return { company, location, salary: salaryLine(lines) };
+  },
+};
+
+export const senders = { linkedin, jobsbg, google, workday } satisfies Record<string, AlertSender>;
 
 export type SenderKey = keyof typeof senders;
 
