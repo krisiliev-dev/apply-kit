@@ -4,6 +4,7 @@ import { checkNow, fetchFeed } from "../api.ts";
 import { JobsTable } from "./JobsTable.tsx";
 import { PassedClosed } from "./PassedClosed.tsx";
 import { useToaster } from "./toast.tsx";
+import { FailedSourceBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -19,7 +20,9 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const toaster = useToaster();
-  const refresh = useCallback(() => setAttempt((n) => n + 1), []);
+  const reload = useCallback(() => setAttempt((n) => n + 1), []);
+  const [said, say] = useState("");
+  const { busy, tryNow } = useTryNow(reload, say);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -35,43 +38,53 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   return <>{content()}{toaster.element}</>;
 
   function content() {
-  if (load.state === "loading") return <p className="meta" role="status">Loading the Feed…</p>;
-  if (load.state === "error") {
-    return (
-      <div className="banner error" role="alert">
-        <span className="text"><b>Couldn't reach the apply-kit service.</b> {load.message}. Check that it is running, then try again.</span>
-        <button className="btn sm" type="button" onClick={() => { setLoad({ state: "loading" }); setAttempt((n) => n + 1); }}>Try again</button>
-      </div>
-    );
-  }
+    if (load.state === "loading") return <p className="meta" role="status">Loading the Feed…</p>;
+    if (load.state === "error") {
+      return (
+        <div className="banner error" role="alert">
+          <span className="text"><b>Couldn't reach the apply-kit service.</b> {load.message}. Check that it is running, then try again.</span>
+          <button className="btn sm" type="button" onClick={() => { setLoad({ state: "loading" }); setAttempt((n) => n + 1); }}>Try again</button>
+        </div>
+      );
+    }
 
-  const { feed } = load;
-  if (feed.firstRun) {
+    const { feed } = load;
+    if (feed.firstRun) {
+      return (
+        <section className="stack" style={{ gap: "var(--s-6)" }}>
+          <Toolbar feed={feed} view={view} onView={setView} />
+          <FirstRun />
+        </section>
+      );
+    }
     return (
       <section className="stack" style={{ gap: "var(--s-6)" }}>
+        {feed.health.failing.map((f) => (
+          <FailedSourceBanner
+            key={f.sourceId}
+            failure={f}
+            busy={busy === f.sourceId}
+            onTry={() => tryNow(f.sourceId, f.name, f.jobsKept)}
+            showHealthLink
+          />
+        ))}
+        <StatusLine message={said} />
+        <div className="page-head">
+          <div className="lead">
+            <h1>{viewTitle(view, feed)}</h1>
+            <p className="meta">
+              {feed.counts.open} open across {feed.health.sources} {feed.health.sources === 1 ? "source" : "sources"} · newest first
+            </p>
+          </div>
+          <span className="grow" />
+          <CheckNow onChecked={reload} />
+        </div>
         <Toolbar feed={feed} view={view} onView={setView} />
-        <FirstRun />
+        {view === "passed"
+          ? <PassedClosed feed={feed} toaster={toaster} onChanged={reload} />
+          : <JobsTable feed={feed} view={view} toaster={toaster} onChanged={reload} />}
       </section>
     );
-  }
-  return (
-    <section className="stack" style={{ gap: "var(--s-6)" }}>
-      <div className="page-head">
-        <div className="lead">
-          <h1>{viewTitle(view, feed)}</h1>
-          <p className="meta">
-            {feed.counts.open} open across {feed.health.sources} {feed.health.sources === 1 ? "source" : "sources"} · newest first
-          </p>
-        </div>
-        <span className="grow" />
-        <CheckNow onChecked={refresh} />
-      </div>
-      <Toolbar feed={feed} view={view} onView={setView} />
-      {view === "passed"
-        ? <PassedClosed feed={feed} toaster={toaster} onChanged={refresh} />
-        : <JobsTable feed={feed} view={view} toaster={toaster} onChanged={refresh} />}
-    </section>
-  );
   }
 }
 
@@ -91,7 +104,6 @@ function CheckNow({ onChecked }: { onChecked: () => void }) {
       .then((result) => { setCheck({ state: "done", result }); onChecked(); })
       .catch((err: unknown) => setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) }));
   };
-  const failed = check.state === "done" ? check.result.sources.filter((s) => !s.ok) : [];
   return (
     <div className="row" style={{ alignItems: "center" }}>
       <p className="meta" role="status" aria-live="polite">
@@ -99,11 +111,6 @@ function CheckNow({ onChecked }: { onChecked: () => void }) {
         {check.state === "done" && summary(check.result)}
         {check.state === "error" && `Couldn't run the check: ${check.message}`}
       </p>
-      {failed.length > 0 && (
-        <p className="meta" role="alert">
-          {failed.map((s) => `${s.name}: ${s.ok ? "" : s.error}. Its jobs are kept as they were.`).join(" ")}
-        </p>
-      )}
       <button className="btn sm" type="button" onClick={run} disabled={check.state === "checking"}>
         {check.state === "checking" ? "Checking…" : "Check now"}
       </button>
@@ -116,7 +123,9 @@ function summary(result: CheckResult): string {
   const found = ok.reduce((n, s) => n + (s.ok ? s.found : 0), 0);
   const fresh = ok.reduce((n, s) => n + (s.ok ? s.newPostings : 0), 0);
   const total = result.sources.length;
-  return `Checked ${ok.length} of ${total} ${total === 1 ? "source" : "sources"} · ${found} jobs listed, ${fresh} new`;
+  const failed = total - ok.length;
+  const note = failed === 0 ? "" : ` · ${failed} failed, ${failed === 1 ? "its" : "their"} jobs kept as they were`;
+  return `Checked ${ok.length} of ${total} ${total === 1 ? "source" : "sources"} · ${found} jobs listed, ${fresh} new${note}`;
 }
 
 function Toolbar({ feed, view, onView }: { feed: FeedResult; view: FeedView; onView: (v: FeedView) => void }) {

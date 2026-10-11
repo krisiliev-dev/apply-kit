@@ -16,11 +16,22 @@ export function createServer({ engine, uiDir }: { engine: DiscoveryEngine; uiDir
 
   // Requiring a JSON body type means a web page can't trigger this without a CORS preflight,
   // which this service never grants.
+  const jsonOnly = (ct: string | undefined) => ct?.startsWith("application/json");
+
   app.post("/api/check", async (c) => {
-    if (!c.req.header("content-type")?.startsWith("application/json")) {
-      return c.json({ error: "Send Content-Type: application/json" }, 415);
-    }
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     return c.json(await engine.checkAll());
+  });
+
+  app.get("/api/sources", async (c) => c.json(await engine.sourceHealth()));
+
+  // "Try now": checks one Source. Same JSON-only rule as /api/check.
+  app.post("/api/sources/:id/check", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    const id = c.req.param("id");
+    const known = (await engine.sourceHealth()).sources.some((s) => s.id === id);
+    if (!known) return c.json({ error: `No source "${id}"` }, 404);
+    return c.json(await engine.checkSource(id));
   });
 
   // Triage. Each answers with the Decision (or the Jobs restored, for undo).

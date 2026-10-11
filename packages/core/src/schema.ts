@@ -35,6 +35,17 @@ const migrations: string[] = [
      UNIQUE (source_id, external_id)
    );
    CREATE INDEX posting_job ON posting(job_id);`,
+  // #4: every Check of a Source (time, outcome, count in Kris's locations, total), kept as history.
+  `CREATE TABLE source_check (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     source_id TEXT NOT NULL REFERENCES source(id),
+     checked_at TEXT NOT NULL,
+     outcome TEXT NOT NULL,
+     in_locations INTEGER,
+     total INTEGER,
+     error TEXT
+   );
+   CREATE INDEX source_check_source ON source_check(source_id, checked_at);`,
   // #14: triage. A Job's state carries when it last changed and why (pass reason and note, how it
   // closed). Each save, pass, close or reopen is a Decision that remembers every Job's previous
   // state, so it can be undone, per Job.

@@ -20,6 +20,7 @@ const boardToken = /^[a-z0-9][a-z0-9_-]*$/i;
 
 export const greenhouse: SourceAdapter<GreenhouseConfig> = {
   kind: "greenhouse",
+  category: "ats",
 
   parseConfig(raw) {
     const board = typeof raw === "string" ? raw : (raw as { board?: unknown } | null)?.board;

@@ -18,7 +18,7 @@ describe("Greenhouse source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: true, found: 3, newPostings: 3 }]);
     expect(feed.firstRun).toBe(false);
-    expect(feed.health).toEqual({ state: "working", sources: 1 });
+    expect(feed.health).toMatchObject({ state: "working", sources: 1 });
     expect(feed.counts.new).toBe(3);
     // Newest first until Fit exists.
     expect(feed.jobs).toEqual([
@@ -81,7 +81,7 @@ describe("Greenhouse source", () => {
     const feed = await engine.queryFeed({ view: "new" });
 
     expect(check.sources).toEqual([
-      { sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: false, error: 'Greenhouse answered 503 for board "payhawkio"' },
+      { sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: false, outcome: "error", error: 'Greenhouse answered 503 for board "payhawkio"' },
     ]);
     expect(feed.counts.new).toBe(3);
   });
