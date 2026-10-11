@@ -49,6 +49,7 @@
 .quiet-note { color: var(--partly); font-weight: 500 }
 .table td.r, .table th.r { text-align: right }
 .table .total { color: var(--ink-3) }
+.table .usual { display: block; font-size: var(--fs-small) }
 .table .act { text-align: right; padding-block: var(--s-3); white-space: nowrap }
 .table .c-last { white-space: nowrap }
 .table-foot { padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-caption); color: var(--ink-3) }

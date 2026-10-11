@@ -6,8 +6,8 @@ import { PassedClosed } from "./PassedClosed.tsx";
 import { HiddenPile } from "./HiddenPile.tsx";
 import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
 import { useToaster } from "./toast.tsx";
+import { DropBanner, FailedSourceBanner, MailboxBanner, StatusLine, useConfirmDrop, useTryNow } from "../health.tsx";
 import { PasteLink } from "./PasteLink.tsx";
-import { FailedSourceBanner, MailboxBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -48,6 +48,8 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
       })
       .catch((err: unknown) => toaster.show({ message: `Couldn't refresh the Feed: ${err instanceof Error ? err.message : String(err)}` }));
   }, [view, options, onHealth, toaster]);
+  // "Close 34 SumUp jobs" on an unusual drop: the closed rows leave the view (and come back on Undo).
+  const drops = useConfirmDrop(toaster, afterTriage, say);
 
   // A fresh load (first visit, another view, sort or filter, Try again) shows the Feed as it is.
   useEffect(() => {
@@ -133,6 +135,9 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
             onTry={() => tryNow(f.sourceId, f.name, f.jobsKept)}
             showHealthLink
           />
+        ))}
+        {feed.health.unusual.map((d) => (
+          <DropBanner key={d.sourceId} drop={d} busy={drops.busy === d.sourceId} onClose={() => drops.confirm(d)} showHealthLink />
         ))}
         <StatusLine message={said} />
         <CheckHead

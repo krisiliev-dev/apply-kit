@@ -24,6 +24,8 @@ interface ReedJob {
 export const reed: SourceAdapter<ReedConfig> = {
   kind: "reed",
   category: "api",
+  // A keyword search capped at its top results: missing from one Check never means gone.
+  capped: true,
   label: "Reed",
 
   parseConfig: (raw) => parseSearch(raw, "Reed", "security|London"),

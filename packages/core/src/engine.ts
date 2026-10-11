@@ -7,13 +7,15 @@ import {
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
+import type { Angle } from "./fit/angles.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
 import { defaultSearchSettings, parseSearchSettings, type SearchSettings } from "./search-settings.ts";
 import { dealbreakersOf, monthlyEur, type DealbreakerRule, type HiddenReason } from "./dealbreakers.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
-import { isEmailAlertAdapter } from "./sources/adapter.ts";
+import { isEmailAlertAdapter, listsEverything, type SourceAdapter } from "./sources/adapter.ts";
+import { currentDrop, dropWording, isDrop, normalVolume, type NormalVolume, type UnusualDrop } from "./drops.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
 import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
 import { describeMergeReason, type MergeReason } from "./matching.ts";
@@ -136,6 +138,10 @@ export interface JobDetail {
   /** Link to the target posting. */
   url: string;
   state: JobState;
+  /** Set on a closed Job: when, how it closed in plain words, and the Decision to undo. Null otherwise. */
+  closed: { at: string; how: string; decisionId: string } | null;
+  /** On a closed Job: open Jobs with the same closest angle, best Fit first (up to 5). Empty otherwise. */
+  similar: FeedJob[];
   /** How many Postings were merged into this Job, and on how many sites. */
   postingCount: number;
   siteCount: number;
@@ -202,7 +208,8 @@ export interface PassInput {
   note?: string | null;
 }
 
-export type HealthState = "no-sources" | "working" | "failing";
+/** "unusual": no Source is failing, but one is in an unusual drop (its Jobs are kept open). */
+export type HealthState = "no-sources" | "working" | "failing" | "unusual";
 
 /** A Source whose latest Check failed, and what that means for the Feed. */
 export interface FailingSource {
@@ -244,6 +251,11 @@ export interface HealthSummary {
   failing: FailingSource[];
   /** Email-alert Sources quiet longer than usual. Never closes jobs; the user checks the alert is still on. */
   quiet: QuietSource[];
+  /**
+   * Sources in an unusual drop, with the same wording the Feed and Sources show. Their Jobs stay
+   * open; `needsYou` marks one Kris is asked to confirm (only confirmDrop closes anything).
+   */
+  unusual: UnusualDrop[];
   /**
    * The job mailbox, or null when no email-alert Source is connected. While it fails, its email
    * Sources are reported here once instead of one by one in `failing`.
@@ -322,6 +334,9 @@ export interface RemovalPreview {
 /** How "Source removed" reads on a closed Job. */
 export const sourceRemovedHow = "Source removed";
 
+/** How a Job reads once the last Source listing it stops: "No longer listed by Payhawk". */
+export const noLongerListedBy = (sourceName: string) => `No longer listed by ${sourceName}`;
+
 /** Why a Check failed: the Source errored, didn't answer in time, or asked us to slow down. */
 export type CheckFailure = "error" | "timeout" | "rate-limited";
 
@@ -339,10 +354,12 @@ export interface CheckRecord {
   /** Every Posting the Source listed. */
   total: number | null;
   error: string | null;
+  /** True when the Check listed far fewer than the Source's normal volume (an unusual drop). */
+  unusual: boolean;
 }
 
-/** Paused: Kris stopped its checks; its Jobs stay as they are. "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
-export type SourceStatus = "not-checked" | "working" | "failing" | "quiet" | "paused";
+/** "unusual": its latest good Check was an unusual drop, and its Jobs are kept open. Paused: Kris stopped its checks; its Jobs stay as they are. "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
+export type SourceStatus = "not-checked" | "working" | "failing" | "quiet" | "unusual" | "paused";
 
 /** An email-alert Source's rhythm, learned from the emails it received in the last 6 weeks. */
 export interface AlertRhythm {
@@ -383,6 +400,10 @@ export interface SourceHealth {
   history: CheckRecord[];
   /** Email-alert Sources only: their email rhythm. Null for every other Source. */
   alerts: AlertRhythm | null;
+  /** What it usually lists per Check, or null until a good Check is recorded (and for email alerts). */
+  normal: NormalVolume | null;
+  /** The unusual drop it is in, or null. */
+  drop: UnusualDrop | null;
 }
 
 export interface HealthReport {
@@ -455,6 +476,13 @@ export interface DiscoveryEngine {
   close(jobIds: string[], how: string): Promise<Decision>;
   /** Reopens closed Jobs: they go back to New. */
   reopen(jobIds: string[]): Promise<Decision>;
+  /**
+   * Kris confirms a Source's unusual drop is real ("Close 34 SumUp jobs"): the Postings its latest
+   * Check no longer listed are gone, and the open Jobs no other Source still lists close with "No
+   * longer listed by SumUp". The only way a drop closes anything. Undoing the Decision reopens them
+   * and the drop stands again. Throws if the Source isn't in an unusual drop.
+   */
+  confirmDrop(sourceId: string): Promise<Decision>;
   /**
    * One Job with all its Postings and the target marked, or null if there's no such Job. A Job
    * that was merged into another answers with the Job it now lives in (check the returned id).
@@ -572,6 +600,9 @@ export interface ReadResult {
   /** Left unread because the monthly AI budget would be crossed. */
   unscreened: number;
 }
+
+/** How many similar open Jobs a closed Job suggests. */
+const similarLimit = 5;
 
 /** How many recent Checks sourceHealth returns per Source. */
 const historyLength = 14;
@@ -771,15 +802,25 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
         for (const { email, postings } of emails) recordAlertEmail(db, sourceId, email, postings.length);
+        const back = found.flatMap((p) => db.prepare(
+          "SELECT id, gone_decision_id FROM posting WHERE id = ? AND gone_at IS NOT NULL",
+        ).all(`${sourceId}:${p.externalId}`));
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
-        recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null });
+        listedAgain(back);
+        const unusual = watchesVolume(adapter) && isDrop(db, sourceId, found.length);
+        recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null, unusual });
+        if (listsEverything(adapter) && !unusual) {
+          const missing = db.prepare("SELECT id FROM posting WHERE source_id = ? AND gone_at IS NULL AND last_seen_at < ? ORDER BY id")
+            .all(sourceId, startedAt).map((r) => String(r.id));
+          markGone(missing, noLongerListedBy(name));
+        }
         return fresh;
       });
       return { sourceId, name, ok: true, found: found.length, newPostings };
     } catch (err) {
       const outcome: CheckFailure = timedOut ? "timeout" : rateLimited ? "rate-limited" : "error";
       const error = err instanceof Error ? err.message : String(err);
-      recordCheck(db, sourceId, { at: startedAt, outcome, inLocations: null, total: null, error });
+      recordCheck(db, sourceId, { at: startedAt, outcome, inLocations: null, total: null, error, unusual: false });
       return { sourceId, name, ok: false, outcome, error };
     }
   }
@@ -911,27 +952,102 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** Moves each Job currently in one of `from` to `to`, remembering its previous state. */
   function decide(kind: Decision["kind"], jobIds: string[], from: JobState[], to: JobState, fields: StateFields = {}): Decision {
+    return transaction(db, () => decideNow(kind, jobIds, from, to, fields));
+  }
+
+  /** `decide` inside a transaction the caller already holds. */
+  function decideNow(kind: Decision["kind"], jobIds: string[], from: JobState[], to: JobState, fields: StateFields = {}): Decision {
     const id = `decision:${crypto.randomUUID()}`;
     const now = clock.now().toISOString();
-    const changed = transaction(db, () => {
-      db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
-      const out: string[] = [];
-      for (const jobId of new Set(jobIds)) {
-        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ? AND merged_into IS NULL").get(jobId);
-        if (!job || !from.includes(String(job.state) as JobState)) continue;
-        db.prepare(
-          `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        ).run(id, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
-        setState(jobId, to, now, fields);
-        if (kind === "unhide") {
-          db.prepare("INSERT OR REPLACE INTO job_unhidden (job_id, decision_id, unhidden_at) VALUES (?, ?, ?)").run(jobId, id, now);
-        }
-        out.push(jobId);
+    db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
+    const changed = applyDecision(id, jobIds, from, to, fields);
+    if (kind === "unhide") {
+      for (const jobId of changed) {
+        db.prepare("INSERT OR REPLACE INTO job_unhidden (job_id, decision_id, unhidden_at) VALUES (?, ?, ?)").run(jobId, id, now);
       }
-      return out;
-    });
+    }
     return { id, kind, jobIds: changed };
+  }
+
+  /** Moves Jobs as part of an existing Decision, remembering each one's previous state. */
+  function applyDecision(decisionId: string, jobIds: Iterable<string>, from: JobState[], to: JobState, fields: StateFields = {}): string[] {
+    const now = clock.now().toISOString();
+    const changed: string[] = [];
+    for (const jobId of new Set(jobIds)) {
+      const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ? AND merged_into IS NULL").get(jobId);
+      if (!job || !from.includes(String(job.state) as JobState)) continue;
+      db.prepare(
+        `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      ).run(decisionId, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
+      setState(jobId, to, now, fields);
+      changed.push(jobId);
+    }
+    return changed;
+  }
+
+  /**
+   * Puts each of a Decision's Jobs (or only the given ones) back in its state from before, unless
+   * Kris decided on it again since. Runs in the caller's transaction; returns the Jobs restored.
+   */
+  function undoNow(decisionId: string, only?: string[]): string[] {
+    const now = clock.now().toISOString();
+    const rows = db.prepare(
+      `SELECT dj.rowid AS rid, dj.* FROM decision_job dj
+       WHERE dj.decision_id = ? AND dj.undone_at IS NULL
+         AND dj.rowid = (SELECT MAX(rowid) FROM decision_job WHERE job_id = dj.job_id AND undone_at IS NULL)
+       ORDER BY dj.rowid`,
+    ).all(decisionId);
+    const out: string[] = [];
+    for (const r of rows) {
+      const jobId = String(r.job_id);
+      if (only && !only.includes(jobId)) continue;
+      setState(jobId, String(r.prev_state), sqlText(r.prev_changed_at), {
+        passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
+      });
+      db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
+      db.prepare("DELETE FROM job_unhidden WHERE job_id = ? AND decision_id = ?").run(jobId, decisionId);
+      out.push(jobId);
+    }
+    return out;
+  }
+
+  /**
+   * Postings of a Source that it lists again after they were marked gone: each Job that closed
+   * because of it opens again as it was (a Job Kris closed or decided on since stays as he left it).
+   */
+  function listedAgain(gone: Record<string, unknown>[]): void {
+    for (const p of gone) {
+      const decisionId = sqlText(p.gone_decision_id);
+      const job = db.prepare("SELECT job_id FROM posting WHERE id = ?").get(String(p.id));
+      if (decisionId && job && stillListed(String(job.job_id))) undoNow(decisionId, [String(job.job_id)]);
+    }
+  }
+
+  /**
+   * Marks Postings gone (their Source no longer lists them) and closes each open Job left with no
+   * Posting a watchlist Source still lists, saying how. One Decision: undoing it reopens those Jobs
+   * and brings the Postings back. Null when there was nothing to mark. Runs in the caller's transaction.
+   */
+  function markGone(postingIds: string[], how: string): Decision | null {
+    if (postingIds.length === 0) return null;
+    const decision = decideNow("close", [], [], "closed");
+    const jobIds = new Set<string>();
+    for (const id of postingIds) {
+      db.prepare("UPDATE posting SET gone_at = ?, gone_decision_id = ? WHERE id = ? AND gone_at IS NULL").run(clock.now().toISOString(), decision.id, id);
+      const p = db.prepare("SELECT job_id FROM posting WHERE id = ?").get(id);
+      if (p) jobIds.add(String(p.job_id));
+    }
+    const closing = [...jobIds].filter((jobId) => !stillListed(jobId));
+    return { ...decision, jobIds: applyDecision(decision.id, closing, ["new", "saved"], "closed", { closedHow: how }) };
+  }
+
+  /** Whether a watchlist Source (paused ones included) still lists one of this Job's Postings. */
+  function stillListed(jobId: string): boolean {
+    return !!db.prepare(
+      `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL LIMIT 1`,
+    ).get(jobId);
   }
 
   function setState(jobId: string, state: string, changedAt: string | null, f: StateFields) {
@@ -1031,6 +1147,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const fit = fitOf(base, read, reading.facts);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
     const shown = shownByYou(jobId);
+    const closed = row.state === "closed"
+      ? { at: String(row.state_changed_at), how: String(row.closed_how), decisionId: String(row.decision_id) }
+      : null;
     return {
       id: jobId,
       title: base.title,
@@ -1043,6 +1162,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       postedAt: base.postedAt,
       url: t.url,
       state: String(row.state) as JobState,
+      closed,
+      similar: closed && fit.angle ? similarOpenJobs(jobId, fit.angle, money) : [],
       postingCount: postings.length,
       siteCount: new Set(postings.map((p) => p.site)).size,
       postings,
@@ -1061,6 +1182,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     };
   }
 
+  /** Open Jobs (New and Saved) with the same closest angle, best Fit first. */
+  function similarOpenJobs(jobId: string, angle: Angle, money: BudgetInfo): FeedJob[] {
+    return db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved') AND j.id != ?`).all(jobId)
+      .map((r) => toFeedJob(r, money))
+      .filter((j) => j.fit.angle === angle)
+      .sort((a, b) => b.fit.value - a.fit.value)
+      .slice(0, similarLimit);
+  }
+
   /** The target posting's link and how many sites list the Job. */
   function linksOf(jobId: string): { siteCount: number; url: string; targetId: string } {
     const rows = db.prepare("SELECT id, url FROM posting WHERE job_id = ?").all(jobId);
@@ -1075,7 +1205,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   function allSourceHealth(): SourceHealth[] {
     const rows = db.prepare(`SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL AND ${onWatchlist} ORDER BY created_at, id`).all();
     const history = db.prepare(
-      `SELECT checked_at, outcome, in_locations, total, error FROM source_check
+      `SELECT checked_at, outcome, in_locations, total, error, unusual FROM source_check
        WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
     );
     return rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord)));
@@ -1117,17 +1247,20 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
     const latest = history[0];
     const alerts = adapters[kind]?.category === "email" ? alertRhythm(db, id, clock.now()) : null;
-    const status: SourceStatus = r.paused_at != null ? "paused" : !latest ? "not-checked" : latest.outcome !== "ok" ? "failing" : alerts?.quietSince ? "quiet" : "working";
-    const failingSince = status !== "failing" ? null : String(db.prepare(
-      "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
-    ).get(id, lastGoodCheckAt ?? "")!.at);
+    const volume = watchesVolume(adapters[kind]) ? normalVolume(db, id) : null;
     const jobsKept = count(
       `SELECT COUNT(DISTINCT j.id) AS n FROM job j JOIN posting p ON p.job_id = j.id
        WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
     );
+    const drop = watchesVolume(adapters[kind]) ? unusualDrop(id, String(r.name), jobsKept) : null;
+    const status: SourceStatus = r.paused_at != null ? "paused" : !latest ? "not-checked" : latest.outcome !== "ok" ? "failing"
+      : drop ? "unusual" : alerts?.quietSince ? "quiet" : "working";
+    const failingSince = status !== "failing" ? null : String(db.prepare(
+      "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
+    ).get(id, lastGoodCheckAt ?? "")!.at);
     return {
       id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
-      status, failingSince, lastGoodCheckAt, jobsKept, history, alerts,
+      status, failingSince, lastGoodCheckAt, jobsKept, history, alerts, normal: volume, drop,
     };
   }
 
@@ -1141,6 +1274,38 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       job: { id: String(r.job_id), title: String(r.title), company: String(r.company) },
       reason: String(r.reason_text), at: String(r.created_at), undoneAt: sqlText(r.undone_at),
     };
+  }
+
+  /** The unusual drop a Source is in, with what it keeps open and what confirming would close. */
+  function unusualDrop(sourceId: string, name: string, jobsKept: number): UnusualDrop | null {
+    const d = currentDrop(db, sourceId);
+    if (!d) return null;
+    const closing = dropClosing(sourceId, d.latestAt).jobIds.length;
+    const { since, latestAt, listed, normal, checksSince, needsYou } = d;
+    return {
+      sourceId, name, since, latestAt, listed, normal, checksSince, needsYou, jobsKept, closing,
+      wording: dropWording({ name, listed, normal, checksSince, needsYou, jobsKept, closing }),
+    };
+  }
+
+  /**
+   * What confirming a drop would do: the Source's Postings missing from its latest Check (gone once
+   * confirmed), and the open Jobs among theirs that no other Source still lists (they close).
+   */
+  function dropClosing(sourceId: string, latestAt: string): { postingIds: string[]; jobIds: string[] } {
+    const missing = db.prepare(
+      "SELECT id, job_id FROM posting WHERE source_id = ? AND gone_at IS NULL AND last_seen_at < ? ORDER BY id",
+    ).all(sourceId, latestAt);
+    const jobIds = [...new Set(missing.map((p) => String(p.job_id)))].filter((jobId) => {
+      const open = db.prepare("SELECT 1 AS hit FROM job WHERE id = ? AND state IN ('new', 'saved')").get(jobId);
+      const elsewhere = db.prepare(
+        `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
+         WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL
+           AND NOT (p.source_id = ? AND p.last_seen_at < ?) LIMIT 1`,
+      ).get(jobId, sourceId, latestAt);
+      return !!open && !elsewhere;
+    });
+    return { postingIds: missing.map((p) => String(p.id)), jobIds };
   }
 
   /** The Source pasted links belong to, created the first time Kris pastes one. */
@@ -1266,25 +1431,29 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return decide("reopen", jobIds, ["closed"], "new");
     },
 
+    async confirmDrop(sourceId) {
+      const source = liveSource(sourceId);
+      const name = String(source.name);
+      const drop = currentDrop(db, sourceId);
+      if (!drop) throw new Error(`${name} isn't in an unusual drop`);
+      return transaction(db, () => {
+        const { postingIds } = dropClosing(sourceId, drop.latestAt);
+        const decision = markGone(postingIds, noLongerListedBy(name)) ?? decideNow("close", [], [], "closed");
+        db.prepare("INSERT INTO drop_confirmation (decision_id, source_id, check_id, confirmed_at) VALUES (?, ?, ?, ?)").run(
+          decision.id, sourceId, drop.latestCheckId, clock.now().toISOString(),
+        );
+        return decision;
+      });
+    },
+
     async undo(decisionId, only) {
       const now = clock.now().toISOString();
       const restored = transaction(db, () => {
-        const rows = db.prepare(
-          `SELECT dj.rowid AS rid, dj.* FROM decision_job dj
-           WHERE dj.decision_id = ? AND dj.undone_at IS NULL
-             AND dj.rowid = (SELECT MAX(rowid) FROM decision_job WHERE job_id = dj.job_id AND undone_at IS NULL)
-           ORDER BY dj.rowid`,
-        ).all(decisionId);
-        const out: string[] = [];
-        for (const r of rows) {
-          const jobId = String(r.job_id);
-          if (only && !only.includes(jobId)) continue;
-          setState(jobId, String(r.prev_state), sqlText(r.prev_changed_at), {
-            passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
-          });
-          db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
-          db.prepare("DELETE FROM job_unhidden WHERE job_id = ? AND decision_id = ?").run(jobId, decisionId);
-          out.push(jobId);
+        const out = undoNow(decisionId, only);
+        if (!only) {
+          // Postings it marked gone are listed again, and a drop it confirmed stands unconfirmed.
+          db.prepare("UPDATE posting SET gone_at = NULL, gone_decision_id = NULL WHERE gone_decision_id = ?").run(decisionId);
+          db.prepare("UPDATE drop_confirmation SET undone_at = ? WHERE decision_id = ? AND undone_at IS NULL").run(now, decisionId);
         }
         return out;
       });
@@ -1614,6 +1783,8 @@ function restoreRule(current: SearchSettings, rule: DealbreakerRule, key: string
   }
   return out;
 }
+/** Whether a Source's volume per Check is watched for drops (email alerts have a rhythm instead). */
+const watchesVolume = (a: SourceAdapter<unknown> | undefined) => a != null && a.category !== "email" && a.category !== "capture";
 
 function startNow(start: () => Promise<Response>): Promise<Response> {
   try {
@@ -1661,7 +1832,8 @@ function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: 
   });
   const times = sources.map((s) => s.history[0]?.at).filter((t): t is string => t != null).sort();
   return {
-    state: sources.length === 0 ? "no-sources" : failing.length > 0 || mailbox?.state === "error" ? "failing" : "working",
+    state: sources.length === 0 ? "no-sources" : failing.length > 0 || mailbox?.state === "error" ? "failing"
+      : sources.some((s) => s.status === "unusual") ? "unusual" : "working",
     sources: sources.length,
     lastCheckAt: times.at(-1) ?? null,
     failing,
@@ -1671,6 +1843,7 @@ function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: 
       const silentHours = toHours(now.getTime() - Date.parse(a.lastEmailAt));
       return [{ sourceId: s.id, name: s.name, lastEmailAt: a.lastEmailAt, usualGapHours: a.usualGapHours, silentHours }];
     }),
+    unusual: sources.flatMap((s) => (s.status === "unusual" && s.drop ? [s.drop] : [])),
     mailbox,
   };
 }
@@ -1727,8 +1900,8 @@ function median(xs: number[]): number {
 }
 
 function recordCheck(db: SqlDatabase, sourceId: string, c: CheckRecord): void {
-  db.prepare("INSERT INTO source_check (source_id, checked_at, outcome, in_locations, total, error) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(sourceId, c.at, c.outcome, c.inLocations, c.total, c.error);
+  db.prepare("INSERT INTO source_check (source_id, checked_at, outcome, in_locations, total, error, unusual) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .run(sourceId, c.at, c.outcome, c.inLocations, c.total, c.error, c.unusual ? 1 : 0);
 }
 
 function toCheckRecord(r: Record<string, unknown>): CheckRecord {
@@ -1738,6 +1911,7 @@ function toCheckRecord(r: Record<string, unknown>): CheckRecord {
     inLocations: r.in_locations == null ? null : Number(r.in_locations),
     total: r.total == null ? null : Number(r.total),
     error: r.error == null ? null : String(r.error),
+    unusual: Number(r.unusual) === 1,
   };
 }
 
@@ -1766,7 +1940,7 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
   if (existing) {
     db.prepare(
       `UPDATE posting SET url = ?, title = ?, company = ?, location = ?, salary = ?, posted_at = ?,
-              description_html = ?, last_seen_at = ? WHERE id = ?`,
+              description_html = ?, last_seen_at = ?, gone_at = NULL, gone_decision_id = NULL WHERE id = ?`,
     ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, id);
     refreshMatchKey(db, id, p);
     reconcile(db, id);

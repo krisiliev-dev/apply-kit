@@ -14,7 +14,7 @@ describe("discovery engine: Feed query", () => {
       jobs: [],
       counts: { new: 0, saved: 0, open: 0, passed: 0, hidden: 0, relocation: 0 },
       filteredToNothing: null,
-      health: { state: "no-sources", sources: 0, lastCheckAt: null, failing: [], quiet: [], mailbox: null },
+      health: { state: "no-sources", sources: 0, lastCheckAt: null, failing: [], quiet: [], unusual: [], mailbox: null },
       ranking: { learnedAdjustments: 0 },
       budget: { month: "2026-10", capUsd: 10, spentUsd: 0, reached: false },
     });
