@@ -25,7 +25,18 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Until the Sources screen exists, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start; use **Check now** on the Feed to fetch.
+Until the Sources screen exists, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start.
+
+While the service runs it checks Sources every 30 minutes between 07:00 and 23:00 (local time), and after the Mac wakes it catches up within a minute if a check was missed. Change this with `APPLY_KIT_CHECK_EVERY_MINUTES` and `APPLY_KIT_CHECK_WINDOW` (e.g. `08:00-20:00`). **Check now** on the Feed checks straight away.
+
+### Start at login
+
+```sh
+nvm use                  # the Node 22 whose path goes into the LaunchAgent
+pnpm service:install     # builds the UI, installs ~/Library/LaunchAgents/dev.krisiliev.apply-kit.plist and starts it
+```
+
+Logs go to `~/Library/Logs/apply-kit/`. `pnpm service:status` shows whether it is running; `pnpm service:uninstall` removes it. Run install again after upgrading Node or moving the repo.
 
 Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
 
@@ -35,6 +46,7 @@ Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that 
 |---|---|
 | `pnpm start` | Builds the UI and starts the service; open http://localhost:4310 (or your `PORT`) |
 | `pnpm dev` | Service with reload plus the Vite dev server; open http://localhost:5173 (it proxies `/api` to the service) |
+| `pnpm service:install` / `service:uninstall` / `service:status` | Start the service at login with launchd (see above) |
 | `pnpm test` | Runs the tests (Vitest) |
 | `pnpm lint` | ESLint across the workspace |
 | `pnpm typecheck` | TypeScript project build, no output files |
