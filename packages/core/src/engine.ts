@@ -131,6 +131,8 @@ export interface DiscoveryEngine {
   addSource(source: NewSource): Promise<SourceInfo>;
   /** Checks every Source now. A failing Source is reported, never thrown, and changes nothing. */
   checkAll(): Promise<CheckResult>;
+  /** Checks one Source now ("Try now"). Same rules as checkAll; throws only if the Source doesn't exist. */
+  checkSource(sourceId: string): Promise<SourceCheck>;
   /** Every Source with its status, latest Checks and what a failure means for the Feed. */
   sourceHealth(): Promise<HealthReport>;
 }
@@ -274,6 +276,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
       const sources = await Promise.all(rows.map((r) => checkOne(r, startedAt)));
       return { startedAt, sources };
+    },
+
+    async checkSource(sourceId) {
+      const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ?").get(sourceId);
+      if (!row) throw new Error(`No source "${sourceId}"`);
+      return checkOne(row, clock.now().toISOString());
     },
 
     async sourceHealth() {

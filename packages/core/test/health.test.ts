@@ -139,3 +139,30 @@ describe("source health: overall summary for the top bar and Feed", () => {
     expect(report.summary).toEqual(expected);
   });
 });
+
+describe("source health: try one Source now", () => {
+  it("retries only the Source asked for and reports its result", async () => {
+    const { engine, deps, clock } = await checkedPayhawk();
+    await engine.addSource({ kind: "greenhouse", config: "otherboard" });
+    deps.fetch = failures[0]![1];
+    clock.set("2026-10-12T08:00:00Z");
+    await engine.checkAll();
+
+    deps.fetch = goodFetch;
+    clock.set("2026-10-12T08:05:00Z");
+    const result = await engine.checkSource("greenhouse:payhawkio");
+    const report = await engine.sourceHealth();
+
+    expect(result).toEqual({ sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: true, found: 3, newPostings: 0 });
+    expect(report.sources.map((s) => [s.id, s.status, s.history[0]!.at])).toEqual([
+      ["greenhouse:payhawkio", "working", "2026-10-12T08:05:00.000Z"],
+      ["greenhouse:otherboard", "failing", "2026-10-12T08:00:00.000Z"],
+    ]);
+  });
+
+  it("refuses a Source that doesn't exist", async () => {
+    const { engine } = await checkedPayhawk();
+
+    await expect(engine.checkSource("greenhouse:nope")).rejects.toThrow(/No source "greenhouse:nope"/);
+  });
+});
