@@ -1,6 +1,7 @@
 import type {
-  RuleChange, SearchSettings, PairedDevice,
+  LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  WatchlistSeed,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -130,6 +131,16 @@ export async function addSource(source: NewSource): Promise<SourceInfo> {
   return json(await postJson("/api/sources", source));
 }
 
+/** The Sofia starter watchlist against the watchlist: feeds on it or not, and companies without a feed. */
+export async function fetchStarterWatchlist(signal?: AbortSignal): Promise<WatchlistSeed> {
+  return json(await fetch("/api/watchlist/starter", { signal }));
+}
+
+/** Adds every starter-watchlist feed not added before, in one step. */
+export async function seedStarterWatchlist(): Promise<WatchlistSeed> {
+  return json(await postJson("/api/watchlist/starter"));
+}
+
 export async function pauseSource(id: string): Promise<SourceInfo> {
   return json(await postJson(`${sourcePath(id)}/pause`));
 }
@@ -144,6 +155,19 @@ export async function previewRemoval(id: string, signal?: AbortSignal): Promise<
 
 export async function removeSource(id: string): Promise<{ sourceId: string; decision: Decision }> {
   return json(await postJson(`${sourcePath(id)}/remove`));
+}
+
+/** Records a coverage check and answers with what was found and missing; a refused check throws its reason. */
+export async function recordCoverageCheck(input: CoverageInput): Promise<CoverageResult> {
+  return json(await postJson("/api/coverage", input));
+}
+
+export async function fetchCoverageHistory(signal?: AbortSignal): Promise<CoverageHistory> {
+  return json(await fetch("/api/coverage", { signal }));
+}
+
+export async function fetchCoverageCheck(id: string, signal?: AbortSignal): Promise<CoverageResult> {
+  return json(await fetch(`/api/coverage/${encodeURIComponent(id)}`, { signal }));
 }
 
 /** "Close 34 SumUp jobs": Kris confirms a Source's unusual drop. Undo with undoDecision. */
@@ -168,7 +192,21 @@ export async function saveSearchSettings(settings: SearchSettings): Promise<Sear
 }
 
 /** "Show this job": hidden Jobs back to New; undo the Decision to hide them again. */
-export const unhideJobs = (jobIds: string[]) => post<Decision>("/api/jobs/unhide", { jobIds });
+export const unhideJobs = (jobIds: string[], learn = false) => post<Decision>("/api/jobs/unhide", { jobIds, learn });
+
+/** Every learned ranking adjustment, newest first (undone ones marked). */
+export async function fetchAdjustments(signal?: AbortSignal): Promise<LearnedAdjustment[]> {
+  return json(await fetch("/api/adjustments", { signal }));
+}
+
+export async function undoAdjustment(id: string): Promise<LearnedAdjustment> {
+  return json(await postJson(`/api/adjustments/${encodeURIComponent(id)}/undo`));
+}
+
+/** "Boost new {company} {angle} jobs" from a Job. */
+export async function boostJob(jobId: string): Promise<LearnedAdjustment> {
+  return json(await postJson(`${jobPath(jobId)}/boost`));
+}
 
 /** "Not a dealbreaker for me" on one hidden reason (its key): changes the rule behind it. */
 export async function notADealbreaker(jobId: string, reason: string): Promise<{ change: RuleChange; settings: SearchSettings }> {

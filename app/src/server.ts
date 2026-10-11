@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { CapturedPage, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
+import type { CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
@@ -128,6 +128,14 @@ export function createServer({ engine, scheduler, pairing, uiDir }: { engine: Di
     }
   });
 
+  // The Sofia starter watchlist: GET shows which companies' feeds are on the watchlist and the ones
+  // without a feed with their alert route; POST adds every feed not added before, in one step.
+  app.get("/api/watchlist/starter", async (c) => c.json(await engine.starterWatchlist()));
+  app.post("/api/watchlist/starter", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return c.json(await engine.seedWatchlist(), 201);
+  });
+
   // Pause, resume, what removing would do, and remove. Undoing a removal is POST /api/decisions/:id/undo.
   app.post("/api/sources/:id/pause", (c) => onSource(c, (id) => engine.pauseSource(id)));
   app.post("/api/sources/:id/resume", (c) => onSource(c, (id) => engine.resumeSource(id)));
@@ -190,7 +198,13 @@ export function createServer({ engine, scheduler, pairing, uiDir }: { engine: Di
   // Triage. Each answers with the Decision (or the Jobs restored, for undo).
   app.post("/api/jobs/save", (c) => withIds(c, (body, ids) => engine.save(ids)));
   app.post("/api/jobs/pass", (c) =>
-    withIds(c, (body, ids) => engine.pass(ids, { reason: body.reason as PassReason | null, note: typeof body.note === "string" ? body.note : null })));
+    withIds(c, (body, ids) => engine.pass(ids, {
+      reason: body.reason as PassReason | null,
+      note: typeof body.note === "string" ? body.note : null,
+      // "Rank jobs like this lower": only when Kris ticked it (exactly true).
+      learn: body.learn === true,
+      requirement: typeof body.requirement === "string" ? body.requirement : null,
+    })));
   app.post("/api/jobs/reopen", (c) => withIds(c, (body, ids) => engine.reopen(ids)));
   app.post("/api/decisions/:id/undo", async (c) => {
     const body = await jsonBody(c);
@@ -201,7 +215,27 @@ export function createServer({ engine, scheduler, pairing, uiDir }: { engine: Di
   });
 
   // Dealbreakers. "Show this job" is a Decision like the others (undo hides it again).
-  app.post("/api/jobs/unhide", (c) => withIds(c, (body, ids) => engine.unhide(ids)));
+  app.post("/api/jobs/unhide", (c) => withIds(c, (body, ids) => engine.unhide(ids, { learn: body.learn === true })));
+
+  // Learned ranking adjustments: listed with what created each, undoable one by one. A boost is
+  // created from a Job ("Boost new Kestrel security jobs").
+  app.get("/api/adjustments", async (c) => c.json(await engine.learnedAdjustments()));
+  app.post("/api/adjustments/:id/undo", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    try {
+      return c.json(await engine.undoAdjustment(c.req.param("id")));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+    }
+  });
+  app.post("/api/jobs/:id/boost", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    try {
+      return c.json(await engine.boost(c.req.param("id")), 201);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+    }
+  });
   // "Not a dealbreaker for me": { "reason": "<the hidden reason's key>" }; changes the rule behind it.
   app.post("/api/jobs/:id/not-a-dealbreaker", async (c) => {
     const body = await jsonBody(c);
@@ -237,6 +271,29 @@ export function createServer({ engine, scheduler, pairing, uiDir }: { engine: Di
 
   app.post("/api/jobs/:id/target", (c) => withPosting(c, (jobId, postingId) => engine.setTarget(jobId, postingId)));
   app.post("/api/jobs/:id/split", (c) => withPosting(c, (jobId, postingId) => engine.splitPosting(jobId, postingId)));
+
+  // Coverage checks: record one ({ site, query, location?, resultCount?, listings?, resultsUrl? },
+  // listings as pasted text or a list), the history (newest first, whether one is due), and one check.
+  app.post("/api/coverage", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const text = (v: unknown) => (typeof v === "string" ? v : undefined);
+    const listings = typeof body.listings === "string" || Array.isArray(body.listings) ? body.listings as CoverageInput["listings"] : undefined;
+    const resultCount = body.resultCount == null || body.resultCount === "" ? null : Number(body.resultCount);
+    try {
+      return c.json(await engine.recordCoverageCheck({
+        site: text(body.site) ?? "", query: text(body.query) ?? "", location: text(body.location) ?? null,
+        resultCount, listings, resultsUrl: text(body.resultsUrl) ?? null,
+      }), 201);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  });
+  app.get("/api/coverage", async (c) => c.json(await engine.coverageHistory()));
+  app.get("/api/coverage/:id", async (c) => {
+    const check = await engine.getCoverageCheck(c.req.param("id"));
+    return check ? c.json(check) : c.json({ error: "No such coverage check" }, 404);
+  });
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

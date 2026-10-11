@@ -1,4 +1,4 @@
-import type { FeedJob, FeedResult, FeedSort, FeedView, PassInput } from "@apply-kit/core";
+import type { FeedJob, FeedResult, FeedSort, FeedView, LearnedAdjustment, PassInput } from "@apply-kit/core";
 import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { passJobs, saveJobs, undoDecision } from "../api.ts";
 import { PassDialog } from "./PassDialog.tsx";
@@ -121,13 +121,15 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
       land(next);
       onChanged();
       toaster.show({
-        message: d.jobIds.length === 1 ? `Passed · ${named(list[0]!)}. It's in Passed & closed.` : `Passed ${d.jobIds.length} jobs. They're in Passed & closed.`,
+        message: (d.jobIds.length === 1 ? `Passed · ${named(list[0]!)}. It's in Passed & closed.` : `Passed ${d.jobIds.length} jobs. They're in Passed & closed.`)
+          + learnedText(d.learned),
         undo: () => {
           undoDecision(d.id)
             .then((r) => {
               focusLater(r.jobIds[0]);
               onChanged(r.jobIds);
-              toaster.announce(r.jobIds.length === 1 ? `Pass undone. The job is back in ${backIn[view]}.` : `Pass undone. ${r.jobIds.length} jobs are back.`);
+              toaster.announce((r.jobIds.length === 1 ? `Pass undone. The job is back in ${backIn[view]}.` : `Pass undone. ${r.jobIds.length} jobs are back.`)
+                + (d.learned?.length ? " What the ranking learned from it is undone too." : ""));
             })
             .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
         },
@@ -203,7 +205,7 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
               : view === "saved" ? "No saved jobs. Save one from New to keep it here." : "No open jobs."}
         </p>
         {queued > 0 && <button className="btn sm" type="button" onClick={onShowQueued}>Show {queued} new {queued === 1 ? "job" : "jobs"}</button>}
-        {passing && <PassDialog what={passing.what} onPass={(input) => void pass(passing.ids, input)} onCancel={() => setPassing(null)} />}
+        {passing && <PassDialog what={passing.what} jobs={jobs.filter((j) => passing.ids.includes(j.id))} onPass={(input) => void pass(passing.ids, input)} onCancel={() => setPassing(null)} />}
       </div>
     );
   }
@@ -283,12 +285,19 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
       {passing && (
         <PassDialog
           what={passing.what}
+          jobs={jobs.filter((j) => passing.ids.includes(j.id))}
           onPass={(input) => void pass(passing.ids, input)}
           onCancel={() => { const from = passing.from; setPassing(null); focusRow(from ?? undefined); }}
         />
       )}
     </div>
   );
+}
+
+/** " Jobs at Unity Bank will rank lower." for a toast, or "" when nothing was learned. */
+export function learnedText(learned: LearnedAdjustment[] | undefined): string {
+  if (!learned?.length) return "";
+  return ` ${learned.map((a) => `${a.applies} will rank ${a.effect}`).join("; ")}.`;
 }
 
 function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, onCheck, onSave, onPass }: {

@@ -2,7 +2,8 @@
 // POST {origin}/wday/cxs/{tenant}/{site}/jobs with {appliedFacets, limit, offset, searchText}.
 // Tenants reject limit > 20, and `total` is only reliable on the first page, so a check pages
 // 20 at a time and fails rather than return a partial list. A country is applied through the
-// tenant's own location facet id, read from the first response (ids differ between tenants).
+// tenant's own location facet id, read from the first response (ids differ between tenants); a tenant
+// without a country facet is filtered by every place in that country from its locations facet.
 import type { FoundPosting, SourceAdapter } from "./adapter.ts";
 import { field, keyPart, readJson, splitShorthand } from "./shared.ts";
 
@@ -40,6 +41,8 @@ const pageSize = 20;
 /** Past this, paging gets impolite (25 requests per check): ask for a country instead. */
 const maxJobs = 500;
 const countryFacets = new Set(["locationcountry", "location_country", "country"]);
+/** Tenants without a country facet (HPE, Mastercard) list each place instead: "Sofia, Sofia, Bulgaria". */
+const locationFacets = new Set(["locations", "location"]);
 const host = /^([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com$/i;
 
 export const workday: SourceAdapter<WorkdayConfig> = {
@@ -79,7 +82,7 @@ export const workday: SourceAdapter<WorkdayConfig> = {
       const found = findCountry(first.facets ?? [], config.country);
       if (found === "no-country-facet") throw new Error(`This Workday site has no country filter, so "${config.country}" can't be applied`);
       if (!found) return []; // The tenant lists nothing in that country right now.
-      facets = { [found.param]: [found.id] };
+      facets = { [found.param]: found.ids };
       first = await search(facets, 0);
     }
 
@@ -123,23 +126,34 @@ function parseCareersUrl(text: string) {
   return { origin, tenant: m[1]!.toLowerCase(), pod: m[2]!.toLowerCase(), site: siteName, url: `${origin}/${segments.join("/")}` };
 }
 
-/** The tenant's facet id for a country, null if the tenant has no jobs there, or a marker if it has no country facet. */
-function findCountry(facets: WorkdayFacet[], country: string): { param: string; id: string } | null | "no-country-facet" {
-  let sawCountryFacet = false;
-  const walk = (list: WorkdayFacet[]): { param: string; id: string } | null => {
+/**
+ * The tenant's facet ids for a country, null if the tenant has no jobs there, or a marker if it can't
+ * filter by country. A country facet is used when there is one; otherwise every value of the
+ * locations facet whose last part is that country ("Sofia, Bulgaria (Puzl Office)" is in Bulgaria).
+ */
+function findCountry(facets: WorkdayFacet[], country: string): { param: string; ids: string[] } | null | "no-country-facet" {
+  const wanted = country.trim().toLowerCase();
+  const all: WorkdayFacet[] = [];
+  const walk = (list: WorkdayFacet[]) => {
     for (const f of list) {
-      if (f.facetParameter && countryFacets.has(f.facetParameter.toLowerCase())) {
-        sawCountryFacet = true;
-        const v = f.values?.find((x) => x.descriptor?.trim().toLowerCase() === country.trim().toLowerCase() && x.id);
-        if (v) return { param: f.facetParameter, id: v.id! };
-      }
-      const inner = f.values ? walk(f.values) : null;
-      if (inner) return inner;
+      if (f.facetParameter) all.push(f);
+      if (f.values) walk(f.values);
+    }
+  };
+  walk(facets);
+  const byCountry = all.filter((f) => countryFacets.has(f.facetParameter!.toLowerCase()));
+  if (byCountry.length > 0) {
+    for (const f of byCountry) {
+      const v = f.values?.find((x) => x.descriptor?.trim().toLowerCase() === wanted && x.id);
+      if (v) return { param: f.facetParameter!, ids: [v.id!] };
     }
     return null;
-  };
-  const found = walk(facets);
-  return found ?? (sawCountryFacet ? null : "no-country-facet");
+  }
+  const byPlace = all.find((f) => locationFacets.has(f.facetParameter!.toLowerCase()));
+  if (!byPlace) return "no-country-facet";
+  const countryOf = (descriptor: string) => descriptor.split(",").at(-1)!.replace(/\(.*\)/, "").trim().toLowerCase();
+  const ids = (byPlace.values ?? []).filter((x) => x.id && x.descriptor && countryOf(x.descriptor) === wanted).map((x) => x.id!);
+  return ids.length > 0 ? { param: byPlace.facetParameter!, ids } : null;
 }
 
 function toPosting(p: WorkdayPosting, careersUrl: string, company: string): FoundPosting | null {

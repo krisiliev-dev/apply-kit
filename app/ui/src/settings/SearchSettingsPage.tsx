@@ -1,11 +1,13 @@
-import type { HealthSummary, RuleChange, SearchSettings } from "@apply-kit/core";
+import type { HealthSummary, LearnedAdjustment, RuleChange, SearchSettings } from "@apply-kit/core";
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { fetchFeed, fetchRuleChanges, fetchSearchSettings, saveSearchSettings, undoRuleChange } from "../api.ts";
+import { fetchAdjustments, fetchFeed, fetchRuleChanges, fetchSearchSettings, saveSearchSettings, undoAdjustment, undoRuleChange } from "../api.ts";
 
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 /** "German, French" ↔ ["German", "French"]. */
 const listText = (xs: string[]) => xs.join(", ");
 const listOf = (text: string) => text.split(",").map((s) => s.trim()).filter(Boolean);
+const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const jobsWord = (n: number) => `${n} open ${n === 1 ? "job" : "jobs"}`;
 
 interface Draft {
   minSalary: string;
@@ -31,7 +33,8 @@ const draftOf = (s: SearchSettings): Draft => ({
 
 /**
  * Dealbreakers & search: the minimal search-settings form (until onboarding builds the full
- * profile) and every rule changed from the Feed with "Not a dealbreaker for me", undoable.
+ * profile), every rule changed from the Feed with "Not a dealbreaker for me", and every ranking
+ * adjustment learned from Kris (pass reasons, Show this job, boosts), each undoable.
  */
 export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) => void }) {
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -40,6 +43,8 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
   const [status, setStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [changes, setChanges] = useState<RuleChange[]>([]);
+  const [adjustments, setAdjustments] = useState<LearnedAdjustment[]>([]);
+  const [rankStatus, setRankStatus] = useState("");
   const [hidden, setHidden] = useState<number | null>(null);
   const errorRef = useRef<HTMLParagraphElement>(null);
 
@@ -51,8 +56,14 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
 
   useEffect(() => {
     const ctrl = new AbortController();
-    Promise.all([fetchSearchSettings(ctrl.signal), fetchRuleChanges(ctrl.signal)])
-      .then(([s, c]) => { setDraft(draftOf(s)); setChanges(c); })
+    Promise.all([fetchSearchSettings(ctrl.signal), fetchRuleChanges(ctrl.signal), fetchAdjustments(ctrl.signal)])
+      .then(([s, c, a]) => {
+        setDraft(draftOf(s));
+        setChanges(c);
+        setAdjustments(a);
+        // The Feed's "Ranking: N learned adjustments · review" lands on the list.
+        if (window.location.hash === "#ranking") window.setTimeout(() => document.getElementById("ranking-h")?.focus(), 0);
+      })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setLoadError(message(err)); });
     fetchFeed("new", { sort: "fit", relocation: false }, ctrl.signal)
       .then((f) => { setHidden(f.counts.hidden); onHealth(f.health); })
@@ -116,6 +127,16 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
       refreshFeedCounts();
     } catch (err) {
       setStatus(`Couldn't put the rule back: ${message(err)}`);
+    }
+  }
+
+  async function undoLearned(a: LearnedAdjustment) {
+    try {
+      await undoAdjustment(a.id);
+      setAdjustments(await fetchAdjustments());
+      setRankStatus(`Undone: ${a.applies} no longer rank ${a.effect}.`);
+    } catch (err) {
+      setRankStatus(`Couldn't undo it: ${message(err)}`);
     }
   }
 
@@ -197,7 +218,7 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
                 <li key={c.id}>
                   <span>
                     <b>{c.text}</b>
-                    <span className="meta"> · from {c.job.title} at {c.job.company} ({c.reason}) · {new Date(c.at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
+                    <span className="meta"> · from {c.job.title} at {c.job.company} ({c.reason}) · {day(c.at)}</span>
                   </span>
                   {c.undoneAt
                     ? <span className="chip closed">Undone</span>
@@ -206,6 +227,33 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
               ))}
             </ul>
           )}
+      </section>
+
+      <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ranking-h" id="ranking">
+        <h2 id="ranking-h" tabIndex={-1}>What the ranking learned</h2>
+        <p className="meta" style={{ maxWidth: "72ch" }}>
+          The ranking learns only when you tick a box: "rank lower" when you pass with a reason, "rank higher" when you show a hidden job, or a boost.
+          Each change moves Fit by a few points, never hides a job, and is named in the why-line of every job it moved. Undo puts those jobs back where they were.
+        </p>
+        {adjustments.length === 0
+          ? <p className="meta">Nothing learned yet.</p>
+          : (
+            <ul className="rule-changes">
+              {adjustments.map((a) => (
+                <li key={a.id}>
+                  <span>
+                    <b>{a.applies} rank {a.effect}</b>
+                    <span className="meta"> ({a.points > 0 ? "+" : "−"}{Math.abs(a.points)} Fit) · {a.createdBy} · {day(a.at)}</span>
+                    {!a.undoneAt && <span className="meta"> · moves {jobsWord(a.jobsAffected)} today</span>}
+                  </span>
+                  {a.undoneAt
+                    ? <span className="chip closed">Undone</span>
+                    : <button className="btn sm" type="button" onClick={() => void undoLearned(a)}>Undo<span className="sr-only">: {a.applies} rank {a.effect}</span></button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        <span className="meta" role="status" aria-live="polite">{rankStatus}</span>
       </section>
     </section>
   );

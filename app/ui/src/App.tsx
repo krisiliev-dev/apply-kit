@@ -45,7 +45,7 @@ export function App() {
           {path === "/" ? <FeedPage onHealth={setHealth} />
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
             : path === "/profile" || path === "/profile/search" ? <SearchSettingsPage onHealth={setHealth} />
-            : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
+            : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings/sources/coverage" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}
         </main>
       </div>

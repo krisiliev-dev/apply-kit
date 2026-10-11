@@ -1,17 +1,25 @@
-export { createEngine, passReasons } from "./engine.ts";
+export { createEngine, passReasons, passReasonLabel } from "./engine.ts";
+export type { AdjustmentOrigin, AdjustmentMatcher } from "./learned.ts";
 export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
-  Decision, JobState, PassReason, PassInput,
+  Decision, JobState, PassReason, PassInput, UnhideInput, LearnedAdjustment,
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
   AddLinkResult, LinkProblem, PastedPosting, CaptureReport, CaptureItem, CaptureStatus,
+  SeedStatus, SeededSource, CompanyWithoutFeed, WatchlistSeed,
 } from "./engine.ts";
 export type { CapturedPage, MissingField } from "./capture/listings.ts";
 export { createPairing } from "./pairing.ts";
 export type { Pairing, PairResult, PairedDevice } from "./pairing.ts";
 export { sourceRemovedHow, noLongerListedBy } from "./engine.ts";
 export type { UnusualDrop, NormalVolume, DropWording } from "./drops.ts";
+export type {
+  CoverageInput, CoverageListing, CoverageResult, CoverageResultListing, CoverageReason, CoverageReasonKind, CoverageFix,
+  CoverageTotals, CoverageSummary, CoverageHistory,
+} from "./coverage.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
+export { sofiaWatchlist } from "./watchlist.ts";
+export type { WatchlistEntry, WatchlistFeedEntry, WatchlistAlertEntry, WatchlistGroup, WatchlistField, AlertRoute } from "./watchlist.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {
   PostingFacts, SourceQuote, ExtractedRequirement, ExtractedYears, ExtractedLanguage, ExtractedCertificate,

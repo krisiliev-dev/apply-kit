@@ -9,7 +9,7 @@ import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
 import type { Angle } from "./fit/angles.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
-import { isInYourLocations } from "./locations.ts";
+import { isInYourLocations, NOT_STATED } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
 import { defaultSearchSettings, parseSearchSettings, type SearchSettings } from "./search-settings.ts";
 import { dealbreakersOf, monthlyEur, type DealbreakerRule, type HiddenReason } from "./dealbreakers.ts";
@@ -17,12 +17,21 @@ import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter, listsEverything, type SourceAdapter } from "./sources/adapter.ts";
 import { currentDrop, dropWording, isDrop, normalVolume, type NormalVolume, type UnusualDrop } from "./drops.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
+import { devbgPageListings } from "./sources/devbg.ts";
 import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
 import { describeMergeReason, type MergeReason } from "./matching.ts";
+import {
+  answersSearch, coverageHistory, isReadableResultsPage, loadCoverageCheck, matchListing, parseListings, storeCoverageCheck,
+  totalsOf, unreadableResultsPage, whereFound, whyMissing,
+  type CompanySource, type CoverageHistory, type CoverageInput, type CoverageResult, type CoverageResultListing,
+} from "./coverage.ts";
 import { jobLinkFrom, linkKey, protectedSite, robotsAllows } from "./capture/links.ts";
 import { readJobPage } from "./capture/page.ts";
 import { missingFields, readCapturedPage, type CapturedListing, type CapturedPage, type MissingField, type PageListings } from "./capture/listings.ts";
 import { escapeHtml } from "./sources/shared.ts";
+import { appliesTo, companyMatcher, matcherKey, matches, pointsFor, whyText, type AdjustableJob, type AdjustmentMatcher, type AdjustmentOrigin } from "./learned.ts";
+import { senders } from "./sources/email/senders.ts";
+import { sofiaWatchlist, type AlertRoute, type WatchlistField, type WatchlistGroup } from "./watchlist.ts";
 
 /**
  * New, Saved, All open, Passed & closed, and the hidden pile: New Jobs kept out of the main Feed by
@@ -197,6 +206,35 @@ export interface RuleChange {
   undoneAt: string | null;
 }
 
+/**
+ * Something the ranking learned from Kris, only ever because he opted in: a pass reason with "rank
+ * lower" ticked, "Show this job" with "rank higher" ticked, or a boost. Listed with what created it,
+ * and undoable.
+ */
+export interface LearnedAdjustment {
+  id: string;
+  /** What created it: a pass (with its reason), "Show this job" on a hidden job, or a boost. */
+  origin: AdjustmentOrigin;
+  effect: "lower" | "higher";
+  /** Fit points it adds (or, when negative, takes) from each Job it applies to. */
+  points: number;
+  /** Which Jobs it moves, in plain words: "Jobs at Unity Bank", "Jobs that require Kubernetes". */
+  applies: string;
+  /** How a why-line names it: "ranked lower: you passed a job at Unity Bank". */
+  text: string;
+  /** What created it, in plain words: "You passed Security Analyst at Unity Bank: Not interested in this company". */
+  createdBy: string;
+  /** The Job it was learned from. */
+  job: { id: string; title: string; company: string };
+  /** The pass, unhide or boost Decision it came with (undoing that Decision undoes it too); null for a boost. */
+  decisionId: string | null;
+  at: string;
+  /** When it was undone, or null while it is in effect. */
+  undoneAt: string | null;
+  /** Open Jobs whose Fit it changes right now (0 once undone). */
+  jobsAffected: number;
+}
+
 /** Why the list is empty although Jobs exist in this view: which filter holds them back. */
 export interface FilteredToNothing {
   /** Relocation Jobs left out because the Relocation filter is off. */
@@ -211,9 +249,32 @@ export interface FilteredToNothing {
 export const passReasons = ["skills-gap", "salary", "location", "company", "other"] as const;
 export type PassReason = (typeof passReasons)[number];
 
+/** Each pass reason in plain words, as the pass form offers it. */
+export const passReasonLabel: Record<PassReason, string> = {
+  "skills-gap": "Skills gap too big",
+  salary: "Salary too low",
+  location: "Location or remote rules",
+  company: "Not interested in this company",
+  other: "Other",
+};
+
 export interface PassInput {
   reason?: PassReason | null;
   note?: string | null;
+  /**
+   * "Rank jobs like this lower from now on" (off unless Kris ticks it). With a reason it creates a
+   * learned adjustment: company or salary → jobs at that company; location → jobs at that place;
+   * skills gap → jobs that require `requirement` (else each of the job's known gaps). Other learns nothing.
+   */
+  learn?: boolean;
+  /** For a skills-gap pass with `learn`: the required item to rank lower, one of the job's requirements. */
+  requirement?: string | null;
+}
+
+/** "Show this job" options. */
+export interface UnhideInput {
+  /** "Rank jobs at this company higher from now on" (off unless Kris ticks it). */
+  learn?: boolean;
 }
 
 /** "unusual": no Source is failing, but one is in an unusual drop (its Jobs are kept open). */
@@ -433,6 +494,8 @@ export interface Decision {
   kind: "save" | "pass" | "close" | "reopen" | "unhide";
   /** The Jobs it changed. Jobs it didn't apply to (say, saving a closed job) are left out. */
   jobIds: string[];
+  /** Ranking adjustments learned with it (a pass or unhide Kris opted in on); undoing the Decision undoes them. */
+  learned?: LearnedAdjustment[];
 }
 
 export interface CheckOptions {
@@ -440,6 +503,54 @@ export interface CheckOptions {
   onStart?: (total: number) => void;
   /** Called once per Source the moment its check finishes; its jobs are already in the Feed. */
   onSourceChecked?: (check: SourceCheck) => void;
+}
+
+/**
+ * Where a starter-watchlist company's Source stands: "to-add" (not on the watchlist yet), "added" (by
+ * this seed), "on-watchlist" (added before), or Kris's own "paused" or "removed", which seeding keeps.
+ */
+export type SeedStatus = "to-add" | "added" | "on-watchlist" | "paused" | "removed";
+
+/** A starter-watchlist company with a verified feed, and its Source. */
+export interface SeededSource {
+  company: string;
+  group: WatchlistGroup;
+  fields: WatchlistField[];
+  sourceId: string;
+  kind: string;
+  /** The Source type's display name ("Greenhouse"). */
+  label: string;
+  status: SeedStatus;
+  note: string;
+}
+
+/** A starter-watchlist company with no feed apply-kit may read, and the alert route that still catches its jobs. */
+export interface CompanyWithoutFeed {
+  company: string;
+  group: WatchlistGroup;
+  fields: WatchlistField[];
+  /** The company's own careers page. */
+  careers: string;
+  /** Why there's no feed. */
+  why: string;
+  route: {
+    via: AlertRoute;
+    /** The email-alert Source its alerts arrive through ("email:linkedin"). */
+    sourceId: string;
+    sourceName: string;
+    /** Whether that email-alert Source is on the watchlist and not paused, so alerts reach the Feed. */
+    connected: boolean;
+    /** What Kris sets up, in plain words. */
+    how: string;
+  };
+  note: string;
+}
+
+export interface WatchlistSeed {
+  /** Sources this call added (empty for a preview, or when everything was already there). */
+  added: SourceInfo[];
+  sources: SeededSource[];
+  withoutFeed: CompanyWithoutFeed[];
 }
 
 export interface DiscoveryEngine {
@@ -526,6 +637,16 @@ export interface DiscoveryEngine {
    * other ways to catch its jobs, best first.
    */
   detectCompany(input: string, options?: DetectOptions): Promise<CompanyDetection>;
+  /**
+   * Records a coverage check: a manual search Kris ran (site, words, location, how many results he
+   * saw, optionally the listings) compared with the Feed. Each listing is found (in the Feed, or kept
+   * out of the main list with the reason) or missing, with the likely reason and fixes. Kept as history.
+   */
+  recordCoverageCheck(input: CoverageInput): Promise<CoverageResult>;
+  /** Every coverage check, newest first, with missing jobs that have arrived since counted as fixed; and whether one is due. */
+  coverageHistory(): Promise<CoverageHistory>;
+  /** One coverage check as it was recorded (missing listings that have arrived since point at their Job), or null. */
+  getCoverageCheck(id: string): Promise<CoverageResult | null>;
   /** Kris's search settings, which Fit and dealbreakers are measured against. */
   getSearchSettings(): Promise<SearchSettings>;
   /** Saves Kris's search settings (the settings form). Throws with a plain message when invalid. */
@@ -534,7 +655,7 @@ export interface DiscoveryEngine {
    * "Show this job": brings hidden Jobs back to New and changes nothing else (the rule stays).
    * Jobs that aren't hidden are left out of the Decision. Undoing it hides them again.
    */
-  unhide(jobIds: string[]): Promise<Decision>;
+  unhide(jobIds: string[], input?: UnhideInput): Promise<Decision>;
   /**
    * "Not a dealbreaker for me" on one of a Job's hidden reasons (its key): changes the rule behind it
    * so it no longer hides this Job or future ones like it. A language is removed from the languages
@@ -546,6 +667,15 @@ export interface DiscoveryEngine {
   ruleChanges(): Promise<RuleChange[]>;
   /** Puts a changed rule back as it was before that change. */
   undoRuleChange(changeId: string): Promise<{ change: RuleChange; settings: SearchSettings }>;
+  /** Every learned ranking adjustment (in effect or undone), newest first, with what created it. */
+  learnedAdjustments(): Promise<LearnedAdjustment[]>;
+  /** Undoes one learned adjustment: the Jobs it moved go back to the Fit (and rank) they had without it. */
+  undoAdjustment(adjustmentId: string): Promise<LearnedAdjustment>;
+  /**
+   * "Boost new {company} {angle} jobs": ranks Jobs at this Job's company (of its Angle, when it has
+   * one) higher. A boost is itself the opt-in; it is listed and undoable like any adjustment.
+   */
+  boost(jobId: string): Promise<LearnedAdjustment>;
   /**
    * "Paste a job link": adds the job at a link to the Feed like any other Posting (merged with a Job
    * already there, ranked, read later within the budget). A link already in the Feed answers with its
@@ -554,6 +684,17 @@ export interface DiscoveryEngine {
    * posting's text himself (`pasted`), which is never fetched.
    */
   addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult>;
+  /**
+   * The Sofia starter watchlist against Kris's watchlist: which companies' feeds are on it, and the
+   * companies without a feed with their alert route. Adds nothing.
+   */
+  starterWatchlist(): Promise<WatchlistSeed>;
+  /**
+   * Adds every starter-watchlist company with a verified feed as a Source, in one step, ready for the
+   * next check. Safe to repeat: Sources already there are left alone, and one Kris paused or removed
+   * stays that way. Companies without a feed are listed with their alert route; nothing is added for them.
+   */
+  seedWatchlist(): Promise<WatchlistSeed>;
   /**
    * What capturing this page would do, changing nothing: every listing the page shows (one on a job
    * page, every rendered card on a search results page) as new, already in the Feed, hidden (with
@@ -745,9 +886,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const shownByYou = (jobId: string) => db.prepare("SELECT 1 AS y FROM job_unhidden WHERE job_id = ?").get(jobId) != null;
   const isHidden = (state: string, dealbreakers: HiddenReason[], shown: boolean) => state === "new" && dealbreakers.length > 0 && !shown;
 
-  /** Fit for one Job from what is known about it now. Learned adjustments (#15) plug in here. */
-  function fitOf(job: { title: string; location: string | null; postedAt: string | null }, read: ReturnType<typeof readOf>, facts: PostingFacts | null): Fit {
-    return computeFit({
+  /**
+   * Fit for one Job from what is known about it now, with the learned adjustments that apply to it.
+   * An adjustment is named only when it changed the Fit (the number the Feed ranks by).
+   */
+  function fitOf(
+    job: { title: string; company: string; location: string | null; postedAt: string | null },
+    read: ReturnType<typeof readOf>, facts: PostingFacts | null, active = activeAdjustments(),
+  ): Fit {
+    const input = {
       title: job.title,
       titleTranslation: facts?.titleTranslation ?? null,
       location: job.location,
@@ -758,8 +905,104 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       needsYou: read?.needsYou.length ?? 0,
       settings: searchSettings(),
       now: clock.now(),
-      adjustments: [],
-    });
+    };
+    const base = computeFit(input);
+    if (active.length === 0) return base;
+    const target: AdjustableJob = {
+      company: job.company, angle: base.angle, place: base.place.label,
+      required: (read?.requirements ?? []).filter((r) => r.kind === "required").map((r) => r.text),
+    };
+    const applying = active.filter((a) => matches(a.matcher, target));
+    if (applying.length === 0) return base;
+    const adjusted = computeFit({ ...input, adjustments: applying.map((a) => ({ id: a.id, text: a.text, points: a.points })) });
+    return adjusted.value === base.value ? base : adjusted;
+  }
+
+  interface StoredAdjustment { id: string; matcher: AdjustmentMatcher; text: string; points: number }
+  function activeAdjustments(): StoredAdjustment[] {
+    return db.prepare("SELECT id, origin, matcher, points, pass_reason FROM learned_adjustment WHERE undone_at IS NULL ORDER BY created_at, rowid").all()
+      .map((r) => {
+        const matcher = JSON.parse(String(r.matcher)) as AdjustmentMatcher;
+        return { id: String(r.id), matcher, points: Number(r.points), text: whyText(String(r.origin) as AdjustmentOrigin, matcher, sqlText(r.pass_reason)) };
+      });
+  }
+
+  /**
+   * Stores a learned adjustment, unless the same lesson (same Jobs, same direction) is already in
+   * effect: then that one is returned and nothing new is learned.
+   */
+  function learn(origin: AdjustmentOrigin, matcher: AdjustmentMatcher, jobId: string, decisionId: string | null, passReason: string | null): string {
+    const points = pointsFor(origin);
+    const same = db.prepare("SELECT id, matcher, points FROM learned_adjustment WHERE undone_at IS NULL").all()
+      .find((r) => matcherKey(JSON.parse(String(r.matcher)) as AdjustmentMatcher) === matcherKey(matcher) && Math.sign(Number(r.points)) === Math.sign(points));
+    if (same) return String(same.id);
+    const id = `adjustment:${crypto.randomUUID()}`;
+    db.prepare(
+      `INSERT INTO learned_adjustment (id, origin, matcher, points, job_id, decision_id, pass_reason, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, origin, JSON.stringify(matcher), points, jobId, decisionId, passReason, clock.now().toISOString());
+    return id;
+  }
+
+  /** The Jobs a pass with "rank lower" ticked ranks lower, by reason (see PassInput.learn). */
+  function passLessons(job: FeedJob, reason: PassReason, requirement: string | null): AdjustmentMatcher[] {
+    switch (reason) {
+      case "company":
+      case "salary":
+        return [companyMatcher(job.company)];
+      case "location":
+        return job.fit.place.label === NOT_STATED ? [] : [{ by: "place", place: job.fit.place.label }];
+      case "skills-gap": {
+        const items = requirement?.trim() ? [requirement.trim()] : job.fit.gaps;
+        return items.map((r) => ({ by: "requirement", requirement: r }));
+      }
+      case "other":
+        return [];
+    }
+  }
+
+  /** One live Job as a Feed row (any state), or undefined. */
+  function feedJob(jobId: string): FeedJob | undefined {
+    const row = db.prepare(`${jobSelect} WHERE j.id = ? AND j.merged_into IS NULL`).get(jobId);
+    return row ? toFeedJob(row) : undefined;
+  }
+
+  /** How many open Jobs each adjustment currently changes the Fit of. */
+  function affectedCounts(): Map<string, number> {
+    const counts = new Map<string, number>();
+    const active = activeAdjustments();
+    if (active.length === 0) return counts;
+    const money = budget();
+    for (const r of db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved')`).all()) {
+      for (const reason of toFeedJob(r, money, active).fit.reasons) {
+        if (reason.adjustmentId) counts.set(reason.adjustmentId, (counts.get(reason.adjustmentId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }
+
+  function adjustment(id: string, affected: Map<string, number> = affectedCounts()): LearnedAdjustment {
+    const r = db.prepare(
+      `SELECT a.*, p.title, p.company FROM learned_adjustment a JOIN job j ON j.id = a.job_id
+       JOIN posting p ON p.id = ${targetPostingSql("j.id")} WHERE a.id = ?`,
+    ).get(id);
+    if (!r) throw new Error(`No learned adjustment "${id}"`);
+    const origin = String(r.origin) as AdjustmentOrigin;
+    const matcher = JSON.parse(String(r.matcher)) as AdjustmentMatcher;
+    const passReason = sqlText(r.pass_reason);
+    const job = { id: String(r.job_id), title: String(r.title), company: String(r.company) };
+    const points = Number(r.points);
+    const undoneAt = sqlText(r.undone_at);
+    return {
+      id, origin, effect: points < 0 ? "lower" : "higher", points,
+      applies: appliesTo(matcher),
+      text: whyText(origin, matcher, passReason),
+      createdBy: origin === "pass" ? `You passed ${job.title} at ${job.company}: ${passReasonLabel[passReason as PassReason] ?? "no reason"}`
+        : origin === "unhide" ? `You showed ${job.title} at ${job.company} from the hidden pile`
+        : `You boosted it from ${job.title} at ${job.company}`,
+      job, decisionId: sqlText(r.decision_id), at: String(r.created_at), undoneAt,
+      jobsAffected: undoneAt ? 0 : (affected.get(id) ?? 0),
+    };
   }
 
   // Polite polling: one request at a time per host, across every Source and Check, spaced by the
@@ -1083,6 +1326,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       });
       db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
       db.prepare("DELETE FROM job_unhidden WHERE job_id = ? AND decision_id = ?").run(jobId, decisionId);
+      // What the ranking learned with this Decision goes with it.
+      db.prepare("UPDATE learned_adjustment SET undone_at = ? WHERE decision_id = ? AND job_id = ? AND undone_at IS NULL").run(now, decisionId, jobId);
       out.push(jobId);
     }
     return out;
@@ -1145,12 +1390,12 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          FROM job j
          JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
 
-  function toFeedJob(r: Record<string, unknown>, money = budget()): FeedJob {
+  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments()): FeedJob {
     const links = linksOf(String(r.id));
     const reading = readingOf(links.targetId, money.reached);
     const read = readOf(links.targetId, reading);
-    const base = { title: String(r.title), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
-    const fit = fitOf(base, read, reading.facts);
+    const base = { title: String(r.title), company: String(r.company), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
+    const fit = fitOf(base, read, reading.facts, active);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
     const shown = shownByYou(String(r.id));
     return {
@@ -1223,7 +1468,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const money = budget();
     const reading = readingOf(target.postingId, money.reached);
     const read = readOf(target.postingId, reading);
-    const base = { title: String(row.title), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
+    const base = { title: String(row.title), company: String(row.company), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
     const language = reading.facts?.language ?? null;
     const fit = fitOf(base, read, reading.facts);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
@@ -1315,6 +1560,38 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return row;
   }
 
+  /** The starter watchlist against the Sources table; `added` holds the ids this seed just added. */
+  function starterWatchlist(added: Set<string>): WatchlistSeed {
+    const stateOf = (id: string): SeedStatus => {
+      if (added.has(id)) return "added";
+      const row = db.prepare("SELECT paused_at, removed_at FROM source WHERE id = ?").get(id);
+      if (!row) return "to-add";
+      return row.removed_at != null ? "removed" : row.paused_at != null ? "paused" : "on-watchlist";
+    };
+    const sources: SeededSource[] = [];
+    const withoutFeed: CompanyWithoutFeed[] = [];
+    for (const e of sofiaWatchlist) {
+      const base = { company: e.company, group: e.group, fields: [...e.fields], note: e.note };
+      if (e.feed) {
+        const sourceId = sourceIdOf(e.feed);
+        sources.push({ ...base, sourceId, kind: e.feed.kind, label: kindLabel(e.feed.kind), status: stateOf(sourceId) });
+        continue;
+      }
+      const sourceId = `email:${e.route}`;
+      withoutFeed.push({
+        ...base, careers: e.careers, why: e.why,
+        route: {
+          via: e.route, sourceId, sourceName: senders[e.route].name,
+          connected: stateOf(sourceId) === "on-watchlist",
+          how: e.route === "linkedin"
+            ? `Follow ${e.company} on LinkedIn and turn on its job alerts, sent to your job address`
+            : `Set up a jobs.bg alert for ${e.company}, sent to your job address`,
+        },
+      });
+    }
+    return { added: sources.filter((s) => s.status === "added").map((s) => sourceInfo(s.sourceId)), sources, withoutFeed };
+  }
+
   function sourceInfo(id: string): SourceInfo {
     const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
     return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
@@ -1359,6 +1636,25 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
       status, failingSince, lastGoodCheckAt, jobsKept, history, alerts, normal: volume, drop,
     };
+  }
+
+  const liveJob = (jobId: string) => liveJobId(db, jobId) ?? null;
+
+  /** Every company's own job system (ATS or public jobs API), watched or removed, for coverage reasons. */
+  function companySources(): CompanySource[] {
+    const own = (kind: string) => ["ats", "api"].includes(adapters[kind]?.category ?? "ats");
+    const config = (id: string) => JSON.parse(String(db.prepare("SELECT config FROM source WHERE id = ?").get(id)?.config ?? "{}")) as unknown;
+    const watched = allSourceHealth().filter((s) => own(s.kind)).map((s): CompanySource => ({
+      id: s.id, name: s.name, label: s.label, kind: s.kind, config: config(s.id),
+      status: s.status, failingSince: s.failingSince ?? s.drop?.since ?? null, lastGoodCheckAt: s.lastGoodCheckAt,
+    }));
+    const removed = db.prepare("SELECT id, name, kind, config FROM source WHERE removed_at IS NOT NULL ORDER BY removed_at DESC").all()
+      .filter((r) => own(String(r.kind)))
+      .map((r): CompanySource => ({
+        id: String(r.id), name: String(r.name), label: kindLabel(String(r.kind)), kind: String(r.kind), config: JSON.parse(String(r.config)) as unknown,
+        status: "removed", failingSince: null, lastGoodCheckAt: null,
+      }));
+    return [...watched, ...removed];
   }
 
   function ruleChange(id: string): RuleChange {
@@ -1619,7 +1915,16 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const reason = input.reason ?? null;
       if (reason !== null && !passReasons.includes(reason)) throw new Error(`Unknown pass reason "${String(reason)}"`);
       const note = input.note?.trim() || null;
-      return decide("pass", jobIds, ["new", "saved"], "passed", { passReason: reason, passNote: note });
+      // What would be learned is worked out before the pass, from the Jobs as they are now.
+      const lessons = input.learn && reason
+        ? jobIds.map((id) => feedJob(id)).filter((j): j is FeedJob => j != null && (j.state === "new" || j.state === "saved"))
+            .map((j) => ({ jobId: j.id, matchers: passLessons(j, reason, input.requirement ?? null) }))
+        : [];
+      const decision = decide("pass", jobIds, ["new", "saved"], "passed", { passReason: reason, passNote: note });
+      if (!input.learn) return decision;
+      const ids = transaction(db, () => lessons.flatMap((l) => l.matchers.map((m) => learn("pass", m, l.jobId, decision.id, reason))));
+      const affected = affectedCounts();
+      return { ...decision, learned: [...new Set(ids)].map((id) => adjustment(id, affected)) };
     },
 
     async close(jobIds, how) {
@@ -1684,7 +1989,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          WHERE j.merged_into IS NULL
          ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all();
-      const all = rows.map((r) => ({ job: toFeedJob(r, money), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const active = activeAdjustments();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money, active), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
       const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");
@@ -1725,7 +2031,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           heldBack.filter((j) => j.hidden),
         ),
         health: summary(allSourceHealth()),
-        ranking: { learnedAdjustments: 0 },
+        ranking: { learnedAdjustments: active.length },
         budget: money,
       };
     },
@@ -1849,6 +2155,79 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       }, options);
     },
 
+    starterWatchlist: async () => starterWatchlist(new Set()),
+
+    async seedWatchlist() {
+      const added = new Set<string>();
+      for (const entry of sofiaWatchlist) {
+        if (!entry.feed) continue;
+        const id = sourceIdOf(entry.feed);
+        if (db.prepare("SELECT 1 AS x FROM source WHERE id = ?").get(id)) continue;
+        await this.addSource({ ...entry.feed, name: entry.company }, { onlyIfNew: true });
+        added.add(id);
+      }
+      return starterWatchlist(added);
+    },
+
+    async recordCoverageCheck(input) {
+      const id = `coverage:${crypto.randomUUID()}`;
+      const at = clock.now().toISOString();
+      const given = typeof input.listings === "string" ? parseListings(input.listings) : [...input.listings ?? []];
+      const resultsUrl = input.resultsUrl?.trim();
+      const count = input.resultCount;
+      if (!input.site?.trim()) throw new Error("Say which site you searched");
+      if (count != null && (!Number.isInteger(count) || count < 0)) throw new Error("The number of results must be a whole number, 0 or more");
+      if (count == null && given.length === 0 && !resultsUrl) {
+        throw new Error("Type how many results you saw, paste the listings, or paste the results link");
+      }
+      if (resultsUrl) {
+        if (!isReadableResultsPage(resultsUrl)) throw new Error(unreadableResultsPage);
+        const res = await fetchFor("devbg")(resultsUrl, { headers: { accept: "text/html" } });
+        if (!res.ok) throw new Error(`dev.bg answered ${res.status} for that results page`);
+        given.push(...devbgPageListings(await res.text()).map(({ title, company, location, url }) => ({ title, company, location, url })));
+      }
+      const money = budget();
+      const alertSenders = new Set(
+        db.prepare("SELECT config FROM source WHERE kind = 'email' AND removed_at IS NULL").all()
+          .map((r) => String((JSON.parse(String(r.config)) as { sender?: unknown }).sender)),
+      );
+      const ctx = { db, site: input.site, sources: companySources(), alertSenders, locations: searchSettings().locations };
+      const listings: CoverageResultListing[] = given.map((l) => {
+        const hit = matchListing(db, l);
+        const jobId = (hit && liveJobId(db, hit.job_id)) ?? null;
+        const url = l.url?.trim() || null;
+        const listing = { title: l.title.trim(), company: l.company.trim(), location: l.location?.trim() || null, url };
+        const row = jobId ? db.prepare(`${jobSelect} WHERE j.id = ?`).get(jobId) : undefined;
+        if (jobId && row) {
+          const job = toFeedJob(row, money);
+          // A link alone is described by the Job it found.
+          const described = listing.title ? listing : { title: job.title, company: job.company, location: job.location, url };
+          return { ...described, jobId, ...whereFound({ ...job, place: job.fit.place }), fixedBy: null };
+        }
+        const described = listing.title ? listing : { ...listing, title: url ?? "" };
+        return { ...described, status: "missing", jobId: null, ...whyMissing(listing, ctx), fixedBy: null };
+      });
+      const query = input.query?.trim() ?? "";
+      const location = input.location?.trim() || null;
+      // With no listings, what apply-kit had is the Jobs (in any view) that answer the same search.
+      const appHad = listings.length > 0 ? undefined : db.prepare(`${jobSelect} WHERE j.merged_into IS NULL`).all()
+        .filter((r) => answersSearch({ title: String(r.title), company: String(r.company), location: sqlText(r.location) }, query, location)).length;
+      const totals = totalsOf(listings, input.resultCount ?? listings.length, appHad);
+      const result: CoverageResult = {
+        id, at, site: input.site.trim(), query, location, listings, totals,
+      };
+      transaction(db, () => storeCoverageCheck(db, result));
+      return result;
+    },
+
+    async coverageHistory() {
+      return coverageHistory(db, clock.now(), liveJob);
+    },
+
+    async getCoverageCheck(id) {
+      return loadCoverageCheck(db, id, liveJob);
+    },
+
     async getSearchSettings() {
       return searchSettings();
     },
@@ -1857,12 +2236,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return storeSettings(parseSearchSettings(input));
     },
 
-    async unhide(jobIds) {
-      const hidden = jobIds.filter((id) => {
-        const row = db.prepare(`${jobSelect} WHERE j.id = ? AND j.merged_into IS NULL`).get(id);
-        return row != null && toFeedJob(row).hidden;
-      });
-      return decide("unhide", hidden, ["new"], "new");
+    async unhide(jobIds, input = {}) {
+      const hidden = jobIds.map((id) => feedJob(id)).filter((j): j is FeedJob => j?.hidden === true);
+      const decision = decide("unhide", hidden.map((j) => j.id), ["new"], "new");
+      if (!input.learn) return decision;
+      const ids = transaction(db, () => hidden.map((j) => learn("unhide", companyMatcher(j.company), j.id, decision.id, null)));
+      const affected = affectedCounts();
+      return { ...decision, learned: [...new Set(ids)].map((id) => adjustment(id, affected)) };
     },
 
     async notADealbreaker(jobId, reasonKey) {
@@ -1900,11 +2280,34 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { change: ruleChange(changeId), settings: restored };
     },
 
+    async learnedAdjustments() {
+      const affected = affectedCounts();
+      return db.prepare("SELECT id FROM learned_adjustment ORDER BY created_at DESC, rowid DESC").all().map((r) => adjustment(String(r.id), affected));
+    },
+
+    async undoAdjustment(adjustmentId) {
+      db.prepare("UPDATE learned_adjustment SET undone_at = COALESCE(undone_at, ?) WHERE id = ?").run(clock.now().toISOString(), adjustmentId);
+      return adjustment(adjustmentId);
+    },
+
+    async boost(jobId) {
+      const live = liveJobId(db, jobId);
+      const job = live && feedJob(live);
+      if (!job) throw new Error(`No job with id "${jobId}"`);
+      return adjustment(learn("boost", companyMatcher(job.company, job.fit.angle), job.id, null, null));
+    },
+
     async sourceHealth() {
       const sources = allSourceHealth();
       return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
     },
   };
+}
+
+/** A Source's id from its kind and config, as addSource makes it. */
+function sourceIdOf({ kind, config }: { kind: string; config: unknown }): string {
+  const adapter = adapterFor(kind);
+  return `${kind}:${adapter.key(adapter.parseConfig(config))}`;
 }
 
 const ruleLabel: Record<DealbreakerRule, string> = {

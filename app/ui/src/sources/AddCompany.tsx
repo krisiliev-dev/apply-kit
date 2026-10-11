@@ -145,7 +145,8 @@ export function AddCompany({ onAdded, onCancel }: { onAdded: (added: Added) => v
 }
 
 function CompanyForm({ error, onSubmit, onCancel }: { error?: string; onSubmit: (input: string) => void; onCancel: () => void }) {
-  const [value, setValue] = useState("");
+  // A coverage check's "Add to your watchlist" opens this with the company filled in (?company=).
+  const [value, setValue] = useState(() => new URLSearchParams(window.location.search).get("company") ?? "");
   const [empty, setEmpty] = useState(false);
   const message = empty ? "Type a company name or paste a link to its careers page." : error;
   return (

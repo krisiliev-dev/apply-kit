@@ -55,6 +55,23 @@ export const devbg: SourceAdapter<DevBgConfig> = {
   },
 };
 
+/**
+ * Every job card on one dev.bg page (a category or a search-results page), for coverage checks.
+ * Throws if the page has no job list at all (a different page, or the layout changed).
+ */
+export function devbgPageListings(html: string): FoundPosting[] {
+  const page = parse(html);
+  if (!page.querySelector(".job-list") && page.querySelectorAll(".job-list-item").length === 0) {
+    throw new Error("That dev.bg page has no job list: paste the link to a page of search results");
+  }
+  const byId = new Map<string, FoundPosting>();
+  for (const card of page.querySelectorAll(".job-list-item")) {
+    const posting = toPosting(card);
+    if (posting) byId.set(posting.externalId, posting);
+  }
+  return [...byId.values()];
+}
+
 /** The highest /page/N/ of this category the page links to (1 if none). */
 function pageCount(page: HTMLElement, base: string): number {
   let last = 1;

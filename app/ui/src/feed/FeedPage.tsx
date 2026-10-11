@@ -24,7 +24,8 @@ type Load =
 export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => void }) {
   // "/?view=hidden" opens the hidden pile (the link from the search settings).
   const [view, setView] = useState<FeedView>(initialView);
-  const [options, setOptions] = useState<FeedOptions>({ sort: "fit", relocation: false });
+  // "?relocation=1" opens the Feed with the Relocation filter on (a coverage check's "Turn on Relocation").
+  const [options, setOptions] = useState<FeedOptions>(() => ({ sort: "fit", relocation: new URLSearchParams(window.location.search).get("relocation") === "1" }));
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const check = useCheckStatus();
@@ -334,9 +335,13 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
         </>
       )}
       <span className="end">
-        <span className="meta">
-          {ranking.learnedAdjustments === 0 ? "Ranking: nothing learned yet" : `Ranking: ${ranking.learnedAdjustments} learned adjustments`}
-        </span>
+        {ranking.learnedAdjustments === 0
+          ? <span className="meta">Ranking: nothing learned yet</span>
+          : (
+            <a className="rank-link" href="/profile/search#ranking">
+              Ranking: {ranking.learnedAdjustments} learned {ranking.learnedAdjustments === 1 ? "adjustment" : "adjustments"} · review
+            </a>
+          )}
         {ranked && <SortMenu sort={options.sort} onSort={(sort) => onOptions({ ...options, sort })} />}
         {!feed.firstRun && <AddJobMenu />}
       </span>

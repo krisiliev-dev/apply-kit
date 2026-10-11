@@ -5,6 +5,7 @@
 .toolbar .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
 .toolbar .segmented button { white-space: nowrap }
 .toolbar .end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-left: auto }
+.toolbar .rank-link { font-size: var(--fs-small); font-weight: 500 }
 .empty h1 { font-size: var(--fs-h3) }
 
 /* Feed job rows (from the Feed hi-fi): two-line titles, narrow-screen summary line */
@@ -242,6 +243,24 @@ h1[tabindex="-1"]:focus { outline: none }
 .paste-pair .field { flex: 1 1 180px }
 .add-job-pop { width: min(520px, calc(100vw - 2 * var(--s-5))); padding: var(--s-5); gap: var(--s-4) }
 .add-job-pop .paste-first { width: 100% }
+/* Coverage check (from the Sources hi-fi state "Coverage check" and the Normal state's panel). Tokens only. */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--s-6); align-items: start }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: var(--s-5) }
+.field-label { font-weight: 600; font-size: var(--fs-small) }
+.field label .meta { font-weight: 400 }
+.segmented.wrap { justify-self: start; flex-wrap: wrap; max-width: 100% }
+textarea.input.cv-list { resize: vertical; font-size: var(--fs-small); line-height: var(--lh-body) }
+.err-line { color: var(--gap); font-size: var(--fs-small); font-weight: 500 }
+.miss { display: grid; gap: var(--s-3); padding: var(--s-5) 0; border-top: 1px solid var(--rule) }
+.miss .why { color: var(--ink-2); font-size: var(--fs-small); max-width: none }
+.miss .src-name a { color: inherit }
+.sub-h { font-size: var(--fs-body); margin-bottom: var(--s-2) }
+.panel-pad { padding: var(--s-5) var(--s-5) var(--s-3) }
+.table.static tbody tr { cursor: default }
+.link-btn { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px }
+.link-btn:hover { color: var(--action); text-decoration-color: currentColor }
+.found-list { margin-top: var(--s-3) }
+h2[tabindex="-1"]:focus { outline: none }
 
 /* Chrome extension pairing code: large and spaced so it is easy to type across. */
 .pair-code { font-family: var(--font-display); font-size: var(--fs-h2); letter-spacing: .12em; font-variant-numeric: tabular-nums; font-weight: 600 }

@@ -25,7 +25,7 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Add companies on the Sources screen (**Add company**: a name or a careers link; apply-kit detects the job system). Sources can also be seeded in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`), which is the only way to add search, aggregator and email-alert Sources for now. Source types and their values:
+Add companies on the Sources screen (**Add company**: a name or a careers link; apply-kit detects the job system). The **Sofia starter watchlist** panel there adds the 46 companies from `docs/design/watchlist-draft.md` with a verified feed in one step (repeatable; Sources you paused or removed stay that way) and lists the 29 without a feed with the LinkedIn or jobs.bg alert that still catches their jobs. Sources can also be seeded in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`), which is the only way to add search, aggregator and email-alert Sources for now. Source types and their values:
 
 | Type | Value | Notes |
 |---|---|---|
