@@ -1,6 +1,7 @@
 import type { CheckResult, FeedJob, FeedResult, FeedView } from "@apply-kit/core";
 import { useEffect, useState } from "react";
 import { checkNow, fetchFeed } from "../api.ts";
+import { FailedSourceBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
   ["new", "New"],
@@ -15,6 +16,9 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   const [view, setView] = useState<FeedView>("new");
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const reload = () => setAttempt((n) => n + 1);
+  const [said, say] = useState("");
+  const { busy, tryNow } = useTryNow(reload, say);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -48,6 +52,16 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   }
   return (
     <section className="stack" style={{ gap: "var(--s-6)" }}>
+      {feed.health.failing.map((f) => (
+        <FailedSourceBanner
+          key={f.sourceId}
+          failure={f}
+          busy={busy === f.sourceId}
+          onTry={() => tryNow(f.sourceId, f.name, f.jobsKept)}
+          showHealthLink
+        />
+      ))}
+      <StatusLine message={said} />
       <div className="page-head">
         <div className="lead">
           <h1>{viewTitle(view, feed)}</h1>
@@ -56,7 +70,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
           </p>
         </div>
         <span className="grow" />
-        <CheckNow onChecked={() => setAttempt((n) => n + 1)} />
+        <CheckNow onChecked={reload} />
       </div>
       <Toolbar feed={feed} view={view} onView={setView} />
       <JobsTable feed={feed} view={view} />
@@ -80,7 +94,6 @@ function CheckNow({ onChecked }: { onChecked: () => void }) {
       .then((result) => { setCheck({ state: "done", result }); onChecked(); })
       .catch((err: unknown) => setCheck({ state: "error", message: err instanceof Error ? err.message : String(err) }));
   };
-  const failed = check.state === "done" ? check.result.sources.filter((s) => !s.ok) : [];
   return (
     <div className="row" style={{ alignItems: "center" }}>
       <p className="meta" role="status" aria-live="polite">
@@ -88,11 +101,6 @@ function CheckNow({ onChecked }: { onChecked: () => void }) {
         {check.state === "done" && summary(check.result)}
         {check.state === "error" && `Couldn't run the check: ${check.message}`}
       </p>
-      {failed.length > 0 && (
-        <p className="meta" role="alert">
-          {failed.map((s) => `${s.name}: ${s.ok ? "" : s.error}. Its jobs are kept as they were.`).join(" ")}
-        </p>
-      )}
       <button className="btn sm" type="button" onClick={run} disabled={check.state === "checking"}>
         {check.state === "checking" ? "Checking…" : "Check now"}
       </button>
@@ -105,7 +113,9 @@ function summary(result: CheckResult): string {
   const found = ok.reduce((n, s) => n + (s.ok ? s.found : 0), 0);
   const fresh = ok.reduce((n, s) => n + (s.ok ? s.newPostings : 0), 0);
   const total = result.sources.length;
-  return `Checked ${ok.length} of ${total} ${total === 1 ? "source" : "sources"} · ${found} jobs listed, ${fresh} new`;
+  const failed = total - ok.length;
+  const note = failed === 0 ? "" : ` · ${failed} failed, ${failed === 1 ? "its" : "their"} jobs kept as they were`;
+  return `Checked ${ok.length} of ${total} ${total === 1 ? "source" : "sources"} · ${found} jobs listed, ${fresh} new${note}`;
 }
 
 function JobsTable({ feed, view }: { feed: FeedResult; view: FeedView }) {
