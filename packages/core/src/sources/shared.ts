@@ -52,3 +52,20 @@ export function utcDate(year: number, month: number, day: number): string | null
   if (d.getUTCFullYear() !== year || d.getUTCMonth() !== month - 1 || d.getUTCDate() !== day) return null;
   return d.toISOString();
 }
+
+/** Throws a readable error naming the setting (never its value) when a keyed API refuses it. */
+export function checkKeyAccepted(res: Response, settingName: string, sourceName: string): void {
+  if (res.status === 401 || res.status === 403) throw new Error(`${sourceName} rejected the ${settingName} setting (${res.status})`);
+}
+
+/** Search config shared by keyword Sources: "keywords|location" or {keywords, location}. */
+export function parseSearch(raw: unknown, sourceName: string, example: string): { keywords: string; location: string } {
+  const [keywords, location] = typeof raw === "string" ? splitShorthand(raw, 2) : [field(raw, "keywords") ?? "", field(raw, "location") ?? ""];
+  if (!keywords) throw new Error(`A ${sourceName} source needs a search like "${example}", got ${JSON.stringify(raw)}`);
+  return { keywords, location: location! };
+}
+
+/** Escapes plain text for use inside HTML. */
+export function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}

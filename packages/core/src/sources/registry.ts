@@ -4,6 +4,9 @@ import { workday } from "./workday.ts";
 import { microsoft } from "./microsoft.ts";
 import { amazon } from "./amazon.ts";
 import { devbg } from "./devbg.ts";
+import { jooble } from "./jooble.ts";
+import { reed } from "./reed.ts";
+import { eures } from "./eures.ts";
 
 /** Every Source type the engine can check, by kind. New adapters register here. */
 export const adapters: Record<string, SourceAdapter<unknown>> = {
@@ -12,6 +15,9 @@ export const adapters: Record<string, SourceAdapter<unknown>> = {
   [microsoft.kind]: microsoft as SourceAdapter<unknown>,
   [amazon.kind]: amazon as SourceAdapter<unknown>,
   [devbg.kind]: devbg as SourceAdapter<unknown>,
+  [jooble.kind]: jooble as SourceAdapter<unknown>,
+  [reed.kind]: reed as SourceAdapter<unknown>,
+  [eures.kind]: eures as SourceAdapter<unknown>,
 };
 
 export function adapterFor(kind: string): SourceAdapter<unknown> {
