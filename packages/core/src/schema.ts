@@ -46,6 +46,30 @@ const migrations: string[] = [
      error TEXT
    );
    CREATE INDEX source_check_source ON source_check(source_id, checked_at);`,
+  // #14: triage. A Job's state carries when it last changed and why (pass reason and note, how it
+  // closed). Each save, pass, close or reopen is a Decision that remembers every Job's previous
+  // state, so it can be undone, per Job.
+  `ALTER TABLE job ADD COLUMN state_changed_at TEXT;
+   ALTER TABLE job ADD COLUMN pass_reason TEXT;
+   ALTER TABLE job ADD COLUMN pass_note TEXT;
+   ALTER TABLE job ADD COLUMN closed_how TEXT;
+   CREATE TABLE decision (
+     id TEXT PRIMARY KEY,
+     kind TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );
+   CREATE TABLE decision_job (
+     decision_id TEXT NOT NULL REFERENCES decision(id),
+     job_id TEXT NOT NULL REFERENCES job(id),
+     prev_state TEXT NOT NULL,
+     prev_changed_at TEXT,
+     prev_pass_reason TEXT,
+     prev_pass_note TEXT,
+     prev_closed_how TEXT,
+     undone_at TEXT,
+     PRIMARY KEY (decision_id, job_id)
+   );
+   CREATE INDEX decision_job_job ON decision_job(job_id);`,
 ];
 
 export function migrate(db: SqlDatabase): void {
