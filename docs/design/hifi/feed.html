@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Feed · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../tokens.css">
+<link rel="stylesheet" href="../components.css">
+<style>
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.toolbar .sep { width: 1px; height: 22px; background: var(--rule) }
+.bulk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--surface); font-size: var(--fs-small); color: var(--ink-2) }
+.bulk .keys { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; font-size: var(--fs-caption) }
+.foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small); color: var(--ink-2) }
+.foot .pager { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s-3) }
+.progress-head { display: grid; gap: var(--s-3) }
+.mark { color: var(--action) }
+</style>
+</head>
+<body>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · Feed</span>
+  <a href="index.html">All Discover screens</a>
+  <div class="states" role="tablist" aria-label="State"></div>
+</div>
+
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
+    <nav class="nav" aria-label="Main">
+      <a href="feed.html" aria-current="page">Feed</a>
+      <a href="#">Applications<span class="badge" aria-label="4 need you">4</span></a>
+      <a href="#">Profile</a>
+      <a href="sources.html">Settings</a>
+    </nav>
+    <span class="grow"></span>
+    <a class="health" id="health" href="sources.html"><i></i><span>14 sources OK · 07:30</span></a>
+  </header>
+
+  <main class="main" id="main">
+
+    <!-- NORMAL -->
+    <section data-state="normal" data-state-name="Normal" class="stack" style="gap:var(--s-6)">
+      <div class="page-head">
+        <div class="lead"><h1>23 new since yesterday</h1><p class="meta">143 open jobs across 14 sources · sorted by fit</p></div>
+        <span class="grow"></span>
+        <div class="search" style="width:min(320px,100%)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m11 11 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input class="input" type="search" id="q1" placeholder="Search title, company or skill" aria-label="Search jobs"></div>
+      </div>
+      <div class="toolbar">
+        <div class="segmented" role="group" aria-label="Show"><button aria-pressed="true">New <span class="num">23</span></button><button aria-pressed="false">Saved <span class="num">6</span></button><button aria-pressed="false">All open <span class="num">143</span></button></div>
+        <span class="sep" aria-hidden="true"></span>
+        <button class="filter" aria-pressed="false">Angle: all ▾</button>
+        <button class="filter" aria-pressed="true">Sofia + Remote EU</button>
+        <button class="filter" aria-pressed="false">Relocation</button>
+        <span class="grow"></span>
+        <button class="filter" aria-pressed="false">Sort: best fit ▾</button>
+      </div>
+      <div class="panel flush">
+        <div class="bulk" id="bulk1"><span id="selCount">Select jobs to save or pass several at once</span><button class="btn sm" disabled>Save</button><button class="btn sm" disabled>Pass…</button><span class="keys"><kbd>J</kbd><kbd>K</kbd> move <kbd>Enter</kbd> open <kbd>S</kbd> save <kbd>X</kbd> pass</span></div>
+        <div class="table-wrap"><table class="table" aria-label="New jobs, sorted by fit">
+          <thead><tr><th class="col-check"><input type="checkbox" aria-label="Select all"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th aria-sort="descending" style="text-align:right"><button>Fit ↓</button></th></tr></thead>
+          <tbody data-rows="normal"></tbody>
+        </table></div>
+        <div class="foot"><button class="btn ghost sm">Show 7 hidden jobs and why</button><span class="pager"><span class="num">1–23 of 23</span><button class="btn sm" disabled>Previous</button><button class="btn sm" disabled>Next</button></span></div>
+      </div>
+    </section>
+
+    <!-- LOADING -->
+    <section data-state="loading" data-state-name="Checking sources" class="stack" style="gap:var(--s-6)">
+      <div class="page-head"><div class="lead"><h1>Checking your sources</h1><p class="meta">9 of 14 done · about 20 seconds left · new jobs appear as each source finishes</p></div></div>
+      <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="14" aria-valuenow="9" aria-label="Sources checked"><span style="width:64%"></span></div>
+      <div class="panel flush">
+        <div class="table-wrap"><table class="table" aria-label="Jobs found so far">
+          <thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead>
+          <tbody data-rows="loading"></tbody>
+          <tbody aria-hidden="true">
+            <tr><td></td><td><span class="skel" style="width:70%"></span><span class="skel" style="width:40%;margin-top:8px"></span></td><td><span class="skel" style="width:70%"></span></td><td><span class="skel" style="width:85%"></span></td><td><span class="skel" style="width:60%"></span></td><td><span class="skel" style="width:28px;margin-left:auto"></span></td></tr>
+            <tr><td></td><td><span class="skel" style="width:55%"></span><span class="skel" style="width:30%;margin-top:8px"></span></td><td><span class="skel" style="width:60%"></span></td><td><span class="skel" style="width:70%"></span></td><td><span class="skel" style="width:50%"></span></td><td><span class="skel" style="width:28px;margin-left:auto"></span></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </section>
+
+    <!-- FIRST RUN -->
+    <section data-state="first-run" data-state-name="First run">
+      <div class="empty">
+        <svg viewBox="0 0 120 48" width="120" height="48" aria-hidden="true"><path d="M2 46 32 12l18 20 14-14 26 28z" fill="var(--met-soft)" stroke="var(--action)" stroke-width="2" stroke-linejoin="round"/><circle cx="96" cy="10" r="5" fill="var(--bloom)"/></svg>
+        <h2>Your feed fills up once sources are connected</h2>
+        <p>Pick companies from the Sofia watchlist and connect your job mailbox. The first check takes about a minute, and jobs appear as each source answers.</p>
+        <div class="row"><a class="btn primary" href="sources.html">Choose companies</a><a class="btn" href="sources.html">Connect mailbox</a></div>
+        <div class="field" style="width:min(460px,100%)"><label for="paste1">Or start with one job</label><div class="row" style="flex-wrap:nowrap"><input class="input" id="paste1" placeholder="Paste a job link"><button class="btn">Add</button></div></div>
+      </div>
+    </section>
+
+    <!-- SOURCE FAILED -->
+    <section data-state="source-failed" data-state-name="Source failed" class="stack" style="gap:var(--s-6)">
+      <div class="banner error" role="status"><span class="text"><b>dev.bg didn't respond at 07:30.</b> Its 12 jobs are kept as they were, not closed. Next try at 08:00.</span><button class="btn sm">Try now</button><a class="btn sm" href="sources.html">Source health</a></div>
+      <div class="page-head"><div class="lead"><h1>19 new since yesterday</h1><p class="meta">13 of 14 sources checked · sorted by fit</p></div></div>
+      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="New jobs"><thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead><tbody data-rows="failed"></tbody></table></div></div>
+    </section>
+
+    <!-- UNUSUAL DROP -->
+    <section data-state="drop" data-state-name="Unusual drop" class="stack" style="gap:var(--s-6)">
+      <div class="banner warning" role="status"><span class="text"><b>SumUp returned 0 jobs. It usually has about 30.</b> That could be a hiring freeze or a broken feed, so its jobs stay open until the next check confirms it.</span><a class="btn sm" href="https://sumup.com/careers">Check their site</a><button class="btn sm">They're gone, close them</button></div>
+      <div class="page-head"><div class="lead"><h1>21 new since yesterday</h1><p class="meta">14 sources checked · 1 looks unusual</p></div></div>
+      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="New jobs"><thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead><tbody data-rows="drop"></tbody></table></div></div>
+    </section>
+
+    <!-- NO MATCH -->
+    <section data-state="no-match" data-state-name="Filtered to nothing" class="stack" style="gap:var(--s-6)">
+      <div class="page-head"><div class="lead"><h1>No new jobs match these filters</h1><p class="meta">23 new jobs today · 0 match</p></div></div>
+      <div class="toolbar"><button class="filter" aria-pressed="true">Angle: design ✕</button><button class="filter" aria-pressed="true">Remote EU only ✕</button><button class="filter" aria-pressed="true">Salary from €4,000 ✕</button><button class="btn ghost sm">Clear all</button></div>
+      <div class="empty"><h2>Close, but not quite</h2><p>2 remote design jobs list no salary, and 1 more is hidden because it asks for 5+ years. Loosen one filter to see them.</p><div class="row"><button class="btn primary">Include jobs without a salary</button><button class="btn">Show the hidden one</button></div></div>
+    </section>
+
+    <!-- HIDDEN -->
+    <section data-state="hidden" data-state-name="Hidden jobs" class="stack" style="gap:var(--s-6)">
+      <div class="page-head"><div class="lead"><h1>7 hidden today</h1><p class="meta">Hidden, never deleted. If a reason is wrong, unhide the job and the rule learns.</p></div><span class="grow"></span><a class="btn" href="#">Edit dealbreakers</a></div>
+      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="Hidden jobs"><thead><tr><th>Job</th><th>Where</th><th>Why it's hidden</th><th></th></tr></thead><tbody data-rows="hidden"></tbody></table></div></div>
+    </section>
+
+    <!-- OVERFLOW -->
+    <section data-state="overflow" data-state-name="After a week away" class="stack" style="gap:var(--s-6)">
+      <div class="page-head"><div class="lead"><h1>212 new since you were last here</h1><p class="meta">Your last visit was 7 days ago · sorted by fit</p></div></div>
+      <div class="banner info"><span class="text">The best 25 are on this page. Save the ones worth a closer look and come back to the rest later.</span><button class="btn sm">Save top 10</button></div>
+      <div class="panel flush"><div class="table-wrap"><table class="table" aria-label="New jobs"><thead><tr><th class="col-check"></th><th>Job</th><th>Where</th><th>Requirements</th><th>Salary</th><th style="text-align:right">Fit</th></tr></thead><tbody data-rows="overflow"></tbody></table></div>
+        <div class="foot"><span class="num">1–25 of 212</span><span class="pager"><button class="btn sm" disabled>Previous</button><button class="btn sm">Next</button></span></div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+(function () {
+  const icon = { met: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>', partly: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>', gap: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>' };
+  const label = { met: "met", partly: "partly met", gap: "missing" };
+  const jobs = [
+    { t: "Security Engineer", c: "Kestrel Payments", w: "Sofia · hybrid", r: [["3+ years", "met"], ["SIEM", "met"], ["CISSP preferred", "partly"]], s: "€2,800–3,600", f: 91, why: "Security angle · 2 of 3 met · above your floor", n: 3 },
+    { t: "Full-stack Developer (React, Node)", c: "Brightwave", w: "Remote · EU", r: [["2+ years", "met"], ["TypeScript", "met"], ["English", "met"]], s: "€3,200–4,200", f: 88, why: "Developer angle · every requirement met", n: 2 },
+    { t: "SOC Analyst L2", c: "Ardent Labs", w: "Sofia · on-site", r: [["2+ years", "met"], ["Bulgarian", "met"], ["Night shifts", "partly"]], s: "Not stated", f: 84, why: "Matches your SOC experience · shift work flagged", n: 1 },
+    { t: "Cloud Security Engineer", c: "Halden Systems", w: "Remote · EU", r: [["AWS", "met"], ["Kubernetes", "gap"], ["4+ years", "partly"]], s: "€4,000–5,000", f: 76, why: "One gap you could answer", n: 4 },
+    { t: "Product Designer", c: "Lumen Health", w: "Sofia · hybrid", r: [["Portfolio", "met"], ["Figma", "met"], ["3+ years", "partly"]], s: "€2,050–2,800", f: 71, why: "Design angle · slightly short on years", n: 2 },
+    { t: "Backend Engineer (Go)", c: "Corvid Logistics", w: "Sofia · hybrid", r: [["Go", "partly"], ["Postgres", "met"], ["2+ years", "met"]], s: "€3,050–4,100", f: 68, why: "Developer angle · Go would be new", n: 2 },
+    { t: "IT Security Specialist", c: "Ostrava Bank", w: "Sofia · on-site", r: [["ISO 27001", "partly"], ["Bulgarian", "met"]], s: "Not stated", f: 63, why: "Security angle · bank, on-site", n: 1 },
+  ];
+  const hidden = [
+    ["Penetration Tester", "Vollmer GmbH", "Remote · Germany", "Requires fluent German"],
+    ["Senior Security Architect", "Northgate Group", "Sofia", "Requires 7+ years"],
+    ["Frontend Developer", "Pixelforge", "Plovdiv · on-site", "On-site outside Sofia"],
+    ["DevOps Engineer", "Tallis", "Remote · US only", "Remote limited to the US"],
+  ];
+  const chips = r => `<div class="chips">${r.map(([l, k]) => `<span class="chip ${k}" title="${label[k]}">${icon[k]}${l}<span class="sr-only">, ${label[k]}</span></span>`).join("")}</div>`;
+  const row = (j, i) => `<tr${i === 0 ? ' class="is-focused"' : ""}>
+    <td class="col-check"><input type="checkbox" aria-label="Select ${j.t} at ${j.c}"></td>
+    <td><a class="t" href="job.html" title="${j.t}">${i < 3 ? '<span class="new-dot" aria-label="New"></span>' : ""}${j.t}</a><span class="co">${j.c}</span>${j.n > 1 ? `<span class="meta"> · on ${j.n} sites</span>` : ""}<div class="why">${j.why}</div></td>
+    <td>${j.w}</td><td>${chips(j.r)}</td><td class="num">${j.s}</td><td class="fit">${j.f}<small>fit</small></td></tr>`;
+  const fill = (k, list) => document.querySelectorAll(`[data-rows="${k}"]`).forEach(tb => tb.innerHTML = list.map(row).join(""));
+  fill("normal", jobs); fill("loading", jobs.slice(0, 3)); fill("failed", jobs.slice(0, 5)); fill("drop", jobs.slice(1, 6));
+  fill("overflow", [{ ...jobs[0], t: "Senior Application Security Engineer, Payments Platform (Fraud and Risk Engineering)", c: "International Clearing and Settlement Services Bulgaria EAD", n: 5 }, ...jobs.slice(1, 5)]);
+  document.querySelectorAll('[data-rows="hidden"]').forEach(tb => tb.innerHTML = hidden.map(h => `<tr class="is-hidden"><td><span class="t" style="font-weight:500;color:var(--ink-2)">${h[0]}</span><span class="co">${h[1]}</span></td><td>${h[2]}</td><td><span class="chip hidden-reason">${h[3]}</span></td><td style="text-align:right"><div class="row" style="justify-content:flex-end"><button class="btn sm">Unhide</button><button class="btn ghost sm">Not a dealbreaker for me</button></div></td></tr>`).join(""));
+
+  // selection count
+  document.addEventListener("change", e => {
+    if (!e.target.matches('[data-rows="normal"] input')) return;
+    const n = document.querySelectorAll('[data-rows="normal"] input:checked').length;
+    document.getElementById("selCount").textContent = n ? `${n} selected` : "Select jobs to save or pass several at once";
+    document.querySelectorAll("#bulk1 .btn").forEach(b => b.disabled = !n);
+    e.target.closest("tr").classList.toggle("is-selected", e.target.checked);
+  });
+  document.querySelectorAll(".segmented").forEach(g => g.addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; g.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === b))); }));
+
+  // review state switcher
+  const states = [...document.querySelectorAll("[data-state]")], bar = document.querySelector(".review .states"), health = document.getElementById("health");
+  const healthFor = { "source-failed": ["bad", "1 source failing"], drop: ["warn", "1 source unusual"], "first-run": ["warn", "No sources yet"], loading: ["", "Checking… 9 of 14"] };
+  const show = id => {
+    states.forEach(s => s.hidden = s.dataset.state !== id);
+    bar.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === id)));
+    const [cls, txt] = healthFor[id] || ["", "14 sources OK · 07:30"];
+    health.className = "health " + cls; health.querySelector("span").textContent = txt;
+  };
+  states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => show(s.dataset.state); bar.appendChild(b); });
+  show(states.some(s => s.dataset.state === location.hash.slice(1)) ? location.hash.slice(1) : "normal");
+})();
+</script>
+</body>
+</html>
