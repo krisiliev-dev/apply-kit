@@ -28,9 +28,13 @@ export interface AdapterContext {
   fetch: typeof fetch;
 }
 
+/** What sort of Source this is, as the Sources screen groups them. */
+export type SourceCategory = "ats" | "api" | "aggregator" | "email" | "capture";
+
 export interface SourceAdapter<Config = unknown> {
   /** Stored as source.kind; never rename once shipped. */
   readonly kind: string;
+  readonly category: SourceCategory;
   /**
    * Validates config and returns it normalised. Accepts the adapter's config object or a
    * shorthand string (for Greenhouse, the board token). Throws an Error with a readable message.

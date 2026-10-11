@@ -1,7 +1,8 @@
 import { migrate } from "./schema.ts";
 import type { EngineDeps, SqlDatabase } from "./ports.ts";
-import type { FoundPosting } from "./sources/adapter.ts";
-import { adapterFor } from "./sources/registry.ts";
+import { isInYourLocations } from "./locations.ts";
+import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
+import { adapterFor, adapters } from "./sources/registry.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
@@ -60,6 +61,32 @@ export type SourceCheck =
   | { sourceId: string; name: string; ok: true; found: number; newPostings: number }
   | { sourceId: string; name: string; ok: false; outcome: CheckFailure; error: string };
 
+/** One recorded Check of one Source. Counts are null when the Check failed. */
+export interface CheckRecord {
+  /** When the Check ran (ISO 8601). */
+  at: string;
+  outcome: "ok" | CheckFailure;
+  /** Postings the Source listed in Kris's locations (Sofia, or remote within Europe). */
+  inLocations: number | null;
+  /** Every Posting the Source listed. */
+  total: number | null;
+  error: string | null;
+}
+
+export interface SourceHealth {
+  id: string;
+  name: string;
+  kind: string;
+  category: SourceCategory;
+  /** Recent Checks, newest first. */
+  history: CheckRecord[];
+}
+
+export interface HealthReport {
+  asOf: string;
+  sources: SourceHealth[];
+}
+
 export interface CheckResult {
   /** When the check started, from the injected clock (ISO 8601). */
   startedAt: string;
@@ -72,7 +99,12 @@ export interface DiscoveryEngine {
   addSource(source: NewSource): Promise<SourceInfo>;
   /** Checks every Source now. A failing Source is reported, never thrown, and changes nothing. */
   checkAll(): Promise<CheckResult>;
+  /** Every Source with its status, latest Checks and what a failure means for the Feed. */
+  sourceHealth(): Promise<HealthReport>;
 }
+
+/** How many recent Checks sourceHealth returns per Source. */
+const historyLength = 14;
 
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
@@ -112,11 +144,18 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
       const found = await adapter.fetchPostings(config, { fetch: watched });
-      const newPostings = transaction(db, () => found.filter((p) => storePosting(db, sourceId, p, startedAt)).length);
+      const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
+      const newPostings = transaction(db, () => {
+        const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
+        recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null });
+        return fresh;
+      });
       return { sourceId, name, ok: true, found: found.length, newPostings };
     } catch (err) {
       const outcome: CheckFailure = timedOut ? "timeout" : rateLimited ? "rate-limited" : "error";
-      return { sourceId, name, ok: false, outcome, error: err instanceof Error ? err.message : String(err) };
+      const error = err instanceof Error ? err.message : String(err);
+      recordCheck(db, sourceId, { at: startedAt, outcome, inLocations: null, total: null, error });
+      return { sourceId, name, ok: false, outcome, error };
     }
   }
 
@@ -175,6 +214,42 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const sources = await Promise.all(rows.map((r) => checkOne(r, startedAt)));
       return { startedAt, sources };
     },
+
+    async sourceHealth() {
+      const rows = db.prepare("SELECT id, name, kind FROM source ORDER BY created_at, id").all();
+      const history = db.prepare(
+        `SELECT checked_at, outcome, in_locations, total, error FROM source_check
+         WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
+      );
+      return {
+        asOf: clock.now().toISOString(),
+        sources: rows.map((r) => {
+          const kind = String(r.kind);
+          return {
+            id: String(r.id),
+            name: String(r.name),
+            kind,
+            category: adapters[kind]?.category ?? "ats",
+            history: history.all(String(r.id)).map(toCheckRecord),
+          };
+        }),
+      };
+    },
+  };
+}
+
+function recordCheck(db: SqlDatabase, sourceId: string, c: CheckRecord): void {
+  db.prepare("INSERT INTO source_check (source_id, checked_at, outcome, in_locations, total, error) VALUES (?, ?, ?, ?, ?, ?)")
+    .run(sourceId, c.at, c.outcome, c.inLocations, c.total, c.error);
+}
+
+function toCheckRecord(r: Record<string, unknown>): CheckRecord {
+  return {
+    at: String(r.checked_at),
+    outcome: String(r.outcome) as CheckRecord["outcome"],
+    inLocations: r.in_locations == null ? null : Number(r.in_locations),
+    total: r.total == null ? null : Number(r.total),
+    error: r.error == null ? null : String(r.error),
   };
 }
 
