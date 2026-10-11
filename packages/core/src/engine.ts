@@ -53,9 +53,12 @@ export interface SourceInfo {
   name: string;
 }
 
+/** Why a Check failed: the Source errored, didn't answer in time, or asked us to slow down. */
+export type CheckFailure = "error" | "timeout" | "rate-limited";
+
 export type SourceCheck =
   | { sourceId: string; name: string; ok: true; found: number; newPostings: number }
-  | { sourceId: string; name: string; ok: false; error: string };
+  | { sourceId: string; name: string; ok: false; outcome: CheckFailure; error: string };
 
 export interface CheckResult {
   /** When the check started, from the injected clock (ISO 8601). */
@@ -70,6 +73,9 @@ export interface DiscoveryEngine {
   /** Checks every Source now. A failing Source is reported, never thrown, and changes nothing. */
   checkAll(): Promise<CheckResult>;
 }
+
+/** How long one Source request may take before the Check counts as timed out. */
+const checkTimeoutMs = 30_000;
 
 const viewStates: Record<FeedView, string[]> = {
   new: ["new"],
@@ -89,14 +95,28 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
     const sourceId = String(row.id);
     const name = String(row.name);
+    let rateLimited = false;
+    let timedOut = false;
+    // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
+    const watched: typeof fetch = async (input, init) => {
+      try {
+        const res = await deps.fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) });
+        if (res.status === 429) rateLimited = true;
+        return res;
+      } catch (err) {
+        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true;
+        throw err;
+      }
+    };
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
-      const found = await adapter.fetchPostings(config, { fetch: deps.fetch });
+      const found = await adapter.fetchPostings(config, { fetch: watched });
       const newPostings = transaction(db, () => found.filter((p) => storePosting(db, sourceId, p, startedAt)).length);
       return { sourceId, name, ok: true, found: found.length, newPostings };
     } catch (err) {
-      return { sourceId, name, ok: false, error: err instanceof Error ? err.message : String(err) };
+      const outcome: CheckFailure = timedOut ? "timeout" : rateLimited ? "rate-limited" : "error";
+      return { sourceId, name, ok: false, outcome, error: err instanceof Error ? err.message : String(err) };
     }
   }
 

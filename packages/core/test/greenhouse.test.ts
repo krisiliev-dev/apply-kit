@@ -81,7 +81,7 @@ describe("Greenhouse source", () => {
     const feed = await engine.queryFeed({ view: "new" });
 
     expect(check.sources).toEqual([
-      { sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: false, error: 'Greenhouse answered 503 for board "payhawkio"' },
+      { sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: false, outcome: "error", error: 'Greenhouse answered 503 for board "payhawkio"' },
     ]);
     expect(feed.counts.new).toBe(3);
   });
