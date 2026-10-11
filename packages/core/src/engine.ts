@@ -1,7 +1,8 @@
 import { migrate } from "./schema.ts";
-import type { EngineDeps, SqlDatabase } from "./ports.ts";
+import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
 import { isInYourLocations } from "./locations.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
+import { isEmailAlertAdapter } from "./sources/adapter.ts";
 import { adapterFor, adapters } from "./sources/registry.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
@@ -150,6 +151,9 @@ export interface DiscoveryEngine {
 /** How many recent Checks sourceHealth returns per Source. */
 const historyLength = 14;
 
+/** How far back a mailbox read looks. Alerts older than this are left alone. */
+const mailLookbackMs = 14 * 24 * 60 * 60_000;
+
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
 
@@ -168,7 +172,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const countStates = (states: string[]) =>
     count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
 
-  async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
+  /** One read of the job mailbox, shared by every email Source in a check and made only if one needs it. */
+  function mailboxRead(): () => Promise<AlertEmail[]> {
+    let read: Promise<AlertEmail[]> | null = null;
+    return () => (read ??= deps.mailReader.fetchSince(new Date(clock.now().getTime() - mailLookbackMs)));
+  }
+
+  async function checkOne(row: Record<string, unknown>, startedAt: string, mail: () => Promise<AlertEmail[]>): Promise<SourceCheck> {
     const sourceId = String(row.id);
     const name = String(row.name);
     let rateLimited = false;
@@ -187,7 +197,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
-      const found = await adapter.fetchPostings(config, { fetch: watched });
+      const found = isEmailAlertAdapter(adapter)
+        ? (await mail()).filter((e) => adapter.isFrom(config, e)).flatMap((e) => adapter.parseEmail(config, e))
+        : await adapter.fetchPostings(config, { fetch: watched, mail });
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
         const fresh = found.filter((p) => storePosting(db, sourceId, p, startedAt)).length;
@@ -285,8 +297,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
       options.onStart?.(rows.length);
+      const mail = mailboxRead();
       const sources = await Promise.all(rows.map(async (r) => {
-        const result = await checkOne(r, startedAt);
+        const result = await checkOne(r, startedAt, mail);
         options.onSourceChecked?.(result);
         return result;
       }));
@@ -296,7 +309,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async checkSource(sourceId) {
       const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ?").get(sourceId);
       if (!row) throw new Error(`No source "${sourceId}"`);
-      return checkOne(row, clock.now().toISOString());
+      return checkOne(row, clock.now().toISOString(), mailboxRead());
     },
 
     async sourceHealth() {

@@ -3,7 +3,7 @@
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
-import { createEngine, type EngineDeps, type Clock, type Timers } from "../src/index.ts";
+import { createEngine, type EngineDeps, type Clock, type Timers, type MailReader } from "../src/index.ts";
 
 const fixturesDir = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
@@ -68,6 +68,41 @@ export function fixtureFetch(routes: Record<string, string> = {}): typeof fetch 
     if (!fixture) throw new Error(`fixtureFetch: no fixture for ${url}`);
     return new Response(loadFixture(fixture), { status: 200 });
   };
+}
+
+export type AlertEmail = Awaited<ReturnType<MailReader["fetchSince"]>>[number];
+
+/**
+ * A job mailbox held in memory. `deliver` puts an email in it; `fail` makes every read throw
+ * (an expired app password, say) until `recover`. Reads return the emails received since the asked time.
+ */
+export interface FakeMailbox extends MailReader {
+  deliver(email: AlertEmail): void;
+  fail(err: Error): void;
+  recover(): void;
+  reads: Date[];
+}
+
+export function fakeMailbox(): FakeMailbox {
+  const emails: AlertEmail[] = [];
+  let failure: Error | null = null;
+  const reads: Date[] = [];
+  return {
+    reads,
+    deliver: (email) => { emails.push(email); },
+    fail: (err) => { failure = err; },
+    recover: () => { failure = null; },
+    async fetchSince(since) {
+      reads.push(since);
+      if (failure) throw failure;
+      return emails.filter((e) => e.receivedAt.getTime() >= since.getTime());
+    },
+  };
+}
+
+/** An alert email whose HTML body is a fixture in test/fixtures (synthetic, no personal data). */
+export function alertEmail(fixture: string, fields: { id: string; from: string; subject: string; receivedAt: string }): AlertEmail {
+  return { ...fields, receivedAt: new Date(fields.receivedAt), html: loadFixture(fixture), text: "" };
 }
 
 export function createTestEngine(overrides: Partial<EngineDeps> = {}) {
