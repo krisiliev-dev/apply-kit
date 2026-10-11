@@ -3,7 +3,7 @@ export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
   Decision, JobState, PassReason, PassInput,
-  ReadingState, ReadResult, JobDetail, BudgetInfo, AddSourceOptions, RemovalPreview,
+  ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview,
 } from "./engine.ts";
 export { sourceRemovedHow } from "./engine.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";

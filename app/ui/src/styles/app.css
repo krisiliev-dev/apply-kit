@@ -150,7 +150,11 @@
 .posting { display: grid; gap: var(--s-1); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small); min-width: 0 }
 .posting:first-child { border-top: 0; padding-top: 0 }
 .posting .name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere }
+.posting.target { border-left: 3px solid var(--action); padding-left: var(--s-4); padding-top: var(--s-4); background: color-mix(in srgb, var(--met-soft) 45%, transparent); border-radius: 0 var(--r-small) var(--r-small) 0 }
+.posting .note { color: var(--ink-2); font-size: inherit; margin-top: 0; max-width: none }
+.posting .row { gap: var(--s-2) }
 .posting .acts { margin-top: var(--s-2); margin-left: calc(-1 * var(--s-4)) }
+.posting.target .acts { margin-left: calc(-1 * var(--s-3)) }
 .ask-panel { border-left: 4px solid var(--bloom) }
 .ask-panel fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
 .ask-panel legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }

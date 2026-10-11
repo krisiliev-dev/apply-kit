@@ -90,6 +90,8 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
   });
   app.post("/api/sources/:id/remove", (c) => onSource(c, (id) => engine.removeSource(id)));
 
+  // One Job with its Postings (target marked) and its reading. A merged-away id answers with the
+  // Job it lives in now (check the returned id).
   app.get("/api/jobs/:id", async (c) => {
     const job = await engine.getJob(c.req.param("id"));
     return job ? c.json(job) : c.json({ error: "No such job" }, 404);
@@ -126,6 +128,9 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     return c.json(await engine.undo(c.req.param("id"), ids));
   });
 
+  app.post("/api/jobs/:id/target", (c) => withPosting(c, (jobId, postingId) => engine.setTarget(jobId, postingId)));
+  app.post("/api/jobs/:id/split", (c) => withPosting(c, (jobId, postingId) => engine.splitPosting(jobId, postingId)));
+
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
   // The built UI (pnpm start). In dev, Vite serves the UI and proxies /api here.
@@ -157,6 +162,17 @@ async function onSource(c: Context, act: (sourceId: string) => Promise<unknown>)
     return c.json(await act(c.req.param("id")!));
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : String(err) }, 404);
+  }
+}
+
+async function withPosting(c: Context, act: (jobId: string, postingId: string) => Promise<unknown>) {
+  const body = await jsonBody(c);
+  if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+  if (typeof body.postingId !== "string") return c.json({ error: "postingId must be a posting id" }, 400);
+  try {
+    return c.json(await act(c.req.param("id")!, body.postingId));
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
   }
 }
 

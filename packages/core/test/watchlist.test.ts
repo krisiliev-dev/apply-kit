@@ -1,37 +1,28 @@
 // Pausing and removing Sources: pause stops checks and closes nothing; removal closes only the Jobs
 // no other Source covers, says so beforehand, and can be undone.
 import { describe, expect, it } from "vitest";
-import type { DatabaseSync } from "node:sqlite";
-import { createTestEngine } from "./harness.ts";
+import { createTestEngine, loadFixture } from "./harness.ts";
 import { routedFetch } from "./http.ts";
 
 const board = (b: string) => `https://boards-api.greenhouse.io/v1/boards/${b}/jobs?content=true`;
 
 /**
- * Stands in for merging (#9) until it lands: moves a Posting into another Job, so that Job is
- * covered by two Sources.
- */
-function mergeInto(db: DatabaseSync, keepJobId: string, dropJobId: string) {
-  db.prepare("UPDATE posting SET job_id = ? WHERE job_id = ?").run(keepJobId, dropJobId);
-  db.prepare("DELETE FROM job WHERE id = ?").run(dropJobId);
-}
-
-/**
- * Two Greenhouse Sources listing the same three Postings. Payhawk's Associate Product Manager is
- * also covered by the second Source; Support is saved; Account Executive is passed.
+ * Two Greenhouse Sources. Payhawk lists three Postings; the mirror lists only the Associate Product
+ * Manager, which merges into Payhawk's Job, so that Job is covered by both. Support is saved;
+ * Account Executive is passed.
  */
 async function twoSources() {
+  const payhawkBoard = JSON.parse(loadFixture("greenhouse-payhawkio.json")) as { jobs: { title: string }[]; meta: unknown };
+  const mirrorBoard = { ...payhawkBoard, jobs: payhawkBoard.jobs.filter((j) => j.title.trim() === "Associate Product Manager") };
   const http = routedFetch((req) =>
-    req.url === board("payhawkio") || req.url === board("payhawkmirror") ? { fixture: "greenhouse-payhawkio.json" } : undefined);
+    req.url === board("payhawkio") ? { json: payhawkBoard } : req.url === board("payhawkmirror") ? { json: mirrorBoard } : undefined);
   const t = createTestEngine({ fetch: http.fetch });
   const payhawk = await t.engine.addSource({ kind: "greenhouse", config: "payhawkio", name: "Payhawk" });
   const mirror = await t.engine.addSource({ kind: "greenhouse", config: "payhawkmirror", name: "Payhawk mirror" });
   await t.engine.checkAll();
   const ids = await jobIds(t.engine);
-  mergeInto(t.deps.db as DatabaseSync, ids["payhawkio:Associate Product Manager"]!, ids["payhawkmirror:Associate Product Manager"]!);
   await t.engine.save([ids["payhawkio:Customer Support Specialist"]!]);
   await t.engine.pass([ids["payhawkio:Account Executive"]!], { reason: "skills-gap" });
-  // Only the APM job is merged; the mirror's own Support and AE stay separate jobs.
   return { ...t, http, payhawk, mirror, ids };
 }
 
@@ -90,7 +81,6 @@ describe("removing a Source", () => {
   });
   it("undoing a removal that closed nothing still brings the Source back", async () => {
     const { engine, mirror } = await twoSources();
-    await engine.pass((await engine.queryFeed({ view: "open" })).jobs.filter((j) => j.id.includes("payhawkmirror")).map((j) => j.id));
     const removal = await engine.removeSource(mirror.id);
     expect(removal.decision.jobIds).toEqual([]);
 

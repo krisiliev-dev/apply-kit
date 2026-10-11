@@ -117,6 +117,22 @@ const migrations: string[] = [
      error TEXT,
      emails INTEGER
    );`,
+  // #9: merging Postings into Jobs. Each Posting carries its match key (normalised company and title)
+  // and why it joined its Job. A Job merged into another keeps its row (state and decisions intact)
+  // and points at the Job that absorbed it, so a split can bring it back. Kris's chosen target
+  // posting is kept on the Job; splits are remembered as pairs of Postings that never merge again.
+  `ALTER TABLE posting ADD COLUMN match_key TEXT;
+   ALTER TABLE posting ADD COLUMN merge_reason TEXT;
+   CREATE INDEX posting_match ON posting(match_key);
+   CREATE INDEX posting_url ON posting(url);
+   ALTER TABLE job ADD COLUMN merged_into TEXT REFERENCES job(id);
+   ALTER TABLE job ADD COLUMN target_posting_id TEXT REFERENCES posting(id);
+   CREATE TABLE posting_split (
+     a TEXT NOT NULL REFERENCES posting(id),
+     b TEXT NOT NULL REFERENCES posting(id),
+     created_at TEXT NOT NULL,
+     PRIMARY KEY (a, b)
+   );`,
   // #8: pausing and removing Sources. Removal is a soft delete, so its Postings keep their Source
   // and undoing the removal (the Decision that closed its Jobs) brings it back.
   `ALTER TABLE source ADD COLUMN paused_at TEXT;
