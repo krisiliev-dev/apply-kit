@@ -1,11 +1,12 @@
 // The Job page (hi-fi: docs/design/hifi/job.html): Fit check area, requirements with evidence,
-// key facts with "Show where", low-confidence facts for Kris to confirm, and the reading,
-// couldn't-read and unscreened states.
+// key facts with "Show where", low-confidence facts for Kris to confirm, the reading,
+// couldn't-read and unscreened states, and the Postings merged into the Job (target, split).
 import type { FactAnswer, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { confirmFact, fetchJob, fetchSources, readJob } from "../api.ts";
 import { Chevron, Icon } from "../icons.tsx";
 import { AskChip, StatusChip } from "../requirements.tsx";
+import { PostingsPanel } from "./PostingsPanel.tsx";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; job: JobDetail };
 
@@ -26,7 +27,11 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
   useEffect(() => {
     const ctrl = new AbortController();
     fetchJob(id, ctrl.signal)
-      .then((job) => setLoad({ state: "ready", job }))
+      .then((job) => {
+        setLoad({ state: "ready", job });
+        // A Job merged into another lives on under that Job's id.
+        if (job.id !== id) window.history.replaceState(null, "", `/jobs/${encodeURIComponent(job.id)}`);
+      })
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return;
         const m = message(err);
@@ -127,7 +132,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         </div>
         <div className="col side">
           <Decide job={job} />
-          <Postings job={job} />
+          <PostingsPanel job={job} onChanged={answered} />
         </div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">{said}</p>
@@ -277,7 +282,7 @@ function Quote({ source }: { source: FactSource }) {
 function KeyFacts({ facts }: { facts: KeyFact[] }) {
   return (
     <div className="panel o3">
-      <div className="sec-head"><h2>Key facts</h2><span className="meta">From the posting. Each one shows the line it came from.</span></div>
+      <div className="sec-head"><h2>Key facts</h2><span className="meta">From the target posting. Each one shows the line it came from.</span></div>
       <dl className="facts">{facts.map((f) => <Fact key={f.key} fact={f} />)}</dl>
     </div>
   );
@@ -378,25 +383,6 @@ function Decide({ job }: { job: JobDetail }) {
       <button className="btn primary" type="button" disabled aria-describedby="prep-why">Prepare package</button>
       <p className="why-off" id="prep-why">{why}</p>
       <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
-    </div>
-  );
-}
-
-function Postings({ job }: { job: JobDetail }) {
-  return (
-    <div className="panel o4">
-      <div className="sec-head"><h2>Postings</h2><span className="meta">{job.postings.length}</span></div>
-      <div className="postings">
-        {job.postings.map((p) => (
-          <div className="posting" key={p.id}>
-            <span className="name">{p.source}</span>
-            <span className="meta">First seen {new Date(p.firstSeenAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>
-            <div className="row acts">
-              <a className="btn ghost sm" href={p.url} target="_blank" rel="noopener noreferrer">Open<span className="sr-only"> the {p.source} posting</span><span aria-hidden="true"> ↗</span></a>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

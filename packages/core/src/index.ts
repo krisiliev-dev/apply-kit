@@ -3,7 +3,7 @@ export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
   Decision, JobState, PassReason, PassInput,
-  ReadingState, ReadResult, JobDetail, BudgetInfo,
+  ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo,
 } from "./engine.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {

@@ -283,7 +283,9 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         <a className="t" href={jobPage(job.id)} tabIndex={tab}>{job.title}</a>
         <span className="co">{job.company}</span>
         {showSavedChip && job.state === "saved" && <span className="chip met saved-chip">Saved</span>}
-        {job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
+        {job.siteCount > 1
+          ? <span className="meta"> · on {job.siteCount} sites</span>
+          : job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
         <span className="narrow meta">{where} · {salary} · {posted}</span>
         <div className="narrow"><RowChips job={job} /></div>
         <div className="row-acts">
