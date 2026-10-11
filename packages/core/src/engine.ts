@@ -102,6 +102,8 @@ export interface SourceHealth {
   id: string;
   name: string;
   kind: string;
+  /** The Source type's name as people write it ("Lever", "SmartRecruiters"). */
+  typeLabel: string;
   category: SourceCategory;
   status: SourceStatus;
   /** First failed Check in the current run of failures; null unless failing. */
@@ -143,6 +145,9 @@ const historyLength = 14;
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
 
+/** Sent with every Source request so hosts can see who is asking. */
+const userAgent = "apply-kit/0.1 (personal job search; https://github.com/krisiliev-dev/apply-kit)";
+
 const viewStates: Record<FeedView, string[]> = {
   new: ["new"],
   saved: ["saved"],
@@ -154,6 +159,24 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
 
+  // Polite polling: one request at a time per host, across every Source and Check, spaced by the
+  // Source type's crawl delay (Lever asks for 1 s).
+  const hosts = new Map<string, { tail: Promise<unknown>; lastStartMs: number }>();
+  const sleep = (ms: number) => (clock.sleep ? clock.sleep(ms) : new Promise<void>((r) => setTimeout(r, ms)));
+  function politely(url: string, gapMs: number, send: () => Promise<Response>): Promise<Response> {
+    const host = new URL(url).host;
+    const h = hosts.get(host) ?? { tail: Promise.resolve(), lastStartMs: -Infinity };
+    hosts.set(host, h);
+    const run = h.tail.then(async () => {
+      const wait = h.lastStartMs + gapMs - clock.now().getTime();
+      if (wait > 0) await sleep(wait);
+      h.lastStartMs = clock.now().getTime();
+      return send();
+    });
+    h.tail = run.catch(() => undefined);
+    return run;
+  }
+
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
   const countStates = (states: string[]) =>
     count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
@@ -163,10 +186,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const name = String(row.name);
     let rateLimited = false;
     let timedOut = false;
+    const gapMs = adapters[String(row.kind)]?.crawlDelayMs ?? 0;
     // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
     const watched: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const headers = new Headers(init?.headers);
+      if (!headers.has("user-agent")) headers.set("user-agent", userAgent);
       try {
-        const res = await deps.fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) });
+        const res = await politely(url, gapMs, () =>
+          deps.fetch(input, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) }));
         if (res.status === 429) rateLimited = true;
         return res;
       } catch (err) {
@@ -217,7 +245,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
        WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
     );
     return {
-      id, name: String(r.name), kind, category: adapters[kind]?.category ?? "ats",
+      id, name: String(r.name), kind, typeLabel: adapters[kind]?.label ?? kind[0]!.toUpperCase() + kind.slice(1),
+      category: adapters[kind]?.category ?? "ats",
       status, failingSince, lastGoodCheckAt, jobsKept, history,
     };
   }

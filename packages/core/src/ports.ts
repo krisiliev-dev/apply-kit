@@ -3,6 +3,8 @@
 
 export interface Clock {
   now(): Date;
+  /** Waits this long (polite gaps between requests). Defaults to a real timer; tests pass fake time. */
+  sleep?(ms: number): Promise<void>;
 }
 
 /**

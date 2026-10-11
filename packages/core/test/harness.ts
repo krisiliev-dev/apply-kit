@@ -13,6 +13,7 @@ export function loadFixture(name: string): string {
 }
 
 export interface FakeClock extends Clock {
+  sleep(ms: number): Promise<void>;
   advance(ms: number): void;
   set(iso: string): void;
 }
@@ -23,6 +24,8 @@ export function fakeClock(startIso = "2026-10-12T07:30:00Z"): FakeClock {
     now: () => new Date(t),
     advance: (ms) => { t += ms; },
     set: (iso) => { t = new Date(iso).getTime(); },
+    // Waiting (polite gaps between requests) passes fake time instantly.
+    sleep: async (ms) => { t += ms; },
   };
 }
 

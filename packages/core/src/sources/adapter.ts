@@ -35,6 +35,13 @@ export interface SourceAdapter<Config = unknown> {
   /** Stored as source.kind; never rename once shipped. */
   readonly kind: string;
   readonly category: SourceCategory;
+  /** The Source type's name as people write it ("SmartRecruiters"); defaults to the kind capitalised. */
+  readonly label?: string;
+  /**
+   * Minimum gap between two requests to this Source type's host, across all its Sources (the host's
+   * robots.txt Crawl-delay, e.g. Lever's 1 s). The engine already sends one request at a time per host.
+   */
+  readonly crawlDelayMs?: number;
   /**
    * Validates config and returns it normalised. Accepts the adapter's config object or a
    * shorthand string (for Greenhouse, the board token). Throws an Error with a readable message.
