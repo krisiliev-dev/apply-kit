@@ -14,6 +14,7 @@ import { devbg } from "./devbg.ts";
 import { jooble } from "./jooble.ts";
 import { reed } from "./reed.ts";
 import { eures } from "./eures.ts";
+import { capture } from "./capture.ts";
 
 /** Every Source type the engine can check, by kind. New adapters register here. */
 export const adapters: Record<string, SourceAdapter<unknown>> = {
@@ -32,6 +33,7 @@ export const adapters: Record<string, SourceAdapter<unknown>> = {
   [jooble.kind]: jooble as SourceAdapter<unknown>,
   [reed.kind]: reed as SourceAdapter<unknown>,
   [eures.kind]: eures as SourceAdapter<unknown>,
+  [capture.kind]: capture as SourceAdapter<unknown>,
 };
 
 export function adapterFor(kind: string): SourceAdapter<unknown> {

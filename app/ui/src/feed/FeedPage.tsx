@@ -6,6 +6,7 @@ import { PassedClosed } from "./PassedClosed.tsx";
 import { HiddenPile } from "./HiddenPile.tsx";
 import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
 import { useToaster } from "./toast.tsx";
+import { PasteLink } from "./PasteLink.tsx";
 import { FailedSourceBanner, MailboxBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
@@ -332,6 +333,7 @@ function Toolbar({ feed, view, onView, options, onOptions }: {
           {ranking.learnedAdjustments === 0 ? "Ranking: nothing learned yet" : `Ranking: ${ranking.learnedAdjustments} learned adjustments`}
         </span>
         {ranked && <SortMenu sort={options.sort} onSort={(sort) => onOptions({ ...options, sort })} />}
+        {!feed.firstRun && <AddJobMenu />}
       </span>
     </div>
   );
@@ -383,7 +385,6 @@ function useFitHint(): [boolean, () => void] {
 }
 
 function FirstRun() {
-  const [note, setNote] = useState("");
   return (
     <div className="empty">
       <svg viewBox="0 0 120 48" width="120" height="48" aria-hidden="true"><path d="M2 46 32 12l18 20 14-14 26 28z" fill="var(--met-soft)" stroke="var(--action)" strokeWidth="2" strokeLinejoin="round" /><circle cx="96" cy="10" r="5" fill="var(--bloom)" /></svg>
@@ -393,18 +394,9 @@ function FirstRun() {
         <a className="btn primary" href="/settings/sources">Choose companies</a>
         <a className="btn" href="/settings/mailbox">Connect mailbox</a>
       </div>
-      <form
-        className="field"
-        style={{ width: "min(460px, 100%)" }}
-        onSubmit={(e) => { e.preventDefault(); setNote("Adding a job from a link isn't available yet."); }}
-      >
-        <label htmlFor="paste-job">Or start with one job</label>
-        <div className="row" style={{ flexWrap: "nowrap" }}>
-          <input className="input" id="paste-job" name="job-link" type="url" inputMode="url" autoComplete="off" spellCheck={false} placeholder="Paste a job link…" />
-          <button className="btn" type="submit">Add</button>
-        </div>
-        <p className="meta" role="status">{note}</p>
-      </form>
+      <div className="paste-first">
+        <PasteLink label="Or start with one job" />
+      </div>
     </div>
   );
 }
@@ -415,4 +407,31 @@ function initialView(): FeedView {
   } catch {
     return "new";
   }
+}
+
+/** The toolbar's "Add job": the paste-a-link field in a popover. Escape or a click elsewhere closes it. */
+function AddJobMenu() {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const wrap = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  return (
+    <span
+      className="pop-wrap"
+      ref={wrap}
+      onKeyDown={(e) => { if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); wrap.current?.querySelector<HTMLElement>("button")?.focus(); } }}
+    >
+      <button className="filter" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        Add job<span aria-hidden="true"> ▾</span>
+      </button>
+      <span className="pop end-align add-job-pop" id={id} hidden={!open}>
+        {open && <PasteLink label="Paste a job link" autoFocus />}
+      </span>
+    </span>
+  );
 }

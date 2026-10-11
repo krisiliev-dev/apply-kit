@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, Scheduler } from "@apply-kit/core";
+import type { DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
@@ -117,6 +117,26 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
     }
+  });
+
+  // "Paste a job link": { link, pasted?: { title, company?, location?, text } }. Answers with the
+  // outcome: added, existing or merged (open jobId), invalid, or unreadable (with the link kept).
+  app.post("/api/jobs/link", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    if (typeof body.link !== "string" || !body.link.trim()) return c.json({ error: "Paste a link to the job" }, 400);
+    const p = body.pasted;
+    let pasted: PastedPosting | undefined;
+    if (p !== undefined) {
+      const o = (p && typeof p === "object" ? p : {}) as Record<string, unknown>;
+      const text = typeof o.text === "string" ? o.text.trim() : "";
+      const title = typeof o.title === "string" ? o.title.trim() : "";
+      if (!text || !title) return c.json({ error: "A pasted job needs its title and text" }, 400);
+      const opt = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+      pasted = { text, title, company: opt(o.company), location: opt(o.location) };
+    }
+    const result = await engine.addJobLink(body.link, pasted);
+    return c.json(result, result.outcome === "added" || result.outcome === "merged" ? 201 : 200);
   });
 
   // Triage. Each answers with the Decision (or the Jobs restored, for undo).

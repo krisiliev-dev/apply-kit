@@ -233,3 +233,11 @@ h1[tabindex="-1"]:focus { outline: none }
 .settings-form .err { color: var(--gap); font-size: var(--fs-small) }
 .rule-changes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }
 .rule-changes li { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: baseline }
+/* Paste a job link (first run and the toolbar's Add job) */
+.paste-first { width: min(460px, 100%) }
+.paste-link .field .err { font-size: var(--fs-small) }
+.paste-text textarea.input { min-height: calc(var(--s-10) * 3); resize: vertical; line-height: var(--lh-body) }
+.paste-pair { flex-wrap: wrap; gap: var(--s-4) }
+.paste-pair .field { flex: 1 1 180px }
+.add-job-pop { width: min(520px, calc(100vw - 2 * var(--s-5))); padding: var(--s-5); gap: var(--s-4) }
+.add-job-pop .paste-first { width: 100% }
