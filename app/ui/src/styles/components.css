@@ -1,4 +1,4 @@
-/* apply-kit components (Vitosha). Requires tokens.css. Used by hi-fi screens and, later, the app UI. */
+/* apply-kit components (Vitosha). Requires tokens.css. Single copy used by the app UI and the hi-fi screens in docs/design/hifi. */
 * { box-sizing: border-box }
 [hidden] { display: none !important }
 html, body { margin: 0 }

@@ -1,4 +1,4 @@
-/* apply-kit tokens, direction "Vitosha". Mirrors tokens.json; change both together. */
+/* apply-kit tokens, direction "Vitosha". Mirrors docs/design/tokens.json; change both together. Single copy used by the app UI and docs/design. */
 :root {
   /* colour, light */
   --ground: #edf1ee; --surface: #ffffff; --surface-sunken: #e1e8e3;

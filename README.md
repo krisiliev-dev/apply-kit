@@ -1,22 +1,44 @@
 # apply-kit
 
-A personal toolkit for applying to jobs. It has three goals:
+A personal tool that finds jobs, prepares tailored applications, fills application portals and tracks outcomes for one job seeker. It runs entirely on your Mac: a small local service with the UI in a browser tab, and all data in one SQLite file.
 
-1. **Generate and tailor CVs** (and cover letters) for each role.
-2. **Apply to jobs** with as little repetitive work as possible.
-3. **Discover jobs** automatically from job boards, ATS feeds and alerts.
+The first feature being built is **Discover**: one trustworthy Feed of every relevant job (spec: GitHub issue #1). The old prototypes (`cv-maker/`, `autofill-extension/`) live on in git history and the `archive-2026-10` tag.
 
-## Status: archive snapshot
+## Layout
 
-This commit is an **archive** of the earlier prototypes. A new project will replace these files, built design-first. Git history keeps this snapshot for reference.
+| Path | What |
+|---|---|
+| `app/` | Local service: Hono API (and later the scheduler, mail reader and PDF), in `app/src/` |
+| `app/ui/` | React + Vite UI. `app/ui/src/styles/tokens.css` and `components.css` are the design system's single copy |
+| `packages/core/` | Discovery engine and domain rules. Its dependencies (fetch, clock, database, AI extractor, mail reader) are injected |
+| `extension/` | Chrome-first WXT extension (placeholder for now) |
+| `docs/` | Product, design, architecture ([ARCHITECTURE.md](docs/ARCHITECTURE.md)), ADRs, research |
+| `data` | Gitignored shortcut to `~/Library/Application Support/apply-kit`, where the database lives |
 
-| Part | Path | Goals | State |
-|---|---|---|---|
-| CV-maker web app | `cv-maker/` | 1, 3 (partly 2) | Working local-first Next.js 16 app: canvas CV editor + AI copilot, tailoring, cover letters, CV evaluation ("recruiter eye", six-second test, archetypes), application tracker, follow-ups, career advisor, discovery queue (Greenhouse/Lever/Ashby/SmartRecruiters/Workday/dev.bg/HN/RSS/Reed/Jooble/EURES/…), email-alert ingestion, MCP server, capture extension. Doesn't submit applications. |
-| Autofill extension | `autofill-extension/` | 2, 3 | Chrome MV3 extension (Vite + React) that learns your answers on application forms and suggests them later; pairs with CV-maker. Never auto-submits. |
-| Research notes | `docs/research/` | all | The previous agent's findings: job-source landscape, ToS/scraping limits (LinkedIn, jobs.bg), free job APIs, run setup, no-personal-data rule. |
+## Setup
+
+Needs Node 22 (`nvm use` reads `.nvmrc`) and pnpm.
+
+```sh
+pnpm install
+pnpm run setup:data      # creates the Application Support folder and the `data` shortcut
+cp .env.example .env     # then fill in the settings you need (names only in the example)
+```
+
+Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `pnpm start` | Builds the UI and starts the service; open http://localhost:4310 (or your `PORT`) |
+| `pnpm dev` | Service with reload plus the Vite dev server; open http://localhost:5173 (it proxies `/api` to the service) |
+| `pnpm test` | Runs the tests (Vitest) |
+| `pnpm lint` | ESLint across the workspace |
+| `pnpm typecheck` | TypeScript project build, no output files |
 
 ## Rules carried forward
 
-- Never commit real CVs, profile data or secrets. Personal data stays local (`.gitignore` covers `.env*`, PDFs/DOCX/Pages and personal folders).
+- Never commit real CVs, profile data or secrets. Personal data stays local (`.gitignore` covers `.env*`, PDFs/DOCX/Pages, personal folders and `data`).
 - No automation that drives authenticated LinkedIn/jobs.bg sessions or defeats bot protection. Use official APIs, email alerts and user-driven capture instead.
+- The app drafts and pre-fills; you send messages and press Submit.

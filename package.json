@@ -7,7 +7,7 @@
     "node": ">=22.13"
   },
   "scripts": {
-    "setup": "node scripts/setup.mjs",
+    "setup:data": "node scripts/setup.mjs",
     "dev": "pnpm --filter @apply-kit/app dev",
     "start": "pnpm --filter @apply-kit/app start",
     "test": "vitest run",

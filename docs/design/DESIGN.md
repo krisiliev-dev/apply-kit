@@ -1,6 +1,6 @@
 # apply-kit: Design system
 
-Design step 5. Direction **Vitosha**, chosen 2026-10-11 from three directions ([directions.html](directions.html)). Live specimen: [system.html](system.html). Tokens: [tokens.json](tokens.json) (source of truth, W3C DTCG) and [tokens.css](tokens.css) (same values for the app; change both together).
+Design step 5. Direction **Vitosha**, chosen 2026-10-11 from three directions ([directions.html](directions.html)). Live specimen: [system.html](system.html). Tokens: [tokens.json](tokens.json) (source of truth, W3C DTCG) and [tokens.css](../../app/ui/src/styles/tokens.css) (same values for the app; change both together). Shared component styles: [components.css](../../app/ui/src/styles/components.css). Both CSS files moved into the UI package on 2026-10-11 so the app and the hi-fi screens use one copy.
 
 ## Intent
 
