@@ -1,0 +1,286 @@
+<title>apply-kit Visual Directions</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,500;6..72,600&family=Hanken+Grotesk:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: neutral board; three self-contained direction panels, each with its own tokens, fonts and light/dark values */
+:root {
+  --board: #e9eaec; --board-ink: #23262b; --board-ink-2: #5d636c; --board-line: #cfd2d6;
+  --sys: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --board: #111316; --board-ink: #e6e8eb; --board-ink-2: #9aa1aa; --board-line: #2c3036; color-scheme: dark } }
+:root[data-theme="dark"] { --board: #111316; --board-ink: #e6e8eb; --board-ink-2: #9aa1aa; --board-line: #2c3036; color-scheme: dark }
+
+* { box-sizing: border-box }
+body { background: var(--board); color: var(--board-ink); font-family: var(--sys); font-size: 15px; line-height: 1.5; padding-inline: 16px; padding-block: 24px 48px }
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 28px }
+.intro h1 { margin: 0; font-size: 1.5rem; text-wrap: balance }
+.intro p { margin: 4px 0 0; color: var(--board-ink-2); max-width: 70ch }
+p { margin: 0 }
+:focus-visible { outline: 2px solid var(--board-ink); outline-offset: 2px }
+
+/* ---------- direction panel scaffold (tokens per direction below) ---------- */
+.dir { background: var(--ground); color: var(--ink); border-radius: 14px; overflow: hidden; border: 1px solid var(--board-line); font-family: var(--body); }
+.dir-head { padding: 20px 22px 16px; display: grid; gap: 6px; border-bottom: 1px solid var(--rule) }
+.dir-head h2 { margin: 0; font-family: var(--display); font-weight: var(--display-w); font-size: 1.7rem; letter-spacing: var(--display-track); line-height: 1.1 }
+.dir-head .feel { color: var(--ink-2); max-width: 68ch }
+.dir-body { padding: 20px 22px 24px; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 22px; align-items: start }
+@media (max-width: 900px) { .dir-body { grid-template-columns: minmax(0, 1fr) } }
+.col { display: grid; gap: 16px; min-width: 0 }
+.cap { font-size: 0.78rem; color: var(--ink-3) }
+
+.swatches { display: flex; flex-wrap: wrap; gap: 8px }
+.sw { display: grid; gap: 4px; font-size: 0.72rem; color: var(--ink-2); width: 74px }
+.sw i { display: block; height: 40px; border-radius: var(--r-sm); border: 1px solid var(--rule) }
+
+.surface { background: var(--sheet); border: 1px solid var(--rule); border-radius: var(--r-md); padding: 14px 16px; display: grid; gap: 12px; min-width: 0; box-shadow: var(--lift) }
+.h1 { font-family: var(--display); font-weight: var(--display-w); font-size: 1.55rem; letter-spacing: var(--display-track); line-height: 1.15 }
+.meta { color: var(--ink-2); font-size: 0.88rem }
+
+.scroll { overflow-x: auto }
+table { border-collapse: collapse; width: 100%; font-size: 0.88rem; font-variant-numeric: tabular-nums }
+th { text-align: left; font-weight: 600; font-size: 0.78rem; color: var(--ink-3); padding: 6px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap }
+td { padding: 9px 8px; border-bottom: 1px solid var(--rule); vertical-align: top }
+td b { font-weight: 600 }
+.why { font-size: 0.8rem; color: var(--ink-3) }
+.fit { font-family: var(--num); font-weight: 600; font-size: 1.05rem }
+
+.chip { display: inline-block; padding: 1px 8px; border-radius: var(--r-chip); font-size: 0.8rem; white-space: nowrap; margin: 0 4px 4px 0 }
+.chip.met { background: var(--met-bg); color: var(--met) }
+.chip.part { background: var(--part-bg); color: var(--part) }
+.chip.gap { background: var(--gap-bg); color: var(--gap) }
+
+.btns { display: flex; flex-wrap: wrap; gap: 8px }
+.btn { font: inherit; font-weight: 600; font-size: 0.9rem; border-radius: var(--r-btn); padding: 7px 14px; border: 1px solid var(--rule); background: var(--sheet); color: var(--ink); cursor: pointer }
+.btn.primary { background: var(--action); color: var(--on-action); border-color: var(--action) }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2) }
+
+.status { display: flex; flex-wrap: wrap; gap: 6px }
+.st { font-size: 0.8rem; font-weight: 600; padding: 2px 9px; border-radius: var(--r-chip); border: 1px solid var(--rule); color: var(--ink-2); background: var(--sheet) }
+.st.applied { color: var(--ink) }
+.st.screening { color: var(--action); border-color: var(--action) }
+.st.interviewing { background: var(--action); color: var(--on-action); border-color: var(--action) }
+.st.offer { background: var(--met-bg); color: var(--met); border-color: transparent }
+.st.rejected { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--ink-3) }
+
+.needs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 12px; border-radius: var(--r-md); background: var(--needs-bg); border: var(--needs-border) }
+.needs b { font-weight: 600 }
+
+/* A4 sheet — the CV template's direction */
+.a4 { background: #ffffff; color: #1b1d21; aspect-ratio: 1 / 1.414; max-width: 100%; border: 1px solid var(--rule); border-radius: 3px; padding: 7% 8%; display: grid; align-content: start; gap: 10px; font-family: var(--cv-body); font-size: 0.66rem; line-height: 1.45; box-shadow: var(--lift) }
+.a4 .nm { font-family: var(--cv-display); font-weight: var(--cv-display-w); font-size: 1.45rem; color: var(--cv-accent); line-height: 1.1; letter-spacing: var(--display-track) }
+.a4 .ct { color: #555b63 }
+.a4 .sec { font-family: var(--cv-display); font-weight: 600; font-size: 0.82rem; color: var(--cv-accent); border-bottom: 1px solid #d9dce0; padding-bottom: 2px; margin-top: 4px }
+.a4 .job { display: flex; justify-content: space-between; gap: 8px; font-weight: 600 }
+.a4 .job span { font-weight: 400; color: #555b63; white-space: nowrap }
+.a4 ul { margin: 0; padding-left: 14px; display: grid; gap: 2px }
+.a4 .ln { height: 5px; background: #e6e8eb; border-radius: 2px }
+
+/* ---------- A · Letterhead ---------- */
+.dir-a {
+  --ground: #f6f7f5; --sheet: #ffffff; --ink: #1c2433; --ink-2: #566074; --ink-3: #8a93a3; --rule: #dde0e5;
+  --action: #2347c6; --on-action: #ffffff; --mark: #f4dc5a;
+  --met: #2b6a47; --met-bg: #e2efe6; --part: #6b5410; --part-bg: #fbf0bd; --gap: #9c3329; --gap-bg: #f6e0dc;
+  --needs-bg: #fff7cf; --needs-border: 1px solid #ecd57a;
+  --display: "Newsreader", Georgia, "Times New Roman", serif; --display-w: 600; --display-track: -0.01em;
+  --body: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif; --num: "Hanken Grotesk", ui-sans-serif, sans-serif;
+  --r-sm: 4px; --r-md: 6px; --r-btn: 6px; --r-chip: 3px; --lift: 0 1px 0 rgba(28,36,51,.06);
+  --cv-display: "Newsreader", Georgia, serif; --cv-display-w: 600; --cv-body: "Hanken Grotesk", Arial, sans-serif; --cv-accent: #1f3a8a;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dir-a {
+  --ground: #131823; --sheet: #1a2030; --ink: #e7eaf1; --ink-2: #a3acbd; --ink-3: #6f7a8e; --rule: #2b3346;
+  --action: #8aa2ff; --on-action: #0f1424; --met: #9ed3b1; --met-bg: #1d3427; --part: #f1d979; --part-bg: #3b3317; --gap: #f1a99f; --gap-bg: #3d2220;
+  --needs-bg: #2f2a14; --needs-border: 1px solid #5e5222; --lift: none } }
+:root[data-theme="dark"] .dir-a {
+  --ground: #131823; --sheet: #1a2030; --ink: #e7eaf1; --ink-2: #a3acbd; --ink-3: #6f7a8e; --rule: #2b3346;
+  --action: #8aa2ff; --on-action: #0f1424; --met: #9ed3b1; --met-bg: #1d3427; --part: #f1d979; --part-bg: #3b3317; --gap: #f1a99f; --gap-bg: #3d2220;
+  --needs-bg: #2f2a14; --needs-border: 1px solid #5e5222; --lift: none }
+.dir-a .hl { background: linear-gradient(transparent 55%, var(--mark) 55%); padding: 0 2px }
+
+/* ---------- B · Signal board ---------- */
+.dir-b {
+  --ground: #f1f1ee; --sheet: #ffffff; --ink: #16181b; --ink-2: #565b62; --ink-3: #8b9097; --rule: #d6d7d9;
+  --action: #16181b; --on-action: #ffffff; --signal: #e09b12;
+  --met: #1b7451; --met-bg: #dff0e7; --part: #8a5a00; --part-bg: #fbecc7; --gap: #b73c2a; --gap-bg: #f7e1dc;
+  --needs-bg: #ffffff; --needs-border: 1px solid var(--rule);
+  --display: "Barlow Condensed", "Arial Narrow", sans-serif; --display-w: 600; --display-track: 0;
+  --body: "Barlow", ui-sans-serif, system-ui, sans-serif; --num: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --r-sm: 2px; --r-md: 4px; --r-btn: 3px; --r-chip: 2px; --lift: none;
+  --cv-display: "Barlow Condensed", "Arial Narrow", sans-serif; --cv-display-w: 700; --cv-body: "Barlow", Arial, sans-serif; --cv-accent: #16181b;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dir-b {
+  --ground: #121416; --sheet: #1a1d20; --ink: #ecedee; --ink-2: #a5aab1; --ink-3: #6e747c; --rule: #2d3135;
+  --action: #ecedee; --on-action: #121416; --signal: #f2b33d; --met: #8fd3b2; --met-bg: #183126; --part: #f2c86b; --part-bg: #392d12; --gap: #f1a597; --gap-bg: #3b221d;
+  --needs-bg: #1a1d20 } }
+:root[data-theme="dark"] .dir-b {
+  --ground: #121416; --sheet: #1a1d20; --ink: #ecedee; --ink-2: #a5aab1; --ink-3: #6e747c; --rule: #2d3135;
+  --action: #ecedee; --on-action: #121416; --signal: #f2b33d; --met: #8fd3b2; --met-bg: #183126; --part: #f2c86b; --part-bg: #392d12; --gap: #f1a597; --gap-bg: #3b221d;
+  --needs-bg: #1a1d20 }
+.dir-b .needs { border-left: 4px solid var(--signal) }
+.dir-b .lamp { display: inline-flex; gap: 3px; vertical-align: middle; margin-right: 6px }
+.dir-b .lamp i { width: 7px; height: 7px; border-radius: 50%; background: var(--rule) }
+.dir-b .lamp i.on { background: var(--signal) }
+.dir-b .fit { font-size: 1.35rem; line-height: 1 }
+.dir-b .st.interviewing { background: var(--signal); border-color: var(--signal); color: #16181b }
+.dir-b .st.screening { color: var(--ink); border-color: var(--ink) }
+
+/* ---------- C · Vitosha ---------- */
+.dir-c {
+  --ground: #edf1ee; --sheet: #ffffff; --ink: #1d2b25; --ink-2: #566760; --ink-3: #8a9a93; --rule: #d5ddd8;
+  --action: #2c6652; --on-action: #ffffff; --bloom: #b0466a;
+  --met: #2c6652; --met-bg: #e0eee7; --part: #75561a; --part-bg: #f6ecd1; --gap: #a33e46; --gap-bg: #f6e2e3;
+  --needs-bg: #ffffff; --needs-border: 1px solid var(--rule);
+  --display: "Bricolage Grotesque", ui-sans-serif, sans-serif; --display-w: 700; --display-track: -0.02em;
+  --body: "Figtree", ui-sans-serif, system-ui, sans-serif; --num: "Figtree", ui-sans-serif, sans-serif;
+  --r-sm: 8px; --r-md: 12px; --r-btn: 999px; --r-chip: 999px; --lift: 0 1px 2px rgba(29,43,37,.06), 0 4px 14px rgba(29,43,37,.05);
+  --cv-display: "Bricolage Grotesque", Arial, sans-serif; --cv-display-w: 700; --cv-body: "Figtree", Arial, sans-serif; --cv-accent: #24584a;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .dir-c {
+  --ground: #121a17; --sheet: #19231f; --ink: #e5ece8; --ink-2: #a2b3ab; --ink-3: #6d7f77; --rule: #2a3732;
+  --action: #7cc4a8; --on-action: #0f1a16; --bloom: #e889aa; --met: #93d4b9; --met-bg: #1b3129; --part: #ecd08e; --part-bg: #362d16; --gap: #efa3aa; --gap-bg: #3b2226;
+  --needs-bg: #19231f; --lift: none } }
+:root[data-theme="dark"] .dir-c {
+  --ground: #121a17; --sheet: #19231f; --ink: #e5ece8; --ink-2: #a2b3ab; --ink-3: #6d7f77; --rule: #2a3732;
+  --action: #7cc4a8; --on-action: #0f1a16; --bloom: #e889aa; --met: #93d4b9; --met-bg: #1b3129; --part: #ecd08e; --part-bg: #362d16; --gap: #efa3aa; --gap-bg: #3b2226;
+  --needs-bg: #19231f; --lift: none }
+.dir-c .needs::before { content: ""; grid-row: span 2 }
+.dir-c .needs { grid-template-columns: 6px minmax(0, 1fr) auto }
+.dir-c .needs::before { width: 6px; height: 100%; border-radius: 3px; background: var(--bloom) }
+.dir-c .ascent { width: 100%; height: 70px; display: block }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>apply-kit visual directions</h1>
+    <p>Three directions for step 5, each applied to the same pieces of the real app: the feed, buttons, statuses, something that needs you, and the top of the CV. Pick one, or name what you'd take from each. Every direction works in light and dark.</p>
+  </header>
+
+  <!-- A -->
+  <section class="dir dir-a" aria-labelledby="a-h">
+    <div class="dir-head">
+      <h2 id="a-h">A. Letterhead</h2>
+      <p class="feel">A tidy correspondence desk. Cool white paper, blue-black ink, a serif reserved for documents and headings, and a highlighter that marks only what needs you. The CV and the app share one letterhead.</p>
+    </div>
+    <div class="dir-body">
+      <div class="col">
+        <div class="surface">
+          <div><div class="h1">23 new since yesterday</div><p class="meta">143 open jobs · sources all checked at 07:30</p></div>
+          <div class="scroll"><table>
+            <thead><tr><th>Job</th><th>Requirements</th><th>Salary</th><th>Fit</th></tr></thead>
+            <tbody>
+              <tr><td><b>Security Engineer</b><div>Kestrel Payments · Sofia</div><div class="why">2 of 3 requirements met, above your floor</div></td><td><span class="chip met">3+ yrs</span><span class="chip met">SIEM</span><span class="chip part">CISSP pref.</span></td><td>€2,800–3,600</td><td class="fit">91</td></tr>
+              <tr><td><b>Full-stack Developer</b><div>Brightwave · Remote EU</div><div class="why">Every requirement met</div></td><td><span class="chip met">TypeScript</span><span class="chip met">2+ yrs</span></td><td>€3,200–4,200</td><td class="fit">88</td></tr>
+              <tr><td><b>Cloud Security Engineer</b><div>Halden Systems · Remote EU</div><div class="why">One gap you could answer</div></td><td><span class="chip met">AWS</span><span class="chip gap">Kubernetes</span></td><td>€4,000–5,000</td><td class="fit">76</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="needs"><div><b>Follow up with Kestrel Payments</b><div class="meta">Applied 7 days ago. <span class="hl">Draft ready to review.</span></div></div><button class="btn">Review</button></div>
+        <div class="btns"><button class="btn primary">Prepare package</button><button class="btn">Save</button><button class="btn ghost">Pass</button></div>
+        <div class="status"><span class="st applied">Applied</span><span class="st screening">Screening</span><span class="st interviewing">Interviewing</span><span class="st offer">Offer</span><span class="st rejected">Rejected</span></div>
+      </div>
+      <div class="col">
+        <div class="swatches">
+          <div class="sw"><i style="background:var(--ground)"></i>Paper</div><div class="sw"><i style="background:var(--ink)"></i>Ink</div><div class="sw"><i style="background:var(--action)"></i>Postal blue</div><div class="sw"><i style="background:var(--mark)"></i>Highlighter</div><div class="sw"><i style="background:var(--rule)"></i>Rule</div>
+        </div>
+        <div class="a4" aria-label="CV preview in direction A">
+          <div class="nm">Kris Marinov</div>
+          <div class="ct">Security analyst · Sofia · kris@krisiliev.dev · +359 88 000 0000</div>
+          <div class="sec">Experience</div>
+          <div class="job">Junior Security Analyst, Orbital Bank<span>2023 – 2025</span></div>
+          <ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Triaged ~25 alerts a day in a 6-person SOC</li></ul>
+          <div class="ln" style="width:90%"></div><div class="ln" style="width:70%"></div>
+          <div class="sec">Skills</div><div class="ln" style="width:80%"></div>
+        </div>
+        <p class="cap">Newsreader for headings and documents, Hanken Grotesk for the interface. Postal blue for actions; yellow only ever means "needs you".</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- B -->
+  <section class="dir dir-b" aria-labelledby="b-h">
+    <div class="dir-head">
+      <h2 id="b-h">B. Signal board</h2>
+      <p class="feel">An operations board, like the tram departure signs. Condensed type, big tabular numbers, hard edges and high density. Black and white do the work; one amber signal lights up whatever is next or live.</p>
+    </div>
+    <div class="dir-body">
+      <div class="col">
+        <div class="surface">
+          <div><div class="h1">23 new since yesterday</div><p class="meta">143 open jobs · sources all checked at 07:30</p></div>
+          <div class="scroll"><table>
+            <thead><tr><th>Fit</th><th>Job</th><th>Requirements</th><th>Salary</th></tr></thead>
+            <tbody>
+              <tr><td class="fit">91</td><td><b>Security Engineer</b><div>Kestrel Payments · Sofia</div><div class="why">2 of 3 requirements met, above your floor</div></td><td><span class="chip met">3+ yrs</span><span class="chip met">SIEM</span><span class="chip part">CISSP pref.</span></td><td>€2,800–3,600</td></tr>
+              <tr><td class="fit">88</td><td><b>Full-stack Developer</b><div>Brightwave · Remote EU</div><div class="why">Every requirement met</div></td><td><span class="chip met">TypeScript</span><span class="chip met">2+ yrs</span></td><td>€3,200–4,200</td></tr>
+              <tr><td class="fit">76</td><td><b>Cloud Security Engineer</b><div>Halden Systems · Remote EU</div><div class="why">One gap you could answer</div></td><td><span class="chip met">AWS</span><span class="chip gap">Kubernetes</span></td><td>€4,000–5,000</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="needs"><div><b><span class="lamp" aria-hidden="true"><i class="on"></i><i></i><i></i></span>Follow up with Kestrel Payments</b><div class="meta">Applied 7 days ago. Draft ready to review.</div></div><button class="btn">Review</button></div>
+        <div class="btns"><button class="btn primary">Prepare package</button><button class="btn">Save</button><button class="btn ghost">Pass</button></div>
+        <div class="status"><span class="st applied">Applied</span><span class="st screening">Screening</span><span class="st interviewing">Interviewing</span><span class="st offer">Offer</span><span class="st rejected">Rejected</span></div>
+      </div>
+      <div class="col">
+        <div class="swatches">
+          <div class="sw"><i style="background:var(--ground)"></i>Concrete</div><div class="sw"><i style="background:var(--ink)"></i>Board black</div><div class="sw"><i style="background:var(--signal)"></i>Signal amber</div><div class="sw"><i style="background:var(--met)"></i>Go</div><div class="sw"><i style="background:var(--gap)"></i>Stop</div>
+        </div>
+        <div class="a4" aria-label="CV preview in direction B">
+          <div class="nm">KRIS MARINOV</div>
+          <div class="ct">Security analyst · Sofia · kris@krisiliev.dev · +359 88 000 0000</div>
+          <div class="sec">Experience</div>
+          <div class="job">Junior Security Analyst, Orbital Bank<span>2023 – 2025</span></div>
+          <ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Triaged ~25 alerts a day in a 6-person SOC</li></ul>
+          <div class="ln" style="width:90%"></div><div class="ln" style="width:70%"></div>
+          <div class="sec">Skills</div><div class="ln" style="width:80%"></div>
+        </div>
+        <p class="cap">Barlow Condensed for headings and numbers, Barlow for text. Status reads like a signal: amber means live, never decoration.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- C -->
+  <section class="dir dir-c" aria-labelledby="c-h">
+    <div class="dir-head">
+      <h2 id="c-h">C. Vitosha</h2>
+      <p class="feel">Calm and encouraging, for a search that involves rejection. Mountain stone and pine, soft surfaces, a friendly display face. Progress is drawn as an ascent, and a single alpine-pink accent marks what needs you and what went well.</p>
+    </div>
+    <div class="dir-body">
+      <div class="col">
+        <div class="surface">
+          <div><div class="h1">23 new since yesterday</div><p class="meta">143 open jobs · sources all checked at 07:30</p></div>
+          <div class="scroll"><table>
+            <thead><tr><th>Job</th><th>Requirements</th><th>Salary</th><th>Fit</th></tr></thead>
+            <tbody>
+              <tr><td><b>Security Engineer</b><div>Kestrel Payments · Sofia</div><div class="why">2 of 3 requirements met, above your floor</div></td><td><span class="chip met">3+ yrs</span><span class="chip met">SIEM</span><span class="chip part">CISSP pref.</span></td><td>€2,800–3,600</td><td class="fit">91</td></tr>
+              <tr><td><b>Full-stack Developer</b><div>Brightwave · Remote EU</div><div class="why">Every requirement met</div></td><td><span class="chip met">TypeScript</span><span class="chip met">2+ yrs</span></td><td>€3,200–4,200</td><td class="fit">88</td></tr>
+              <tr><td><b>Cloud Security Engineer</b><div>Halden Systems · Remote EU</div><div class="why">One gap you could answer</div></td><td><span class="chip met">AWS</span><span class="chip gap">Kubernetes</span></td><td>€4,000–5,000</td><td class="fit">76</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <div class="needs"><div><b>Follow up with Kestrel Payments</b><div class="meta">Applied 7 days ago. Draft ready to review.</div></div><button class="btn">Review</button></div>
+        <div class="btns"><button class="btn primary">Prepare package</button><button class="btn">Save</button><button class="btn ghost">Pass</button></div>
+        <div class="status"><span class="st applied">Applied</span><span class="st screening">Screening</span><span class="st interviewing">Interviewing</span><span class="st offer">Offer</span><span class="st rejected">Rejected</span></div>
+        <div class="surface">
+          <p class="meta">Applications sent, last 8 weeks: 53</p>
+          <svg class="ascent" viewBox="0 0 320 70" role="img" aria-label="Cumulative applications rising from 3 to 53 over 8 weeks">
+            <polygon points="0,66 40,63 80,58 120,52 160,42 200,35 240,24 280,17 320,4 320,70 0,70" fill="var(--met-bg)"/>
+            <polyline points="0,66 40,63 80,58 120,52 160,42 200,35 240,24 280,17 320,4" fill="none" stroke="var(--action)" stroke-width="2"/>
+            <circle cx="320" cy="4" r="3.5" fill="var(--bloom)"/>
+          </svg>
+        </div>
+      </div>
+      <div class="col">
+        <div class="swatches">
+          <div class="sw"><i style="background:var(--ground)"></i>Stone mist</div><div class="sw"><i style="background:var(--ink)"></i>Pine ink</div><div class="sw"><i style="background:var(--action)"></i>Pine</div><div class="sw"><i style="background:var(--bloom)"></i>Alpine pink</div><div class="sw"><i style="background:var(--rule)"></i>Lichen</div>
+        </div>
+        <div class="a4" aria-label="CV preview in direction C">
+          <div class="nm">Kris Marinov</div>
+          <div class="ct">Security analyst · Sofia · kris@krisiliev.dev · +359 88 000 0000</div>
+          <div class="sec">Experience</div>
+          <div class="job">Junior Security Analyst, Orbital Bank<span>2023 – 2025</span></div>
+          <ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Triaged ~25 alerts a day in a 6-person SOC</li></ul>
+          <div class="ln" style="width:90%"></div><div class="ln" style="width:70%"></div>
+          <div class="sec">Skills</div><div class="ln" style="width:80%"></div>
+        </div>
+        <p class="cap">Bricolage Grotesque for headings, Figtree for text. Rounded, soft surfaces; pink is used only for "needs you" and for wins.</p>
+      </div>
+    </div>
+  </section>
+</div>
