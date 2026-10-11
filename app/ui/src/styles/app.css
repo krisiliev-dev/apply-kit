@@ -54,3 +54,5 @@
 .table-foot { padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-caption); color: var(--ink-3) }
 @media (max-width: 1100px) { .table .c-type { display: none } }
 @media (max-width: 560px) { .table .c-last { display: none } }
+.tile.warn .n svg { color: var(--partly) }
+.tile .n.word { font-size: var(--fs-title) }
