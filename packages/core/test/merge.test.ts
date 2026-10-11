@@ -143,4 +143,139 @@ describe("merging postings into jobs", () => {
     expect(job!.target).toMatchObject({ postingId: "jooble:product|bulgaria:3333333333333333333", chosenBy: "default" });
     expect(job!.target.why).toBe("First seen here: none of the postings is on the company's own page");
   });
+
+  /** Checked once: Payhawk's APM merged from Greenhouse, dev.bg and Jooble. */
+  async function mergedApm() {
+    const t = threeSources([apmCard], [apmJooble]);
+    await t.addAll();
+    await t.engine.checkAll();
+    const [row] = (await t.engine.queryFeed({ view: "new" })).jobs.filter((j) => j.postingCount === 3);
+    return { ...t, apmId: row!.id };
+  }
+
+  const joobleApm = "jooble:product|bulgaria:3333333333333333333";
+
+  it("splitting a Posting off makes it its own Job, and later checks remember the split", async () => {
+    const { engine, apmId } = await mergedApm();
+
+    const result = await engine.splitPosting(apmId, joobleApm);
+    await engine.checkAll();
+
+    expect(result.jobIds).toEqual([apmId, `job:${joobleApm}`]);
+    const feed = await engine.queryFeed({ view: "new" });
+    expect(feed.counts.new).toBe(4);
+    expect((await engine.getJob(apmId))!.postings.map((p) => p.id)).toEqual(["devbg:product-management:570001", "greenhouse:payhawkio:4998241101"]);
+    const splitOff = await engine.getJob(`job:${joobleApm}`);
+    expect(splitOff).toMatchObject({ postingCount: 1, state: "new", title: "Associate Product Manager", company: "Payhawk EOOD" });
+    expect(splitOff!.postings[0]!.mergedBecause).toBeNull();
+  });
+
+  it("the Job keeps Kris's decision after a split; the Posting split off is a job he hasn't judged yet", async () => {
+    const { engine, apmId } = await mergedApm();
+    await engine.pass([apmId], { reason: "salary" });
+
+    await engine.splitPosting(apmId, joobleApm);
+
+    expect((await engine.getJob(apmId))!.state).toBe("passed");
+    expect((await engine.getJob(`job:${joobleApm}`))!.state).toBe("new");
+  });
+
+  it("splitting the Posting a Job was created from moves the others out together", async () => {
+    const { engine, apmId } = await mergedApm();
+    const creator = apmId.slice("job:".length);
+    await engine.save([apmId]);
+
+    const { jobIds: [kept, other] } = await engine.splitPosting(apmId, creator);
+    await engine.checkAll();
+
+    expect(kept).toBe(apmId);
+    expect(await engine.getJob(apmId)).toMatchObject({ postingCount: 1, state: "saved" });
+    const rest = await engine.getJob(other);
+    expect(rest).toMatchObject({ postingCount: 2, state: "new" });
+    expect(rest!.postings.map((p) => p.id)).not.toContain(creator);
+  });
+
+  it("a split clears Kris's target if it moved away, falling back to the company's page", async () => {
+    const { engine, apmId } = await mergedApm();
+    await engine.setTarget(apmId, joobleApm);
+
+    await engine.splitPosting(apmId, joobleApm);
+
+    expect((await engine.getJob(apmId))!.target).toMatchObject({ postingId: "greenhouse:payhawkio:4998241101", chosenBy: "default" });
+  });
+
+  it("refuses to split a Job with one Posting or a Posting that isn't in the Job, and changes nothing", async () => {
+    const { engine, apmId } = await mergedApm();
+    const single = (await engine.queryFeed({ view: "new" })).jobs.find((j) => j.postingCount === 1)!;
+
+    await expect(engine.splitPosting(single.id, single.id.slice(4))).rejects.toThrow(/only one posting/);
+    await expect(engine.splitPosting(apmId, "devbg:product-management:999")).rejects.toThrow(/isn't part of/);
+    expect((await engine.getJob(apmId))!.postingCount).toBe(3);
+  });
+
+  it("a newly found copy of a job Kris already saved joins it and keeps it saved", async () => {
+    const { engine, clock, addAll } = threeSources([apmCard], [apmJooble]);
+    await addAll();
+    await engine.checkSource("greenhouse:payhawkio");
+    const [gh] = (await engine.queryFeed({ view: "new" })).jobs.filter((j) => j.title.startsWith("Associate"));
+    await engine.save([gh!.id]);
+    await clock.advance(60_000);
+
+    await engine.checkAll();
+
+    const saved = await engine.queryFeed({ view: "saved" });
+    expect(saved.jobs).toEqual([expect.objectContaining({ id: gh!.id, postingCount: 3, state: "saved" })]);
+    expect(saved.counts).toMatchObject({ new: 2, saved: 1 });
+  });
+
+  it("when two Jobs Kris decided on turn out to be one, his most recent decision wins, and undoing it restores the earlier one", async () => {
+    // dev.bg first lists the job under a different title, so it starts as a Job of its own,
+    // newer than the Greenhouse one: the older Job keeps its id.
+    let devbgTitle = "APM";
+    const http = routedFetch((r) => {
+      if (r.url === greenhouseBoard) return { fixture: "greenhouse-payhawkio.json" };
+      if (r.url === devbgPage) return new Response(devbgCards([{ ...apmCard, title: devbgTitle }]));
+      return undefined;
+    });
+    const { engine, clock } = createTestEngine({ fetch: http.fetch });
+    await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+    await engine.addSource({ kind: "devbg", config: "product-management" });
+    await engine.checkSource("greenhouse:payhawkio");
+    await clock.advance(60_000);
+    await engine.checkSource("devbg:product-management");
+    const jobs = (await engine.queryFeed({ view: "new" })).jobs;
+    const gh = jobs.find((j) => j.title === "Associate Product Manager")!;
+    const dev = jobs.find((j) => j.title === "APM")!;
+    await engine.save([gh.id]);
+    await clock.advance(60_000);
+    const pass = await engine.pass([dev.id], { reason: "salary" });
+    await clock.advance(60_000);
+
+    devbgTitle = "Associate Product Manager";
+    await engine.checkAll();
+
+    const passed = await engine.queryFeed({ view: "passed" });
+    expect(passed.jobs).toEqual([expect.objectContaining({ id: gh.id, postingCount: 2, state: "passed", passed: expect.objectContaining({ reason: "salary", decisionId: pass.id }) })]);
+    expect(passed.counts).toMatchObject({ new: 2, saved: 0, passed: 1 });
+    expect(await engine.getJob(dev.id)).toMatchObject({ id: gh.id });
+
+    await engine.undo(pass.id);
+
+    expect((await engine.queryFeed({ view: "saved" })).jobs).toEqual([expect.objectContaining({ id: gh.id, state: "saved" })]);
+  });
+
+  it("merges the same way whichever Source answers first", async () => {
+    const order = ["greenhouse:payhawkio", "devbg:product-management", "jooble:product|bulgaria"];
+    const grouped = async (sourceIds: string[]) => {
+      const { engine, addAll } = threeSources([{ ...apmCard, title: "Associate Product Manager (m/f/d)" }], [apmJooble]);
+      await addAll();
+      for (const id of sourceIds) await engine.checkSource(id);
+      return (await engine.queryFeed({ view: "new" })).jobs.map((j) => [j.id, j.postingCount]);
+    };
+
+    const forwards = await grouped(order);
+
+    expect(forwards).toContainEqual(["job:devbg:product-management:570001", 3]);
+    expect(await grouped([...order].reverse())).toEqual(forwards);
+  });
 });
