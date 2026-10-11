@@ -1,0 +1,104 @@
+{
+  "id": "en-security-crypto-security-it-support",
+  "field": "security",
+  "source": {
+    "kind": "lever",
+    "url": "https://jobs.lever.co/crypto/b27075e9-45b8-440f-96a1-cd19326fe8e2",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Security IT Support Engineer",
+    "company": "Crypto",
+    "location": "Sofia, Bulgaria",
+    "text": "At Crypto.com, our dedication to user security is led by our highly experienced Security Team. Comprising an international roster of seasoned cybersecurity experts, our team leads the company's Security, Privacy, and Security Compliance endeavors.\nThe team includes holders of international patents for technologies integrated in our security architecture. Under the stewardship of a distinguished CISO recognized by the Forbes Technology Council and among the Global Top 100 CISOs, our team has consistently championed industry standards, acquiring certifications like ISO27001, ISO27701, ISO22301, PCI:DSS 3.2.1 (Level 1), NIST Tier 4, and SOC 2 Type II, in addition to the MPI License from Singapore MAS. Our Chief Information Security Officer reports directly to the CEO, underscoring the prioritization of security in our organization's hierarchy.\nOur Security Team not only places great emphasis on credentials and expertise but also deeply values hands-on experience, rapid cognition, and dynamic learning. The challenges in the world of crypto are ever-evolving, and as such, our team prides itself on quick adaptability and robust teamwork, ensuring that we stay ahead of potential threats and always safeguard our user base.\nWe're looking for someone who knows IT support inside out and takes security seriously. You'll keep the environment running day to day — endpoints, access, patching, support — while also owning vulnerability management across our devices, servers, and virtual desktops.\nAI is part of how we work now. That means you'll also help us make sure the AI tools our teams are adopting are being used safely. You don't need to be a researcher. You just need to understand the risks and be willing to engage with them.\nResponsibilities\n• IT support: Be the first line of support for the organisation. Resolve issues, hit SLAs, and keep things moving.\n• Endpoint management: Own the full lifecycle of our devices — laptops, desktops, mobiles, and virtual desktops. Deployment, configuration, troubleshooting, all of it.\n• Patch management: Keep endpoints, workstations, cloud servers, and VDI environments up to date. Track what needs patching, get it done, and report on it.\n• Vulnerability management: Run regular vulnerability scans across our environment. Understand what the results mean, prioritise by risk, and drive remediation to closure.\n• Access & identity: Manage user accounts and access rights. Enforce least privilege. Make provisioning and deprovisioning slick and secure.\n• Threat prevention: Help implement and monitor our security controls — endpoint protection, DLP, email security, network controls. Keep an eye on what's happening.\n• Asset management: Know what we have, where it is, and who has it. Keep the inventory accurate.\n• Onboarding & offboarding: Set people up properly when they join and make sure access is cleanly revoked when they leave.\n• AI enablement & security: Work with teams to help them adopt AI tools safely. Spot risks like prompt injection, data leakage, or insecure integrations. Help us keep track of what AI tools are in use and make sure we have the right guardrails in place.\nRequirements\n• 3+ years in an IT support or IT operations role\n• Solid experience with identity and access management, MDM, and endpoint security tools\n• Some exposure to patch management — even if it's mostly been laptops, that's fine. We care that you understand the concept and are willing to grow into the broader scope.\n• You've come across vulnerability scanning before and have a basic idea of what the results mean. You don't need to be an expert — we just want to know it's not brand new to you.\n• You understand what AI tools are doing when people use them at work, and you can think about the security angle\n• Skilled at translating complex technical concepts into clear, accessible language for non-technical stakeholders\n• Highly self-directed professional who anticipates needs and ensures project momentum without requiring external follow-up.\nNice-to-Haves\n• IT or security certifications (CISSP, CompTIA Security+, AWS, Microsoft Certified, etc.)\n• Experience with physical office IT setup — networking gear, workstations, cabling\n• Basic scripting ability (Python, Bash, PowerShell) to automate the repetitive stuff\n• Exposure to LLM security concepts — prompt injection, data leakage, agentic risks — even from your own reading or research\n• Worked in a fast-paced or high-security environment before\nWhat We Offer\nA role where security and IT are genuinely treated as the same thing — not separate teams with separate priorities. You'll work directly with a senior team that's been doing this at scale for years, and you'll have real ownership from day one.\nThe AI side of this role is still being shaped. If you're someone who wants to help define how that works rather than follow someone else's playbook, this is a good place to be.\nLife @ Crypto.com\nEmpowered to think big. Try new opportunities while working with a talented, ambitious and supportive team.\nTransformational and proactive working environment. Elevate employees to find thoughtful and innovative solutions.\nGrowth from within. We help to develop new skill-sets that would impact the shaping of your personal and professional growth.\nWork Culture. Our colleagues are some of the best in the industry; we are all here to help and support one another.\nOne cohesive team. Engage stakeholders to achieve our ultimate goal - Cryptocurrency in every wallet.\nAre you ready to kickstart your future with us?\nBenefits\nCompetitive salary\nMedical insurance package with extended coverage to dependents\nAttractive annual leave entitlement including: birthday, work anniversary\nWork Flexibility Adoption. Flexi-work hour and hybrid or remote set-up\nAspire career alternatives through us. Our internal mobility program can offer employees a diverse scope.\nWork Perks: crypto.com visa card provided upon joining\nOur Crypto.com benefits packages vary depending on region requirements, you can learn more from our talent acquisition team.\nAbout Crypto.com:\nFounded in 2016, Crypto.com serves more than 80 million customers and is the world's fastest growing global cryptocurrency platform. Our vision is simple: Cryptocurrency in Every Wallet™. Built on a foundation of security, privacy, and compliance, Crypto.com is committed to accelerating the adoption of cryptocurrency through innovation and empowering the next generation of builders, creators, and entrepreneurs to develop a fairer and more equitable digital ecosystem.\nLearn more at https://crypto.com.\nCrypto.com is an equal opportunities employer and we are committed to creating an environment where opportunities are presented to everyone in a fair and transparent way. Crypto.com values diversity and inclusion, seeking candidates with a variety of backgrounds, perspectives, and skills that complement and strengthen our team.\nPersonal data provided by applicants will be used for recruitment purposes only.\nPlease note that only shortlisted candidates will be contacted."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "3+ years in IT support or IT operations",
+        "kind": "required"
+      },
+      {
+        "text": "Identity and access management, MDM and endpoint security tools",
+        "kind": "required"
+      },
+      {
+        "text": "Some patch management exposure",
+        "kind": "required"
+      },
+      {
+        "text": "Basic vulnerability scanning",
+        "kind": "required"
+      },
+      {
+        "text": "Understanding AI tools at work and their security angle",
+        "kind": "required"
+      },
+      {
+        "text": "Explaining technical concepts to non-technical stakeholders",
+        "kind": "required"
+      },
+      {
+        "text": "Self-directed",
+        "kind": "required"
+      },
+      {
+        "text": "IT or security certifications (CISSP, CompTIA Security+, AWS, Microsoft)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Physical office IT setup (networking gear, cabling)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Basic scripting (Python, Bash, PowerShell)",
+        "kind": "preferred"
+      },
+      {
+        "text": "LLM security concepts (prompt injection, data leakage, agentic risks)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Fast-paced or high-security environments",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 3,
+        "max": null,
+        "about": "IT support or IT operations",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [
+      {
+        "name": "CISSP",
+        "kind": "preferred"
+      },
+      {
+        "name": "CompTIA Security+",
+        "kind": "preferred"
+      },
+      {
+        "name": "AWS certification",
+        "kind": "preferred"
+      },
+      {
+        "name": "Microsoft Certified",
+        "kind": "preferred"
+      }
+    ],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Benefits offer 'hybrid or remote set-up' (varying by region); labelled hybrid for this Sofia listing. 'Competitive salary' is not a salary."
+}

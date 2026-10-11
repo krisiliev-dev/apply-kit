@@ -1,0 +1,124 @@
+{
+  "id": "en-security-payhawk-security-engineer",
+  "field": "security",
+  "source": {
+    "kind": "greenhouse",
+    "url": "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4804574101",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Security Engineer",
+    "company": "Payhawk",
+    "location": "Sofia",
+    "text": "Company Mission\nPayhawk is one AI-powered spend management platform for scaling businesses — corporate cards, expense management, procurement, and accounts payable, unified in one place. We serve finance teams across 32+ countries, cutting month-end close time and reconciling 99.7% of transactions with zero manual touch. AI runs through the platform as core infrastructure, not a bolted-on feature — and we hire the top 1% of talent in every function to keep building it that way.\nWhy Payhawk\nPayhawk, where the bold builders make an impact.\nWe're not a family, we're a high-performance team — and that's deliberate. We debate, ideate, and push each other to be better, because the best ideas come from direct feedback. We've already made history as Bulgaria's first unicorn, but the ambition doesn't stop there: if you want to grow fast - own it; do not wait for it.\nGive: Honest opinions, real ownership, a focus on outcomes.\nGet: A front-row seat to a market leader in one of the fastest-moving industries.\nThe role, in one line\nYou will help maintain and improve Payhawk's security posture through proactive monitoring, vulnerability management, and incident response, as a key member of the IT & Security team.\nWhat you will own\n• Lead the evaluation, implementation, and continuous improvement of cybersecurity controls across the organization, in line with internal security standards and regulatory requirements.\n• Run vulnerability assessments and coordinate remediation with engineering and infrastructure teams, including risk prioritization, tracking, and reporting.\n• Manage and maintain endpoint security controls, including system monitoring, patch management, and security configuration, so enterprise environments perform well and stay protected.\n• Configure, manage, and optimize our mobile device management (MDM) and endpoint protection platforms, with effective coverage and policy enforcement.\n• Oversee software deployment, operating system imaging, and patch compliance across enterprise endpoints, so updates land on time and meet security baselines.\n• Monitor, investigate, and respond to security alerts and incidents using SIEM, EDR, and related security tools, through containment, remediation, and post-incident analysis.\n• Document monitoring activities, incident investigations, and response actions in ticketing and case management systems, for traceability and continuous improvement.\n• Work with engineering, IT, and product teams to define, implement, and maintain security baselines and secure configurations across systems and endpoints.\n• Take part in the security assessment and due diligence of third-party vendors and service providers, including reviewing security documentation and identifying potential risks.\n• Help respond to customer security inquiries and complete security questionnaires, giving sales and customer assurance accurate, timely information.\n• Contribute to security awareness initiatives, and promote security best practices across the organization.\n• Guide and mentor junior team members on security operations, endpoint security, and incident response.\nWhat you will need\nMust-have\n• A degree in Computer Science, Information Security, Information Technology, or a related field.\n• 4+ years of experience in cybersecurity, information security, or a related technical role.\n• An understanding of networking concepts and protocols, including TCP/IP, DNS, firewalls, VPNs, and network segmentation.\n• Hands-on experience in security operations within enterprise environments, including endpoint security, vulnerability management, threat detection, and incident response.\n• Practical experience with SIEM, EDR, and centralized logging platforms (e.g., Splunk, Microsoft Sentinel, CrowdStrike, or similar), including alert investigation, detection tuning, and incident analysis.\n• Experience with vulnerability management tools (e.g., Nessus, Qualys, OpenVAS), and the ability to interpret scan results, prioritize remediation, and coordinate fixes with engineering or infrastructure teams.\n• The ability to build or maintain automation scripts in PowerShell, Python, or Bash that improve security monitoring, reporting, or operational workflows.\n• Familiarity with endpoint management and security technologies, including MDM platforms and endpoint protection solutions.\n• An understanding of security best practices, system hardening, and security baselines across operating systems and enterprise environments.\n• Ongoing professional development through security certifications, training, industry events, or involvement in the cybersecurity community.\n• Strong analytical and problem-solving skills.\n• High attention to detail and the ability to prioritize tasks in a fast-paced environment.\n• Clear communication and good teamwork.\n• Eagerness to learn and grow in a cybersecurity team.\n• The ability to adapt.\nNice-to-have\n• Professional security certifications, such as CompTIA Security+, Cisco CyberOps Associate/Professional, Azure Security Engineer, Google Professional Cloud Security Engineer, CEH, or similar.\nWhat you will get\n• Recharge properly — 30 days of paid holiday\n• Change the view — a week-long exchange to London, Amsterdam, Paris, Munich, Vilnius, Berlin, Sofia, or Barcelona\n• Win together, celebrate together — regular team-wide events that are actually worth showing up to\n• Covered, properly — additional medical care\n• Stay in the game — a sports card, fully funded, for the gym, classes, or your sport of choice\n• Commute easily — a monthly travel allowance that covers getting to and from the office\n• Use what you build — hands-on access to the actual product you're hiring people to help build\nPayhawk is an Equal Employment Opportunity Employer. Qualified applicants will receive consideration for employment without regard to race, color, religion, sex, sexual orientation, gender perception or identity, national origin, age, marital status, protected veteran status, or disability status."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Degree in computer science, information security, IT or related",
+        "kind": "required"
+      },
+      {
+        "text": "4+ years in cybersecurity or information security",
+        "kind": "required"
+      },
+      {
+        "text": "Networking (TCP/IP, DNS, firewalls, VPNs, segmentation)",
+        "kind": "required"
+      },
+      {
+        "text": "Enterprise security operations (endpoint security, vulnerability management, threat detection, incident response)",
+        "kind": "required"
+      },
+      {
+        "text": "SIEM, EDR and centralised logging (Splunk, Microsoft Sentinel, CrowdStrike)",
+        "kind": "required"
+      },
+      {
+        "text": "Vulnerability management tools (Nessus, Qualys, OpenVAS)",
+        "kind": "required"
+      },
+      {
+        "text": "Automation scripts in PowerShell, Python or Bash",
+        "kind": "required"
+      },
+      {
+        "text": "Endpoint management and MDM platforms",
+        "kind": "required"
+      },
+      {
+        "text": "Security best practices, system hardening and baselines",
+        "kind": "required"
+      },
+      {
+        "text": "Ongoing professional development (certifications, training, community)",
+        "kind": "required"
+      },
+      {
+        "text": "Analytical and problem-solving skills",
+        "kind": "required"
+      },
+      {
+        "text": "Attention to detail and prioritising",
+        "kind": "required"
+      },
+      {
+        "text": "Clear communication and teamwork",
+        "kind": "required"
+      },
+      {
+        "text": "Eagerness to learn",
+        "kind": "required"
+      },
+      {
+        "text": "Ability to adapt",
+        "kind": "required"
+      },
+      {
+        "text": "Security certifications (CompTIA Security+, Cisco CyberOps, Azure Security Engineer, Google Cloud Security Engineer, CEH)",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 4,
+        "max": null,
+        "about": "cybersecurity or information security",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [
+      {
+        "name": "CompTIA Security+",
+        "kind": "preferred"
+      },
+      {
+        "name": "Cisco CyberOps Associate/Professional",
+        "kind": "preferred"
+      },
+      {
+        "name": "Azure Security Engineer",
+        "kind": "preferred"
+      },
+      {
+        "name": "Google Professional Cloud Security Engineer",
+        "kind": "preferred"
+      },
+      {
+        "name": "CEH",
+        "kind": "preferred"
+      }
+    ],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "A travel allowance for the office commute hints at office work but states no rule: not stated."
+}
