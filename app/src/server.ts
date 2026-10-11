@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import type { Context } from "hono";
-import type { DiscoveryEngine, FactAnswer, FeedView, PassReason, Scheduler } from "@apply-kit/core";
+import type { DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, Scheduler } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed"];
+const sorts: FeedSort[] = ["fit", "newest"];
 
 export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEngine; scheduler: Scheduler; uiDir: string }) {
   const app = new Hono();
@@ -11,7 +12,10 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
   app.get("/api/feed", async (c) => {
     const v = c.req.query("view") ?? "new";
     if (!views.includes(v as FeedView)) return c.json({ error: `Unknown view "${v}"` }, 400);
-    return c.json(await engine.queryFeed({ view: v as FeedView }));
+    const sort = c.req.query("sort") ?? "fit";
+    if (!sorts.includes(sort as FeedSort)) return c.json({ error: `Unknown sort "${sort}"` }, 400);
+    const relocation = c.req.query("relocation") === "1";
+    return c.json(await engine.queryFeed({ view: v as FeedView, sort: sort as FeedSort, relocation }));
   });
 
   // Requiring a JSON body type means a web page can't trigger a POST without a CORS preflight,

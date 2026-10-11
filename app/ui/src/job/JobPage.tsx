@@ -1,7 +1,7 @@
 // The Job page (hi-fi: docs/design/hifi/job.html): Fit check area, requirements with evidence,
 // key facts with "Show where", low-confidence facts for Kris to confirm, and the reading,
 // couldn't-read and unscreened states.
-import type { FactAnswer, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
+import type { FactAnswer, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
 import { useEffect, useId, useState, type FormEvent } from "react";
 import { confirmFact, fetchJob, fetchSources, readJob } from "../api.ts";
 import { Chevron, Icon } from "../icons.tsx";
@@ -51,7 +51,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
     }
   }, [id, readingState, attempt]);
 
-  const titled = load.state === "ready" ? `${load.job.title} · ${load.job.company}` : null;
+  const titled = load.state === "ready" ? `${titleOf(load.job)} · ${load.job.company}` : null;
   useEffect(() => { document.title = `${titled ?? "Job"} · apply-kit`; }, [titled]);
 
   if (load.state === "loading") return <p className="meta" role="status">Loading the job…</p>;
@@ -85,8 +85,10 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
   return (
     <section className="stack job-page" style={{ gap: "var(--s-6)" }}>
       <nav className="crumbs" aria-label="Breadcrumb">
-        <a href="/">Feed</a><span aria-hidden="true">/</span><span aria-current="page">{job.title}</span>
+        <a href="/">Feed</a><span aria-hidden="true">/</span><span aria-current="page">{titleOf(job)}</span>
       </nav>
+
+      {job.language === "bg" && <BulgarianBanner job={job} />}
 
       {state === "failed" && (
         <div className="banner error" role="alert">
@@ -124,6 +126,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
             </>
           )}
           {(state === "failed" || state === "unscreened") && <FullPosting job={job} open />}
+          {state !== "read" && <FitCheck job={job} />}
         </div>
         <div className="col side">
           <Decide job={job} />
@@ -147,12 +150,24 @@ function doneText(job: JobDetail): string {
 
 const cssId = (key: string) => key.replace(/[^a-z0-9]/gi, "-");
 
+/** The title Kris reads: the English one for a posting in another language. */
+const titleOf = (job: JobDetail) => job.titleTranslation ?? job.title;
+const languageNames: Record<string, string> = { bg: "Bulgarian", de: "German", fr: "French", es: "Spanish" };
+const languageName = (code: string | null) => (code && languageNames[code]) || "another language";
+
+const bandLabel: Record<FitBand, string> = { strong: "Strong fit", good: "Good fit", stretch: "Stretch" };
+const bandChip: Record<FitBand, "met" | "partly" | "neutral"> = { strong: "met", good: "met", stretch: "neutral" };
+
 function JobHead({ job }: { job: JobDetail }) {
   const salary = job.keyFacts.find((f) => f.key === "salary");
   const salaryText = job.salary ?? (salary ? salary.value : job.reading.state === "read" ? "Salary not stated" : null);
+  const { fit } = job;
   return (
     <div className="job-head">
-      <h1 tabIndex={-1}>{job.title}</h1>
+      <h1 tabIndex={-1}>
+        {titleOf(job)}
+        {job.titleTranslation && <span className="orig" lang={job.language ?? undefined}>{job.title}</span>}
+      </h1>
       <div className="job-meta">
         <b>{job.company}</b>
         <span>{job.location ?? "Location not stated"}</span>
@@ -160,12 +175,47 @@ function JobHead({ job }: { job: JobDetail }) {
         {job.postedAt && <span>Posted {new Date(job.postedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
       </div>
       <div className="chips">
+        {fit.provisional
+          ? <span className="chip partly"><Icon name="partly" />{bandLabel[fit.band]} · provisional</span>
+          : <span className={`chip ${bandChip[fit.band]}`}>{fit.band !== "stretch" && <Icon name="met" />}{bandLabel[fit.band]}</span>}
+        {fit.angle && <span className="chip neutral">{angleName(fit)} angle</span>}
         {job.reading.state === "read" && job.needsYou.length > 0 && <span className="chip partly"><Icon name="partly" />Screening provisional</span>}
         {job.reading.state === "failed" && <span className="chip neutral">Fit check not run</span>}
         {job.reading.state === "unscreened" && <span className="chip neutral">Unscreened</span>}
+        {job.language && job.language !== "en" && <span className="chip neutral">{languageName(job.language)} original</span>}
         <span className="chip neutral">Seen in {job.postings.length} {job.postings.length === 1 ? "posting" : "postings"}</span>
       </div>
     </div>
+  );
+}
+
+const angleName = (fit: Fit) => (fit.angle ? fit.angle.charAt(0).toUpperCase() + fit.angle.slice(1) : "");
+
+/** A posting not in English: read from the original, shown in English, the original one click away. */
+function BulgarianBanner({ job }: { job: JobDetail }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const lines = job.postingText.split("\n").filter(Boolean);
+  const read = job.reading.state === "read";
+  return (
+    <>
+      <div className="banner info">
+        <span className="text">
+          <b>This posting is in {languageName(job.language)}.</b>{" "}
+          {read
+            ? "Requirements and facts were read from the original and are shown in English. Quotes stay in the original, with a translation under each."
+            : "Once it's read, requirements and facts are shown in English, with the original quotes kept."}
+        </span>
+        <button className="btn sm" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}><Chevron />View original</button>
+      </div>
+      <section id={id} className="panel" aria-label="Original posting" hidden={!open}>
+        <p className="meta">Original · {job.postings[0]?.source ?? "posting"} · {job.company}</p>
+        <div className="posting-text" lang={job.language ?? undefined}>
+          <h2 style={{ fontSize: "var(--fs-body)" }}>{job.title}</h2>
+          {lines.length === 0 ? <p className="meta">This posting has no text.</p> : lines.map((l, i) => <p key={i} className={l.startsWith("• ") ? "li" : undefined}>{l.startsWith("• ") ? l.slice(2) : l}</p>)}
+        </div>
+      </section>
+    </>
   );
 }
 
@@ -212,24 +262,58 @@ function ReadingPanel() {
   );
 }
 
-/** The Fit check area. Fit needs the master profile; until it exists this says so plainly. */
+/** The Fit check: the number, what it is made of ("What makes up 91?"), closest angle and gaps. */
 function FitCheck({ job }: { job: JobDetail }) {
-  const required = job.requirements.filter((r) => r.kind === "required").length;
-  const preferred = job.requirements.length - required;
+  const { fit } = job;
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const read = job.reading.state === "read";
+  const title = fit.provisional ? "Fit check: provisional" : `Fit check: ${bandLabel[fit.band].toLowerCase()}`;
+  const parts = fit.reasons.filter((r) => r.factor !== "adjustment");
+  const adjustments = fit.reasons.filter((r) => r.factor === "adjustment");
+  const points = (n: number) => `${n >= 0 ? "+" : "−"}${Math.abs(Math.round(n))}`;
   return (
     <article className="panel o1" aria-labelledby="fit-h">
       <div className="fitcheck">
-        <div className="fit-num provisional">–<small>no fit yet</small></div>
-        <div className="verdict">
-          <h2 id="fit-h">Fit check: not available yet</h2>
-          <p>
-            {job.requirements.length} requirements read: {required} required, {preferred} preferred.
-            Whether you meet them isn't checked yet: that needs your master profile, so nothing here is marked met or missing.
-          </p>
-          {job.screening?.provisional && (
-            <p className="meta">Until you answer the questions above, screening uses the cautious reading: unclear requirements count as preferred, an unclear salary as not stated.</p>
-          )}
+        <div className={`fit-num${fit.provisional ? " provisional" : ""}`}>
+          {fit.provisional && <span aria-hidden="true">~</span>}{fit.value}<small>{fit.provisional ? "fit · provisional" : "fit"}</small>
         </div>
+        <div className="verdict">
+          <h2 id="fit-h">{title}</h2>
+          <p>{fit.why}.</p>
+          {!read && <p className="meta">The posting isn't read yet, so this Fit comes from the title, location and date only.</p>}
+          {read && job.screening?.provisional && (
+            <p className="meta">Until you answer the questions above, the Fit uses the cautious reading: unclear requirements count as preferred, an unclear salary as not stated.</p>
+          )}
+          <div>
+            <button className="btn ghost sm" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}><Chevron />What makes up {fit.value}?</button>
+          </div>
+          <div id={id} className="fit-why" hidden={!open}>
+            <p className="muted">Fit is how well this job matches your profile and preferences, 0–100. Strong is 85 and up, good 70–84, stretch below 70. A part that can't be told yet is left out, never counted against the job.</p>
+            <dl className="kv">
+              {parts.map((r) => (
+                <div key={r.factor} style={{ display: "contents" }}>
+                  <dt>{r.label}</dt>
+                  <dd>{r.text} · {r.score == null ? "left out for now" : `${points(r.points)} points`}</dd>
+                </div>
+              ))}
+              <dt>Learned adjustments</dt>
+              <dd>{adjustments.length === 0 ? "None affect this job" : adjustments.map((a) => `${a.text} (${points(a.points)})`).join(" · ")}</dd>
+            </dl>
+          </div>
+        </div>
+        <dl className="kv">
+          <dt>Closest angle</dt>
+          <dd>{fit.angle ? parts.find((r) => r.factor === "angle")!.text : "None of developer, security or design, going by the title and requirements"}</dd>
+          <dt>Where</dt>
+          <dd>{fit.place.label}{fit.place.tier === "relocation" && <span className="meta"> · shown with the Relocation filter</span>}</dd>
+          <dt>Gaps</dt>
+          <dd>
+            {fit.gaps.length > 0
+              ? <div className="chips">{fit.gaps.map((g) => <StatusChip key={g} status="gap" label={g} />)}</div>
+              : <span className="meta">{read ? "None known: whether you meet each requirement needs your master profile, so nothing is counted as a gap yet." : "Not known until the posting is read."}</span>}
+          </dd>
+        </dl>
       </div>
     </article>
   );
@@ -370,14 +454,30 @@ function FullPosting({ job, open }: { job: JobDetail; open: boolean }) {
 }
 
 function Decide({ job }: { job: JobDetail }) {
+  const [language, setLanguage] = useState(job.packageLanguage);
   const why = job.reading.state === "read"
     ? "Packages arrive with a later part of the rebuild."
     : "A package needs the requirements first, and packages arrive with a later part of the rebuild.";
+  const inOriginal = job.packageLanguage !== "en";
   return (
     <div className="panel decide o2" role="group" aria-label="Decide">
-      <button className="btn primary" type="button" disabled aria-describedby="prep-why">Prepare package</button>
+      <button className="btn primary" type="button" disabled aria-describedby="prep-why">
+        Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}
+      </button>
       <p className="why-off" id="prep-why">{why}</p>
       <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
+      {inOriginal && (
+        <div className="lang">
+          <span aria-live="polite">
+            {language === "bg"
+              ? <>The posting is in Bulgarian, so your CV, cover letter and screening answers will be in <b>Bulgarian</b>.</>
+              : <>Your package will be in <b>English</b>.</>}
+          </span>
+          <button className="btn sm" type="button" onClick={() => setLanguage(language === "bg" ? "en" : "bg")}>
+            {language === "bg" ? "Switch to English" : "Switch back to Bulgarian"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

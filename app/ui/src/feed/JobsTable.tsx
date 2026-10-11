@@ -1,5 +1,5 @@
-import type { FeedJob, FeedResult, FeedView, PassInput } from "@apply-kit/core";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import type { FeedJob, FeedResult, FeedSort, FeedView, PassInput } from "@apply-kit/core";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { passJobs, saveJobs, undoDecision } from "../api.ts";
 import { PassDialog } from "./PassDialog.tsx";
 import { useShortcutsSetting } from "./shortcuts.ts";
@@ -8,7 +8,9 @@ import { RowChips } from "../requirements.tsx";
 
 const jobPage = (id: string) => `/jobs/${encodeURIComponent(id)}`;
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
-const named = (j: FeedJob) => `${j.title} at ${j.company}`;
+/** The title Kris reads: the English one for a posting in another language. */
+const titleOf = (j: FeedJob) => j.titleTranslation ?? j.title;
+const named = (j: FeedJob) => `${titleOf(j)} at ${j.company}`;
 const backIn: Record<FeedView, string> = { new: "New", saved: "Saved", open: "All open", passed: "Passed & closed" };
 
 /** Which actions take a job out of the view it is in. */
@@ -19,10 +21,11 @@ const leavesView = (view: FeedView, action: "save" | "pass") => action === "pass
  * multi-select with bulk Save and Pass, and single-key shortcuts that work only while focus is in
  * the table and can be turned off.
  */
-export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued, checking }: {
+export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShowQueued, checking }: {
   /** The Feed, with `jobs` set to the rows on screen. */
   feed: FeedResult;
   view: FeedView;
+  sort: FeedSort;
   toaster: Toaster;
   /** Refresh after a change; `touched` rows show even if they'd otherwise wait under the bar. */
   onChanged: (touched?: string[]) => void;
@@ -199,7 +202,7 @@ export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued
         </div>
       )}
       <div className="table-wrap">
-        <table className="table jobs" aria-label="Jobs, newest first" aria-describedby="jobs-keys-help">
+        <table className="table jobs" aria-label={sort === "fit" ? "Jobs, best fit first" : "Jobs, newest first"} aria-describedby="jobs-keys-help">
           <thead>
             <tr>
               <th scope="col" className="col-check">
@@ -215,7 +218,8 @@ export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued
               <th scope="col" className="wide">Where</th>
               <th scope="col" className="wide">Requirements</th>
               <th scope="col" className="wide">Salary</th>
-              <th scope="col" className="wide" aria-sort="descending">Posted</th>
+              <th scope="col" className="wide" aria-sort={sort === "newest" ? "descending" : undefined}>Posted</th>
+              <FitHeader sorted={sort === "fit"} />
             </tr>
           </thead>
           <tbody onKeyDown={onKeyDown}>
@@ -280,17 +284,21 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         <input type="checkbox" tabIndex={tab} aria-label={`Select ${named(job)}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} />
       </td>
       <td className="job">
-        <a className="t" href={jobPage(job.id)} tabIndex={tab}>{job.title}</a>
+        <a className="t" href={jobPage(job.id)} tabIndex={tab}>{titleOf(job)}</a>
         <span className="co">{job.company}</span>
         {showSavedChip && job.state === "saved" && <span className="chip met saved-chip">Saved</span>}
+        {job.titleTranslation && <span className="meta"> · <span lang={job.language ?? undefined}>{job.title}</span></span>}
         {job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
         <span className="narrow meta">{where} · {salary} · {posted}</span>
         <div className="narrow"><RowChips job={job} /></div>
-        <div className="row-acts">
-          {job.state === "new" && (
-            <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onSave}>Save<span className="sr-only"> {named(job)}</span></button>
-          )}
-          <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onPass}>Pass…<span className="sr-only"> {named(job)}</span></button>
+        <div className="why-row">
+          <div className="why">{job.fit.why}</div>
+          <div className="row-acts">
+            {job.state === "new" && (
+              <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onSave}>Save<span className="sr-only"> {named(job)}</span></button>
+            )}
+            <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onPass}>Pass…<span className="sr-only"> {named(job)}</span></button>
+          </div>
         </div>
       </td>
       <td className="wide">{where}</td>
@@ -299,7 +307,39 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
       <td className="num wide">
         {job.postedAt ? <time dateTime={job.postedAt} title={new Date(job.postedAt).toLocaleDateString("en-GB", { dateStyle: "long" })}>{posted}</time> : posted}
       </td>
+      <FitCell job={job} />
     </tr>
+  );
+}
+
+/**
+ * The Fit column header with its explanation: the definition is the header's description (read
+ * with it by screen readers), and the "?" button shows it on screen; hover or focus shows it too.
+ */
+function FitHeader({ sorted }: { sorted: boolean }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  return (
+    <th scope="col" className="fit-h" aria-sort={sorted ? "descending" : undefined} aria-describedby={id}>
+      <span className="fit-hw" onKeyDown={(e) => { if (e.key === "Escape" && open) { e.stopPropagation(); setOpen(false); } }}>
+        <span>Fit{sorted && <span aria-hidden="true"> ↓</span>}</span>
+        <button type="button" className="info" aria-label="What Fit means" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)} onBlur={() => setOpen(false)}>?</button>
+        <span className={`tip${open ? " open" : ""}`} id={id} role="note">
+          How well this job matches your profile and preferences, 0–100. The line under each title says why. A ~ means it may still change: the posting isn't read yet, or a fact needs you.
+        </span>
+      </span>
+    </th>
+  );
+}
+
+/** The Fit number; "~" and grey while provisional (not read yet, or a fact waits for Kris). */
+function FitCell({ job }: { job: FeedJob }) {
+  const { fit } = job;
+  const note = job.reading === "read" ? (fit.provisional ? "provisional" : "fit") : "not read yet";
+  return (
+    <td className={`fit${fit.provisional ? " provisional" : ""}`}>
+      {fit.provisional && <span aria-hidden="true">~</span>}{fit.value}<small>{note}</small>
+    </td>
   );
 }
 

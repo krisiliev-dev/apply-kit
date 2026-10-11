@@ -1,6 +1,6 @@
-import type { CheckProgress, FeedResult, FeedView, SchedulerStatus } from "@apply-kit/core";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { checkNow, fetchCheckStatus, fetchFeed } from "../api.ts";
+import type { CheckProgress, FeedResult, FeedSort, FeedView, SchedulerStatus } from "@apply-kit/core";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { checkNow, fetchCheckStatus, fetchFeed, type FeedOptions } from "../api.ts";
 import { JobsTable } from "./JobsTable.tsx";
 import { PassedClosed } from "./PassedClosed.tsx";
 import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
@@ -21,6 +21,7 @@ type Load =
 
 export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => void }) {
   const [view, setView] = useState<FeedView>("new");
+  const [options, setOptions] = useState<FeedOptions>({ sort: "fit", relocation: false });
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const check = useCheckStatus();
@@ -32,43 +33,44 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   const [said, say] = useState("");
   const { busy, tryNow } = useTryNow(() => setNudge((n) => n + 1), say);
   const toaster = useToaster();
+  const [seenFitHint, dismissFitHint] = useFitHint();
 
   // After Save, Pass, Undo or Reopen: rows Kris acted on update in place (or come back, for an
   // undo); rows that left the view go; anything else new still waits under the bar.
   const afterTriage = useCallback((touched: string[] = []) => {
-    fetchFeed(view)
+    fetchFeed(view, options)
       .then((feed) => {
         setLoad((prev) => prev.state === "ready" ? { state: "ready", feed, rows: settle(prev.rows, feed.jobs, touched) } : prev);
         onHealth(feed.health);
       })
       .catch((err: unknown) => toaster.show({ message: `Couldn't refresh the Feed: ${err instanceof Error ? err.message : String(err)}` }));
-  }, [view, onHealth, toaster]);
+  }, [view, options, onHealth, toaster]);
 
-  // A fresh load (first visit, another view, Try again) shows the Feed as it is.
+  // A fresh load (first visit, another view, sort or filter, Try again) shows the Feed as it is.
   useEffect(() => {
     const ctrl = new AbortController();
-    fetchFeed(view, ctrl.signal)
+    fetchFeed(view, options, ctrl.signal)
       .then((feed) => { setLoad({ state: "ready", feed, rows: { shown: feed.jobs, queued: [] } }); onHealth(feed.health); })
       .catch((err: unknown) => {
         if (ctrl.signal.aborted) return;
         setLoad({ state: "error", message: err instanceof Error ? err.message : String(err) });
       });
     return () => ctrl.abort();
-  }, [view, attempt, onHealth]);
+  }, [view, options, attempt, onHealth]);
 
   // While a check runs, each finished Source can bring jobs: fetch the Feed again and queue them.
   const { refreshKey } = check;
   useEffect(() => {
     if (refreshKey === null && nudge === 0) return;
     const ctrl = new AbortController();
-    fetchFeed(view, ctrl.signal)
+    fetchFeed(view, options, ctrl.signal)
       .then((feed) => {
         setLoad((prev) => prev.state === "ready" ? { state: "ready", feed, rows: receive(prev.rows, feed.jobs) } : prev);
         onHealth(feed.health);
       })
       .catch(() => { /* the next progress step tries again */ });
     return () => ctrl.abort();
-  }, [refreshKey, nudge, view, onHealth]);
+  }, [refreshKey, nudge, view, options, onHealth]);
 
   // While postings are being read, look again every few seconds so chips fill in place
   // (rows keep their order: receive() only updates rows already on screen).
@@ -104,7 +106,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
     if (feed.firstRun) {
       return (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
-          <Toolbar feed={feed} view={view} onView={setView} />
+          <Toolbar feed={feed} view={view} onView={setView} options={options} onOptions={setOptions} />
           <FirstRun />
         </section>
       );
@@ -132,10 +134,16 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
         <CheckHead
           check={check}
           title={viewTitle(view, rows.shown.length)}
-          subtitle={`${feed.counts.open} open across ${feed.health.sources} ${feed.health.sources === 1 ? "source" : "sources"} · newest first`}
+          subtitle={`${feed.counts.open} open across ${feed.health.sources} ${feed.health.sources === 1 ? "source" : "sources"} · ${view === "passed" ? "latest decision first" : options.sort === "fit" ? "sorted by fit" : "newest first"}`}
           waiting={rows.queued.length}
         />
-        <Toolbar feed={feed} view={view} onView={setView} />
+        <Toolbar feed={feed} view={view} onView={setView} options={options} onOptions={setOptions} />
+        {!seenFitHint && view !== "passed" && options.sort === "fit" && rows.shown.length > 0 && (
+          <div className="banner info hint">
+            <span className="text"><b>New here? Fit</b> is how well a job matches your profile and preferences, 0–100. The grey line under each title says why it ranks there.</span>
+            <button className="btn sm" type="button" onClick={dismissFitHint}>Got it</button>
+          </div>
+        )}
         <div ref={tableRef}>
           {view === "passed"
             ? <PassedClosed feed={{ ...feed, jobs: rows.shown }} toaster={toaster} onChanged={afterTriage} />
@@ -143,6 +151,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
               <JobsTable
                 feed={{ ...feed, jobs: rows.shown }}
                 view={view}
+                sort={options.sort}
                 toaster={toaster}
                 onChanged={afterTriage}
                 queued={rows.queued.length}
@@ -268,8 +277,15 @@ function timeLeft(p: CheckProgress): string {
 
 const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 
-function Toolbar({ feed, view, onView }: { feed: FeedResult; view: FeedView; onView: (v: FeedView) => void }) {
+function Toolbar({ feed, view, onView, options, onOptions }: {
+  feed: FeedResult;
+  view: FeedView;
+  onView: (v: FeedView) => void;
+  options: FeedOptions;
+  onOptions: (o: FeedOptions) => void;
+}) {
   const { counts, ranking } = feed;
+  const ranked = view !== "passed";
   return (
     <div className="toolbar">
       <div className="segmented" role="group" aria-label="View">
@@ -282,13 +298,74 @@ function Toolbar({ feed, view, onView }: { feed: FeedResult; view: FeedView; onV
       <button className="filter" type="button" aria-pressed="false">
         Hidden <span className="n num">{counts.hidden}</span>
       </button>
+      {ranked && (
+        <>
+          <span className="sep" aria-hidden="true" />
+          <button
+            className="filter"
+            type="button"
+            aria-pressed={options.relocation}
+            aria-describedby="relocation-why"
+            onClick={() => onOptions({ ...options, relocation: !options.relocation })}
+          >
+            Relocation <span className="n num">{counts.relocation}</span>
+          </button>
+          <span className="sr-only" id="relocation-why">Jobs in Switzerland or Spain, a separate, lower-priority list shown after the others.</span>
+        </>
+      )}
       <span className="end">
         <span className="meta">
           {ranking.learnedAdjustments === 0 ? "Ranking: nothing learned yet" : `Ranking: ${ranking.learnedAdjustments} learned adjustments`}
         </span>
+        {ranked && <SortMenu sort={options.sort} onSort={(sort) => onOptions({ ...options, sort })} />}
       </span>
     </div>
   );
+}
+
+const sortLabels: Record<FeedSort, string> = { fit: "best fit", newest: "newest" };
+
+/** "Sort: best fit ▾" with its two choices (Feed hi-fi). Escape or a click elsewhere closes it. */
+function SortMenu({ sort, onSort }: { sort: FeedSort; onSort: (s: FeedSort) => void }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const wrap = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: MouseEvent) => { if (!wrap.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  return (
+    <span
+      className="pop-wrap"
+      ref={wrap}
+      onKeyDown={(e) => { if (e.key === "Escape" && open) { e.preventDefault(); setOpen(false); wrap.current?.querySelector<HTMLElement>("button")?.focus(); } }}
+    >
+      <button className="filter" type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(!open)}>
+        Sort: {sortLabels[sort]}<span aria-hidden="true"> ▾</span>
+      </button>
+      <span className="pop end-align" id={id} hidden={!open}>
+        {(Object.keys(sortLabels) as FeedSort[]).map((s) => (
+          <button key={s} type="button" aria-pressed={s === sort} onClick={() => { onSort(s); setOpen(false); }}>
+            <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+            {sortLabels[s]}
+          </button>
+        ))}
+      </span>
+    </span>
+  );
+}
+
+/** The one-time "New here? Fit is…" hint; remembered in this browser once dismissed. */
+function useFitHint(): [boolean, () => void] {
+  const key = "apply-kit:fit-hint-seen";
+  const [seen, setSeen] = useState(() => { try { return localStorage.getItem(key) === "1"; } catch { return false; } });
+  const dismiss = useCallback(() => {
+    setSeen(true);
+    try { localStorage.setItem(key, "1"); } catch { /* private window: the hint comes back next time */ }
+  }, []);
+  return [seen, dismiss];
 }
 
 function FirstRun() {
