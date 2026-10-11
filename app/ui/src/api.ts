@@ -1,5 +1,5 @@
 import type {
-  RuleChange, SearchSettings,
+  RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed,
 } from "@apply-kit/core";
@@ -155,6 +155,19 @@ export async function previewRemoval(id: string, signal?: AbortSignal): Promise<
 
 export async function removeSource(id: string): Promise<{ sourceId: string; decision: Decision }> {
   return json(await postJson(`${sourcePath(id)}/remove`));
+}
+
+/** Records a coverage check and answers with what was found and missing; a refused check throws its reason. */
+export async function recordCoverageCheck(input: CoverageInput): Promise<CoverageResult> {
+  return json(await postJson("/api/coverage", input));
+}
+
+export async function fetchCoverageHistory(signal?: AbortSignal): Promise<CoverageHistory> {
+  return json(await fetch("/api/coverage", { signal }));
+}
+
+export async function fetchCoverageCheck(id: string, signal?: AbortSignal): Promise<CoverageResult> {
+  return json(await fetch(`/api/coverage/${encodeURIComponent(id)}`, { signal }));
 }
 
 /** "Close 34 SumUp jobs": Kris confirms a Source's unusual drop. Undo with undoDecision. */

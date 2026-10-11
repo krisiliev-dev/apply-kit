@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
+import type { CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
@@ -199,6 +199,29 @@ export function createServer({ engine, scheduler, uiDir }: { engine: DiscoveryEn
 
   app.post("/api/jobs/:id/target", (c) => withPosting(c, (jobId, postingId) => engine.setTarget(jobId, postingId)));
   app.post("/api/jobs/:id/split", (c) => withPosting(c, (jobId, postingId) => engine.splitPosting(jobId, postingId)));
+
+  // Coverage checks: record one ({ site, query, location?, resultCount?, listings?, resultsUrl? },
+  // listings as pasted text or a list), the history (newest first, whether one is due), and one check.
+  app.post("/api/coverage", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const text = (v: unknown) => (typeof v === "string" ? v : undefined);
+    const listings = typeof body.listings === "string" || Array.isArray(body.listings) ? body.listings as CoverageInput["listings"] : undefined;
+    const resultCount = body.resultCount == null || body.resultCount === "" ? null : Number(body.resultCount);
+    try {
+      return c.json(await engine.recordCoverageCheck({
+        site: text(body.site) ?? "", query: text(body.query) ?? "", location: text(body.location) ?? null,
+        resultCount, listings, resultsUrl: text(body.resultsUrl) ?? null,
+      }), 201);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  });
+  app.get("/api/coverage", async (c) => c.json(await engine.coverageHistory()));
+  app.get("/api/coverage/:id", async (c) => {
+    const check = await engine.getCoverageCheck(c.req.param("id"));
+    return check ? c.json(check) : c.json({ error: "No such coverage check" }, 404);
+  });
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
