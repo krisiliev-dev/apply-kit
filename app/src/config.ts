@@ -19,5 +19,22 @@ export function readConfig() {
     port: Number(process.env.PORT ?? 4310),
     dbPath: process.env.APPLY_KIT_DB_PATH || join(dataDir, "apply-kit.db"),
     uiDir: fileURLToPath(new URL("../ui/dist/", import.meta.url)),
+    sources: parseSources(process.env.APPLY_KIT_SOURCES ?? ""),
   };
+}
+
+/**
+ * Config-level Sources until the Sources screen exists: comma-separated `kind:shorthand` pairs,
+ * e.g. `greenhouse:payhawkio,greenhouse:another`. The engine validates each shorthand.
+ */
+export function parseSources(text: string): { kind: string; config: string }[] {
+  return text
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => {
+      const i = s.indexOf(":");
+      if (i < 1) throw new Error(`APPLY_KIT_SOURCES: expected kind:value, got "${s}"`);
+      return { kind: s.slice(0, i).trim(), config: s.slice(i + 1).trim() };
+    });
 }
