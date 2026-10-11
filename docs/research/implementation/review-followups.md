@@ -4,3 +4,4 @@
 - Don't send email-only postings (no description) to extraction until full text is fetched (from #17)
 - Salary only from target posting: if only a board (e.g. Jooble) lists salary, Feed says 'Not read yet' — consider falling back to other postings' salary (from #9)
 - HTTP routes have no direct tests (thin wrappers) — consider a small server test suite (from #9)
+- After a Source is removed, its postings still show on the Job page and can be picked as target in merging.ts — filter removed Sources out (from #8)
