@@ -1,7 +1,10 @@
-import type { CheckProgress, FeedJob, FeedResult, FeedView, SchedulerStatus } from "@apply-kit/core";
+import type { CheckProgress, FeedResult, FeedView, SchedulerStatus } from "@apply-kit/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { checkNow, fetchCheckStatus, fetchFeed } from "../api.ts";
-import { receive, showQueued, type ShownFeed } from "./queue.ts";
+import { JobsTable } from "./JobsTable.tsx";
+import { PassedClosed } from "./PassedClosed.tsx";
+import { receive, settle, showQueued, type ShownFeed } from "./queue.ts";
+import { useToaster } from "./toast.tsx";
 import { FailedSourceBanner, MailboxBanner, StatusLine, useTryNow } from "../health.tsx";
 
 const views: [FeedView, string][] = [
@@ -28,6 +31,18 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
   const [nudge, setNudge] = useState(0);
   const [said, say] = useState("");
   const { busy, tryNow } = useTryNow(() => setNudge((n) => n + 1), say);
+  const toaster = useToaster();
+
+  // After Save, Pass, Undo or Reopen: rows Kris acted on update in place (or come back, for an
+  // undo); rows that left the view go; anything else new still waits under the bar.
+  const afterTriage = useCallback((touched: string[] = []) => {
+    fetchFeed(view)
+      .then((feed) => {
+        setLoad((prev) => prev.state === "ready" ? { state: "ready", feed, rows: settle(prev.rows, feed.jobs, touched) } : prev);
+        onHealth(feed.health);
+      })
+      .catch((err: unknown) => toaster.show({ message: `Couldn't refresh the Feed: ${err instanceof Error ? err.message : String(err)}` }));
+  }, [view, onHealth, toaster]);
 
   // A fresh load (first visit, another view, Try again) shows the Feed as it is.
   useEffect(() => {
@@ -55,67 +70,92 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
     return () => ctrl.abort();
   }, [refreshKey, nudge, view, onHealth]);
 
+  // While postings are being read, look again every few seconds so chips fill in place
+  // (rows keep their order: receive() only updates rows already on screen).
+  const reading = load.state === "ready" && load.rows.shown.some((j) => j.reading === "reading");
+  useEffect(() => {
+    if (!reading) return;
+    const timer = setTimeout(() => setNudge((n) => n + 1), 3_000);
+    return () => clearTimeout(timer);
+  }, [reading, load]);
+
   // After "Show them", move focus to the first job that joined so keyboard users land on it.
   useEffect(() => {
     const id = focusAfterShow.current;
     if (!id || load.state !== "ready") return;
     focusAfterShow.current = null;
-    tableRef.current?.querySelector<HTMLAnchorElement>(`tr[data-id="${CSS.escape(id)}"] a`)?.focus();
+    tableRef.current?.querySelector<HTMLElement>(`tr[data-id="${CSS.escape(id)}"]`)?.focus();
   }, [load]);
 
-  if (load.state === "loading") return <p className="meta" role="status">Loading the Feed…</p>;
-  if (load.state === "error") {
-    return (
-      <div className="banner error" role="alert">
-        <span className="text"><b>Couldn't reach the apply-kit service.</b> {load.message}. Check that it is running, then try again.</span>
-        <button className="btn sm" type="button" onClick={() => { setLoad({ state: "loading" }); setAttempt((n) => n + 1); }}>Try again</button>
-      </div>
-    );
-  }
+  return <>{content()}{toaster.element}</>;
 
-  const { feed, rows } = load;
-  if (feed.firstRun) {
+  function content() {
+    if (load.state === "loading") return <p className="meta" role="status">Loading the Feed…</p>;
+    if (load.state === "error") {
+      return (
+        <div className="banner error" role="alert">
+          <span className="text"><b>Couldn't reach the apply-kit service.</b> {load.message}. Check that it is running, then try again.</span>
+          <button className="btn sm" type="button" onClick={() => { setLoad({ state: "loading" }); setAttempt((n) => n + 1); }}>Try again</button>
+        </div>
+      );
+    }
+
+    const { feed, rows } = load;
+    if (feed.firstRun) {
+      return (
+        <section className="stack" style={{ gap: "var(--s-6)" }}>
+          <Toolbar feed={feed} view={view} onView={setView} />
+          <FirstRun />
+        </section>
+      );
+    }
+
+    const showThem = () => {
+      const joined = rows.queued.length;
+      focusAfterShow.current = rows.queued[0]?.id ?? null;
+      setLoad({ state: "ready", feed, rows: { shown: showQueued(rows, feed.jobs), queued: [] } });
+      setAnnouncement(`${joined} ${joined === 1 ? "job" : "jobs"} added in order. Your place in the list is kept.`);
+    };
+
     return (
       <section className="stack" style={{ gap: "var(--s-6)" }}>
+        {feed.health.mailbox?.state === "error" && <MailboxBanner mailbox={feed.health.mailbox} showHealthLink />}
+        {feed.health.failing.map((f) => (
+          <FailedSourceBanner
+            key={f.sourceId}
+            failure={f}
+            busy={busy === f.sourceId}
+            onTry={() => tryNow(f.sourceId, f.name, f.jobsKept)}
+            showHealthLink
+          />
+        ))}
+        <StatusLine message={said} />
+        <CheckHead
+          check={check}
+          title={viewTitle(view, rows.shown.length)}
+          subtitle={`${feed.counts.open} open across ${feed.health.sources} ${feed.health.sources === 1 ? "source" : "sources"} · newest first`}
+          waiting={rows.queued.length}
+        />
         <Toolbar feed={feed} view={view} onView={setView} />
-        <FirstRun />
+        <div ref={tableRef}>
+          {view === "passed"
+            ? <PassedClosed feed={{ ...feed, jobs: rows.shown }} toaster={toaster} onChanged={afterTriage} />
+            : (
+              <JobsTable
+                feed={{ ...feed, jobs: rows.shown }}
+                view={view}
+                toaster={toaster}
+                onChanged={afterTriage}
+                queued={rows.queued.length}
+                onShowQueued={showThem}
+                checking={check.status?.checking != null}
+              />
+            )}
+        </div>
+        <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
       </section>
     );
   }
-
-  const showThem = () => {
-    const joined = rows.queued.length;
-    focusAfterShow.current = rows.queued[0]?.id ?? null;
-    setLoad({ state: "ready", feed, rows: { shown: showQueued(rows, feed.jobs), queued: [] } });
-    setAnnouncement(`${joined} ${joined === 1 ? "job" : "jobs"} added in order. Your place in the list is kept.`);
-  };
-
-  return (
-    <section className="stack" style={{ gap: "var(--s-6)" }}>
-      {feed.health.mailbox?.state === "error" && <MailboxBanner mailbox={feed.health.mailbox} showHealthLink />}
-      {feed.health.failing.map((f) => (
-        <FailedSourceBanner
-          key={f.sourceId}
-          failure={f}
-          busy={busy === f.sourceId}
-          onTry={() => tryNow(f.sourceId, f.name, f.jobsKept)}
-          showHealthLink
-        />
-      ))}
-      <StatusLine message={said} />
-      <CheckHead
-        check={check}
-        title={viewTitle(view, rows.shown.length)}
-        subtitle={`${feed.counts.open} open across ${feed.health.sources} ${feed.health.sources === 1 ? "source" : "sources"} · newest first`}
-        waiting={rows.queued.length}
-      />
-      <Toolbar feed={feed} view={view} onView={setView} />
-      <div ref={tableRef}>
-        <JobsTable jobs={rows.shown} queued={rows.queued.length} onShowQueued={showThem} asOf={feed.asOf} view={view} checking={check.status?.checking != null} />
-      </div>
-      <p className="sr-only" role="status" aria-live="polite">{announcement}</p>
-    </section>
-  );
 }
 
 function viewTitle(view: FeedView, n: number): string {
@@ -228,92 +268,6 @@ function timeLeft(p: CheckProgress): string {
 }
 
 const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
-
-interface JobsTableProps {
-  jobs: FeedJob[];
-  queued: number;
-  onShowQueued: () => void;
-  asOf: string;
-  view: FeedView;
-  checking: boolean;
-}
-
-function JobsTable({ jobs, queued, onShowQueued, asOf, view, checking }: JobsTableProps) {
-  if (jobs.length === 0) {
-    return (
-      <div className="empty">
-        <h2>Nothing here yet</h2>
-        <p>
-          {checking ? "Jobs appear here as each source finishes." : view === "new" ? "No new jobs. Run a check to look again." : "No jobs in this view yet."}
-        </p>
-      </div>
-    );
-  }
-  return (
-    <div className="panel flush">
-      {queued > 0 && (
-        <div className="queue">
-          <span>{queued} new {queued === 1 ? "job" : "jobs"} found</span>
-          <button className="btn sm" type="button" onClick={onShowQueued}>Show them</button>
-        </div>
-      )}
-      <div className="table-wrap">
-        <table className="table jobs" aria-label="Jobs, newest first">
-          <thead>
-            <tr>
-              <th scope="col">Job</th>
-              <th scope="col" className="wide">Where</th>
-              <th scope="col" className="wide">Salary</th>
-              <th scope="col" className="wide" aria-sort="descending">Posted</th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((j) => <JobRow key={j.id} job={j} asOf={asOf} />)}
-          </tbody>
-        </table>
-      </div>
-      <div className="foot">
-        {checking
-          ? <span>More appear as sources finish. They wait under the bar above, so nothing moves while you work.</span>
-          : <span className="num">Showing {jobs.length} of {jobs.length + queued}</span>}
-      </div>
-    </div>
-  );
-}
-
-function JobRow({ job, asOf }: { job: FeedJob; asOf: string }) {
-  const where = job.location ?? "Location not stated";
-  const salary = job.salary ?? "Not stated";
-  const posted = job.postedAt ? ago(job.postedAt, asOf) : "Unknown";
-  return (
-    <tr data-id={job.id}>
-      <td className="job">
-        <a className="t" href={job.url} target="_blank" rel="noopener noreferrer">
-          {job.title}<span className="sr-only"> (opens the posting in a new tab)</span>
-        </a>
-        <span className="co">{job.company}</span>
-        {job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
-        <span className="narrow meta">{where} · {salary} · {posted}</span>
-      </td>
-      <td className="wide">{where}</td>
-      <td className="num wide">{salary}</td>
-      <td className="num wide">
-        {job.postedAt ? <time dateTime={job.postedAt} title={new Date(job.postedAt).toLocaleDateString("en-GB", { dateStyle: "long" })}>{posted}</time> : posted}
-      </td>
-    </tr>
-  );
-}
-
-const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-/** "today", "3 days ago", "6 months ago", relative to when the Feed was computed. */
-function ago(iso: string, asOf: string): string {
-  const days = Math.floor((new Date(asOf).getTime() - new Date(iso).getTime()) / 86_400_000);
-  if (days < 1) return "today";
-  if (days < 45) return rtf.format(-days, "day");
-  if (days < 365) return rtf.format(-Math.round(days / 30), "month");
-  return rtf.format(-Math.floor(days / 365), "year");
-}
 
 function Toolbar({ feed, view, onView }: { feed: FeedResult; view: FeedView; onView: (v: FeedView) => void }) {
   const { counts, ranking } = feed;

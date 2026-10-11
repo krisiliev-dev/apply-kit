@@ -46,6 +46,58 @@ const migrations: string[] = [
      error TEXT
    );
    CREATE INDEX source_check_source ON source_check(source_id, checked_at);`,
+  // #14: triage. A Job's state carries when it last changed and why (pass reason and note, how it
+  // closed). Each save, pass, close or reopen is a Decision that remembers every Job's previous
+  // state, so it can be undone, per Job.
+  `ALTER TABLE job ADD COLUMN state_changed_at TEXT;
+   ALTER TABLE job ADD COLUMN pass_reason TEXT;
+   ALTER TABLE job ADD COLUMN pass_note TEXT;
+   ALTER TABLE job ADD COLUMN closed_how TEXT;
+   CREATE TABLE decision (
+     id TEXT PRIMARY KEY,
+     kind TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );
+   CREATE TABLE decision_job (
+     decision_id TEXT NOT NULL REFERENCES decision(id),
+     job_id TEXT NOT NULL REFERENCES job(id),
+     prev_state TEXT NOT NULL,
+     prev_changed_at TEXT,
+     prev_pass_reason TEXT,
+     prev_pass_note TEXT,
+     prev_closed_how TEXT,
+     undone_at TEXT,
+     PRIMARY KEY (decision_id, job_id)
+   );
+   CREATE INDEX decision_job_job ON decision_job(job_id);`,
+  // #10: reading postings. One extraction per Posting (re-read when its text changes), the AI
+  // spending ledger the monthly cap is checked against, and Kris's answers to low-confidence facts.
+  `CREATE TABLE extraction (
+     posting_id TEXT PRIMARY KEY REFERENCES posting(id),
+     text_hash TEXT NOT NULL,
+     status TEXT NOT NULL,
+     facts TEXT,
+     model TEXT,
+     error TEXT,
+     attempts INTEGER NOT NULL DEFAULT 1,
+     read_at TEXT NOT NULL
+   );
+   CREATE TABLE ai_spend (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     at TEXT NOT NULL,
+     month TEXT NOT NULL,
+     task TEXT NOT NULL,
+     posting_id TEXT,
+     cost_usd REAL NOT NULL
+   );
+   CREATE INDEX ai_spend_month ON ai_spend(month);
+   CREATE TABLE fact_confirmation (
+     posting_id TEXT NOT NULL REFERENCES posting(id),
+     fact_key TEXT NOT NULL,
+     choice TEXT NOT NULL,
+     confirmed_at TEXT NOT NULL,
+     PRIMARY KEY (posting_id, fact_key)
+   );`,
   // #17: alert emails each email Source received (by Message-ID, so a re-delivered copy is one row),
   // for its usual rhythm; and every read of the job mailbox, for mailbox errors on Sources.
   `CREATE TABLE alert_email (

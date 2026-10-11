@@ -1,0 +1,40 @@
+{
+ "jobs": [
+  {
+   "id": 7001,
+   "title": "Security Engineer",
+   "absolute_url": "https://job-boards.eu.greenhouse.io/kestrel/jobs/7001",
+   "company_name": "Kestrel Payments",
+   "location": {
+    "name": "Sofia"
+   },
+   "first_published": "2026-10-09T08:00:00Z",
+   "content": "&lt;p&gt;Kestrel&#x27;s security team protects payment flows for 12,000 merchants across South-East Europe.&lt;/p&gt;\n&lt;h3&gt;Requirements&lt;/h3&gt;\n&lt;ul&gt;&lt;li&gt;You have 3+ years in a security operations or SOC role&lt;/li&gt;&lt;li&gt;Hands-on with Splunk or Elastic&lt;/li&gt;&lt;li&gt;Experience securing Kubernetes workloads&lt;/li&gt;&lt;li&gt;Professional English: our working language is English&lt;/li&gt;&lt;/ul&gt;\n&lt;h3&gt;Nice to have&lt;/h3&gt;\n&lt;ul&gt;&lt;li&gt;CISSP or a similar certification&lt;/li&gt;&lt;li&gt;Ideally 5+ years working in a SOC or CERT&lt;/li&gt;&lt;/ul&gt;\n&lt;p&gt;We work hybrid, two days a week together at Business Park Sofia.&lt;/p&gt;\n&lt;p&gt;Package: 5.5&amp;ndash;7k + annual bonus, paid monthly.&lt;/p&gt;\n&lt;p&gt;We are unable to sponsor visas for this role.&lt;/p&gt;"
+  },
+  {
+   "id": 7002,
+   "title": "SOC Analyst L2",
+   "absolute_url": "https://job-boards.eu.greenhouse.io/kestrel/jobs/7002",
+   "company_name": "Kestrel Payments",
+   "location": {
+    "name": "Sofia"
+   },
+   "first_published": "2026-10-08T08:00:00Z",
+   "content": "&lt;p&gt;Търсим анализатор с минимум 2 години опит в SOC среда.&lt;/p&gt;&lt;p&gt;Изисквания: свободно владеене на български език.&lt;/p&gt;"
+  },
+  {
+   "id": 7003,
+   "title": "Office Manager",
+   "absolute_url": "https://job-boards.eu.greenhouse.io/kestrel/jobs/7003",
+   "company_name": "Kestrel Payments",
+   "location": {
+    "name": "Sofia"
+   },
+   "first_published": "2026-10-07T08:00:00Z",
+   "content": null
+  }
+ ],
+ "meta": {
+  "total": 3
+ }
+}

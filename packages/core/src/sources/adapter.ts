@@ -32,6 +32,12 @@ export interface AdapterContext {
    * email Source in a check. Throws a MailboxError if the mailbox can't be read.
    */
   mail?: () => Promise<AlertEmail[]>;
+  /**
+   * Reads a setting by name (e.g. "JOOBLE_API_KEY"), or undefined if it isn't set. Adapters that
+   * need a key throw a readable error naming the missing setting, so the Source shows as failing
+   * with that message instead of crashing anything. Never put a setting's value in an error.
+   */
+  setting(name: string): string | undefined;
 }
 
 /** What sort of Source this is, as the Sources screen groups them. */
@@ -41,6 +47,13 @@ export interface SourceAdapter<Config = unknown> {
   /** Stored as source.kind; never rename once shipped. */
   readonly kind: string;
   readonly category: SourceCategory;
+  /** The Source type's name as the Sources screen shows it ("dev.bg", "EURES"). Defaults to the kind. */
+  readonly label?: string;
+  /**
+   * Minimum gap between two requests to this Source type's host, across all its Sources (the host's
+   * robots.txt Crawl-delay, e.g. Lever's 1 s). The engine already sends one request at a time per host.
+   */
+  readonly crawlDelayMs?: number;
   /**
    * Validates config and returns it normalised. Accepts the adapter's config object or a
    * shorthand string (for Greenhouse, the board token). Throws an Error with a readable message.

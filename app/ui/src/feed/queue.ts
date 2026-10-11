@@ -33,3 +33,17 @@ export function showQueued(current: ShownFeed, latest: FeedJob[]): FeedJob[] {
   // A row the Feed no longer lists stays until the next fresh load rather than vanishing mid-read.
   return [...ordered, ...current.shown.filter((j) => !placed.has(j.id))];
 }
+
+/**
+ * After Kris acts on rows (save, pass, undo, reopen): rows on screen keep showing if the view
+ * still lists them, rows he touched show (so an undone pass comes back in place), rows that left
+ * the view go, and anything else new keeps waiting behind the bar. Feed order throughout.
+ */
+export function settle(current: ShownFeed, incoming: FeedJob[], touched: string[]): ShownFeed {
+  if (current.shown.length === 0) return { shown: incoming, queued: [] };
+  const visible = new Set([...current.shown.map((j) => j.id), ...touched]);
+  return {
+    shown: incoming.filter((j) => visible.has(j.id)),
+    queued: incoming.filter((j) => !visible.has(j.id)),
+  };
+}

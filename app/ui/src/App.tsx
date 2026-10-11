@@ -4,6 +4,7 @@ import { fetchSources } from "./api.ts";
 import { FeedPage } from "./feed/FeedPage.tsx";
 import { healthPill } from "./health.tsx";
 import { SourcesPage } from "./sources/SourcesPage.tsx";
+import { JobPage } from "./job/JobPage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -29,7 +30,7 @@ export function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) ? "page" : undefined}>{n.label}</a>
+              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>{n.label}</a>
             ))}
           </nav>
           <span className="grow" />
@@ -41,6 +42,7 @@ export function App() {
         </header>
         <main className="main" id="main" tabIndex={-1}>
           {path === "/" ? <FeedPage onHealth={setHealth} />
+            : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
             : path === "/settings/sources" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}
         </main>

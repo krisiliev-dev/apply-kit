@@ -16,6 +16,7 @@ const known = Object.keys(senders) as SenderKey[];
 export const emailAlerts: EmailAlertAdapter<EmailAlertConfig> = {
   kind: "email",
   category: "email",
+  label: "Email alert",
 
   parseConfig(raw) {
     const sender = typeof raw === "string" ? raw : (raw as { sender?: unknown } | null)?.sender;

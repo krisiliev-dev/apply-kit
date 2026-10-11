@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
 import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
+import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
+import {
+  jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
+} from "./extraction/reading.ts";
+import { htmlToText } from "./extraction/text.ts";
 import { isInYourLocations } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
@@ -12,13 +18,26 @@ export interface FeedQuery {
   view: FeedView;
 }
 
-/** One row of the Feed. Fit, requirements and the why-line arrive with their tickets. */
+/**
+ * Whether a Job's posting has been read by the extractor:
+ * - unread: not read yet (it will be at the next read);
+ * - reading: being read right now;
+ * - read: requirements and facts are available;
+ * - failed: the last read failed (retried at the next read);
+ * - unscreened: not read because this month's AI budget is used up. Never hidden because of it.
+ */
+export type ReadingState = "unread" | "reading" | "read" | "failed" | "unscreened";
+
+/** One row of the Feed. Fit and the why-line arrive with their tickets. */
 export interface FeedJob {
   id: string;
   title: string;
   company: string;
   location: string | null;
-  /** Null means the posting doesn't state one; the UI shows "Not stated". */
+  /**
+   * The Source's own salary text, else the salary read from the posting ("Unclear" while it waits
+   * for Kris). Null means none is stated, or the posting isn't read yet (see `reading`).
+   */
   salary: string | null;
   /** When the Source says the job was first published (ISO 8601), if known. */
   postedAt: string | null;
@@ -26,6 +45,52 @@ export interface FeedJob {
   postingCount: number;
   /** Link to the job's posting. */
   url: string;
+  state: JobState;
+  /** Set on passed Jobs: when, the reason Kris chose (null when he gave none), and the Decision to undo. */
+  passed?: { at: string; reason: PassReason | null; note: string | null; decisionId: string };
+  /** Set on closed Jobs: when, how it closed in plain words, and the Decision to undo. */
+  closed?: { at: string; how: string; decisionId: string };
+  reading: ReadingState;
+  /** Every requirement read from the posting (empty until it is read). */
+  requirements: FeedRequirement[];
+  /** How many low-confidence facts wait for Kris ("N facts need you"). */
+  needsYou: number;
+}
+
+/** One Job in full, for the Job page. */
+export interface JobDetail {
+  id: string;
+  title: string;
+  company: string;
+  location: string | null;
+  /** Salary as the Source's structured data states it, or null. The read salary is in keyFacts. */
+  salary: string | null;
+  postedAt: string | null;
+  url: string;
+  state: JobState;
+  postings: { id: string; source: string; url: string; firstSeenAt: string }[];
+  reading: { state: ReadingState; error: string | null };
+  /** The posting as plain text, one line per paragraph or list item; fact sources point at its lines. */
+  postingText: string;
+  requirements: JobRequirement[];
+  keyFacts: KeyFact[];
+  /** Low-confidence facts for Kris to confirm; the cautious reading is used until he does. */
+  needsYou: NeedsYouItem[];
+  /** The reading dealbreakers and Fit use, or null until the posting is read. */
+  screening: Screening | null;
+  /** The Fit check (Fit, closest angle, gaps) arrives with Fit; null until then. */
+  fit: null;
+  /** This month's AI budget, so an unscreened Job can say why. */
+  budget: BudgetInfo;
+}
+
+/** The pass reasons Kris can choose from. None is ever chosen for him. */
+export const passReasons = ["skills-gap", "salary", "location", "company", "other"] as const;
+export type PassReason = (typeof passReasons)[number];
+
+export interface PassInput {
+  reason?: PassReason | null;
+  note?: string | null;
 }
 
 export type HealthState = "no-sources" | "working" | "failing";
@@ -87,6 +152,16 @@ export interface FeedResult {
   counts: { new: number; saved: number; open: number; passed: number; hidden: number };
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
+  budget: BudgetInfo;
+}
+
+/** This month's AI spending against the cap. Once reached, unread Postings show as unscreened. */
+export interface BudgetInfo {
+  /** Calendar month the spending counts towards (UTC), e.g. "2026-10". */
+  month: string;
+  capUsd: number;
+  spentUsd: number;
+  reached: boolean;
 }
 
 export interface NewSource {
@@ -151,6 +226,8 @@ export interface SourceHealth {
   id: string;
   name: string;
   kind: string;
+  /** The Source type's display name ("Greenhouse", "dev.bg"). */
+  label: string;
   category: SourceCategory;
   status: SourceStatus;
   /** First failed Check in the current run of failures; null unless failing. */
@@ -176,6 +253,14 @@ export interface CheckResult {
   sources: SourceCheck[];
 }
 
+/** A save, pass, close or reopen. Its id undoes it. */
+export interface Decision {
+  id: string;
+  kind: "save" | "pass" | "close" | "reopen";
+  /** The Jobs it changed. Jobs it didn't apply to (say, saving a closed job) are left out. */
+  jobIds: string[];
+}
+
 export interface CheckOptions {
   /** Called when the check starts, with how many Sources it will check. */
   onStart?: (total: number) => void;
@@ -196,6 +281,43 @@ export interface DiscoveryEngine {
   checkSource(sourceId: string): Promise<SourceCheck>;
   /** Every Source with its status, latest Checks and what a failure means for the Feed. */
   sourceHealth(): Promise<HealthReport>;
+  /** Saves open Jobs (new → saved). */
+  save(jobIds: string[]): Promise<Decision>;
+  /** Passes open Jobs, with the reason and note Kris gave (both optional, never defaulted). */
+  pass(jobIds: string[], input?: PassInput): Promise<Decision>;
+  /**
+   * Undoes a Decision, for all its Jobs or only the given ones, at any time: each Job goes back to
+   * its state before. A Job Kris has decided on again since is left alone. Returns the Jobs restored.
+   */
+  undo(decisionId: string, jobIds?: string[]): Promise<{ jobIds: string[] }>;
+  /** Closes Jobs that aren't closed yet, saying how in plain words ("No longer listed by Greenhouse"). */
+  close(jobIds: string[], how: string): Promise<Decision>;
+  /** Reopens closed Jobs: they go back to New. */
+  reopen(jobIds: string[]): Promise<Decision>;
+  /**
+   * Reads every open Job's posting that hasn't been read (or whose text changed, or whose last read
+   * failed), newest first, within the monthly AI budget. Never throws for a single posting.
+   */
+  readPending(): Promise<ReadResult>;
+  /** One Job in full, or null if there is no such Job. */
+  getJob(id: string): Promise<JobDetail | null>;
+  /**
+   * Kris's answer to one Needs-you item on a Job: keep the model's reading ("extracted") or the
+   * cautious one. Applies to this Job only; the posting isn't changed. Throws if the fact isn't waiting.
+   */
+  confirmFact(jobId: string, factKey: string, answer: FactAnswer): Promise<JobDetail>;
+  /**
+   * Reads one Job's posting now (the Job page asks when it opens an unread Job), within the budget.
+   * Resolves with the Job once the read has finished, failed or been refused by the cap.
+   */
+  readJob(jobId: string): Promise<JobDetail>;
+}
+
+export interface ReadResult {
+  read: number;
+  failed: number;
+  /** Left unread because the monthly AI budget would be crossed. */
+  unscreened: number;
 }
 
 /** How many recent Checks sourceHealth returns per Source. */
@@ -207,7 +329,20 @@ const mailLookbackMs = 14 * 24 * 60 * 60_000;
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
 
-const viewStates: Record<FeedView, string[]> = {
+/** Sent with every Source request so hosts can see who is asking. */
+const userAgent = "apply-kit/0.1 (personal job search; https://github.com/krisiliev-dev/apply-kit)";
+
+export type JobState = "new" | "saved" | "passed" | "closed";
+
+interface StateFields {
+  passReason?: string | null;
+  passNote?: string | null;
+  closedHow?: string | null;
+}
+
+const sqlText = (v: unknown): string | null => (v == null ? null : String(v));
+
+const viewStates: Record<FeedView, JobState[]> = {
   new: ["new"],
   saved: ["saved"],
   open: ["new", "saved"],
@@ -217,6 +352,35 @@ const viewStates: Record<FeedView, string[]> = {
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
+
+  const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
+
+  // Polite polling: one request at a time per host, across every Source and Check, spaced by the
+  // Source type's crawl delay (Lever asks for 1 s).
+  const hosts = new Map<string, { tail: Promise<void> | null; lastStartMs: number }>();
+  const wait = (ms: number) => (clock.wait ? clock.wait(ms) : new Promise<void>((r) => setTimeout(r, ms)));
+  function politely(url: string, gapMs: number, send: () => Promise<Response>): Promise<Response> {
+    const host = new URL(url).host;
+    const h = hosts.get(host) ?? { tail: null, lastStartMs: -Infinity };
+    hosts.set(host, h);
+    const start = () => {
+      h.lastStartMs = clock.now().getTime();
+      return send();
+    };
+    // A free host is asked straight away (no extra tick); otherwise the request queues behind the others.
+    const run = !h.tail && h.lastStartMs + gapMs <= clock.now().getTime()
+      ? startNow(start)
+      : (h.tail ?? Promise.resolve()).then(async () => {
+          const gap = h.lastStartMs + gapMs - clock.now().getTime();
+          if (gap > 0) await wait(gap);
+          return start();
+        });
+    const tail: Promise<void> = run.then(() => undefined, () => undefined).then(() => {
+      if (h.tail === tail) h.tail = null;
+    });
+    h.tail = tail;
+    return run;
+  }
 
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
   const countStates = (states: string[]) =>
@@ -268,10 +432,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const name = String(row.name);
     let rateLimited = false;
     let timedOut = false;
+    const gapMs = adapters[String(row.kind)]?.crawlDelayMs ?? 0;
     // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
     const watched: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const headers = new Headers(init?.headers);
+      if (!headers.has("user-agent")) headers.set("user-agent", userAgent);
       try {
-        const res = await deps.fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) });
+        const res = await politely(url, gapMs, () =>
+          deps.fetch(input, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) }));
         if (res.status === 429) rateLimited = true;
         return res;
       } catch (err) {
@@ -288,7 +457,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         emails = (await mail()).filter((e) => adapter.isFrom(config, e)).map((email) => ({ email, postings: adapter.parseEmail(config, email) }));
         found = emails.flatMap((e) => e.postings);
       } else {
-        found = await adapter.fetchPostings(config, { fetch: watched, mail });
+        found = await adapter.fetchPostings(config, { fetch: watched, setting, mail });
       }
       const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
       const newPostings = transaction(db, () => {
@@ -304,6 +473,154 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       recordCheck(db, sourceId, { at: startedAt, outcome, inLocations: null, total: null, error });
       return { sourceId, name, ok: false, outcome, error };
     }
+  }
+
+  /** Postings being read right now, so a second read waits for the first instead of starting. */
+  const inFlight = new Map<string, Promise<keyof ReadResult>>();
+  let pendingRun: Promise<ReadResult> | null = null;
+
+  const month = () => clock.now().toISOString().slice(0, 7);
+  const spentThisMonth = () =>
+    Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
+  const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
+  /** The month in which a read was last refused because it would have crossed the cap. */
+  let refusedInMonth: string | null = null;
+  const budget = (): BudgetInfo => {
+    const spentUsd = Math.round(spentThisMonth() * 1e6) / 1e6;
+    const capUsd = cap();
+    return { month: month(), capUsd, spentUsd, reached: capUsd <= 0 || spentUsd >= capUsd || refusedInMonth === month() };
+  };
+
+  function readingOf(postingId: string, budgetReached = budget().reached): { state: ReadingState; facts: PostingFacts | null; error: string | null; text: string } {
+    const p = db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
+    const text = postingText(p?.description_html);
+    if (inFlight.has(postingId)) return { state: "reading", facts: null, error: null, text };
+    const e = db.prepare("SELECT status, text_hash, facts, error FROM extraction WHERE posting_id = ?").get(postingId);
+    const current = e && e.text_hash === hashText(text);
+    if (current && e.status === "read") return { state: "read", facts: JSON.parse(String(e.facts)) as PostingFacts, error: null, text };
+    if (current && e.status === "failed") return { state: "failed", facts: null, error: String(e.error), text };
+    return { state: budgetReached ? "unscreened" : "unread", facts: null, error: null, text };
+  }
+
+  const answersFor = (postingId: string): Record<string, FactAnswer> =>
+    Object.fromEntries(
+      db.prepare("SELECT fact_key, choice FROM fact_confirmation WHERE posting_id = ?").all(postingId)
+        .map((r) => [String(r.fact_key), String(r.choice) as FactAnswer]),
+    );
+
+  /** The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is read. */
+  function readOf(postingId: string, reading: ReturnType<typeof readingOf>) {
+    return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
+  }
+
+  const toReadSql = `SELECT j.id AS job_id, p.id, p.title, p.company, p.location, p.description_html
+       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")}`;
+
+  async function readAllPending(): Promise<ReadResult> {
+    const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
+    const rows = db.prepare(
+      `${toReadSql} WHERE j.state IN ('new', 'saved') ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+    ).all();
+    for (const row of rows) {
+      const state = readingOf(String(row.id), false).state;
+      if (state === "read" || state === "reading") continue;
+      const outcome = await readPosting(row);
+      result[outcome]++;
+    }
+    return result;
+  }
+
+  function readPosting(row: Record<string, unknown>): Promise<keyof ReadResult> {
+    const postingId = String(row.id);
+    const running = inFlight.get(postingId);
+    if (running) return running;
+    const run = readPostingNow(row).finally(() => inFlight.delete(postingId));
+    inFlight.set(postingId, run);
+    return run;
+  }
+
+  async function readPostingNow(row: Record<string, unknown>): Promise<keyof ReadResult> {
+    const postingId = String(row.id);
+    const text = postingText(row.description_html);
+    const hash = hashText(text);
+    const now = () => clock.now().toISOString();
+    const store = (status: "read" | "failed", facts: PostingFacts | null, model: string | null, error: string | null) => {
+      // Answers belong to one reading of one text: a changed posting is asked about afresh.
+      db.prepare("DELETE FROM fact_confirmation WHERE posting_id = ?").run(postingId);
+      db.prepare(
+        `INSERT INTO extraction (posting_id, text_hash, status, facts, model, error, attempts, read_at)
+         VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+         ON CONFLICT (posting_id) DO UPDATE SET text_hash = excluded.text_hash, status = excluded.status,
+           facts = excluded.facts, model = excluded.model, error = excluded.error,
+           attempts = extraction.attempts + 1, read_at = excluded.read_at`,
+      ).run(postingId, hash, status, facts ? JSON.stringify(facts) : null, model, error, now());
+    };
+    if (text === "") {
+      store("failed", null, null, "The posting has no text to read");
+      return "failed";
+    }
+    const input: ExtractionInput = {
+      title: String(row.title),
+      company: String(row.company),
+      location: row.location == null ? null : String(row.location),
+      text: text.slice(0, MAX_TEXT_CHARS),
+    };
+    const estimate = deps.extractor.estimateCostUsd(input);
+    if (spentThisMonth() + estimate > cap()) {
+      refusedInMonth = month();
+      return "unscreened";
+    }
+
+    try {
+      const out = await deps.extractor.extract(input);
+      recordSpend(postingId, Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      const parsed = postingFactsSchema.safeParse(out.facts);
+      if (!parsed.success) {
+        store("failed", null, out.model, "The model's answer didn't have the expected shape");
+        return "failed";
+      }
+      store("read", parsed.data, out.model, null);
+      return "read";
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) recordSpend(postingId, billed);
+      store("failed", null, null, err instanceof Error ? err.message : String(err));
+      return "failed";
+    }
+  }
+
+  function recordSpend(postingId: string, costUsd: number) {
+    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'extraction', ?, ?)").run(
+      clock.now().toISOString(), month(), postingId, costUsd,
+    );
+  }
+
+  /** Moves each Job currently in one of `from` to `to`, remembering its previous state. */
+  function decide(kind: Decision["kind"], jobIds: string[], from: JobState[], to: JobState, fields: StateFields = {}): Decision {
+    const id = `decision:${crypto.randomUUID()}`;
+    const now = clock.now().toISOString();
+    const changed = transaction(db, () => {
+      db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
+      const out: string[] = [];
+      for (const jobId of new Set(jobIds)) {
+        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ?").get(jobId);
+        if (!job || !from.includes(String(job.state) as JobState)) continue;
+        db.prepare(
+          `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        ).run(id, jobId, String(job.state), sqlText(job.state_changed_at), sqlText(job.pass_reason), sqlText(job.pass_note), sqlText(job.closed_how));
+        setState(jobId, to, now, fields);
+        out.push(jobId);
+      }
+      return out;
+    });
+    return { id, kind, jobIds: changed };
+  }
+
+  function setState(jobId: string, state: string, changedAt: string | null, f: StateFields) {
+    db.prepare("UPDATE job SET state = ?, state_changed_at = ?, pass_reason = ?, pass_note = ?, closed_how = ? WHERE id = ?").run(
+      state, changedAt, f.passReason ?? null, f.passNote ?? null, f.closedHow ?? null, jobId,
+    );
   }
 
   function allSourceHealth(): SourceHealth[] {
@@ -331,37 +648,137 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
        WHERE p.source_id = ? AND j.state IN ('new', 'saved')`, id,
     );
     return {
-      id, name: String(r.name), kind, category: adapters[kind]?.category ?? "ats",
+      id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
       status, failingSince, lastGoodCheckAt, jobsKept, history, alerts,
     };
   }
 
+  async function getJob(id: string): Promise<JobDetail | null> {
+    const j = db.prepare(
+      `SELECT j.id, j.state, p.id AS posting_id, p.title, p.company, p.location, p.salary, p.posted_at, p.url
+       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")} WHERE j.id = ?`,
+    ).get(id);
+    if (!j) return null;
+    const postings = db.prepare(
+      `SELECT p.id, s.name, p.url, p.first_seen_at FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
+    ).all(id);
+    const money = budget();
+    const reading = readingOf(String(j.posting_id), money.reached);
+    const read = readOf(String(j.posting_id), reading);
+    return {
+      id: String(j.id),
+      title: String(j.title),
+      company: String(j.company),
+      location: j.location == null ? null : String(j.location),
+      salary: j.salary == null ? null : String(j.salary),
+      postedAt: j.posted_at == null ? null : String(j.posted_at),
+      url: String(j.url),
+      state: String(j.state) as JobState,
+      postings: postings.map((p) => ({ id: String(p.id), source: String(p.name), url: String(p.url), firstSeenAt: String(p.first_seen_at) })),
+      reading: { state: reading.state, error: reading.error },
+      postingText: reading.text,
+      requirements: read?.requirements ?? [],
+      keyFacts: read?.keyFacts ?? [],
+      needsYou: read?.needsYou ?? [],
+      screening: read?.screening ?? null,
+      fit: null,
+      budget: money,
+    };
+  }
+
   return {
+    async save(jobIds) {
+      return decide("save", jobIds, ["new"], "saved");
+    },
+
+    async pass(jobIds, input = {}) {
+      const reason = input.reason ?? null;
+      if (reason !== null && !passReasons.includes(reason)) throw new Error(`Unknown pass reason "${String(reason)}"`);
+      const note = input.note?.trim() || null;
+      return decide("pass", jobIds, ["new", "saved"], "passed", { passReason: reason, passNote: note });
+    },
+
+    async close(jobIds, how) {
+      return decide("close", jobIds, ["new", "saved", "passed"], "closed", { closedHow: how });
+    },
+
+    async reopen(jobIds) {
+      return decide("reopen", jobIds, ["closed"], "new");
+    },
+
+    async undo(decisionId, only) {
+      const now = clock.now().toISOString();
+      const restored = transaction(db, () => {
+        const rows = db.prepare(
+          `SELECT dj.rowid AS rid, dj.* FROM decision_job dj
+           WHERE dj.decision_id = ? AND dj.undone_at IS NULL
+             AND dj.rowid = (SELECT MAX(rowid) FROM decision_job WHERE job_id = dj.job_id AND undone_at IS NULL)
+           ORDER BY dj.rowid`,
+        ).all(decisionId);
+        const out: string[] = [];
+        for (const r of rows) {
+          const jobId = String(r.job_id);
+          if (only && !only.includes(jobId)) continue;
+          setState(jobId, String(r.prev_state), sqlText(r.prev_changed_at), {
+            passReason: sqlText(r.prev_pass_reason), passNote: sqlText(r.prev_pass_note), closedHow: sqlText(r.prev_closed_how),
+          });
+          db.prepare("UPDATE decision_job SET undone_at = ? WHERE rowid = ?").run(now, Number(r.rid));
+          out.push(jobId);
+        }
+        return out;
+      });
+      return { jobIds: restored };
+    },
+
     async queryFeed(query) {
       const sources = count("SELECT COUNT(*) AS n FROM source");
+      const money = budget();
       const states = viewStates[query.view];
       const rows = db.prepare(
-        `SELECT j.id, p.title, p.company, p.location, p.salary, p.posted_at, p.url,
-                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n
+        `SELECT j.id, p.id AS posting_id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
+                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
+                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
+                (SELECT decision_id FROM decision_job
+                  WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
          FROM job j
-         JOIN posting p ON p.id = (SELECT id FROM posting WHERE job_id = j.id ORDER BY first_seen_at, id LIMIT 1)
+         JOIN posting p ON p.id = ${representativePosting("j.id")}
          WHERE j.state IN (${states.map(() => "?").join(",")})
-         ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+         ORDER BY ${query.view === "passed" ? "j.state_changed_at DESC, " : ""}p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all(...states);
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
         firstRun: sources === 0,
-        jobs: rows.map((r) => ({
+        jobs: rows.map((r) => {
+          const reading = readingOf(String(r.posting_id), money.reached);
+          const read = readOf(String(r.posting_id), reading);
+          return {
           id: String(r.id),
           title: String(r.title),
           company: String(r.company),
           location: r.location == null ? null : String(r.location),
-          salary: r.salary == null ? null : String(r.salary),
+          salary: r.salary != null ? String(r.salary) : readSalary(read?.keyFacts),
           postedAt: r.posted_at == null ? null : String(r.posted_at),
           postingCount: Number(r.n),
           url: String(r.url),
-        })),
+          reading: reading.state,
+          requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
+          needsYou: read ? read.needsYou.length : 0,
+          state: String(r.state) as JobState,
+          ...(r.state === "passed" && {
+            passed: {
+              at: String(r.state_changed_at),
+              reason: (sqlText(r.pass_reason) as PassReason | null),
+              note: sqlText(r.pass_note),
+              decisionId: String(r.decision_id),
+            },
+          }),
+          ...(r.state === "closed" && {
+            closed: { at: String(r.state_changed_at), how: String(r.closed_how), decisionId: String(r.decision_id) },
+          }),
+          };
+        }),
         counts: {
           new: countStates(viewStates.new),
           saved: countStates(viewStates.saved),
@@ -371,6 +788,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         },
         health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
+        budget: money,
       };
     },
 
@@ -383,6 +801,33 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       );
       const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
       return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
+    },
+
+    getJob,
+
+    async confirmFact(jobId, factKey, answer) {
+      const posting = db.prepare(`SELECT ${representativePosting("?")} AS id`).get(jobId)?.id;
+      if (posting == null) throw new Error(`No job with id "${jobId}"`);
+      const postingId = String(posting);
+      const read = readOf(postingId, readingOf(postingId));
+      if (!read?.needsYou.some((n) => n.key === factKey)) throw new Error(`"${factKey}" doesn't need an answer on this job`);
+      if (answer !== "extracted" && answer !== "cautious") throw new Error(`Unknown answer "${String(answer)}"`);
+      db.prepare("INSERT OR REPLACE INTO fact_confirmation (posting_id, fact_key, choice, confirmed_at) VALUES (?, ?, ?, ?)").run(
+        postingId, factKey, answer, clock.now().toISOString(),
+      );
+      return (await getJob(jobId))!;
+    },
+
+    async readJob(jobId) {
+      const row = db.prepare(`${toReadSql} WHERE j.id = ?`).get(jobId);
+      if (!row) throw new Error(`No job with id "${jobId}"`);
+      if (readingOf(String(row.id), false).state !== "read") await readPosting(row);
+      return (await getJob(jobId))!;
+    },
+
+    readPending() {
+      pendingRun ??= readAllPending().finally(() => { pendingRun = null; });
+      return pendingRun;
     },
 
     async checkAll(options = {}) {
@@ -409,6 +854,18 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { asOf: clock.now().toISOString(), summary: summary(sources), sources };
     },
   };
+}
+
+function startNow(start: () => Promise<Response>): Promise<Response> {
+  try {
+    return start();
+  } catch (err) {
+    return Promise.reject(err);
+  }
+}
+
+function kindLabel(kind: string): string {
+  return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 
 function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: Date): HealthSummary {
@@ -503,6 +960,24 @@ function toCheckRecord(r: Record<string, unknown>): CheckRecord {
     error: r.error == null ? null : String(r.error),
   };
 }
+
+/** The salary a read gives a Feed row: the reading in use, "Unclear" while it waits for Kris, null if not stated. */
+function readSalary(keyFacts: KeyFact[] | undefined): string | null {
+  const fact = keyFacts?.find((f) => f.key === "salary");
+  if (!fact) return null;
+  if (fact.needsYou) return "Unclear";
+  return fact.value === "Not stated" ? null : fact.value;
+}
+
+/** Longest posting text sent to the extractor; longer texts are cut (bounds the cost of one read). */
+const MAX_TEXT_CHARS = 24_000;
+
+/** SQL for the Posting that stands for a Job (the first one seen) until merging picks a Target posting. */
+const representativePosting = (jobIdSql: string) =>
+  `(SELECT id FROM posting WHERE job_id = ${jobIdSql} ORDER BY first_seen_at, id LIMIT 1)`;
+
+const postingText = (html: unknown) => (html == null ? "" : htmlToText(String(html)));
+const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
 
 /**
  * Upserts one Posting by its stable identity (source id + the Source's own id). A Posting seen for

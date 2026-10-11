@@ -1,0 +1,40 @@
+{
+  "results": [
+    {
+      "jobId": 55500001,
+      "employerId": 900001,
+      "employerName": "Synthetic Bank",
+      "employerProfileId": null,
+      "employerProfileName": null,
+      "jobTitle": "Security Engineer",
+      "locationName": "London",
+      "minimumSalary": 65000.0000,
+      "maximumSalary": 80000.0000,
+      "currency": "GBP",
+      "expirationDate": "20/11/2026",
+      "date": "08/10/2026",
+      "jobDescription": " Our security team protects payments for millions of customers. You will harden cloud infrastructure... ",
+      "applications": 12,
+      "jobUrl": "https://www.reed.co.uk/jobs/security-engineer/55500001"
+    },
+    {
+      "jobId": 55500002,
+      "employerId": 900002,
+      "employerName": "Synthetic Recruitment",
+      "employerProfileId": null,
+      "employerProfileName": null,
+      "jobTitle": "SOC Analyst",
+      "locationName": "City of London",
+      "minimumSalary": null,
+      "maximumSalary": null,
+      "currency": null,
+      "expirationDate": "15/11/2026",
+      "date": "01/10/2026",
+      "jobDescription": "Join a 24/7 security operations centre... ",
+      "applications": 3,
+      "jobUrl": "https://www.reed.co.uk/jobs/soc-analyst/55500002"
+    }
+  ],
+  "ambiguousLocations": [],
+  "totalResults": 2
+}

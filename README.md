@@ -25,7 +25,32 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
+Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). Source types and their values:
+
+| Type | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token (`payhawkio`) | |
+| `lever` | site (`siteground`) or jobs link | EU accounts: `https://jobs.eu.lever.co/{site}`. Requests to Lever are spaced 1 s apart (its crawl delay). |
+| `ashby` | board name (`Dext-Careers`, case-sensitive) or jobs.ashbyhq.com link | |
+| `recruitee` | company (`accedia`) or careers-site link | |
+| `personio` | account (`acme`) or `https://acme.jobs.personio.com` | |
+| `teamtailor` | company (`superhosting`) or careers-site link | |
+| `smartrecruiters` | company id, optionally with a country (`Gameloft:bg`) | |
+
+Lever and Ashby don't state the company's name, so the Source's name is a guess from its value. Every Source request identifies apply-kit and goes one at a time per host. They are added on every start. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
+
+| Kind | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token, e.g. `payhawkio` | |
+| `workday` | careers link, optionally `\|Country`, e.g. `https://dxctechnology.wd1.myworkdayjobs.com/DXCJobs\|Bulgaria` | the country uses the site's own location filter |
+| `microsoft` | `query\|place`, e.g. `security engineer\|Dublin` | newest 100 |
+| `amazon` | `query\|ISO3 country`, e.g. `security engineer\|BGR` | newest 100 |
+| `devbg` | dev.bg category, e.g. `it-security` | |
+| `jooble` | `keywords\|location`, e.g. `security\|Bulgaria` | needs `JOOBLE_API_KEY` |
+| `reed` | `keywords\|location`, e.g. `security\|London` | needs `REED_API_KEY` |
+| `eures` | `keywords\|ISO2 country`, e.g. `cyber\|bg` | cyber keywords search by ESCO occupation |
+
+A Source whose key setting is missing shows as failing on the Sources screen with the setting's name.
 
 While the service runs it checks Sources every 30 minutes between 07:00 and 23:00 (local time), and after the Mac wakes it catches up within a minute if a check was missed. Change this with `APPLY_KIT_CHECK_EVERY_MINUTES` and `APPLY_KIT_CHECK_WINDOW` (e.g. `08:00-20:00`). **Check now** on the Feed checks straight away.
 
@@ -49,6 +74,8 @@ pnpm service:install     # builds the UI, installs ~/Library/LaunchAgents/dev.kr
 ```
 
 Logs go to `~/Library/Logs/apply-kit/`. `pnpm service:status` shows whether it is running; `pnpm service:uninstall` removes it. Run install again after upgrading Node or moving the repo.
+
+Reading postings (requirements, key facts) uses OpenRouter: set `OPENROUTER_API_KEY` and a hard monthly cap `AI_MONTHLY_CAP_USD` (e.g. `10`). Without a cap nothing is read and jobs stay in the Feed unscreened. `OPENROUTER_MODEL` and `OPENROUTER_PROVIDERS` are optional; China-hosted providers are always excluded.
 
 Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
 

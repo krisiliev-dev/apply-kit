@@ -89,7 +89,7 @@ function Ready({ report, busy, onTry, checkingAll, onCheckAll }: {
     return (
       <div className="empty">
         <h1>No sources yet</h1>
-        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Until adding companies here is built, list them in the <code>APPLY_KIT_SOURCES</code> setting (for example <code>greenhouse:payhawkio</code>) and restart apply-kit.</p>
+        <p>Sources are where your jobs come from: company job systems, job sites and alert emails. Until adding companies here is built, list them in the <code>APPLY_KIT_SOURCES</code> setting (for example <code>greenhouse:payhawkio,lever:siteground</code>; the README lists every type) and restart apply-kit.</p>
       </div>
     );
   }
@@ -186,7 +186,7 @@ function SourceRow({ source: s, busy, onTry, mailboxDown, quiet }: {
     <tr>
       <td>
         <span className="src-name">{s.name}</span>
-        <span className="src-id">{s.kind[0]!.toUpperCase() + s.kind.slice(1)} · {s.id.slice(s.kind.length + 1)}</span>
+        <span className="src-id">{s.label} · {s.id.slice(s.kind.length + 1)}</span>
         {quiet && (
           <div className="note quiet-note">
             {quietText(quiet.silentHours, quiet.usualGapHours)} Check the alert is still on, and that the iCloud forward still sends this sender's mail. Its jobs stay open.
