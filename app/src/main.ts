@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { createEngine, createScheduler } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
+import { createImapMailReader, readMailSettings } from "./mail.ts";
 import { createServer } from "./server.ts";
 
 loadEnv();
@@ -13,9 +14,11 @@ const engine = createEngine({
   db,
   clock,
   fetch: globalThis.fetch,
-  // Real extractor (OpenRouter) and IMAP mail reader arrive with their tickets.
+  // Real extractor (OpenRouter) arrives with its ticket.
   extractor: { extract: async () => { throw new Error("Extractor not configured yet"); } },
-  mailReader: { fetchSince: async () => [] },
+  // The Gmail job mailbox, read-only. Only read when an email-alert Source exists, during checks
+  // the scheduler runs; missing settings show on Sources as "not configured" with how to fix it.
+  mailReader: createImapMailReader(readMailSettings(process.env)),
 });
 
 // Sources from config are added on every start; adding one that exists changes nothing.
