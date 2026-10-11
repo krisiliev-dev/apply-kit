@@ -138,6 +138,32 @@ const migrations: string[] = [
   `ALTER TABLE source ADD COLUMN paused_at TEXT;
    ALTER TABLE source ADD COLUMN removed_at TEXT;
    ALTER TABLE source ADD COLUMN removed_decision_id TEXT;`,
+  // #12: dealbreakers. Kris's search settings as saved from the settings form (one row; none means
+  // the defaults). A Job Kris chose to show despite a dealbreaker ("Show this job") is remembered
+  // with the Decision that showed it, so undo hides it again. "Not a dealbreaker for me" changes a
+  // rule and is kept as a record of what changed, from which Job, so it can be listed and undone.
+  `CREATE TABLE search_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     value TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE job_unhidden (
+     job_id TEXT PRIMARY KEY REFERENCES job(id),
+     decision_id TEXT NOT NULL REFERENCES decision(id),
+     unhidden_at TEXT NOT NULL
+   );
+   CREATE TABLE rule_change (
+     id TEXT PRIMARY KEY,
+     job_id TEXT NOT NULL REFERENCES job(id),
+     rule TEXT NOT NULL,
+     reason_key TEXT NOT NULL,
+     reason_text TEXT NOT NULL,
+     change_text TEXT NOT NULL,
+     before_value TEXT NOT NULL,
+     after_value TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     undone_at TEXT
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

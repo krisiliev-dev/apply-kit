@@ -11,7 +11,7 @@ const message = (err: unknown) => (err instanceof Error ? err.message : String(e
 /** The title Kris reads: the English one for a posting in another language. */
 const titleOf = (j: FeedJob) => j.titleTranslation ?? j.title;
 const named = (j: FeedJob) => `${titleOf(j)} at ${j.company}`;
-const backIn: Record<FeedView, string> = { new: "New", saved: "Saved", open: "All open", passed: "Passed & closed" };
+const backIn: Record<FeedView, string> = { new: "New", saved: "Saved", open: "All open", passed: "Passed & closed", hidden: "Hidden" };
 
 /** Which actions take a job out of the view it is in. */
 const leavesView = (view: FeedView, action: "save" | "pass") => action === "pass" || view === "new";
@@ -21,7 +21,7 @@ const leavesView = (view: FeedView, action: "save" | "pass") => action === "pass
  * multi-select with bulk Save and Pass, and single-key shortcuts that work only while focus is in
  * the table and can be turned off.
  */
-export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShowQueued, checking }: {
+export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShowQueued, checking, onShowRelocation, onShowHidden }: {
   /** The Feed, with `jobs` set to the rows on screen. */
   feed: FeedResult;
   view: FeedView;
@@ -33,6 +33,9 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
   queued: number;
   onShowQueued: () => void;
   checking: boolean;
+  /** One-click fixes when filters leave the list empty: turn Relocation on, or open the hidden pile. */
+  onShowRelocation: () => void;
+  onShowHidden: () => void;
 }) {
   const jobs = feed.jobs;
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -166,6 +169,30 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
     toaster.announce(shortcutsOn ? "Keyboard shortcuts off" : "Keyboard shortcuts on");
   };
 
+  const filtered = feed.filteredToNothing;
+  if (jobs.length === 0 && filtered && !checking) {
+    const hidden = filtered.hidden.total;
+    return (
+      <div className="empty" ref={panelRef} tabIndex={-1}>
+        <h2>Nothing to show with these filters</h2>
+        <p>{filtered.text}</p>
+        <div className="row">
+          {filtered.relocation > 0 && (
+            <button className="btn primary" type="button" onClick={onShowRelocation}>
+              Show {filtered.relocation} relocation {filtered.relocation === 1 ? "job" : "jobs"}
+            </button>
+          )}
+          {hidden > 0 && (
+            <button className={`btn${filtered.relocation > 0 ? "" : " primary"}`} type="button" onClick={onShowHidden}>
+              {hidden === 1 ? "Show the hidden one" : `Show the ${hidden} hidden jobs`}
+            </button>
+          )}
+        </div>
+        {queued > 0 && <button className="btn sm" type="button" onClick={onShowQueued}>Show {queued} new {queued === 1 ? "job" : "jobs"}</button>}
+      </div>
+    );
+  }
+
   if (jobs.length === 0) {
     return (
       <div className="empty" ref={panelRef} tabIndex={-1}>
@@ -298,7 +325,15 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         <span className="narrow meta">{where} · {salary} · {posted}</span>
         <div className="narrow"><RowChips job={job} /></div>
         <div className="why-row">
-          <div className="why">{job.fit.why}</div>
+          <div className="why">
+            {job.fit.why}
+            {job.dealbreakers.length > 0 && (
+              <span className="learned">
+                Dealbreaker: {job.dealbreakers.map((d) => d.text).join(" · ")}
+                {job.shownByYou ? " · shown because you chose Show this job" : job.state === "saved" ? " · shown because you saved it" : ""}
+              </span>
+            )}
+          </div>
           <div className="row-acts">
             {job.state === "new" && (
               <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onSave}>Save<span className="sr-only"> {named(job)}</span></button>

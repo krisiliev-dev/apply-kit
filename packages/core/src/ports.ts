@@ -88,6 +88,6 @@ export interface EngineDeps {
    * would cross it; Postings then stay in the Feed unscreened. Unset or 0 means no AI spending.
    */
   aiMonthlyCapUsd?: number;
-  /** Kris's search settings, which Fit is measured against. Missing means the defaults (#12 stores them). */
+  /** Kris's search settings until he saves his own (the engine stores those). Missing means the defaults. */
   searchSettings?: SearchSettings;
 }

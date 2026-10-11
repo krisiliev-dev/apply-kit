@@ -13,7 +13,7 @@ describe("Personio source", () => {
 
     expect(check.sources).toEqual([{ sourceId: "personio:personio", name: "Personio", ok: true, found: 1, newPostings: 1 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Staff Software Engineer, Data Platform", company: "Personio SE & Co. KG", location: "Munich; Berlin", salary: null, postedAt: "2024-11-13T14:10:41.000Z", postingCount: 1, siteCount: 1, state: "new", url: "https://personio.jobs.personio.de/job/1834171", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
+      { id: expect.any(String), title: "Staff Software Engineer, Data Platform", company: "Personio SE & Co. KG", location: "Munich; Berlin", salary: null, postedAt: "2024-11-13T14:10:41.000Z", postingCount: 1, siteCount: 1, state: "new", url: "https://personio.jobs.personio.de/job/1834171", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object), dealbreakers: [], hidden: false, shownByYou: false },
     ]);
   });
 
