@@ -275,6 +275,9 @@ const historyLength = 14;
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
 
+/** Sent with every Source request so hosts can see who is asking. */
+const userAgent = "apply-kit/0.1 (personal job search; https://github.com/krisiliev-dev/apply-kit)";
+
 export type JobState = "new" | "saved" | "passed" | "closed";
 
 interface StateFields {
@@ -297,6 +300,34 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   migrate(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
+
+  // Polite polling: one request at a time per host, across every Source and Check, spaced by the
+  // Source type's crawl delay (Lever asks for 1 s).
+  const hosts = new Map<string, { tail: Promise<void> | null; lastStartMs: number }>();
+  const wait = (ms: number) => (clock.wait ? clock.wait(ms) : new Promise<void>((r) => setTimeout(r, ms)));
+  function politely(url: string, gapMs: number, send: () => Promise<Response>): Promise<Response> {
+    const host = new URL(url).host;
+    const h = hosts.get(host) ?? { tail: null, lastStartMs: -Infinity };
+    hosts.set(host, h);
+    const start = () => {
+      h.lastStartMs = clock.now().getTime();
+      return send();
+    };
+    // A free host is asked straight away (no extra tick); otherwise the request queues behind the others.
+    const run = !h.tail && h.lastStartMs + gapMs <= clock.now().getTime()
+      ? startNow(start)
+      : (h.tail ?? Promise.resolve()).then(async () => {
+          const gap = h.lastStartMs + gapMs - clock.now().getTime();
+          if (gap > 0) await wait(gap);
+          return start();
+        });
+    const tail: Promise<void> = run.then(() => undefined, () => undefined).then(() => {
+      if (h.tail === tail) h.tail = null;
+    });
+    h.tail = tail;
+    return run;
+  }
+
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
   const countStates = (states: string[]) =>
     count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
@@ -306,10 +337,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const name = String(row.name);
     let rateLimited = false;
     let timedOut = false;
+    const gapMs = adapters[String(row.kind)]?.crawlDelayMs ?? 0;
     // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
     const watched: typeof fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      const headers = new Headers(init?.headers);
+      if (!headers.has("user-agent")) headers.set("user-agent", userAgent);
       try {
-        const res = await deps.fetch(input, { ...init, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) });
+        const res = await politely(url, gapMs, () =>
+          deps.fetch(input, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) }));
         if (res.status === 429) rateLimited = true;
         return res;
       } catch (err) {
@@ -713,6 +749,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { asOf: clock.now().toISOString(), summary: summarise(sources), sources };
     },
   };
+}
+
+function startNow(start: () => Promise<Response>): Promise<Response> {
+  try {
+    return start();
+  } catch (err) {
+    return Promise.reject(err);
+  }
 }
 
 function kindLabel(kind: string): string {

@@ -25,7 +25,19 @@ pnpm run setup:data      # creates the Application Support folder and the `data`
 cp .env.example .env     # then fill in the settings you need (names only in the example)
 ```
 
-Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). They are added on every start. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
+Until adding companies on the Sources screen is built, Sources are set in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`). Source types and their values:
+
+| Type | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token (`payhawkio`) | |
+| `lever` | site (`siteground`) or jobs link | EU accounts: `https://jobs.eu.lever.co/{site}`. Requests to Lever are spaced 1 s apart (its crawl delay). |
+| `ashby` | board name (`Dext-Careers`, case-sensitive) or jobs.ashbyhq.com link | |
+| `recruitee` | company (`accedia`) or careers-site link | |
+| `personio` | account (`acme`) or `https://acme.jobs.personio.com` | |
+| `teamtailor` | company (`superhosting`) or careers-site link | |
+| `smartrecruiters` | company id, optionally with a country (`Gameloft:bg`) | |
+
+Lever and Ashby don't state the company's name, so the Source's name is a guess from its value. Every Source request identifies apply-kit and goes one at a time per host. They are added on every start. Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one.
 
 | Kind | Value | Notes |
 |---|---|---|
