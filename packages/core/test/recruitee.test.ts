@@ -9,14 +9,14 @@ describe("Recruitee source", () => {
     await engine.addSource({ kind: "recruitee", config: "accedia" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources).toEqual([{ sourceId: "recruitee:accedia", name: "Accedia", ok: true, found: 3, newPostings: 3 }]);
     // The offers' own `location` says "Remote job"; the structured locations and flags say hybrid in Sofia.
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Junior Front-End Developer", company: "Accedia", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-08-04T07:35:25.000Z", postingCount: 1, state: "new", url: "https://accedia.recruitee.com/o/junior-front-end-developer", reading: "unread", requirements: [], needsYou: 0 },
-      { id: expect.any(String), title: "Junior Marketing Specialist", company: "Accedia", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-08-03T11:12:27.000Z", postingCount: 1, state: "new", url: "https://accedia.recruitee.com/o/junior-marketing-specialist-4", reading: "unread", requirements: [], needsYou: 0 },
-      { id: expect.any(String), title: "Junior QA Engineer", company: "Accedia", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-07-24T08:56:07.000Z", postingCount: 1, state: "new", url: "https://accedia.recruitee.com/o/junior-qa-engineer-3", reading: "unread", requirements: [], needsYou: 0 },
+      { id: expect.any(String), title: "Junior Front-End Developer", company: "Accedia", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-08-04T07:35:25.000Z", postingCount: 1, siteCount: 1, state: "new", url: "https://accedia.recruitee.com/o/junior-front-end-developer", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
+      { id: expect.any(String), title: "Junior Marketing Specialist", company: "Accedia", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-08-03T11:12:27.000Z", postingCount: 1, siteCount: 1, state: "new", url: "https://accedia.recruitee.com/o/junior-marketing-specialist-4", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
+      { id: expect.any(String), title: "Junior QA Engineer", company: "Accedia", location: "Sofia, Bulgaria · Hybrid", salary: null, postedAt: "2026-07-24T08:56:07.000Z", postingCount: 1, siteCount: 1, state: "new", url: "https://accedia.recruitee.com/o/junior-qa-engineer-3", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
     ]);
   });
 
@@ -29,7 +29,7 @@ describe("Recruitee source", () => {
     const source = await engine.addSource({ kind: "recruitee", config: "https://careers.example.com/" });
 
     await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(source.id).toBe("recruitee:careers.example.com");
     expect(asked).toEqual(["https://careers.example.com/api/offers/"]);

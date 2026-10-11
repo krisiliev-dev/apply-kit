@@ -1,0 +1,103 @@
+{
+  "status": 200,
+  "error": {
+    "message": "",
+    "body": ""
+  },
+  "data": {
+    "positions": [
+      {
+        "id": 1970393557007211,
+        "displayJobId": "200057645",
+        "name": "Software Engineer - Observability",
+        "locations": [
+          "Ireland, Dublin, Dublin"
+        ],
+        "standardizedLocations": [
+          "Dublin, D, IE"
+        ],
+        "postedTs": 1791465324,
+        "solrScore": null,
+        "stars": 0,
+        "department": "Software Engineering",
+        "creationTs": 1790167134,
+        "isHot": 0,
+        "workLocationOption": "onsite",
+        "locationFlexibility": null,
+        "atsJobId": "200057645",
+        "positionUrl": "/careers/job/1970393557007211"
+      },
+      {
+        "id": 1970393556953328,
+        "displayJobId": "200046406",
+        "name": "Industry Architect - R&D",
+        "locations": [
+          "Ireland, Dublin, Dublin",
+          "Germany, Multiple Locations, Multiple Locations",
+          "United Kingdom, Multiple Locations, Multiple Locations",
+          "Portugal, Lisbon, Lisbon",
+          "Netherlands, Multiple Locations, Multiple Locations"
+        ],
+        "standardizedLocations": [
+          "Dublin, D, IE",
+          "DE",
+          "GB",
+          "Lisbon, Lisbon, PT",
+          "NL"
+        ],
+        "postedTs": 1791458192,
+        "solrScore": null,
+        "stars": 0,
+        "department": "Solution Architecture",
+        "creationTs": 1785494338,
+        "isHot": 0,
+        "workLocationOption": "onsite",
+        "locationFlexibility": null,
+        "atsJobId": "200046406",
+        "positionUrl": "/careers/job/1970393556953328"
+      },
+      {
+        "id": 1970393556991688,
+        "displayJobId": "200054348",
+        "name": "Software Engineer - Identity",
+        "locations": [
+          "Ireland, Dublin, Dublin"
+        ],
+        "standardizedLocations": [
+          "Dublin, D, IE"
+        ],
+        "postedTs": 1791402491,
+        "solrScore": null,
+        "stars": 0,
+        "department": "Software Engineering",
+        "creationTs": 1788962494,
+        "isHot": 0,
+        "workLocationOption": "onsite",
+        "locationFlexibility": null,
+        "atsJobId": "200054348",
+        "positionUrl": "/careers/job/1970393556991688"
+      }
+    ],
+    "count": 14,
+    "sortBy": "timestamp",
+    "appliedFilters": {
+      "distance": [
+        "160"
+      ],
+      "includeRemote": [
+        "1"
+      ],
+      "includeRelocation": [
+        "0"
+      ]
+    },
+    "savedSearchMetadata": {
+      "savedSearchParamsHash": null,
+      "isSavedSearchActive": false
+    },
+    "resultsMetaData": {
+      "usedFuzzSearch": false
+    }
+  },
+  "metadata": null
+}

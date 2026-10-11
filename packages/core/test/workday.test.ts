@@ -39,7 +39,7 @@ describe("Workday source", () => {
     const source = await engine.addSource({ kind: "workday", config: { url: careers, country: "Bulgaria", company: "DXC" } });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(source.id).toBe("workday:dxctechnology.wd1/dxcjobs/bulgaria");
     expect(check.sources).toEqual([{ sourceId: source.id, name: "DXC", ok: true, found: 3, newPostings: 3 }]);
@@ -81,7 +81,7 @@ describe("Workday source", () => {
     deps.fetch = tenantWith(45, { stopAt: 30 }).fetch;
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources[0]).toMatchObject({ ok: false, outcome: "error", error: "Workday stopped after 30 of 45 jobs, so this check is incomplete" });
     expect(feed.counts.new).toBe(25);

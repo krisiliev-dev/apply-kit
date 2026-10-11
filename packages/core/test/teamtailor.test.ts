@@ -9,11 +9,11 @@ describe("Teamtailor source", () => {
     await engine.addSource({ kind: "teamtailor", config: "superhosting" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources).toEqual([{ sourceId: "teamtailor:superhosting", name: "Superhosting", ok: true, found: 1, newPostings: 1 }]);
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Technical Support Specialist", company: "SuperHosting", location: "Sofia, Bulgaria", salary: null, postedAt: "2026-08-07T14:58:39.000Z", postingCount: 1, state: "new", url: "https://superhosting.teamtailor.com/jobs/8191492-technical-support-specialist", reading: "unread", requirements: [], needsYou: 0 },
+      { id: expect.any(String), title: "Technical Support Specialist", company: "SuperHosting", location: "Sofia, Bulgaria", salary: null, postedAt: "2026-08-07T14:58:39.000Z", postingCount: 1, siteCount: 1, state: "new", url: "https://superhosting.teamtailor.com/jobs/8191492-technical-support-specialist", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
     ]);
   });
 
@@ -32,7 +32,7 @@ describe("Teamtailor source", () => {
     await engine.addSource({ kind: "teamtailor", config: "https://careers.example.com/jobs" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(asked).toEqual(["https://careers.example.com/jobs.rss?per_page=200", "https://careers.example.com/jobs.rss?per_page=200&offset=100"]);
     expect(check.sources[0]).toMatchObject({ sourceId: "teamtailor:careers.example.com", ok: true, found: 101 });

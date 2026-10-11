@@ -1,5 +1,6 @@
 // Dependencies the discovery engine needs from the outside world. The service passes real ones;
 // tests pass fakes (see test/harness.ts).
+import type { SearchSettings } from "./search-settings.ts";
 import type { ExtractionInput, ExtractionResult } from "./extraction/facts.ts";
 
 export interface Clock {
@@ -87,4 +88,6 @@ export interface EngineDeps {
    * would cross it; Postings then stay in the Feed unscreened. Unset or 0 means no AI spending.
    */
   aiMonthlyCapUsd?: number;
+  /** Kris's search settings, which Fit is measured against. Missing means the defaults (#12 stores them). */
+  searchSettings?: SearchSettings;
 }

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:tt="https://teamtailor.com/locations">
+  <channel>
+    <title>SuperHosting</title>
+    <description>Свободни работни позиции</description>
+    <link>https://superhosting.teamtailor.com/jobs</link>
+    <item>
+      <title>Technical Support Specialist</title>
+      <description>&lt;p&gt;We at SuperHosting.BG, part of &lt;strong&gt;team.blue &lt;/strong&gt;family&lt;strong&gt;, &lt;/strong&gt;believe that hosting is not just a service. It is the foundation of a successful online presence. We offer top-level services by providing reliable hosting solutions and constant adequate support to more than 200,000 websites! Our service is at a perfect level because we care about o…[trimmed]</description>
+      <pubDate>Fri, 07 Aug 2026 17:58:39 +0300</pubDate>
+      <link>https://superhosting.teamtailor.com/jobs/8191492-technical-support-specialist</link>
+      <remoteStatus>none</remoteStatus>
+      <guid>a2a58af6-ba6e-429a-b6c9-6f464bc94b49</guid>
+      <tt:locations>
+        <tt:location>
+          <tt:name>СуперХостинг.БГ офис</tt:name>
+          <tt:address>[street removed]</tt:address>
+          <tt:zip>1574</tt:zip>
+          <tt:city>Sofia</tt:city>
+          <tt:country>Bulgaria</tt:country>
+        </tt:location>
+      </tt:locations>
+      <tt:department>Customer Services</tt:department>
+      <tt:role/>
+    </item>
+  </channel>
+</rss>

@@ -79,7 +79,8 @@ describe("email alerts: jobs.bg", () => {
 
 /** The Feed's jobs reduced to what an alert can tell us. */
 async function feedFacts(engine: Awaited<ReturnType<typeof withEmailSource>>["engine"]) {
-  const feed = await engine.queryFeed({ view: "new" });
+  // Every job the alert lists, newest first, relocation ones (Switzerland, Spain) after the rest.
+  const feed = await engine.queryFeed({ view: "new", sort: "newest", relocation: true });
   return feed.jobs.map(({ title, company, location, salary, url }) => ({ title, company, location, salary, url }));
 }
 
@@ -95,8 +96,8 @@ describe("email alerts: Google Careers", () => {
 
     expect(source.name).toBe("Google Careers alerts");
     expect(await feedFacts(engine)).toEqual([
-      { title: "Security Engineer, Cloud", company: "Google", location: "Zürich, Switzerland; Munich, Germany", salary: null, url: "https://www.google.com/about/careers/applications/jobs/results/100000000000000001-security-engineer-cloud" },
       { title: "Detection and Response Analyst", company: "YouTube", location: "Warsaw, Poland", salary: null, url: "https://www.google.com/about/careers/applications/jobs/results/100000000000000002-detection-and-response-analyst" },
+      { title: "Security Engineer, Cloud", company: "Google", location: "Zürich, Switzerland; Munich, Germany", salary: null, url: "https://www.google.com/about/careers/applications/jobs/results/100000000000000001-security-engineer-cloud" },
     ]);
   });
 

@@ -150,7 +150,11 @@
 .posting { display: grid; gap: var(--s-1); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small); min-width: 0 }
 .posting:first-child { border-top: 0; padding-top: 0 }
 .posting .name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere }
+.posting.target { border-left: 3px solid var(--action); padding-left: var(--s-4); padding-top: var(--s-4); background: color-mix(in srgb, var(--met-soft) 45%, transparent); border-radius: 0 var(--r-small) var(--r-small) 0 }
+.posting .note { color: var(--ink-2); font-size: inherit; margin-top: 0; max-width: none }
+.posting .row { gap: var(--s-2) }
 .posting .acts { margin-top: var(--s-2); margin-left: calc(-1 * var(--s-4)) }
+.posting.target .acts { margin-left: calc(-1 * var(--s-3)) }
 .ask-panel { border-left: 4px solid var(--bloom) }
 .ask-panel fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
 .ask-panel legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
@@ -160,3 +164,58 @@
 .needs b { font-weight: 600 }
 .mini { font-size: var(--fs-small) }
 .jobs .narrow .chips { margin: var(--s-2) 0 var(--s-1) }
+
+/* Fit and ranking (from the Feed and Job hi-fi). Tokens only. */
+.toolbar .sep { width: 1px; height: 22px; background: var(--rule) }
+.hint { align-items: center }
+.pop-wrap { position: relative }
+.pop { position: absolute; z-index: 20; top: calc(100% + var(--s-2)); left: 0; min-width: 190px; max-width: calc(100vw - 2 * var(--s-5)); display: grid; gap: var(--s-1); padding: var(--s-2); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); box-shadow: var(--shadow-overlay) }
+.pop[hidden] { display: none }
+.pop.end-align { left: auto; right: 0 }
+.pop button { font: inherit; font-size: var(--fs-small); text-align: left; padding: var(--s-3) var(--s-4); border: 0; background: transparent; color: var(--ink); border-radius: var(--r-small); cursor: pointer; display: flex; gap: var(--s-3); align-items: center }
+.pop button:hover { background: var(--surface-sunken) }
+.pop button svg { width: 12px; height: 12px; visibility: hidden; color: var(--action) }
+.pop button[aria-pressed="true"] { font-weight: 600 }
+.pop button[aria-pressed="true"] svg { visibility: visible }
+.why-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4) }
+@media (hover: hover) and (min-width: 761px) {
+  .why-row { flex-wrap: nowrap; align-items: flex-start }
+  .why-row .why { flex: 1 1 auto; min-width: 0 }
+  .why-row .row-acts { flex: none; margin-top: 0 }
+}
+.fit-h { text-align: right }
+.fit-h .fit-hw { display: inline-flex; align-items: center; gap: var(--s-2); position: relative }
+.fit-h .info { font: inherit; font-size: 11px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-control); background: var(--surface); color: var(--ink-2); cursor: help; display: inline-grid; place-items: center; padding: 0 }
+.tip { display: none; position: absolute; right: 0; top: calc(100% + var(--s-3)); z-index: 5; width: 240px; max-width: 70vw; white-space: normal; text-align: left; font-size: var(--fs-caption); font-weight: 400; line-height: var(--lh-snug); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-small); padding: var(--s-3) var(--s-4); box-shadow: var(--shadow-overlay) }
+.fit-h .info:hover + .tip, .fit-h .info:focus-visible + .tip, .tip.open { display: block }
+.table .fit.provisional { color: var(--ink-3) }
+.job-head h1 .orig { display: block; margin-top: var(--s-2); font-family: var(--font-text); font-size: var(--fs-title); font-weight: 500; letter-spacing: 0; color: var(--ink-3) }
+.decide .lang { display: grid; gap: var(--s-3); padding-top: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.fit-why { display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.fit-why[hidden] { display: none }
+.fit-why .kv { padding: 0; border: 0 }
+.fitcheck .kv { grid-column: 1 / -1; padding-top: var(--s-5); border-top: 1px solid var(--rule) }
+@media (max-width: 520px) { .fitcheck .kv { grid-template-columns: minmax(0, 1fr) } .fitcheck .kv dd { margin-bottom: var(--s-3) } }
+.jobs tr.group th { background: var(--surface-sunken); color: var(--ink-2); font-weight: 600; text-align: left }
+
+/* Add company and Remove (from the Sources hi-fi states "Add company", "Add · detecting", "Add · not found", "Remove company"). Tokens only. */
+.narrow-panel { max-width: 520px }
+.panel-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4) }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); min-width: 0 }
+.detect li { padding: var(--s-2) 0; flex-wrap: nowrap; align-items: flex-start }
+.detect li .grow { min-width: 0; overflow-wrap: anywhere }
+.detect .st { width: 112px; flex: none }
+.detect .note { display: block; max-width: none }
+.chip.outline { background: transparent; border: 1px dashed var(--border-control); color: var(--ink-3) }
+.spin.sm { width: 10px; height: 10px; border-width: 1.5px }
+.alt { display: grid; gap: var(--s-3); padding: var(--s-5); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.alt h3 { font-size: var(--fs-body) }
+.alt details summary { cursor: pointer; font-size: var(--fs-small); color: var(--ink-2); font-weight: 500 }
+.steps { margin: var(--s-3) 0 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.remove-dialog { width: min(620px, calc(100vw - 32px)) }
+.impact { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-3); font-size: var(--fs-small); color: var(--ink-2) }
+.impact b { color: var(--ink) }
+.remove-dialog .err { color: var(--gap); font-size: var(--fs-small) }
+.table .act .btn + .btn { margin-left: var(--s-2) }
+h1[tabindex="-1"]:focus { outline: none }

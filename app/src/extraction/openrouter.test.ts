@@ -4,6 +4,7 @@ import { CHINA_HOSTED_PROVIDERS, createOpenRouterExtractor } from "./openrouter.
 
 const facts: PostingFacts = {
   language: "en",
+  titleTranslation: null,
   requirements: [{ text: "TypeScript", kind: "required", category: "skill", source: { quote: "Strong TypeScript", translation: null }, confidence: 0.9 }],
   years: [],
   languages: [],

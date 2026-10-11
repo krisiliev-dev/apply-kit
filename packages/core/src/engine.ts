@@ -6,17 +6,31 @@ import {
   jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
 } from "./extraction/reading.ts";
 import { htmlToText } from "./extraction/text.ts";
+import { computeFit, type Fit } from "./fit/fit.ts";
+import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
+import { defaultSearchSettings, type SearchSettings } from "./search-settings.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
 import { isEmailAlertAdapter } from "./sources/adapter.ts";
-import { adapterFor, adapters } from "./sources/registry.ts";
+import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
+import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
+import { describeMergeReason, type MergeReason } from "./matching.ts";
 
 export type FeedView = "new" | "saved" | "open" | "passed";
 
 export interface FeedQuery {
   view: FeedView;
+  /**
+   * The Relocation filter. Off (the default): relocation Jobs (Switzerland, Spain) are left out of
+   * the main list and only counted. On: they follow the main list as a separate, lower-priority group.
+   */
+  relocation?: boolean;
+  /** "fit" (the default): best Fit first. "newest": most recently posted first. Passed & closed is always latest decision first. */
+  sort?: FeedSort;
 }
+
+export type FeedSort = "fit" | "newest";
 
 /**
  * Whether a Job's posting has been read by the extractor:
@@ -28,10 +42,14 @@ export interface FeedQuery {
  */
 export type ReadingState = "unread" | "reading" | "read" | "failed" | "unscreened";
 
-/** One row of the Feed. Fit and the why-line arrive with their tickets. */
+/** One row of the Feed. */
 export interface FeedJob {
   id: string;
   title: string;
+  /** English title of a posting in another language, once read; null otherwise. */
+  titleTranslation: string | null;
+  /** ISO 639-1 code of the posting's language ("en", "bg"), or null until it is read. */
+  language: string | null;
   company: string;
   location: string | null;
   /**
@@ -43,7 +61,9 @@ export interface FeedJob {
   postedAt: string | null;
   /** How many Postings were merged into this Job. */
   postingCount: number;
-  /** Link to the job's posting. */
+  /** How many different sites (link hosts) list it: the Feed's "on N sites". */
+  siteCount: number;
+  /** Link to the Job's target posting (by default the company's own page). */
   url: string;
   state: JobState;
   /** Set on passed Jobs: when, the reason Kris chose (null when he gave none), and the Decision to undo. */
@@ -55,20 +75,62 @@ export interface FeedJob {
   requirements: FeedRequirement[];
   /** How many low-confidence facts wait for Kris ("N facts need you"). */
   needsYou: number;
+  /** Fit with its reasons and the why-line. Always present: before a read it is provisional, from the title and location. */
+  fit: Fit;
 }
 
-/** One Job in full, for the Job page. */
+/** One Posting of a Job, as the Job page lists it. */
+export interface JobPosting {
+  id: string;
+  source: { id: string; name: string; kind: string; label: string; category: SourceCategory };
+  /** The site its link is on ("dev.bg", "job-boards.eu.greenhouse.io"). */
+  site: string;
+  url: string;
+  title: string;
+  company: string;
+  location: string | null;
+  salary: string | null;
+  postedAt: string | null;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  isTarget: boolean;
+  /** Why it was merged into this Job, in plain words; null for the Posting the Job started from. */
+  mergedBecause: string | null;
+}
+
+/** One Job in full, for the Job page: every Posting merged into it, the target marked, and its reading. */
 export interface JobDetail {
   id: string;
   title: string;
+  /** English title of a posting in another language, once read; null otherwise. */
+  titleTranslation: string | null;
+  /** ISO 639-1 code of the posting's language ("en", "bg"), or null until it is read. */
+  language: string | null;
+  /**
+   * The language a package for this Job starts in: Bulgarian for a Bulgarian posting, English
+   * otherwise. Switchable per package.
+   */
+  packageLanguage: "bg" | "en";
   company: string;
   location: string | null;
   /** Salary as the Source's structured data states it, or null. The read salary is in keyFacts. */
   salary: string | null;
   postedAt: string | null;
+  /** Link to the target posting. */
   url: string;
   state: JobState;
-  postings: { id: string; source: string; url: string; firstSeenAt: string }[];
+  /** How many Postings were merged into this Job, and on how many sites. */
+  postingCount: number;
+  siteCount: number;
+  postings: JobPosting[];
+  target: {
+    postingId: string;
+    /** "default" until Kris picks one ("Make target"). */
+    chosenBy: "default" | "you";
+    /** Why this is the target, in plain words. */
+    why: string;
+  };
+  /** The reading below is of the target posting (the one Kris applies through). */
   reading: { state: ReadingState; error: string | null };
   /** The posting as plain text, one line per paragraph or list item; fact sources point at its lines. */
   postingText: string;
@@ -78,8 +140,8 @@ export interface JobDetail {
   needsYou: NeedsYouItem[];
   /** The reading dealbreakers and Fit use, or null until the posting is read. */
   screening: Screening | null;
-  /** The Fit check (Fit, closest angle, gaps) arrives with Fit; null until then. */
-  fit: null;
+  /** The Fit check: Fit with its reasons, closest angle and gaps. Provisional until read and confirmed. */
+  fit: Fit;
   /** This month's AI budget, so an unscreened Job can say why. */
   budget: BudgetInfo;
 }
@@ -149,7 +211,11 @@ export interface FeedResult {
   /** True until the first source is connected: the UI shows the first-run state. */
   firstRun: boolean;
   jobs: FeedJob[];
-  counts: { new: number; saved: number; open: number; passed: number; hidden: number };
+  /**
+   * Jobs per view. New, Saved and All open leave relocation Jobs out; `relocation` counts the ones
+   * in this view (0 for Passed & closed), whether or not the Relocation filter is on.
+   */
+  counts: { new: number; saved: number; open: number; passed: number; hidden: number; relocation: number };
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
   budget: BudgetInfo;
@@ -178,6 +244,32 @@ export interface SourceInfo {
   name: string;
 }
 
+export interface AddSourceOptions {
+  /**
+   * Add it only if it was never added before: a Source Kris paused or removed stays that way. Used for
+   * Sources from the APPLY_KIT_SOURCES setting, which seed the watchlist once on each start.
+   */
+  onlyIfNew?: boolean;
+}
+
+/** What removing a Source would do to its open Jobs (Packages and Applications are never touched). */
+export interface RemovalPreview {
+  sourceId: string;
+  name: string;
+  label: string;
+  /** Open (new or saved) Jobs this Source lists. */
+  openJobs: number;
+  /** Open Jobs only this Source covers: they close with "Source removed". */
+  closing: number;
+  /** Open Jobs another Source also covers: they stay open. */
+  stayingOpen: number;
+  /** The other Sources keeping them open, with how many each covers. */
+  stayingVia: { sourceId: string; name: string; jobs: number }[];
+}
+
+/** How "Source removed" reads on a closed Job. */
+export const sourceRemovedHow = "Source removed";
+
 /** Why a Check failed: the Source errored, didn't answer in time, or asked us to slow down. */
 export type CheckFailure = "error" | "timeout" | "rate-limited";
 
@@ -197,8 +289,8 @@ export interface CheckRecord {
   error: string | null;
 }
 
-/** "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
-export type SourceStatus = "not-checked" | "working" | "failing" | "quiet";
+/** Paused: Kris stopped its checks; its Jobs stay as they are. "quiet": an email-alert Source whose silence is more than 3× its usual gap between emails. */
+export type SourceStatus = "not-checked" | "working" | "failing" | "quiet" | "paused";
 
 /** An email-alert Source's rhythm, learned from the emails it received in the last 6 weeks. */
 export interface AlertRhythm {
@@ -270,8 +362,23 @@ export interface CheckOptions {
 
 export interface DiscoveryEngine {
   queryFeed(query: FeedQuery): Promise<FeedResult>;
-  /** Adds a Source. Adding the same Source again (same kind and key) changes nothing. */
-  addSource(source: NewSource): Promise<SourceInfo>;
+  /**
+   * Adds a Source. Adding the same Source again (same kind and key) changes nothing, except that a
+   * removed or paused one comes back and is checked again (unless `onlyIfNew`).
+   */
+  addSource(source: NewSource, options?: AddSourceOptions): Promise<SourceInfo>;
+  /** Stops checking a Source. Nothing closes: its Jobs stay as they are. */
+  pauseSource(sourceId: string): Promise<SourceInfo>;
+  /** Checks a paused Source again from the next Check. */
+  resumeSource(sourceId: string): Promise<SourceInfo>;
+  /** What removing a Source would close and what stays open through other Sources. */
+  previewRemoval(sourceId: string): Promise<RemovalPreview>;
+  /**
+   * Removes a Source from the watchlist: it's no longer checked or listed, and its open Jobs that no
+   * other Source covers close with "Source removed" (Passed & closed, reopenable). Passed Jobs,
+   * Packages and Applications are untouched. Undoing the returned Decision brings the Source back.
+   */
+  removeSource(sourceId: string): Promise<{ sourceId: string; decision: Decision }>;
   /**
    * Checks every Source now. A failing Source is reported, never thrown, and changes nothing.
    * Each Source's results are stored as soon as it finishes, so the Feed fills while slower ones run.
@@ -287,20 +394,32 @@ export interface DiscoveryEngine {
   pass(jobIds: string[], input?: PassInput): Promise<Decision>;
   /**
    * Undoes a Decision, for all its Jobs or only the given ones, at any time: each Job goes back to
-   * its state before. A Job Kris has decided on again since is left alone. Returns the Jobs restored.
+   * its state before. A Job Kris has decided on again since is left alone. Undoing a whole removal
+   * also brings its Source back. Returns the Jobs (and Sources) restored.
    */
-  undo(decisionId: string, jobIds?: string[]): Promise<{ jobIds: string[] }>;
+  undo(decisionId: string, jobIds?: string[]): Promise<{ jobIds: string[]; sourceIds: string[] }>;
   /** Closes Jobs that aren't closed yet, saying how in plain words ("No longer listed by Greenhouse"). */
   close(jobIds: string[], how: string): Promise<Decision>;
   /** Reopens closed Jobs: they go back to New. */
   reopen(jobIds: string[]): Promise<Decision>;
   /**
+   * One Job with all its Postings and the target marked, or null if there's no such Job. A Job
+   * that was merged into another answers with the Job it now lives in (check the returned id).
+   */
+  getJob(jobId: string): Promise<JobDetail | null>;
+  /** Makes one of a Job's Postings its target posting ("Make target"); kept across later checks. */
+  setTarget(jobId: string, postingId: string): Promise<JobDetail>;
+  /**
+   * "Not the same job? Split": separates a Posting from its Job. The Job keeps its id, state and
+   * decisions with the Posting it was created from; the other side becomes its own Job (its old
+   * Job restored if it had one, else New). Remembered: later checks never merge them again.
+   */
+  splitPosting(jobId: string, postingId: string): Promise<{ jobIds: [string, string] }>;
+  /**
    * Reads every open Job's posting that hasn't been read (or whose text changed, or whose last read
    * failed), newest first, within the monthly AI budget. Never throws for a single posting.
    */
   readPending(): Promise<ReadResult>;
-  /** One Job in full, or null if there is no such Job. */
-  getJob(id: string): Promise<JobDetail | null>;
   /**
    * Kris's answer to one Needs-you item on a Job: keep the model's reading ("extracted") or the
    * cautious one. Applies to this Job only; the posting isn't changed. Throws if the fact isn't waiting.
@@ -311,6 +430,13 @@ export interface DiscoveryEngine {
    * Resolves with the Job once the read has finished, failed or been refused by the cap.
    */
   readJob(jobId: string): Promise<JobDetail>;
+  /**
+   * Finds which job system a company uses, from its name or a careers link: one request per job
+   * system, through the same polite fetch as Checks. Reports progress as each system answers. Adds
+   * nothing: Kris adds what was found with addSource. When nothing is found, `fallbacks` lists
+   * other ways to catch its jobs, best first.
+   */
+  detectCompany(input: string, options?: DetectOptions): Promise<CompanyDetection>;
 }
 
 export interface ReadResult {
@@ -352,8 +478,28 @@ const viewStates: Record<FeedView, JobState[]> = {
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
+  backfillMatchKeys(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
+  /** Kris's search settings (#12 stores and edits them; until then the defaults). */
+  const searchSettings = (): SearchSettings => deps.searchSettings ?? defaultSearchSettings;
+
+  /** Fit for one Job from what is known about it now. Learned adjustments (#15) plug in here. */
+  function fitOf(job: { title: string; location: string | null; postedAt: string | null }, read: ReturnType<typeof readOf>, facts: PostingFacts | null): Fit {
+    return computeFit({
+      title: job.title,
+      titleTranslation: facts?.titleTranslation ?? null,
+      location: job.location,
+      postedAt: job.postedAt,
+      read: read != null,
+      requirements: read?.requirements ?? [],
+      screening: read?.screening ?? null,
+      needsYou: read?.needsYou.length ?? 0,
+      settings: searchSettings(),
+      now: clock.now(),
+      adjustments: [],
+    });
+  }
 
   // Polite polling: one request at a time per host, across every Source and Check, spaced by the
   // Source type's crawl delay (Lever asks for 1 s).
@@ -383,8 +529,6 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
-  const countStates = (states: string[]) =>
-    count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
 
   /** One read of the job mailbox, shared by every email Source in a check and made only if one needs it. */
   function mailboxRead(): () => Promise<AlertEmail[]> {
@@ -427,27 +571,38 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return summarise(sources, mailboxHealth(sources), clock.now());
   }
 
-  async function checkOne(row: Record<string, unknown>, startedAt: string, mail: () => Promise<AlertEmail[]>): Promise<SourceCheck> {
-    const sourceId = String(row.id);
-    const name = String(row.name);
-    let rateLimited = false;
-    let timedOut = false;
-    const gapMs = adapters[String(row.kind)]?.crawlDelayMs ?? 0;
-    // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
-    const watched: typeof fetch = async (input, init) => {
+  /**
+   * The fetch every Source request goes through: polite per host (spaced by the Source type's crawl
+   * delay), identified by the user agent, and timed out. `watch` sees each answer and failure.
+   */
+  function fetchFor(kind: string, watch: { status?(s: number): void; failed?(err: unknown): void } = {}): typeof fetch {
+    const gapMs = adapters[kind]?.crawlDelayMs ?? 0;
+    return async (input, init) => {
       const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       const headers = new Headers(init?.headers);
       if (!headers.has("user-agent")) headers.set("user-agent", userAgent);
       try {
         const res = await politely(url, gapMs, () =>
           deps.fetch(input, { ...init, headers, signal: init?.signal ?? AbortSignal.timeout(checkTimeoutMs) }));
-        if (res.status === 429) rateLimited = true;
+        watch.status?.(res.status);
         return res;
       } catch (err) {
-        if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true;
+        watch.failed?.(err);
         throw err;
       }
     };
+  }
+
+  async function checkOne(row: Record<string, unknown>, startedAt: string, mail: () => Promise<AlertEmail[]>): Promise<SourceCheck> {
+    const sourceId = String(row.id);
+    const name = String(row.name);
+    let rateLimited = false;
+    let timedOut = false;
+    // Adapters only throw; the engine watches their requests to tell a timeout or rate limit from other errors.
+    const watched = fetchFor(String(row.kind), {
+      status: (s) => { if (s === 429) rateLimited = true; },
+      failed: (err) => { if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true; },
+    });
     try {
       const adapter = adapterFor(String(row.kind));
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
@@ -513,15 +668,20 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
   }
 
-  const toReadSql = `SELECT j.id AS job_id, p.id, p.title, p.company, p.location, p.description_html
-       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")}`;
+  /** The posting a Job is read from: its target posting (the company's own page by default). */
+  function postingToRead(jobId: string): Record<string, unknown> | undefined {
+    return db.prepare("SELECT id, title, company, location, description_html FROM posting WHERE id = ?").get(targetOf(db, jobId).postingId);
+  }
 
   async function readAllPending(): Promise<ReadResult> {
     const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
-    const rows = db.prepare(
-      `${toReadSql} WHERE j.state IN ('new', 'saved') ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
-    ).all();
-    for (const row of rows) {
+    const jobIds = db.prepare(
+      `SELECT j.id FROM job j JOIN posting p ON p.id = ${targetPostingSql("j.id")}
+       WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved') ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+    ).all().map((r) => String(r.id));
+    for (const jobId of jobIds) {
+      const row = postingToRead(jobId);
+      if (!row) continue;
       const state = readingOf(String(row.id), false).state;
       if (state === "read" || state === "reading") continue;
       const outcome = await readPosting(row);
@@ -603,7 +763,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       db.prepare("INSERT INTO decision (id, kind, created_at) VALUES (?, ?, ?)").run(id, kind, now);
       const out: string[] = [];
       for (const jobId of new Set(jobIds)) {
-        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ?").get(jobId);
+        const job = db.prepare("SELECT state, state_changed_at, pass_reason, pass_note, closed_how FROM job WHERE id = ? AND merged_into IS NULL").get(jobId);
         if (!job || !from.includes(String(job.state) as JobState)) continue;
         db.prepare(
           `INSERT INTO decision_job (decision_id, job_id, prev_state, prev_changed_at, prev_pass_reason, prev_pass_note, prev_closed_how)
@@ -623,13 +783,162 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     );
   }
 
+  // A Job's display fields come from its target posting (the company's own page by default).
+  const jobSelect = `SELECT j.id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
+                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
+                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
+                (SELECT decision_id FROM decision_job
+                  WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
+         FROM job j
+         JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
+
+  function toFeedJob(r: Record<string, unknown>, money = budget()): FeedJob {
+    const links = linksOf(String(r.id));
+    const reading = readingOf(links.targetId, money.reached);
+    const read = readOf(links.targetId, reading);
+    const base = { title: String(r.title), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
+    return {
+      id: String(r.id),
+      title: base.title,
+      titleTranslation: reading.facts?.titleTranslation ?? null,
+      language: reading.facts?.language ?? null,
+      company: String(r.company),
+      location: base.location,
+      salary: r.salary != null ? String(r.salary) : readSalary(read?.keyFacts),
+      postedAt: base.postedAt,
+      postingCount: Number(r.n),
+      siteCount: links.siteCount,
+      url: links.url,
+      reading: reading.state,
+      requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
+      needsYou: read ? read.needsYou.length : 0,
+      fit: fitOf(base, read, reading.facts),
+      state: String(r.state) as JobState,
+      ...(r.state === "passed" && {
+        passed: {
+          at: String(r.state_changed_at),
+          reason: (sqlText(r.pass_reason) as PassReason | null),
+          note: sqlText(r.pass_note),
+          decisionId: String(r.decision_id),
+        },
+      }),
+      ...(r.state === "closed" && {
+        closed: { at: String(r.state_changed_at), how: String(r.closed_how), decisionId: String(r.decision_id) },
+      }),
+    };
+  }
+
+  async function getJob(requestedId: string): Promise<JobDetail | null> {
+    const jobId = liveJobId(db, requestedId);
+    if (!jobId) return null;
+    const row = db.prepare(`${jobSelect} WHERE j.id = ?`).get(jobId);
+    if (!row) return null;
+    const target = targetOf(db, jobId);
+    const postings = db.prepare(
+      `SELECT p.*, s.name AS source_name, s.kind FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
+    ).all(jobId).map((p): JobPosting => {
+      const kind = String(p.kind);
+      const reason = sqlText(p.merge_reason);
+      return {
+        id: String(p.id),
+        source: { id: String(p.source_id), name: String(p.source_name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats" },
+        site: siteOf(String(p.url)),
+        url: String(p.url),
+        title: String(p.title),
+        company: String(p.company),
+        location: sqlText(p.location),
+        salary: sqlText(p.salary),
+        postedAt: sqlText(p.posted_at),
+        firstSeenAt: String(p.first_seen_at),
+        lastSeenAt: String(p.last_seen_at),
+        isTarget: p.id === target.postingId,
+        mergedBecause: reason ? describeMergeReason(JSON.parse(reason) as MergeReason) : null,
+      };
+    });
+    const t = postings.find((p) => p.isTarget)!;
+    const why = target.chosenBy === "you" ? "You chose this posting"
+      : t.source.category === "ats" ? `The company's own page (${t.source.label})`
+      : "First seen here: none of the postings is on the company's own page";
+    const money = budget();
+    const reading = readingOf(target.postingId, money.reached);
+    const read = readOf(target.postingId, reading);
+    const base = { title: String(row.title), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
+    const language = reading.facts?.language ?? null;
+    return {
+      id: jobId,
+      title: base.title,
+      titleTranslation: reading.facts?.titleTranslation ?? null,
+      language,
+      packageLanguage: language === "bg" ? "bg" : "en",
+      company: String(row.company),
+      location: base.location,
+      salary: sqlText(row.salary),
+      postedAt: base.postedAt,
+      url: t.url,
+      state: String(row.state) as JobState,
+      postingCount: postings.length,
+      siteCount: new Set(postings.map((p) => p.site)).size,
+      postings,
+      target: { ...target, why },
+      reading: { state: reading.state, error: reading.error },
+      postingText: reading.text,
+      requirements: read?.requirements ?? [],
+      keyFacts: read?.keyFacts ?? [],
+      needsYou: read?.needsYou ?? [],
+      screening: read?.screening ?? null,
+      fit: fitOf(base, read, reading.facts),
+      budget: money,
+    };
+  }
+
+  /** The target posting's link and how many sites list the Job. */
+  function linksOf(jobId: string): { siteCount: number; url: string; targetId: string } {
+    const rows = db.prepare("SELECT id, url FROM posting WHERE job_id = ?").all(jobId);
+    const target = targetOf(db, jobId).postingId;
+    return {
+      siteCount: new Set(rows.map((r) => siteOf(String(r.url)))).size,
+      url: String(rows.find((r) => r.id === target)?.url ?? rows[0]?.url),
+      targetId: target,
+    };
+  }
+
   function allSourceHealth(): SourceHealth[] {
-    const rows = db.prepare("SELECT id, name, kind FROM source ORDER BY created_at, id").all();
+    const rows = db.prepare("SELECT id, name, kind, paused_at FROM source WHERE removed_at IS NULL ORDER BY created_at, id").all();
     const history = db.prepare(
       `SELECT checked_at, outcome, in_locations, total, error FROM source_check
        WHERE source_id = ? ORDER BY checked_at DESC, id DESC LIMIT ${historyLength}`,
     );
     return rows.map((r) => describeSource(r, history.all(String(r.id)).map(toCheckRecord)));
+  }
+
+  /** A Source on the watchlist (paused or not), or throws. Removed Sources are gone as far as Kris can tell. */
+  function liveSource(sourceId: string): Record<string, unknown> {
+    const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ? AND removed_at IS NULL").get(sourceId);
+    if (!row) throw new Error(`No source "${sourceId}"`);
+    return row;
+  }
+
+  function sourceInfo(id: string): SourceInfo {
+    const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
+    return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
+  }
+
+  /** Other watchlist Sources (paused ones included) with a Posting in this Job. */
+  function coveringSources(jobId: string, exceptSourceId: string) {
+    return db.prepare(
+      `SELECT DISTINCT s.id, s.name FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? AND s.id != ? AND s.removed_at IS NULL ORDER BY s.created_at, s.id`,
+    ).all(jobId, exceptSourceId);
+  }
+
+  /** A Source's open Jobs, and those of them no other Source covers. */
+  function removalImpact(sourceId: string): { open: string[]; closing: string[] } {
+    const open = db.prepare(
+      `SELECT DISTINCT j.id FROM job j JOIN posting p ON p.job_id = j.id
+       WHERE p.source_id = ? AND j.state IN ('new', 'saved') ORDER BY j.id`,
+    ).all(sourceId).map((r) => String(r.id));
+    return { open, closing: open.filter((id) => coveringSources(id, sourceId).length === 0) };
   }
 
   function describeSource(r: Record<string, unknown>, history: CheckRecord[]): SourceHealth {
@@ -639,7 +948,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const lastGoodCheckAt = lastGood == null ? null : String(lastGood);
     const latest = history[0];
     const alerts = adapters[kind]?.category === "email" ? alertRhythm(db, id, clock.now()) : null;
-    const status: SourceStatus = !latest ? "not-checked" : latest.outcome !== "ok" ? "failing" : alerts?.quietSince ? "quiet" : "working";
+    const status: SourceStatus = r.paused_at != null ? "paused" : !latest ? "not-checked" : latest.outcome !== "ok" ? "failing" : alerts?.quietSince ? "quiet" : "working";
     const failingSince = status !== "failing" ? null : String(db.prepare(
       "SELECT MIN(checked_at) AS at FROM source_check WHERE source_id = ? AND outcome != 'ok' AND checked_at > ?",
     ).get(id, lastGoodCheckAt ?? "")!.at);
@@ -650,40 +959,6 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return {
       id, name: String(r.name), kind, label: kindLabel(kind), category: adapters[kind]?.category ?? "ats",
       status, failingSince, lastGoodCheckAt, jobsKept, history, alerts,
-    };
-  }
-
-  async function getJob(id: string): Promise<JobDetail | null> {
-    const j = db.prepare(
-      `SELECT j.id, j.state, p.id AS posting_id, p.title, p.company, p.location, p.salary, p.posted_at, p.url
-       FROM job j JOIN posting p ON p.id = ${representativePosting("j.id")} WHERE j.id = ?`,
-    ).get(id);
-    if (!j) return null;
-    const postings = db.prepare(
-      `SELECT p.id, s.name, p.url, p.first_seen_at FROM posting p JOIN source s ON s.id = p.source_id
-       WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
-    ).all(id);
-    const money = budget();
-    const reading = readingOf(String(j.posting_id), money.reached);
-    const read = readOf(String(j.posting_id), reading);
-    return {
-      id: String(j.id),
-      title: String(j.title),
-      company: String(j.company),
-      location: j.location == null ? null : String(j.location),
-      salary: j.salary == null ? null : String(j.salary),
-      postedAt: j.posted_at == null ? null : String(j.posted_at),
-      url: String(j.url),
-      state: String(j.state) as JobState,
-      postings: postings.map((p) => ({ id: String(p.id), source: String(p.name), url: String(p.url), firstSeenAt: String(p.first_seen_at) })),
-      reading: { state: reading.state, error: reading.error },
-      postingText: reading.text,
-      requirements: read?.requirements ?? [],
-      keyFacts: read?.keyFacts ?? [],
-      needsYou: read?.needsYou ?? [],
-      screening: read?.screening ?? null,
-      fit: null,
-      budget: money,
     };
   }
 
@@ -728,63 +1003,63 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         }
         return out;
       });
-      return { jobIds: restored };
+      const sourceIds: string[] = [];
+      if (!only) {
+        for (const r of db.prepare("SELECT id FROM source WHERE removed_decision_id = ? AND removed_at IS NOT NULL").all(decisionId)) {
+          db.prepare("UPDATE source SET removed_at = NULL, removed_decision_id = NULL WHERE id = ?").run(String(r.id));
+          sourceIds.push(String(r.id));
+        }
+      }
+      return { jobIds: restored, sourceIds };
+    },
+
+    async setTarget(jobId, postingId) {
+      setTarget(db, jobId, postingId);
+      return (await getJob(jobId))!;
+    },
+
+    async splitPosting(jobId, postingId) {
+      return transaction(db, () => split(db, jobId, postingId, clock.now().toISOString()));
     },
 
     async queryFeed(query) {
-      const sources = count("SELECT COUNT(*) AS n FROM source");
+      const sources = count("SELECT COUNT(*) AS n FROM source WHERE removed_at IS NULL");
       const money = budget();
-      const states = viewStates[query.view];
+      // Every Job is built (with its Fit) so counts can leave relocation Jobs out; a personal Feed is small.
       const rows = db.prepare(
-        `SELECT j.id, p.id AS posting_id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
-                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
-                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
-                (SELECT decision_id FROM decision_job
-                  WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
-         FROM job j
-         JOIN posting p ON p.id = ${representativePosting("j.id")}
-         WHERE j.state IN (${states.map(() => "?").join(",")})
-         ORDER BY ${query.view === "passed" ? "j.state_changed_at DESC, " : ""}p.posted_at IS NULL, p.posted_at DESC, j.id`,
-      ).all(...states);
+        `${jobSelect}
+         WHERE j.merged_into IS NULL
+         ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
+      ).all();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
+      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state);
+      const countView = (v: FeedView) => all.filter(({ job }) => inView(v, job) && (v === "passed" || !relocating(job))).length;
+
+      let jobs: FeedJob[];
+      if (query.view === "passed") {
+        jobs = all.filter(({ job }) => inView("passed", job))
+          .sort((a, b) => (a.changedAt < b.changedAt ? 1 : a.changedAt > b.changedAt ? -1 : 0))
+          .map(({ job }) => job);
+      } else {
+        const listed = all.map(({ job }) => job).filter((j) => inView(query.view, j));
+        const byFit = (a: FeedJob, b: FeedJob) => b.fit.value - a.fit.value;
+        if ((query.sort ?? "fit") === "fit") listed.sort(byFit);
+        const main = listed.filter((j) => !relocating(j));
+        jobs = query.relocation ? [...main, ...listed.filter(relocating)] : main;
+      }
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
         firstRun: sources === 0,
-        jobs: rows.map((r) => {
-          const reading = readingOf(String(r.posting_id), money.reached);
-          const read = readOf(String(r.posting_id), reading);
-          return {
-          id: String(r.id),
-          title: String(r.title),
-          company: String(r.company),
-          location: r.location == null ? null : String(r.location),
-          salary: r.salary != null ? String(r.salary) : readSalary(read?.keyFacts),
-          postedAt: r.posted_at == null ? null : String(r.posted_at),
-          postingCount: Number(r.n),
-          url: String(r.url),
-          reading: reading.state,
-          requirements: read ? read.requirements.map(({ text, kind, status, needsYou }) => ({ text, kind, status, needsYou })) : [],
-          needsYou: read ? read.needsYou.length : 0,
-          state: String(r.state) as JobState,
-          ...(r.state === "passed" && {
-            passed: {
-              at: String(r.state_changed_at),
-              reason: (sqlText(r.pass_reason) as PassReason | null),
-              note: sqlText(r.pass_note),
-              decisionId: String(r.decision_id),
-            },
-          }),
-          ...(r.state === "closed" && {
-            closed: { at: String(r.state_changed_at), how: String(r.closed_how), decisionId: String(r.decision_id) },
-          }),
-          };
-        }),
+        jobs,
         counts: {
-          new: countStates(viewStates.new),
-          saved: countStates(viewStates.saved),
-          open: countStates(viewStates.open),
-          passed: countStates(viewStates.passed),
+          new: countView("new"),
+          saved: countView("saved"),
+          open: countView("open"),
+          passed: countView("passed"),
           hidden: 0,
+          relocation: query.view === "passed" ? 0 : all.filter(({ job }) => inView(query.view, job) && relocating(job)).length,
         },
         health: summary(allSourceHealth()),
         ranking: { learnedAdjustments: 0 },
@@ -792,23 +1067,59 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       };
     },
 
-    async addSource({ kind, config, name }) {
+    async addSource({ kind, config, name }, options = {}) {
       const adapter = adapterFor(kind);
       const parsed = adapter.parseConfig(config);
       const id = `${kind}:${adapter.key(parsed)}`;
       db.prepare("INSERT OR IGNORE INTO source (id, name, kind, config, created_at) VALUES (?, ?, ?, ?, ?)").run(
         id, name ?? adapter.defaultName(parsed), kind, JSON.stringify(parsed), clock.now().toISOString(),
       );
-      const row = db.prepare("SELECT id, kind, name FROM source WHERE id = ?").get(id)!;
-      return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
+      if (!options.onlyIfNew) db.prepare("UPDATE source SET removed_at = NULL, removed_decision_id = NULL, paused_at = NULL WHERE id = ?").run(id);
+      return sourceInfo(id);
+    },
+
+    async pauseSource(sourceId) {
+      liveSource(sourceId);
+      db.prepare("UPDATE source SET paused_at = COALESCE(paused_at, ?) WHERE id = ?").run(clock.now().toISOString(), sourceId);
+      return sourceInfo(sourceId);
+    },
+
+    async resumeSource(sourceId) {
+      liveSource(sourceId);
+      db.prepare("UPDATE source SET paused_at = NULL WHERE id = ?").run(sourceId);
+      return sourceInfo(sourceId);
+    },
+
+    async previewRemoval(sourceId) {
+      const source = liveSource(sourceId);
+      const { open, closing } = removalImpact(sourceId);
+      const via = new Map<string, { sourceId: string; name: string; jobs: number }>();
+      for (const job of open) {
+        for (const other of coveringSources(job, sourceId)) {
+          const entry = via.get(String(other.id)) ?? { sourceId: String(other.id), name: String(other.name), jobs: 0 };
+          entry.jobs++;
+          via.set(entry.sourceId, entry);
+        }
+      }
+      return {
+        sourceId, name: String(source.name), label: kindLabel(String(source.kind)),
+        openJobs: open.length, closing: closing.length, stayingOpen: open.length - closing.length, stayingVia: [...via.values()],
+      };
+    },
+
+    async removeSource(sourceId) {
+      liveSource(sourceId);
+      const decision = decide("close", removalImpact(sourceId).closing, ["new", "saved"], "closed", { closedHow: sourceRemovedHow });
+      db.prepare("UPDATE source SET removed_at = ?, removed_decision_id = ? WHERE id = ?").run(clock.now().toISOString(), decision.id, sourceId);
+      return { sourceId, decision };
     },
 
     getJob,
 
     async confirmFact(jobId, factKey, answer) {
-      const posting = db.prepare(`SELECT ${representativePosting("?")} AS id`).get(jobId)?.id;
-      if (posting == null) throw new Error(`No job with id "${jobId}"`);
-      const postingId = String(posting);
+      const live = liveJobId(db, jobId);
+      if (!live) throw new Error(`No job with id "${jobId}"`);
+      const postingId = targetOf(db, live).postingId;
       const read = readOf(postingId, readingOf(postingId));
       if (!read?.needsYou.some((n) => n.key === factKey)) throw new Error(`"${factKey}" doesn't need an answer on this job`);
       if (answer !== "extracted" && answer !== "cautious") throw new Error(`Unknown answer "${String(answer)}"`);
@@ -819,7 +1130,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
 
     async readJob(jobId) {
-      const row = db.prepare(`${toReadSql} WHERE j.id = ?`).get(jobId);
+      const live = liveJobId(db, jobId);
+      const row = live && postingToRead(live);
       if (!row) throw new Error(`No job with id "${jobId}"`);
       if (readingOf(String(row.id), false).state !== "read") await readPosting(row);
       return (await getJob(jobId))!;
@@ -832,7 +1144,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
     async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
-      const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
+      const rows = db.prepare(
+        "SELECT id, name, kind, config FROM source WHERE removed_at IS NULL AND paused_at IS NULL ORDER BY created_at, id",
+      ).all();
       options.onStart?.(rows.length);
       const mail = mailboxRead();
       const sources = await Promise.all(rows.map(async (r) => {
@@ -844,9 +1158,32 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     },
 
     async checkSource(sourceId) {
-      const row = db.prepare("SELECT id, name, kind, config FROM source WHERE id = ?").get(sourceId);
-      if (!row) throw new Error(`No source "${sourceId}"`);
-      return checkOne(row, clock.now().toISOString(), mailboxRead());
+      return checkOne(liveSource(sourceId), clock.now().toISOString(), mailboxRead());
+    },
+
+    async detectCompany(input, options) {
+      const monthAgo = new Date(clock.now().getTime() - 30 * 86_400_000).toISOString();
+      return detectCompany(input, {
+        fetchFor: (kind) => fetchFor(kind),
+        setting,
+        existingSource: (id) => (db.prepare("SELECT id FROM source WHERE id = ? AND removed_at IS NULL").get(id) ? id : undefined),
+        aggregatorJobs: (_company, slug) => {
+          const rows = db.prepare(
+            `SELECT s.id, s.name, s.kind, p.company, COUNT(DISTINCT p.job_id) AS n FROM posting p JOIN source s ON s.id = p.source_id
+             WHERE p.last_seen_at >= ? AND s.removed_at IS NULL GROUP BY s.id, p.company ORDER BY s.created_at, s.id`,
+          ).all(monthAgo);
+          const bySource = new Map<string, { id: string; name: string; jobs: number }>();
+          for (const r of rows) {
+            if ((adapters[String(r.kind)]?.category ?? "ats") === "ats") continue;
+            const company = slugFor(String(r.company));
+            if (!slug || !(company === slug || (slug.length >= 4 && company.startsWith(slug)))) continue;
+            const entry = bySource.get(String(r.id)) ?? { id: String(r.id), name: String(r.name), jobs: 0 };
+            entry.jobs += Number(r.n);
+            bySource.set(entry.id, entry);
+          }
+          return [...bySource.values()];
+        },
+      }, options);
     },
 
     async sourceHealth() {
@@ -864,10 +1201,14 @@ function startNow(start: () => Promise<Response>): Promise<Response> {
   }
 }
 
-function kindLabel(kind: string): string {
-  return adapters[kind]?.label ?? kind.charAt(0).toUpperCase() + kind.slice(1);
+/** The site a link is on, "www." aside ("dev.bg", "job-boards.eu.greenhouse.io"). */
+function siteOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
-
 function summarise(sources: SourceHealth[], mailbox: MailboxHealth | null, now: Date): HealthSummary {
   const failing: FailingSource[] = sources.flatMap((s) => {
     const latest = s.history[0];
@@ -972,16 +1313,13 @@ function readSalary(keyFacts: KeyFact[] | undefined): string | null {
 /** Longest posting text sent to the extractor; longer texts are cut (bounds the cost of one read). */
 const MAX_TEXT_CHARS = 24_000;
 
-/** SQL for the Posting that stands for a Job (the first one seen) until merging picks a Target posting. */
-const representativePosting = (jobIdSql: string) =>
-  `(SELECT id FROM posting WHERE job_id = ${jobIdSql} ORDER BY first_seen_at, id LIMIT 1)`;
-
 const postingText = (html: unknown) => (html == null ? "" : htmlToText(String(html)));
 const hashText = (text: string) => createHash("sha256").update(text).digest("hex");
 
 /**
  * Upserts one Posting by its stable identity (source id + the Source's own id). A Posting seen for
- * the first time gets its own Job; merging Postings into shared Jobs comes later. Returns true if new.
+ * the first time gets its own Job, then merges with any Job it's the same as (see merging.ts).
+ * Returns true if new.
  */
 function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: string): boolean {
   const id = `${sourceId}:${p.externalId}`;
@@ -991,6 +1329,8 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
       `UPDATE posting SET url = ?, title = ?, company = ?, location = ?, salary = ?, posted_at = ?,
               description_html = ?, last_seen_at = ? WHERE id = ?`,
     ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, id);
+    refreshMatchKey(db, id, p);
+    reconcile(db, id);
     return false;
   }
   const jobId = `job:${id}`;
@@ -1000,6 +1340,8 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
                           description_html, first_seen_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, sourceId, p.externalId, jobId, p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, now);
+  refreshMatchKey(db, id, p);
+  reconcile(db, id);
   return true;
 }
 

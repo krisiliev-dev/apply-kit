@@ -90,6 +90,8 @@ export const salarySchema = z.object({
 export const postingFactsSchema = z.object({
   /** ISO 639-1 code of the posting's language, e.g. "en", "bg". */
   language: z.string(),
+  /** The job title in English when the posting isn't in English, e.g. "SOC Analyst L2"; null for English postings. */
+  titleTranslation: z.string().nullable(),
   requirements: z.array(requirementSchema),
   years: z.array(yearsSchema),
   languages: z.array(languageSchema),

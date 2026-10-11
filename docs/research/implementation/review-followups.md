@@ -1,0 +1,9 @@
+- index.html served with browser caching: stale UI after rebuild (from #14)
+- For #16 (drops/closing): search sources (microsoft, amazon, jooble, reed, eures) return capped lists — never expire their postings just because they're missing from one check. Workday is complete-or-fails.
+- First real run: confirm Amazon result_limit/country param, dev.bg page links and .job-list wrapper (assumed from trimmed fixtures).
+- Don't send email-only postings (no description) to extraction until full text is fetched (from #17)
+- Salary only from target posting: if only a board (e.g. Jooble) lists salary, Feed says 'Not read yet' — consider falling back to other postings' salary (from #9)
+- HTTP routes have no direct tests (thin wrappers) — consider a small server test suite (from #9)
+- After a Source is removed, its postings still show on the Job page and can be picked as target in merging.ts — filter removed Sources out (from #8)
+- Feed query builds all live Jobs and filters in memory (for relocation-free counts) — fine at personal scale, revisit if large (from #13)
+- Package language switch is page-local; persist it when Packages exist (from #13)

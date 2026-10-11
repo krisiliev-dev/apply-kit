@@ -1,0 +1,166 @@
+{
+  "jobs": [
+    {
+      "absolute_url": "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4998241101",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 4532123101,
+      "location": {
+        "name": "Sofia"
+      },
+      "metadata": [
+        {
+          "id": 4000247101,
+          "name": "Employment Type",
+          "value": "Full-time",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 4998241101,
+      "updated_at": "2026-10-07T07:22:58-04:00",
+      "requisition_id": "576",
+      "title": "Associate Product Manager ",
+      "company_name": "Payhawk",
+      "first_published": "2026-10-06T04:33:36-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;strong&gt;Company Mission&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Payhawk is one AI-powered spend management platform for scaling businesses — corporate cards, expense management, procurement, and accounts payable, unified in one place. We serve finance teams across 32+ countries, cutting month-end close time and reconciling 99.7% of transactions with zero manual touch. AI runs through the platform as core infrastructure, not a bolted-on feature — and we hire the top 1% of talent in every function to keep building it that way.&lt;/p&gt;\n&lt;p&g…[trimmed]",
+      "departments": [
+        {
+          "id": 4003005101,
+          "name": "Product",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4000040101,
+          "name": "Payhawk Sofia",
+          "location": "Sofia",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": false
+    },
+    {
+      "absolute_url": "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4512588101",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 4297525101,
+      "location": {
+        "name": "Sofia"
+      },
+      "metadata": [
+        {
+          "id": 4000247101,
+          "name": "Employment Type",
+          "value": "Full-time",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 4512588101,
+      "updated_at": "2026-10-07T07:26:58-04:00",
+      "requisition_id": "478",
+      "title": "Customer Support Specialist ",
+      "company_name": "Payhawk",
+      "first_published": "2026-04-21T04:19:01-04:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;strong&gt;Company Mission&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Payhawk is one AI-powered spend management platform for scaling businesses — corporate cards, expense management, procurement, and accounts payable, unified in one place. We serve finance teams across 32+ countries, cutting month-end close time and reconciling 99.7% of transactions with zero manual touch. AI runs through the platform as core infrastructure, not a bolted-on feature — and we hire the top 1% of talent in every function to keep building it that way.&lt;/p&gt;\n&lt;p&g…[trimmed]",
+      "departments": [
+        {
+          "id": 4011323101,
+          "name": "Customer Support",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4000040101,
+          "name": "Payhawk Sofia",
+          "location": "Sofia",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": false
+    },
+    {
+      "absolute_url": "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4258713101",
+      "data_compliance": [
+        {
+          "type": "gdpr",
+          "requires_consent": false,
+          "requires_processing_consent": false,
+          "requires_retention_consent": false,
+          "retention_period": null,
+          "demographic_data_consent_applies": false
+        }
+      ],
+      "internal_job_id": 4167638101,
+      "location": {
+        "name": "London"
+      },
+      "metadata": [
+        {
+          "id": 4000247101,
+          "name": "Employment Type",
+          "value": "Full-time",
+          "value_type": "single_select"
+        }
+      ],
+      "id": 4258713101,
+      "updated_at": "2026-10-07T07:47:50-04:00",
+      "requisition_id": "381",
+      "title": "Account Executive",
+      "company_name": "Payhawk",
+      "first_published": "2023-12-07T09:16:04-05:00",
+      "language": "en",
+      "application_deadline": null,
+      "content": "&lt;div class=&quot;content-intro&quot;&gt;&lt;p&gt;&lt;strong&gt;Company Mission&lt;/strong&gt;&lt;/p&gt;\n&lt;p&gt;Payhawk is one AI-powered spend management platform for scaling businesses — corporate cards, expense management, procurement, and accounts payable, unified in one place. We serve finance teams across 32+ countries, cutting month-end close time and reconciling 99.7% of transactions with zero manual touch. AI runs through the platform as core infrastructure, not a bolted-on feature — and we hire the top 1% of talent in every function to keep building it that way.&lt;/p&gt;\n&lt;p&g…[trimmed]",
+      "departments": [
+        {
+          "id": 4000048101,
+          "name": "Sales",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "offices": [
+        {
+          "id": 4000042101,
+          "name": "Payhawk London",
+          "location": "London",
+          "child_ids": [],
+          "parent_id": null
+        }
+      ],
+      "ai_disclaimer": null,
+      "include_ai_disclaimer": false
+    }
+  ],
+  "meta": {
+    "total": 3
+  }
+}
