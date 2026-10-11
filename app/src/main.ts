@@ -17,6 +17,9 @@ const engine = createEngine({
   mailReader: { fetchSince: async () => [] },
 });
 
+// Sources from config are added on every start; adding one that exists changes nothing.
+for (const source of config.sources) await engine.addSource(source);
+
 const app = createServer({ engine, uiDir: config.uiDir });
 
 // localhost only: the extension and UI talk to this, nothing else should.

@@ -16,6 +16,25 @@ const migrations: string[] = [
      state TEXT NOT NULL DEFAULT 'new',
      created_at TEXT NOT NULL
    );`,
+  // #3: Source config, and Postings tied to their Source with a stable (source, external id) identity.
+  `ALTER TABLE source ADD COLUMN config TEXT NOT NULL DEFAULT '{}';
+   CREATE TABLE posting (
+     id TEXT PRIMARY KEY,
+     source_id TEXT NOT NULL REFERENCES source(id),
+     external_id TEXT NOT NULL,
+     job_id TEXT NOT NULL REFERENCES job(id),
+     url TEXT NOT NULL,
+     title TEXT NOT NULL,
+     company TEXT NOT NULL,
+     location TEXT,
+     salary TEXT,
+     posted_at TEXT,
+     description_html TEXT,
+     first_seen_at TEXT NOT NULL,
+     last_seen_at TEXT NOT NULL,
+     UNIQUE (source_id, external_id)
+   );
+   CREATE INDEX posting_job ON posting(job_id);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

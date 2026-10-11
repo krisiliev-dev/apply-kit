@@ -13,6 +13,15 @@ export function createServer({ engine, uiDir }: { engine: DiscoveryEngine; uiDir
     return c.json(await engine.queryFeed({ view: v as FeedView }));
   });
 
+  // Requiring a JSON body type means a web page can't trigger this without a CORS preflight,
+  // which this service never grants.
+  app.post("/api/check", async (c) => {
+    if (!c.req.header("content-type")?.startsWith("application/json")) {
+      return c.json({ error: "Send Content-Type: application/json" }, 415);
+    }
+    return c.json(await engine.checkAll());
+  });
+
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
   // The built UI (pnpm start). In dev, Vite serves the UI and proxies /api here.
