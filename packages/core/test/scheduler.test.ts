@@ -57,4 +57,42 @@ describe("scheduler", () => {
     expect(() => parseSchedule({ window: "23:00-07:00" })).toThrow(/window/);
     expect(() => parseSchedule({ window: "7am-11pm" })).toThrow(/window/);
   });
+
+  describe("after the laptop wakes", () => {
+    it("catches up straight away with one check when checks were missed", async () => {
+      const { clock, scheduler, checkedAt } = await scheduled("2026-10-12T09:00:00Z");
+      scheduler.start();
+      await clock.advance(10 * minutes);
+
+      clock.sleep(2 * hours + 37 * minutes); // lid closed at 09:10, opened at 11:47
+      await clock.advance(31 * minutes);
+      scheduler.stop();
+
+      expect(checkedAt).toEqual(["09:00", "11:47", "12:17"]);
+    });
+
+    it("waits for the window when it wakes before 07:00", async () => {
+      const { clock, scheduler, checkedAt } = await scheduled("2026-10-12T22:30:00Z");
+      scheduler.start();
+      await clock.advance(10 * minutes);
+
+      clock.sleep(7 * hours + 30 * minutes); // asleep 22:40 → 06:10
+      await clock.advance(51 * minutes);
+      scheduler.stop();
+
+      expect(checkedAt).toEqual(["22:30", "07:00"]);
+    });
+
+    it("adds no extra check when none was missed during a short sleep", async () => {
+      const { clock, scheduler, checkedAt } = await scheduled("2026-10-12T09:00:00Z");
+      scheduler.start();
+      await clock.advance(5 * minutes);
+
+      clock.sleep(15 * minutes); // asleep 09:05 → 09:20
+      await clock.advance(15 * minutes);
+      scheduler.stop();
+
+      expect(checkedAt).toEqual(["09:00", "09:30"]);
+    });
+  });
 });
