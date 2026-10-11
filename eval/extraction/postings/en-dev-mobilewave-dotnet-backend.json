@@ -1,0 +1,73 @@
+{
+  "id": "en-dev-mobilewave-dotnet-backend",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/mobile-wave-solutions-senior-software-engineer-backend-net/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Senior Software Engineer – Backend (.NET)",
+    "company": "Mobile Wave Solutions",
+    "location": "Fully Remote",
+    "text": "About the Role\nWe are looking for a Senior Software Engineer – Backend (.NET) to join our client, a fast-growing tech business building highly scalable modern solutions for the future of fundraising. In this role, you will play a key part in shaping, building, and evolving a modern, cloud-based platform—contributing hands-on to architecture, code quality, and engineering best practices.\nThis is a hands-on engineering role where you will spend most of your time coding, reviewing code, and collaborating closely with product and engineering peers to deliver robust, scalable backend systems. We value collaboration, technical excellence, and a pragmatic approach to solving complex problems, and we are looking for an engineer who combines strong technical execution with ownership, sound judgment, and a collaborative mindset.\nIf you bring solid experience with .NET, relational databases (PostgreSQL), distributed or event-driven systems, and cloud platforms (preferably GCP), we’d love to speak with you.\nKey Responsibilities\n• Design & Build: Develop end-to-end backend services and API features using C# .NET with a focus on performance, scalability, and maintainability.\n• Technical Quality: Write high-quality, well-tested code, define testing strategies (integration and contract testing), and apply clean code principles alongside domain-driven design (DDD).\n• Delivery & Planning: Work closely with product and QA to refine, scope, and estimate roadmap items—raising technical risks and dependencies early.\n• System Health & Security: Uphold backend security practices and take shared responsibility for system health, observability (logging, metrics, alerting), leading incident investigations, and driving root-cause fixes.\n• Continuous Improvement: Spot technical debt, performance bottlenecks, and process inefficiencies in the areas you work on, and help prioritize and fix them to elevate developer experience.\n• Collaboration & Knowledge Sharing: Participate in design and code reviews, support and mentor peers through pairing and onboarding, and leverage modern AI-assisted development tools (e.g., Copilot, Claude, ChatGPT) effectively and responsibly.\nQualifications\n• 5+ years of experience designing and building backend services in production environments with a proven track record of delivering robust, scalable systems using C# .NET.\n• Deep expertise in relational databases (PostgreSQL) and caching solutions (Redis or similar), including data modeling and performance tuning.\n• Hands-on experience with cloud platforms (GCP preferred, Azure/AWS also relevant) and containerized environments.\n• Practical experience designing event-driven systems and working with messaging tools (e.g., Pub/Sub, Cloud Tasks, queues).\n• Solid grasp of software architecture, REST APIs, design patterns, observability practices, and backend security fundamentals.\n• Strong organizational skills with the ability to prioritize and manage multiple streams of work in a fast-paced environment.\n• Excellent communicator who can clearly explain technical decisions to both technical and non-technical stakeholders.\nNice to Have\n• Experience building agentic AI software development workflows.\n• Prior experience handling system migrations or scaling platforms through significant user growth.\nOur Benefits\n• Remote Office – Option to work remotely or hybrid\n• Parking Space – Free parking available\n• Fun Office Space – Game zone and relaxation area\n• Health Insurance – Private health insurance, including dental care\n• Holidays – 5 extra days after your 1st and 5th year with us\n• Personal Development – Company-sponsored training and development\n• Employee Referral Programm – Competitive bonus for successful referrals\n• Social Events – Celebrating success together\n• Family Insurance – Add insurance coverage for a family member\n• Multisport Card – Fully covered sports pass"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years building backend services with C# .NET",
+        "kind": "required"
+      },
+      {
+        "text": "PostgreSQL and caching (Redis)",
+        "kind": "required"
+      },
+      {
+        "text": "Cloud platforms (GCP preferred, Azure/AWS) and containers",
+        "kind": "required"
+      },
+      {
+        "text": "Event-driven systems and messaging (Pub/Sub, queues)",
+        "kind": "required"
+      },
+      {
+        "text": "Software architecture, REST APIs, design patterns, observability and backend security",
+        "kind": "required"
+      },
+      {
+        "text": "Organisation and prioritising multiple streams of work",
+        "kind": "required"
+      },
+      {
+        "text": "Excellent communicator",
+        "kind": "required"
+      },
+      {
+        "text": "Agentic AI software development workflows",
+        "kind": "preferred"
+      },
+      {
+        "text": "System migrations or scaling platforms",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "backend services with C# .NET",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "remote",
+      "locations": []
+    },
+    "salary": null
+  },
+  "notes": "Listed as 'Fully Remote' with 'option to work remotely or hybrid': remote, open to no named place."
+}

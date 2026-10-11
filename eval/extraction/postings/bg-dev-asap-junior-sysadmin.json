@@ -1,0 +1,96 @@
+{
+  "id": "bg-dev-asap-junior-sysadmin",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/asap-mladshi-sistemen-administrator-junior-system-administrator/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Младши системен администратор / Junior System Administrator",
+    "company": "ASAP",
+    "location": "София",
+    "text": "АСАП ЕООД е българска ИТ компания с над 18 години опит в предоставянето на цялостни бизнес решения в областта на софтуерната разработка, системната интеграция и професионалното обучение. Сред нашите партньори са Microsoft, SAP, Lenovo, Dell и други водещи компании в технологичния сектор.\nВъв връзка с разширяването на дейността ни търсим отговорен и технически подготвен специалист, който да се присъедини към екипа ни в гр. София.\nОсновни отговорности:\n• Диагностика, ремонт и техническа поддръжка на настолни компютри, лаптопи и периферни устройства.\n• Диагностика и ремонт на електронни устройства и оборудване.\n• Инсталиране и конфигуриране на хардуер, операционни системи и периферни устройства.\n• Работа в сервизната база и на място при клиенти.\n• Подмяна на компоненти, модули и консумативи.\n• Водене на техническа и сервизна отчетност.\nИзисквания:\n• Добри познания по компютърен хардуер.\n• Добри познания по Windows 10 и Windows 11.\n• Основни познания по електроника и работа с измервателна техника.\n• Минимум 2 години професионален опит като сервизен техник, хардуерен специалист или ИТ специалист.\n• Шофьорска книжка категория B и опит като активен шофьор.\n• Умение за самостоятелна работа, организираност и отговорност.\n• Добри комуникационни умения и коректно отношение към клиентите\nПредимства:\n• Опит с принтери, многофункционални и копирни устройства.\n• Опит с ремонт на електронни платки и устройства.\n• Умения за запояване и подмяна на електронни компоненти.\n• Познания в областта на системите за видеонаблюдение.\n• Познания по компютърни мрежи.\n• Техническо образование в областта на електрониката, електротехниката или информационните технологии.\nКомпанията предлага:\n• Трудов договор и дългосрочна заетост.\n• Работа в разнообразна и технологично интересна среда.\n• Работно време: понеделник – петък, от 08:30 до 17:30.\n• Допълнително здравно осигуряване.\n• Ваучери за храна.\n• Карта за спорт (Мултиспорт).\n• Възможност за закупуване на хардуер с отстъпка.\n• До 30 дни платен годишен отпуск.\n• Възможност за сертифицирани обучения – Microsoft, Lenovo и др.\nКандидатстване:\nАко проявявате интерес към позицията, моля изпратете Вашата автобиография. Само одобрените по документи кандидати ще бъдат поканени на интервю.\nАСАП ЕООД гарантира конфиденциалност при обработката на личните данни съгласно действащото законодателство."
+  },
+  "expected": {
+    "language": "bg",
+    "requirements": [
+      {
+        "text": "Computer hardware",
+        "kind": "required"
+      },
+      {
+        "text": "Windows 10 and Windows 11",
+        "kind": "required"
+      },
+      {
+        "text": "Basic electronics and measuring equipment",
+        "kind": "required"
+      },
+      {
+        "text": "2+ years as a service technician, hardware or IT specialist",
+        "kind": "required"
+      },
+      {
+        "text": "Driving licence category B, active driver",
+        "kind": "required"
+      },
+      {
+        "text": "Independent, organised and responsible work",
+        "kind": "required"
+      },
+      {
+        "text": "Communication skills and courtesy to customers",
+        "kind": "required"
+      },
+      {
+        "text": "Printers, multifunction and copier devices",
+        "kind": "preferred"
+      },
+      {
+        "text": "Repairing electronic boards and devices",
+        "kind": "preferred"
+      },
+      {
+        "text": "Soldering and replacing electronic components",
+        "kind": "preferred"
+      },
+      {
+        "text": "Video surveillance systems",
+        "kind": "preferred"
+      },
+      {
+        "text": "Computer networks",
+        "kind": "preferred"
+      },
+      {
+        "text": "Technical education in electronics, electrical engineering or IT",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 2,
+        "max": null,
+        "about": "service technician, hardware or IT specialist",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [
+      {
+        "name": "Driving licence category B",
+        "kind": "required"
+      }
+    ],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "on-site",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Work is at the service base and at clients' sites: on-site."
+}

@@ -1,0 +1,100 @@
+{
+  "id": "en-dev-mypos-data-scientist",
+  "field": "dev",
+  "source": {
+    "kind": "teamtailor",
+    "url": "https://careers.mypos.com/jobs/7965703-data-scientist",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Data Scientist",
+    "company": "myPOS",
+    "location": "Sofia, Bulgaria; Varna, Bulgaria · Hybrid",
+    "text": "At myPOS, we’re all about helping businesses grow and get paid. We make payments simple, smart, and accessible for everyone, but we’re more than just payment solutions - myPOS is a partner in growth. From free multicurrency accounts to powerful e-commerce tools, we’re here to support business owners of all sizes and everyone out there who dreams of starting their own business.\nAs we are expanding our team, we’re looking for Data Scientist to help us make a real difference in the Fintech industry. Ready to join us and shape the future of payments? Let’s make it happen!\nAbout the role:\nmyPOS is building a high-impact Data Science function to power the intelligence layer of one of Europe’s fastest-growing payment and commerce platforms. As a Data Scientist, you will contribute to a focused team working across a rich portfolio of models that drive smarter decisions in Sales, Marketing, Risk, Operations, Product and Technology.\nYou will move fluidly across problem types: from customer lifetime value and churn modelling to fraud scoring and agentic AI workflows.\nWhat you’ll do:\n• Build and maintain ML models across the core portfolio: CLTV, churn prediction, propensity to buy, and Next Most Likely Product (NMLP)\n• Develop fraud detection models including transaction-level classifiers, merchant behaviour anomaly detectors, and new-account risk scorers\n• Contribute scored model outputs to the Next Best Action (NBA) decisioning layer that selects the optimal action for each merchant across Sales, Marketing, and in-product touchpoints\n• Support A/B experiments, uplift tests, and multi-armed bandit evaluations to measure the incremental impact of model-driven interventions\n• Design and implement end-to-end ML pipelines — from data ingestion and feature engineering through to model training, evaluation, and deployment\n• Monitor deployed models in production: detect performance degradation, data drift, and data quality issues; iterate and document changes proactively\n• Collaborate with business teams across Sales, Marketing, Risk, Operations, and Product to translate business problems into well-defined data science solutions\n• Run rigorous experiments and communicate findings clearly to both technical and non-technical stakeholders\n• Contribute to LLM-powered agentic workflows using tool-use patterns (RAG, function calling, memory) and frameworks such as LangChain or LlamaIndex\n• Contribute to team documentation: model cards, methodology write-ups, and internal playbooks that help the team scale its practices\nThis role is perfect for you if you have:\n• 3–5 years of hands-on applied data science, machine learning or statistical modelling experience in a commercial setting, with models shipped and measured in production.\n• Strong proficiency in Python for data science: pandas, numpy, scikit-learn, XGBoost / LightGBM, and at least one deep learning framework (PyTorch or TensorFlow).\n• Solid grounding in supervised and unsupervised learning: classification, regression, clustering, survival analysis, and time-series modelling.\n• Demonstrable experience building at least one of: CLTV, churn, fraud detection, propensity, or uplift models in a production environment.\n• Comfort working with large-scale structured and semi-structured data; proficient in SQL and cloud data warehouses - GCP and BigQuery strongly preferred.\n• Familiarity with ML experiment tracking platforms (MLflow, Weights & Biases) and model serving patterns (REST APIs, batch inference pipelines).\n• Working knowledge of LLM APIs (OpenAI, Anthropic, etc.) and at least one agentic AI framework (LangChain, LlamaIndex, AutoGen, or similar).\n• Understanding of responsible AI: fairness assessment, model explainability methods (SHAP, LIME), bias detection and mitigation strategies.\n• Clear communication — able to distil statistical findings into actionable insights for both technical peers and business stakeholders.\nNice to have:\n• Experience in fintech, payments, banking or e-commerce\n• Familiarity with workflow orchestration (Airflow, Prefect, Dagster)\n• Exposure to causal inference methods (DiD, IV, PSM)\n• Experience building or fine-tuning LLMs, RAG pipelines, or tool-use agents\n• Knowledge of graph-based fraud detection techniques\n• Exposure to streaming feature engineering (Kafka, Pub-Sub, Spark)\nWhy you should join myPOS:\n• Vibrant international team operating in hi-tech environment\n• Annual salary reviews, promotions and performance bonuses\n• myPOS Academy for upskilling and training\n• Unlimited access to courses on LinkedIn Learning\n• Annual individual training and development budget\n• Refer a friend bonus as we know that working with friends is fun\n• Teambuilding, social activities and networks on a multi-national level\nWhat we offer:\n• Excellent compensation package\n• 25 days annual paid leave (+1 day per year up to 30)\n• Full “Luxury” package health insurance including dental care and optical glasses\n• Meal vouchers of 102.26 EUR per month\n• Fully covered Multisport card\n• Fully covered public transport pass for Sofia\n• Free coffee, snacks and drinks at the office\nWho we are:\nSince 2014 we’ve been all about making payments easier and more accessible for businesses of all shapes and sizes. Whether you’re at the counter, selling online, or on the move, we’ve got businesses covered with smart, accessible and affordable solutions that keep things easy.\nOur mission? It’s simple. Help businesses get paid by taking advantage of modern tech and innovative ideas, so payment challenges are a thing of the past.\nPro tip:\nTake it easy about meeting every requirement - this job description is just that, a job description! Even if you don’t tick every box, we want you to apply anyway! This is your chance to grow, learn, and build your career with us. We value potential over perfection, and we are all about mutual growth!\nApply by filling in the form below and send your CV in English!\nmyPOS is committed to providing equal employment opportunities. All qualified candidates will be considered for employment without discrimination based on age, ancestry, color, marital status, national origin, physical or mental disability, medical condition, veteran status, race, religion, sex, sexual orientation, gender identity or expression, or any other characteristic protected by applicable laws, regulations, and ordinances.\nYour application will be confidentially reviewed in line with the General Data Protection Regulation (GDPR). Personal information will be used solely for the job application and will be stored for a period needed by the application process. Only short-listed candidates will be contacted. Good luck!"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "3–5 years of applied data science or machine learning in a commercial setting",
+        "kind": "required"
+      },
+      {
+        "text": "Python for data science (pandas, numpy, scikit-learn, XGBoost/LightGBM, PyTorch or TensorFlow)",
+        "kind": "required"
+      },
+      {
+        "text": "Supervised and unsupervised learning (classification, regression, clustering, survival, time series)",
+        "kind": "required"
+      },
+      {
+        "text": "Building CLTV, churn, fraud, propensity or uplift models in production",
+        "kind": "required"
+      },
+      {
+        "text": "SQL and cloud data warehouses (GCP and BigQuery strongly preferred)",
+        "kind": "required"
+      },
+      {
+        "text": "ML experiment tracking (MLflow, Weights & Biases) and model serving",
+        "kind": "required"
+      },
+      {
+        "text": "LLM APIs and an agentic AI framework (LangChain, LlamaIndex, AutoGen)",
+        "kind": "required"
+      },
+      {
+        "text": "Responsible AI (fairness, explainability with SHAP/LIME, bias mitigation)",
+        "kind": "required"
+      },
+      {
+        "text": "Clear communication of statistical findings",
+        "kind": "required"
+      },
+      {
+        "text": "Fintech, payments, banking or e-commerce",
+        "kind": "preferred"
+      },
+      {
+        "text": "Workflow orchestration (Airflow, Prefect, Dagster)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Causal inference (DiD, IV, PSM)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Building or fine-tuning LLMs, RAG pipelines or tool-use agents",
+        "kind": "preferred"
+      },
+      {
+        "text": "Graph-based fraud detection",
+        "kind": "preferred"
+      },
+      {
+        "text": "Streaming feature engineering (Kafka, Pub/Sub, Spark)",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 3,
+        "max": 5,
+        "about": "applied data science or machine learning",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia",
+        "Varna"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Meal vouchers (102.26 EUR a month) are a benefit, not salary."
+}

@@ -1,0 +1,62 @@
+{
+  "id": "en-design-dsk-product-designer",
+  "field": "design",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/dsk-bank-product-designer-continuous-product-discovery/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Product Designer (Continuous Product Discovery)",
+    "company": "DSK Bank",
+    "location": "София",
+    "text": "Join Our Continuous Product Discovery Team\nWe invite you to join our Continuous Product Discovery (CPD) team — a young, dynamic, and forward-thinking unit shaping the future of digital banking for more than 2 million clients.\nThis role goes far beyond designing screens. You will be a core contributor to continuous product discovery, helping teams deeply understand customer problems, validate opportunities, and make better product decisions at scale. Your work will directly influence how millions of people interact with our digital banking products every day.\nYour Role: What You Will Do\nAs a Product Designer (UX/UI), you will actively contribute to Continuous Product Discovery. Working closely with the Product Owner and Tech Lead, you will help translate customer insights into intuitive, validated, and scalable solutions.\nLead Continuous Product Discovery\n• Conduct customer interviews, usability tests, and qualitative research to uncover unmet needs.\n• Analyze and synthesize insights into clear problems, opportunities, and user stories.\n• Support ideation and discovery sessions to explore and validate solution concepts.\n• Contribute to prioritization by helping teams assess customer value and impact.\nDesign, Prototype & Validate\n• Create wireframes and low-fidelity prototypes for rapid exploration and testing.\n• Develop high-fidelity, interactive prototypes in Figma.\n• Design user interfaces for mobile apps, web platforms, and internal tools.\n• Validate designs with real users and iterate based on feedback and evidence.\nCollaborate for Real Customer Impact\n• Work closely with the Product Owner and Tech Lead to ensure delivery is grounded in discovery insights.\n• Coordinate with developers to ensure design quality, consistency, and feasibility.\n• Contribute to solutions that impact millions of customers across core banking journeys.\nContribute to Our Design System\n• Apply and support the evolution of our design system.\n• Help ensure consistency and scalability across multiple product teams.\nThe perfect candidate has\n• Practical experience in UX/UI design, with a solid understanding of digital product design.\n• Excellent command of English (spoken and written).\n• Strong proficiency in Figma, including prototyping and collaboration.\n• Result-focused, self-driven, and motivated personality.\n• Strong communication, analytical, and problem-solving skills.\n• Ability to collaborate effectively within cross-functional product teams.\nWhy This Role Matters\n• Your work will shape products used by over 2 million customers.\n• You will grow hands-on experience in Continuous Product Discovery, not just delivery.\n• You will influence product decisions with real customer evidence, not assumptions.\nAnd additionally, We offer\n• Excellent opportunities for professional and career development in one of Bulgaria’s leading banks;\n• Food vouchers in the amount up to 102,26 euro per month;\n• 20+5 paid days holiday leave;\n• Additional health insurance;\n• Favorable conditions for housing and mortgage lending;\n• Preferences for bank products and services;\n• Annual bonus scheme depending on the achieved results;\n• Preferential conditions for Multisport / CoolFit card;\n• Great location – in the heart of Sofia’s city center;\n• Discounts in various companies;\n• Refer a Friend Bonus.\nIf this position corresponds to your professional interests and skills, please apply by sending a detailed CV. Only short-listed candidates will be contacted. All applications will be treated in strict confidentiality."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "UX/UI design experience",
+        "kind": "required"
+      },
+      {
+        "text": "Excellent English, spoken and written",
+        "kind": "required"
+      },
+      {
+        "text": "Strong Figma, including prototyping",
+        "kind": "required"
+      },
+      {
+        "text": "Result-focused, self-driven and motivated",
+        "kind": "required"
+      },
+      {
+        "text": "Communication, analytical and problem-solving skills",
+        "kind": "required"
+      },
+      {
+        "text": "Collaborating in cross-functional product teams",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [
+      {
+        "language": "English",
+        "level": "excellent",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'In the heart of Sofia's city centre' describes the office, not a remote rule."
+}

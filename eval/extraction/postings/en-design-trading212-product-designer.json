@@ -1,0 +1,74 @@
+{
+  "id": "en-design-trading212-product-designer",
+  "field": "design",
+  "source": {
+    "kind": "ashby",
+    "url": "https://jobs.ashbyhq.com/trading212/922ff860-f5f8-4eb1-8a76-b2a693866bf0",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Product Designer",
+    "company": "Trading212",
+    "location": "Sofia · Hybrid",
+    "text": "Trading 212 was founded with a simple mission: to make investing accessible for everyone. What started as a bold idea has become a platform trusted by over 5 million clients, managing more than €38 billion in assets.\nOur culture of excellence and high velocity drives us to build intuitive, powerful products that help people grow their wealth. We’re united by the belief that investing should be simple, impactful, and open to all.\nThe role\nAs a Product Designer, you will play a key part in shaping the experiences millions of people use to invest with confidence. You’ll be hands-on in designing and delivering features that make complex financial tools feel intuitive and straightforward. Working closely with product managers and engineers, you will bring ideas to life quickly and effectively.\nThis role is ideal for someone with limited experience but eager to grow as a designer, deepen their product knowledge, and make an immediate impact on real users every day.\nYou will\n• Design and deliver key features within our app, ensuring high-quality user experiences\n• Be hands-on, moving from concepts to detailed UI\n• Work closely with product managers and engineers to ship work with velocity\n• Share your work and welcome feedback as a tool for continuous improvement\n• Continuously grow as a designer, deepening your craft and domain knowledge every day\n• Contribute to and uphold our design system to ensure consistency in our product\nYou have\n• 2+ years of experience crafting impactful digital products\n• A portfolio showcasing strong visual design skills with attention to detail\n• Excellent communication and collaboration skills\n• A self-starter mentality with the confidence to take initiative and move work forward\n• Eagerness to continuously learn and expand your knowledge\n• Proficiency in Figma\nEven better\n• Experience in fintech or regulated industries that demand both compliance and delight\n• Experience in building and maintaining design systems\n• Ability to use quantitative and qualitative insights to drive product success\nBenefits\n• Direct impact on products used by millions globally\n• Collaborative, high-performing team that values design as a strategic differentiator\n• An environment where nothing is set in stone\n• A hybrid working model with an office in Sofia and flexibility for remote days\n• Generous remuneration package including annual bonuses\n• Excellent social benefits package, including private health insurance and sports card\n• 25 days of paid vacation per year\nBring your ambition to Europe’s fastest-growing mobile broker!"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "2+ years crafting digital products",
+        "kind": "required"
+      },
+      {
+        "text": "Portfolio showing strong visual design and attention to detail",
+        "kind": "required"
+      },
+      {
+        "text": "Communication and collaboration",
+        "kind": "required"
+      },
+      {
+        "text": "Self-starter who takes initiative",
+        "kind": "required"
+      },
+      {
+        "text": "Eagerness to keep learning",
+        "kind": "required"
+      },
+      {
+        "text": "Figma",
+        "kind": "required"
+      },
+      {
+        "text": "Fintech or regulated industries",
+        "kind": "preferred"
+      },
+      {
+        "text": "Building and maintaining design systems",
+        "kind": "preferred"
+      },
+      {
+        "text": "Using quantitative and qualitative insights",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 2,
+        "max": null,
+        "about": "crafting digital products",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}

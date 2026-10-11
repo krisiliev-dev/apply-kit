@@ -1,0 +1,100 @@
+{
+  "id": "en-security-playtech-cloud-security",
+  "field": "security",
+  "source": {
+    "kind": "smartrecruiters",
+    "url": "https://jobs.smartrecruiters.com/Playtech/744000154743026-cloud-security-engineer",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Cloud Security Engineer",
+    "company": "Playtech",
+    "location": "Sofia, , Bulgaria",
+    "text": "Company Description\nAbout Playtech\nFounded in 1999, the company has a premium listing on the Main Market of the London Stock Exchange and is focused on regulated and regulating markets across its B2B business. By leveraging its proprietary technology, Playtech delivers innovative products and services to ensure a safe, engaging and entertaining gaming experience.\nAs the gaming industry's leading technology company, it combines business intelligence-driven software, services, content, and platform technology to drive excellence and innovation across the sector. Read more about who we are and what we do here: www.playtechpeople.com and www.playtech.com\nHere at Playtech, we genuinely believe that people are our biggest asset. Diverse thoughts, experiences, and individual characteristics enrich our work environment and lead to better business decisions. Embracing differences and maintaining transparency in our processes is the core of Playtech's overall commitment to responsible business practices.\nReady to level up your career?\nWe are seeking an enthusiastic and experienced Cloud Security Engineer to help drive the security posture of Playtech and its subsidiaries.\nThis position ensures the proper security design and operation of cloud environments in Azure or GCP (primarily IaaS and PaaS) for different types of services and applications. The Cloud Security Engineer will work closely with product teams in the company to assist and audit in building and maintaining secure cloud environments\nJob Description\nYour influential mission. You will...\n• Oversee cloud security governance and monitoring\n• Maintain a Cloud Security Posture Management (CSPM) solution\n• Collaborate with DevOps, IT, development and GRC teams to provide subject‑matter expertise in the Google Cloud domain\n• Support and maintain cloud‑native security controls\n• Conduct security reviews for cloud environments\n• Develop documentation outlining security recommendations and best practices\n• Identify weak spots, missing controls, vulnerabilities, providing clear recommendations for improvement and remediation\n• Stay current on emerging security threats, vulnerabilities, and cloud security controls\n• Participate in investigations and responses to potential security incidents\n• Implement automation for security‑related tasks\nQualifications\nComponents for success. You...\n• Bring at least 2 years of experience in a similar technical security role\n• Demonstrate experience with Microsoft Azure Cloud or Google Cloud Platform (GCP) / Google Workspace\n• Apply strong knowledge of CSPM and DSPM solutions\n• Understand how cloud infrastructure works, including architecture best practices, managed services, typical vulnerabilities, mitigations, and security best practices\n• Communicate clearly, positively, and persuasively on security topics to both technical and non‑technical stakeholders, building effective relationships\n• Maintain a strong security mindset with a business‑enablement focus\n• Leverage familiarity with modern application development approaches (infrastructure as code, CI/CD, containers, serverless, code/artifact repositories, etc.), with hands‑on experience considered a plus\n• Possess broad IT and enterprise architecture knowledge (TCP/IP stack, relevant protocols/technologies—firewall, proxy, etc.; server OS like Windows/Linux; web/database servers, etc.)\n• Use basic scripting skills (Python/Shell) to automate and streamline daily tasks\n• Have a basic understanding of AI concepts and practical experience using AI tools to improve productivity, automation, and security workflows\n• Communicate effectively in spoken and written English\n• Operate effectively within an enterprise environment\nYou'll get extra points for...\n• Knowledge of AWS cloud\n• Relevant security, systems, networking certifications\nThrive in a culture that values...\n• Collaborating with a true product company where your impact is visible\n• Growing through a structured educational program designed to support your development\n• Continuously learning in a collaborative environment where experienced colleagues help you expand your skills\n• Working in a friendly, supportive, and inclusive atmosphere\nAdditional Information\nSECURITY TEAM\nA dynamic and innovative team that focuses on developing and maintaining networks across Playtech. If you’re looking for a challenging and rewarding work environment, the Security Unit at Playtech is a great place to be!\nPlaytech is an equal opportunities employer. Our mission is to welcome everyone and create inclusive teams. We celebrate differences and encourage everyone to join us and be themselves at work."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "2+ years in a similar technical security role",
+        "kind": "required"
+      },
+      {
+        "text": "Microsoft Azure or Google Cloud Platform / Google Workspace",
+        "kind": "required"
+      },
+      {
+        "text": "CSPM and DSPM solutions",
+        "kind": "required"
+      },
+      {
+        "text": "Cloud infrastructure architecture, vulnerabilities and security best practices",
+        "kind": "required"
+      },
+      {
+        "text": "Communicating security topics to technical and non-technical stakeholders",
+        "kind": "required"
+      },
+      {
+        "text": "Security mindset with a business-enablement focus",
+        "kind": "required"
+      },
+      {
+        "text": "Modern application development (infrastructure as code, CI/CD, containers, serverless)",
+        "kind": "required"
+      },
+      {
+        "text": "Broad IT and enterprise architecture (TCP/IP, firewalls, proxies, Windows/Linux)",
+        "kind": "required"
+      },
+      {
+        "text": "Basic scripting (Python/Shell)",
+        "kind": "required"
+      },
+      {
+        "text": "Basic AI concepts and AI tools",
+        "kind": "required"
+      },
+      {
+        "text": "Spoken and written English",
+        "kind": "required"
+      },
+      {
+        "text": "Working in an enterprise environment",
+        "kind": "required"
+      },
+      {
+        "text": "AWS",
+        "kind": "preferred"
+      },
+      {
+        "text": "Security, systems or networking certifications",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 2,
+        "max": null,
+        "about": "technical security role",
+        "kind": "required"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "level": null,
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}

@@ -1,0 +1,80 @@
+{
+  "id": "en-design-siteground-graphic-designer",
+  "field": "design",
+  "source": {
+    "kind": "lever",
+    "url": "https://jobs.lever.co/siteground/306623b7-b077-484c-a997-c5b5e96aef6b",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Web - Graphic Designer",
+    "company": "Siteground",
+    "location": "Sofia, Bulgaria · Hybrid",
+    "text": "YOUR ROLE:\nWe’re looking for a Web - Graphic Designer with a strong creative vision and deep expertise in modern web design.\nIn this role, you will be responsible for designing compelling visuals for both web and digital platforms, ensuring brand consistency while driving high-impact digital campaigns. You will work on a wide range of projects, including website design, UI elements, landing pages, digital marketing assets, and branding materials.\nThis role requires a deep understanding of modern web design principles, UX/UI best practices, and visual storytelling, allowing you to create engaging experiences that captivate users across multiple touchpoints.\nYOUR RESPONSIBILITIES:\n• Design modern, engaging website pages and UI components that combine clean aesthetics with strong UX foundations;\n• Shape the visual direction of our digital presence by creating impactful promotional sections, landing pages, and branded experiences;\n• Develop creative assets for web, email, social media, and marketing campaigns, ensuring a cohesive brand identity across all touchpoints;\n• Translate business goals into smart design solutions that drive engagement and conversion;\n• Brand & Visual Identity: Maintain and evolve the brand’s design system, ensuring consistency across all digital and web assets;\n• Create custom illustrations, icons, or creative visuals to enrich storytelling and give campaigns a distinctive look;\n• Industry Trends & Innovation: Stay up-to-date with the latest trends in web design, digital marketing, and interactive media, implementing innovative ideas that set the brand apart.\nOUR EXPECTATIONS:\n• Solid professional experience in web and graphic design - we value strong portfolios over exact years;\n• A portfolio that demonstrates outstanding web design skills;\n• Expertise in Figma and Adobe Creative Suite;\n• Deep understanding of modern UX/UI principles, responsive design techniques, and accessibility best practices;\n• Experience designing for landing pages, promotional website sections, and marketing campaigns;\n• Strong conceptual thinking and the ability to take ownership from idea to execution;\n• Attention to detail, excellent taste, and a keen eye for visual storytelling.\nGREAT ADVANTAGE WILL BE:\n• Motion design skills (After Effects, Lottie, or similar);\n• Strong illustration skills or unique hand-drawn visual style;\n• Experience with prototyping and interaction design;\n• Familiarity with brand strategy and storytelling through design;\n• Experience working with digital asset management systems.\nWHAT WE OFFER:\nAt SiteGround, we work hard and challenge ourselves to exceed expectations. To support your drive, we provide a thoughtfully designed benefits package created to help you thrive both at work and beyond.\n• Competitive remuneration and a performance-based bonus system;\n• Shorter workday on Fridays – we finish at 3:00 PM;\n• 5 extra days off at 5 years of service, plus 1 more each year after – up to 10;\n• 2 extra paid days off for volunteering to support the causes you care about;\n• Premium additional health insurance coverage and annual medical check-ups;\n• Modern and cozy offices across Bulgaria, plus hybrid work options;\n• Free parking and a metro shuttle;\n• Chef-prepared breakfast and lunch provided daily at our HQ restaurant – all on us;\n• Fully equipped in-office gym with expert fitness guidance;\n• On-site sports at our HQ: yoga, spinning, Brazilian Jiu-Jitsu, dancing, table tennis, and more;\n• Multisport or Coolfit cards fully covered by the company;\n• Free massages;\n• Memorable team events and internal gatherings;\n• Knowledge-sharing culture through meetups, events and conferences;\n• Free employee access to the SiteGround products;\n• Anniversary and company gifts along the way.\nCome and make a difference at SiteGround with people who inspire you to grow!\nTo apply for this position, please send us an online portfolio demonstrating the projects you’ve worked on.\nPlease note:\nOnly resumes submitted in English will be considered for this position.\nOnly shortlisted candidates will be contacted for further steps."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Professional web and graphic design experience",
+        "kind": "required"
+      },
+      {
+        "text": "Portfolio showing outstanding web design",
+        "kind": "required"
+      },
+      {
+        "text": "Figma and Adobe Creative Suite",
+        "kind": "required"
+      },
+      {
+        "text": "UX/UI principles, responsive design and accessibility",
+        "kind": "required"
+      },
+      {
+        "text": "Designing landing pages, promotional sections and marketing campaigns",
+        "kind": "required"
+      },
+      {
+        "text": "Conceptual thinking and ownership",
+        "kind": "required"
+      },
+      {
+        "text": "Attention to detail, taste and visual storytelling",
+        "kind": "required"
+      },
+      {
+        "text": "Motion design (After Effects, Lottie)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Illustration or a hand-drawn visual style",
+        "kind": "preferred"
+      },
+      {
+        "text": "Prototyping and interaction design",
+        "kind": "preferred"
+      },
+      {
+        "text": "Brand strategy and storytelling through design",
+        "kind": "preferred"
+      },
+      {
+        "text": "Digital asset management systems",
+        "kind": "preferred"
+      }
+    ],
+    "years": [],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'Only resumes in English' is an application rule, not a language requirement. No years: 'we value portfolios over exact years'."
+}

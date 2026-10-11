@@ -1,0 +1,79 @@
+{
+  "id": "en-design-avenga-game-designer",
+  "field": "design",
+  "source": {
+    "kind": "teamtailor",
+    "url": "https://career.avenga.com/jobs/8471017-senior-game-designer",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Senior Game Designer",
+    "company": "Avenga",
+    "location": "Poland · Remote",
+    "text": "Avenga is an international engineering firm helping businesses operate with AI at the core. With 6,000+ experts worldwide, we combine engineering expertise with AI-native thinking to turn ambitious ideas into real-world impact across industries, technologies, and markets.\nAt the core of the role\nWe are looking for an experienced Senior Game Designer to join our team and contribute to the creation of innovative Digital experiences. In this role, you will lead game design projects from concept to launch, designing high-quality visual assets and animations while collaborating with cross-functional teams across multiple international locations. This is an excellent opportunity for a creative professional who thrives in a fast-paced environment and is passionate about delivering exceptional player experiences.\nCore skills you’ll bring\n• 5+ years of professional experience with Spine animation software, Adobe Creative Suite, and Digital Drawing Pipelines.\n• Proven experience in working with 2D Mobile and/or Web Games.\n• 5+ years in design software (e.g. Adobe Photoshop & Illustrator or Animate).\n• 5+ years of professional experience in Spine animation software.\n• Strong portfolio showcasing game design and animation skills and experience.\n• Working knowledge of core design & animation principles.\n• Proven experience in working with 3D Mobile and/or Web Games (nice to have).\nThe impact you'll create\n• Design innovative and engaging iLottery concepts aligned with core design principles.\n• Design and illustrate high quality game assets, converting them to clean vector art.\n• Animate game elements, adhering to animation principles and understanding and implementing established animation flows.\n• Consistently design and deliver games from concept to support with limited supervision whilst meeting deadlines and exceeding expectations.\n• Collaborate effectively with all stakeholders involved in the Game Studio.\n• Leverage experience and share knowledge to mentor other team members.\n• Provide and receive feedback in a clear and organised manner.\n• Take initiatives to promote reusability and efficiencies across the design and development process.\n• Stay up-to-date on industry trends and best practices for iLottery game design.\nPeople are at the core of Avenga. We provide equal opportunities regardless of race, ethnicity, gender identity, sexual orientation, disability, age, religion, or any other characteristic. We are committed to a respectful environment where everyone can be themselves, share their ideas, and feel that they belong."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years with Spine, Adobe Creative Suite and digital drawing pipelines",
+        "kind": "required"
+      },
+      {
+        "text": "2D mobile and/or web games",
+        "kind": "required"
+      },
+      {
+        "text": "5+ years in design software (Photoshop, Illustrator, Animate)",
+        "kind": "required"
+      },
+      {
+        "text": "5+ years in Spine animation",
+        "kind": "required"
+      },
+      {
+        "text": "Strong portfolio of game design and animation",
+        "kind": "required"
+      },
+      {
+        "text": "Core design and animation principles",
+        "kind": "required"
+      },
+      {
+        "text": "3D mobile and/or web games",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "Spine, Adobe Creative Suite and digital drawing",
+        "kind": "required"
+      },
+      {
+        "min": 5,
+        "max": null,
+        "about": "design software",
+        "kind": "required"
+      },
+      {
+        "min": 5,
+        "max": null,
+        "about": "Spine animation",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "remote",
+      "locations": [
+        "Poland"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Three separate 5+ year asks: three years entries, as stated (they overlap)."
+}

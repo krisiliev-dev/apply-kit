@@ -1,0 +1,79 @@
+{
+  "id": "en-dev-tbibank-dotnet",
+  "field": "dev",
+  "source": {
+    "kind": "recruitee",
+    "url": "https://jobs.tbibank.bg/o/net-developer-2028",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": ".NET Developer",
+    "company": "tbi bank",
+    "location": "Sofia, Bulgaria · Hybrid",
+    "text": "Join the best bank to work for in Bulgaria*.\nWho we are:\nDo you want to join a well-established bank with a start-up culture? No, we’re not joking!\nWe, at tbi, have been one the most profitable banks for years and we are growing at a fast pace. We’re a bank with a long history of success that operates as a start-up and we’re always on the lookout for new opportunities to grow our business. How do we do that?\nIt's all about our people. Our team is made up of brave, passionate and caring people who don’t just want to follow the same path – we want to transform into mobile-first, state-of-the-art lifestyle ecosystem. Our colleagues love working here – 70% of them would recommend tbi as an employer to their friends and family. Our people are engaged in challenging and meaningful work, inspired to grow their potential and career, encouraged to learn and empowered to take decisions. That’s not corporate babble, it’s what our people say.\nDo you want to play a key role in our unique success story?\nIf so, we're looking for a .NET Developer to join our team on the journey to success!\nWhat You’ll do:\n• Design, develop, and maintain applications and modules across multiple in-house projects, working with both modern and established .NET technologies.\n• Develop new functionality using ASP.NET Core / .NET 10 with a Vue.js frontend.\n• Maintain and enhance existing applications built with ASP.NET MVC, .NET Framework, Razor, JavaScript, HTML and CSS.\n• Design and develop REST APIs and integrations with internal and external systems.\n• Take ownership of features from understanding the business need through to designing, developing, testing, and deploying the solution.\n• Investigate, troubleshoot, and resolve application and production issues, identifying the root cause rather than simply addressing symptoms.\n• Work with different database technologies, including SQL Server and Oracle.\n• Work with legacy applications, including ASP.NET Web Forms, when required.\n• Review and improve existing functionality, code quality, performance and maintainability.\n• Create and maintain appropriate technical documentation.\n• Collaborate with other developers through code reviews, knowledge sharing and support.\n• Move between projects and technologies as business priorities change, continuously learning and adapting to new challenges.\nWhat you’ll need to succeed:\n• 2+ years of professional experience with C# and .NET.\n• Experience with ASP.NET / ASP.NET Core, Web API and REST APIs.\n• Good knowledge of SQL and relational databases.\n• Familiarity with JavaScript, HTML and CSS.\n• Experience with .NET Framework / ASP.NET MVC; Web Forms is a plus.\n• Oracle, SOAP/XML integrations are an advantage.\n• Strong problem-solving skills, fast learner and able to work independently.\n• Comfortable working with modern and legacy systems and changing requirements.\n• Good communication skills and ability to work in a dynamic, multicultural team\nWhat we offer:\n• Take your career to the next level with real growth opportunities\n• Work on exciting, meaningful projects that make an impact\n• Be seen and appreciated for who you are and what you do\n• Join a vibrant, international team of 23 nationalities who’ve got your back\n• Stay covered with additional private health insurance\n• Receive monthly food vouchers as part of your benefits package\n• Enjoy exclusive perks & discounts – from Multisport cards to top retailers\n• Benefit from special rates on our banking products\n• Work in the heart of Sofia – steps away from National Palace of Culture and South Park\n• Bring your furry friend to work – because every office is better with paws\nVisit our Career Page to learn more about what makes us different.\nIf this sounds like something you’d be interested in, we'd love to hear from you!\nTo apply for this position, please send us your CV in English.\nWe'd love to get back to everyone, but due to the number of applications we receive, we can only contact the shortlisted candidates.\n*We are ranked the top bank and top 3 employer to work for in Bulgaria according tо WhereWeWork 2025.\nAll applications are treated with utmost confidentiality.\nBy submitting your job application to tbi bank, you confirm that you have read the document named “Information related to personal data processing for job applicants” publicly available on tbi Career page"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "2+ years of C# and .NET",
+        "kind": "required"
+      },
+      {
+        "text": "ASP.NET / ASP.NET Core, Web API and REST APIs",
+        "kind": "required"
+      },
+      {
+        "text": "SQL and relational databases",
+        "kind": "required"
+      },
+      {
+        "text": "JavaScript, HTML and CSS",
+        "kind": "required"
+      },
+      {
+        "text": ".NET Framework / ASP.NET MVC",
+        "kind": "required"
+      },
+      {
+        "text": "ASP.NET Web Forms",
+        "kind": "preferred"
+      },
+      {
+        "text": "Oracle, SOAP/XML integrations",
+        "kind": "preferred"
+      },
+      {
+        "text": "Problem solving, fast learner, works independently",
+        "kind": "required"
+      },
+      {
+        "text": "Modern and legacy systems, changing requirements",
+        "kind": "required"
+      },
+      {
+        "text": "Communication in a dynamic, multicultural team",
+        "kind": "required"
+      }
+    ],
+    "years": [
+      {
+        "min": 2,
+        "max": null,
+        "about": "C# and .NET",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'Web Forms is a plus' is split out of its bullet as preferred. 'Send your CV in English' is an application rule."
+}

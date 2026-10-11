@@ -1,0 +1,83 @@
+{
+  "id": "en-security-ubb-information-security-iso",
+  "field": "security",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/ubb-dzi-expert-information-security-iso-ref-hq1463/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Expert Information security – ISO Ref #: HQ1463",
+    "company": "UBB / DZI",
+    "location": "София",
+    "text": "UBB was established in 1992 through the merger of 22 Bulgarian regional commercial banks as the first and largest in terms of scale consolidation project in the Bulgarian banking sector. Since 2017, the Bank has been part of the Belgian bank-assurance group КВС, currently the largest financial group in Bulgaria.\nWhile invariably standing by our corporate values, we want to be the reference in the bank business through client-centricity in all our activities. We aim at achieving sustainable and profitable growth by fulfillment of our role in society.\nUBB is seeking a talented and dynamic Expert Information security – ISO\nProper mindset is the key components. Ability to learn, adapt and be efficient in dynamically changed environment are key success factors for this position.\nWe are searching for a senior expert with a strong focus on development to become part of our team.\nThis is a great opportunity to build something new with a scale exceeding typical development companies.\nWe are using cross functional model combining different information security tasks based on business needs and skills and experience of the candidate.\nThe main responsibilities for the position are to:\n• Strong focus on development with supervising and consulting functions\n• Execute and monitor processes of receiving, documenting, tracking, investigating and taking action on all information security issues\n• Participate in development and implementation of Internal Procedures, IS framework, standards, policies and best practices as well as their manifesting to the respective participants\n• Perform assessments of security controls and evaluate results relative to risk assessment\n• Checks and Scans for Compliance with appropriate Benchmarks\n• Preparation, Monitoring and Reporting of Remediation Action Plans\n• Monitoring and Reporting of Audit Recommendations\n• Communication with other stakeholder’s from IT and business\n• Participation of Security Awareness Campaigns and Trainings\n• Participate in security incident response activities, resolve and close the investigation of incidents with proactive suggestions.\n• Monitor technology trends and evolution of cyber threats and vulnerabilities\nKey Skills and Experience required:\n• At least 5 years of progressive experience in information technology or related and relevant experience with 3 years experience in system administration, information security or related\n• Very good communication and problem-solving skills\n• Experience with network technology infrastructure, security engineering or information security technologies\n• Very good command of English (written and spoken)\n• Experience on similar position and/or banking/financial services industry will be considered as advantage\n• Ability to effectively prioritize and execute tasks in a dynamic environment\n• Self-learner and resourceful to find solutions with strong analytical, planning and problem-solving skills\n• Relevant certification shall be considered as a definite advantage\nYou will find:\n• Excellent opportunities for professional and career development in one of the leading banks in Bulgaria\n• Competitive remuneration\n• Various opportunities for learning and further development of the professional skills and competences\n• Preferences for the bank products and services\n• Additional health insurance\n• Life/Accident Insurance\n• Food vouchers –55 EUR\n• Referral program\n• Additional bonus for important life events\n• Hybrid working model and flexible working time (for the employees in Head Office)\n• 25 days annual paid leave\n• Sport card\n• Participation in a solidarity fund which helps employees and their families when necessary\nShare your future with us!\nPlease, send your CV.\nOnly short-listed candidates will be contacted. All applications will be treated under strict confidentiality. Personal data are under special protection in accordance with the Law for Protection of Personal Data"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years in IT, with 3 years in system administration or information security",
+        "kind": "required"
+      },
+      {
+        "text": "Very good communication and problem-solving skills",
+        "kind": "required"
+      },
+      {
+        "text": "Network infrastructure, security engineering or information security technologies",
+        "kind": "required"
+      },
+      {
+        "text": "Very good English, written and spoken",
+        "kind": "required"
+      },
+      {
+        "text": "Similar position and/or banking experience",
+        "kind": "preferred"
+      },
+      {
+        "text": "Prioritising and executing tasks in a dynamic environment",
+        "kind": "required"
+      },
+      {
+        "text": "Self-learner with analytical, planning and problem-solving skills",
+        "kind": "required"
+      },
+      {
+        "text": "Relevant certification",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "information technology",
+        "kind": "required"
+      },
+      {
+        "min": 3,
+        "max": null,
+        "about": "system administration or information security",
+        "kind": "required"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "level": "very good",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "One bullet asks two different amounts of experience: two years entries. 'Relevant certification' names none."
+}

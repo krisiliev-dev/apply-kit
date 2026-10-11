@@ -1,0 +1,80 @@
+{
+  "id": "en-dev-superhosting-tech-support",
+  "field": "dev",
+  "source": {
+    "kind": "teamtailor",
+    "url": "https://superhosting.teamtailor.com/jobs/8191492-technical-support-specialist",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Technical Support Specialist",
+    "company": "SuperHosting",
+    "location": "Sofia, Bulgaria",
+    "text": "We at SuperHosting.BG, part of team.blue family, believe that hosting is not just a service. It is the foundation of a successful online presence. We offer top-level services by providing reliable hosting solutions and constant adequate support to more than 200,000 websites! Our service is at a perfect level because we care about our customers\nWe are looking for Technical support specialist!\nWe offer you an interesting and challenging job in the largest hosting company in Bulgaria! If technology is your passion, if you like to communicate with customers and you are always ready to solve every case until the end - you are the right person for this position! With us, you will have the opportunity for professional development, as you will learn something new every day. Intensive company training awaits you.\nYour main tasks will be:\n•To answer technical questions related to hosting services by phone, chat and email through a ticket system;\n• To assist customers in solving each of their cases related to the service;\n•To track whether each case you have taken up is resolved to the end;\n• To have excellent knowledge of the services offered by the company; We expect from you:\n• Being a communicative person;\n• To love working with clients and talking to them;\n• To know the main email clients - Outlook, Mozilla Thunderbird;\n• To know WordPress - core, popular themes and plugins;\n• To have analytical thinking for diagnosis and solving cases;\n• To have a completed secondary education;\n• Work in shifts;\nYou will be a step ahead of other applicants if:\n• You have experience working with WordPress;\n• You know other CMS systems - OpenCart, Magento, etc.;\n• You know the main Internet protocols, as well as email, PHP, MySQL, html;\n• You have communicated directly with customers via email, chat or phone;\n• You have experience in a previous similar position;\nBonus:\nWork in a creative office with fresh fruit, nuts, tea, coffee and treats in the social area.\nSocial benefits for tone and good health. Additional health insurance and food vouchers.\nHere you will be welcomed by a Super Cool team, always ready for teamwork and adventure!"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Communicative person",
+        "kind": "required"
+      },
+      {
+        "text": "Enjoys working with and talking to clients",
+        "kind": "required"
+      },
+      {
+        "text": "Email clients (Outlook, Thunderbird)",
+        "kind": "required"
+      },
+      {
+        "text": "WordPress core, popular themes and plugins",
+        "kind": "required"
+      },
+      {
+        "text": "Analytical thinking for diagnosing and solving cases",
+        "kind": "required"
+      },
+      {
+        "text": "Completed secondary education",
+        "kind": "required"
+      },
+      {
+        "text": "Working in shifts",
+        "kind": "required"
+      },
+      {
+        "text": "WordPress experience",
+        "kind": "preferred"
+      },
+      {
+        "text": "Other CMS (OpenCart, Magento)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Internet protocols, email, PHP, MySQL, HTML",
+        "kind": "preferred"
+      },
+      {
+        "text": "Direct customer communication via email, chat or phone",
+        "kind": "preferred"
+      },
+      {
+        "text": "Previous similar position",
+        "kind": "preferred"
+      }
+    ],
+    "years": [],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'To have excellent knowledge of the services' runs into the 'We expect from you' heading in the text; it is a task, so it isn't labelled."
+}

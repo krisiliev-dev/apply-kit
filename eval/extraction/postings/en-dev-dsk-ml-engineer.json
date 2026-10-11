@@ -1,0 +1,87 @@
+{
+  "id": "en-dev-dsk-ml-engineer",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/dsk-bank-mid-senior-ml-engineer-ds-for-advanced-analytics-solutions-team/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Mid/Senior ML Engineer (DS) for Advanced Analytics Solutions Team",
+    "company": "DSK Bank",
+    "location": "София",
+    "text": "DSK Bank is one of the leading banks in Bulgaria, with a strong and growing IT team of over 250 talented professionals. Our Advanced Analytics and AI Department is at the forefront of technological innovation, building cutting-edge machine learning platform and models to drive data-driven decision-making across the organization.\nAbout the team:\nOur team works on diverse and impactful use cases, such as pricing optimization, propensity-to-buy models, campaign automation and more. We are also actively exploring the field of modern AI and already have several generative-AI bots in production — we are the first bank in Bulgaria to achieve this!\nWe are seeking a talented and self-driven professional to enhance our machine learning capabilities with a prime focus on pricing and Next-Best-Action models and keen desire to grow in the field of AI. This is a unique opportunity to make a tangible impact on the future of banking.\nMid/Senior ML Engineer (DS) for Advanced Analytics Solutions Team\nAs part of our team, you will:\n• Develop and deploy machine learning models for various business use cases.\n• Own the entire lifecycle of models, from research and development to production and maintenance.\n• Design and automate model development lifecycles to reduce time-to-production and ensure scalability.\n• Conduct proof-of-concept analysis to assess the feasibility of machine learning solutions for new business challenges.\n• Participate in the development of LLM AI Agents and RAG Bots.\nWe’re looking for candidates with:\n• 3+ years / 2+ years for Senior / Middle of hands-on experience in Machine Learning.\n• A solid foundation in mathematics, statistics, machine learning algorithms, metrics, and loss functions.\n• Advanced expertise in Python and its ML ecosystem (NumPy, pandas, scikit-learn, XGBoost, CatBoost, Seaborn, Matplotlib, etc.).\n• Strong skills in SQL and Spark, including advanced features like complex joins, subqueries, CTEs, and window functions.\n• Proficiency in writing clean, efficient, and scalable Python code.\n• Verbal and written English proficiency at Upper Intermediate level or above.\nWhile not required, the following will make you stand out:\n• Experience with Azure Databricks, MLflow, and Airflow for model development and deployment.\n• Keen interest in cutting-edge AI fields such as LLM RAG (Retrieval-Augmented Generation) and agentic applications.\n• Familiarity with deep learning frameworks like PyTorch, TensorFlow, or Keras for future projects.\nWhat we offer to you:\n• Cutting-edge tech stack on par with top global IT companies.\n• Dev-to-Prod in a few clicks via our in-house ML & AI platforms.\n• Unique opportunity to build and productionize modern AI apps.\n• Competitive salary and annual bonus based on performance.\n• Food vouchers worth 200 BGN per month.\n• 20 + 5 days of paid holiday leave.\n• Comprehensive additional health insurance.\n• Preferential conditions for mortgages, loans, and other banking products.\n• Access to Multisport/CoolFit cards at discounted rates.\n• Discounts with partner companies.\n• Internal academies to help you grow professionally.\n• If you are challenged by this opportunity, please send your detailed CV.\nOnly short-listed candidates will be contacted. All applications will be treated in strict confidentiality."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "3+ years (senior) or 2+ years (mid) of hands-on machine learning",
+        "kind": "required"
+      },
+      {
+        "text": "Mathematics, statistics, ML algorithms, metrics and loss functions",
+        "kind": "required"
+      },
+      {
+        "text": "Advanced Python ML ecosystem (NumPy, pandas, scikit-learn, XGBoost, CatBoost)",
+        "kind": "required"
+      },
+      {
+        "text": "SQL and Spark (complex joins, CTEs, window functions)",
+        "kind": "required"
+      },
+      {
+        "text": "Clean, efficient, scalable Python code",
+        "kind": "required"
+      },
+      {
+        "text": "Upper-intermediate English, verbal and written",
+        "kind": "required"
+      },
+      {
+        "text": "Azure Databricks, MLflow and Airflow",
+        "kind": "preferred"
+      },
+      {
+        "text": "Interest in LLM RAG and agentic applications",
+        "kind": "preferred"
+      },
+      {
+        "text": "Deep learning frameworks (PyTorch, TensorFlow, Keras)",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 3,
+        "max": null,
+        "about": "machine learning (senior level)",
+        "kind": "required"
+      },
+      {
+        "min": 2,
+        "max": null,
+        "about": "machine learning (mid level)",
+        "kind": "required"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "level": "upper intermediate",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Different years per level: one years entry per level. 'Competitive salary' and 200 BGN food vouchers are not a salary."
+}

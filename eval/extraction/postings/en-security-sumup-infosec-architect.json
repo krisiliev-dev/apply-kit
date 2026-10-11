@@ -1,0 +1,73 @@
+{
+  "id": "en-security-sumup-infosec-architect",
+  "field": "security",
+  "source": {
+    "kind": "greenhouse",
+    "url": "https://sumup.com/careers/positions/8644927002?gh_jid=8644927002",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Information Security Architect",
+    "company": "SumUp",
+    "location": "Sofia, Bulgaria",
+    "text": "Office first\nTeam description\nSumUp's Information Security team protects a payments platform used by millions of small businesses, which means the work here directly shapes whether merchants can trust us with their money every single day. As an Information Security Architect, you'll help decide how security gets built into new products from day one, from mobile payments to the secure use of AI, while also stepping in as a senior responder when things go wrong. It's a role that sits at the intersection of prevention and response: you'll shape the architecture that stops incidents from happening, and you'll be in the room leading the response when they do anyway.\nWhat you'll do\n• Define security architecture requirements for high-risk initiatives, including PCI PIN, payment processing, and mobile payment surfaces\n• Build automation for security architecture assurance and incident response, such as policy-as-code, detection-as-code, and SOAR workflows\n• Lead incident triage, investigation, containment, and remediation for complex, high-severity security incidents\n• Develop and improve incident response playbooks and detection automation with the wider security team\n• Coordinate with Engineering, Platform, IT, Product, Risk, and Compliance to validate security before launch\n• Maintain a prioritised security roadmap that balances architecture work with lessons learned from incidents\nYou'll be great for this role if…\n• More than 8 years of security experience, typically including at least three years focused on security architecture and substantial hands-on incident response\n• Strong knowledge of SIEM/SOAR/CNAPP systems\n• Experience working with modern Cloud vendors (AWS/AZURE/GCP) & SaaS solutions (Vercel, n8n, Cloudflare, Langdock, Cursor, IncidentIO, Notion, Vanta)\n• Strong knowledge of payment security standards, including PCI DSS and PCI PIN\n• Experience building or improving detection as code, security automation pipelines, or workflow automation tools\n• Comfort translating architecture decisions and incident risk into clear language for senior stakeholders\n• Track record of leading response during high-severity incidents while balancing multiple cross-functional priorities\nWhy you should join SumUp 🎉\n🌍 Opportunity to work with SumUppers globally on large-scale fintech products used by millions of businesses worldwide, from our modern Sofia office. This involves an office-first setup\n🌈 Commitment to Diversity and Inclusion: be part of a workplace that values and promotes diversity, fostering an inclusive environment where everyone's perspectives are respected and embraced\n🚀 Enrolment onto our Virtual Stock Option programme: you will own a stake in SumUp's future success\n📚 A dedicated annual L&D budget of €2000 and 10 paid days of educational leave which can be used to attend conferences and/or advance your career through further education\n🏖 Generous time off: 25 days of paid leave, plus one extra day per year of service (up to 35), along with public holidays and special leave options\n🏥 Peace of mind: additional health insurance and life insurance\n💪 Stay active: on-site yoga and a co-sponsored Multisport card offering access to hundreds of sports facilities\n🍽 Meal support: benefit from a tax-free food voucher program plus flexibility via our Re: Benefits platform\n🚌 Easy commute: free shuttle buses connecting directly to Joliot-Curie metro station\n🌴 Break4me: 1-month sabbatical after 3 years of service\n🔗 Referral Bonus: earn additional rewards by referring talented individuals to join the SumUp team\nAbout SumUp\nBe empowered to do more that matters.\nAt SumUp, we're on a mission to empower small businesses across the globe by providing simple and affordable tools that allow them to thrive. Today, over 4 million businesses in 38 markets rely on SumUp as their financial partner to manage payments, finance, and customer relationships.\nOur commitment to small businesses is reflected in our diverse team of over 3,000 SumUppers from over 90 nationalities, united by global collaboration and an innovative mindset. Our core values shape who we are and what we stand for, shaping our work culture and driving our success. We foster inclusivity and a continuous learning culture, providing a safe space for personal and professional growth. Our differences make us unique and strong as we strive to create an environment where everyone belongs and feels supported, no matter how they identify.\nSumUp is proud to be an Equal Employment Opportunity employer, actively seeking and embracing diversity in our workforce. We don't make hiring or employment decisions based on race, colour, religion or religious belief, ethnic or national origin, nationality, sex, gender, gender identity, sexual orientation, disability, age or any other basis protected by applicable laws or prohibited by company policy. Our commitment extends beyond recruitment to creating a safe and respectful workplace where harassment of any form is strictly prohibited. Discover more about our culture and opportunities on our careers website, and follow our journey on LinkedIn, Instagram, and TikTok.\nJob Application Tip\nWe recognise that candidates feel they need to meet 100% of the job criteria in order to apply for a job. Please note that this is only a guide. If you don’t tick every box, it’s ok too because it means you have room to learn and develop your career at SumUp."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "8+ years in security, including 3+ in security architecture and hands-on incident response",
+        "kind": "required"
+      },
+      {
+        "text": "SIEM/SOAR/CNAPP systems",
+        "kind": "required"
+      },
+      {
+        "text": "Modern cloud vendors (AWS/Azure/GCP) and SaaS solutions",
+        "kind": "required"
+      },
+      {
+        "text": "Payment security standards (PCI DSS, PCI PIN)",
+        "kind": "required"
+      },
+      {
+        "text": "Detection as code and security automation pipelines",
+        "kind": "required"
+      },
+      {
+        "text": "Explaining architecture decisions and incident risk to senior stakeholders",
+        "kind": "required"
+      },
+      {
+        "text": "Leading response during high-severity incidents",
+        "kind": "required"
+      }
+    ],
+    "years": [
+      {
+        "min": 8,
+        "max": null,
+        "about": "security",
+        "kind": "required"
+      },
+      {
+        "min": 3,
+        "max": null,
+        "about": "security architecture",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "on-site",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'Office first' / 'office-first setup' is labelled on-site (you must be near the office). Asks under 'You'll be great for this role if' are required."
+}

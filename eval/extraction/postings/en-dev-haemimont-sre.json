@@ -1,0 +1,94 @@
+{
+  "id": "en-dev-haemimont-sre",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/haemimont-site-reliability-engineer-sre/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Site Reliability Engineer (SRE)",
+    "company": "Haemimont",
+    "location": "София",
+    "text": "Company Description\nHaemimont AD, a full-stack IT services company and public cloud/storage services provider, is based in Sofia, Bulgaria. Since our founding in 2003, we have built a strong reputation for delivering high-quality custom software development and turnkey systems development solutions. Operating our own datacenter enables us to provide robust and secure solutions to meet diverse business needs. Our expertise includes site reliability engineering, cloud infrastructure management, and DevOps. We specialize in AWS and Azure environments, delivering secure and scalable cloud solutions to A-brands, international corporations, and Fortune 500 companies across the EU, UK, and US.\nJob Description\nWe are looking for a Junior Site Reliability Engineer (SRE) to join our team and help us ensure the reliability, scalability, and performance of our systems.\nMain responsibilities\n• Hands-on administration of Windows and Linux servers, including user and group management, patching, routine maintenance, and first-level troubleshooting.\n• Support and maintenance of mail services, including mailbox administration, distribution groups, basic configuration, and operational support.\n• Strong focus on networking fundamentals, including DNS, IP addressing, routing, switching, firewalls, and day-to-day connectivity troubleshooting.\n• Monitoring, troubleshooting, and support of infrastructure, systems, and services in both office and datacenter environments.\n• Basic scripting and automation for operational tasks using PowerShell, Bash, Javascript, or similar tools.\n• Support of web and application services such as IIS, Apache, Haproxy and Nginx, including basic configuration and maintenance.\n• Participation in datacenter activities such as rack and stack, cabling, hardware replacement, and maintaining accurate documentation and asset records.\n• Participation in shift-based operational coverage. 16/5 currently, may expand in the future to 24/5(Monday-Friday)\nRequired skills and experience\n• Good practical knowledge of networking and troubleshooting, with confidence in working with DNS, IP addressing, subnet and related connectivity issues.\n• Experience administering Windows and Linux systems in an operational environment.\n• Basic understanding of virtualization and high availability concepts such as Hyper-V, VMware, clustering, and failover.\n• Basic knowledge of scripting or automation with PowerShell, Bash, Shell, or similar tools.\n• Good troubleshooting mindset, willingness to learn, and ability to follow operational procedures.\n• Working proficiency in English.\nNice to have\nThe following are considered an advantage during the interview process, but are not mandatory:\n• Exposure to Microsoft Exchange and/or Microsoft 365 administration.\n• Experience with load balancing concepts such as L4/L7, VIPs, health checks, reverse proxies, and basic TLS/certificate handling.\n• Familiarity with monitoring and logging platforms such as Zabbix, Graylog, Datadog, or similar systems.\n• Exposure to container and automation technologies such as Docker, Kubernetes, Ansible, Terraform, and Git-based workflows.\n• Basic experience with databases and data platforms, including backup/restore workflows and exposure to systems such as MongoDB Atlas.\n• Familiarity with Azure services such as Azure DevOps, Azure Function Apps, Application Gateways, Azure Data Factory, and other cloud infrastructure components.\n• Understanding of hardware and datacenter fundamentals, including RAID, remote management, firmware lifecycle, and hardware replacement procedures.\n• Networking knowledge beyond the basics, such as VLANs, LACP, switch configuration/CLI, and general Layer 2/Layer 3 troubleshooting."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Networking and troubleshooting (DNS, IP addressing, subnets)",
+        "kind": "required"
+      },
+      {
+        "text": "Administering Windows and Linux systems",
+        "kind": "required"
+      },
+      {
+        "text": "Basic virtualisation and high availability (Hyper-V, VMware, clustering, failover)",
+        "kind": "required"
+      },
+      {
+        "text": "Basic scripting or automation (PowerShell, Bash)",
+        "kind": "required"
+      },
+      {
+        "text": "Troubleshooting mindset, willingness to learn, following procedures",
+        "kind": "required"
+      },
+      {
+        "text": "Working English",
+        "kind": "required"
+      },
+      {
+        "text": "Microsoft Exchange and/or Microsoft 365 administration",
+        "kind": "preferred"
+      },
+      {
+        "text": "Load balancing (L4/L7, reverse proxies, TLS certificates)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Monitoring and logging (Zabbix, Graylog, Datadog)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Containers and automation (Docker, Kubernetes, Ansible, Terraform, Git)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Databases and backup/restore (MongoDB Atlas)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Azure services (Azure DevOps, Function Apps, Data Factory)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Hardware and datacenter fundamentals (RAID, firmware)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Networking beyond the basics (VLANs, LACP, L2/L3)",
+        "kind": "preferred"
+      }
+    ],
+    "years": [],
+    "languages": [
+      {
+        "language": "English",
+        "level": "working",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "on-site",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Office and own-datacenter work (rack and stack, shifts): on-site."
+}
