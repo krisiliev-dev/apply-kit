@@ -1,5 +1,5 @@
 import type {
-  CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -153,4 +153,9 @@ export async function makeTarget(jobId: string, postingId: string): Promise<JobD
 /** "Not the same job? Split": the Posting leaves the Job; answers with both Jobs' ids (this one first). */
 export async function splitPosting(jobId: string, postingId: string): Promise<{ jobIds: [string, string] }> {
   return json(await postJson(`${jobPath(jobId)}/split`, { postingId }));
+}
+
+/** "Paste a job link", optionally with the job's text Kris pasted when the page couldn't be read. */
+export async function addJobLink(link: string, pasted?: PastedPosting): Promise<AddLinkResult> {
+  return json(await postJson("/api/jobs/link", pasted ? { link, pasted } : { link }));
 }

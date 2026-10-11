@@ -4,6 +4,7 @@ export type {
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
   Decision, JobState, PassReason, PassInput,
   ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort,
+  AddLinkResult, LinkProblem, PastedPosting,
 } from "./engine.ts";
 export { sourceRemovedHow } from "./engine.ts";
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
@@ -16,6 +17,8 @@ export type { FeedRequirement, RequirementStatus, JobRequirement, KeyFact, FactS
 export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, AlertEmail, Settings } from "./ports.ts";
 export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext, EmailAlertAdapter } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";
+export { jobPostingsFromLd } from "./capture/jsonld.ts";
+export type { LdJobPosting } from "./capture/jsonld.ts";
 export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts";
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
