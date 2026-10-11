@@ -154,7 +154,7 @@ describe("running the evaluation", () => {
     expect(fact("years")).toMatchObject({ precision: 1, recall: 1, f1: 1 });
     expect(fact("salary")).toMatchObject({ correct: 2, total: 2, accuracy: 1 });
     expect(fact("remote")).toMatchObject({ correct: 1, total: 2, accuracy: 0.5 });
-    expect(fact("location")).toMatchObject({ expected: 1, extracted: 0, matched: 0, recall: 0, precision: null });
+    expect(fact("location")).toMatchObject({ expected: 1, extracted: 0, matched: 0, recall: 0, precision: null, f1: 0 });
     expect(report.cases.map((c) => c.status)).toEqual(["read", "read"]);
   });
 

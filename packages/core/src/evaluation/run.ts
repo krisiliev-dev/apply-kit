@@ -40,6 +40,7 @@ export interface ListFactScore {
   precision: number | null;
   /** matched / expected, or null when nothing was labelled. */
   recall: number | null;
+  /** 2·matched / (expected + extracted), or null when there was nothing to find and nothing found. */
   f1: number | null;
   /** Of the matched facts, the share asked the same way (required or preferred); null for location. */
   kindAgreement: number | null;
@@ -136,7 +137,8 @@ function summarise(rows: { r: CaseResult; c: EvaluationCase }[]): EvaluationSumm
       const sum = (f: (s: ListScore) => number) => parts.reduce((n, s) => n + f(s), 0);
       const expected = sum((s) => s.expected), extracted = sum((s) => s.extracted), matched = sum((s) => s.matched);
       const precision = ratio(matched, extracted), recall = ratio(matched, expected);
-      const f1 = precision == null || recall == null ? null : precision + recall === 0 ? 0 : (2 * precision * recall) / (precision + recall);
+      // Nothing labelled and nothing found: no score. Otherwise F1, which is 0 when nothing matched.
+      const f1 = expected + extracted === 0 ? null : matched === 0 ? 0 : (2 * matched) / (expected + extracted);
       const kindAgreement = key === "locations" ? null : ratio(sum((s) => s.kindAgreed ?? 0), matched);
       return { fact, type: "list", expected, extracted, matched, precision, recall, f1, kindAgreement };
     }),
