@@ -14,17 +14,17 @@ describe("Greenhouse source", () => {
     await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources).toEqual([{ sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: true, found: 3, newPostings: 3 }]);
     expect(feed.firstRun).toBe(false);
     expect(feed.health).toMatchObject({ state: "working", sources: 1 });
     expect(feed.counts.new).toBe(3);
-    // Newest first until Fit exists.
+    // Newest first: this test is about normalising, not ranking.
     expect(feed.jobs).toEqual([
-      { id: expect.any(String), title: "Associate Product Manager", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-10-06T08:33:36.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4998241101", state: "new", reading: "unread", requirements: [], needsYou: 0 },
-      { id: expect.any(String), title: "Customer Support Specialist", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-04-21T08:19:01.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4512588101", state: "new", reading: "unread", requirements: [], needsYou: 0 },
-      { id: expect.any(String), title: "Account Executive", company: "Payhawk", location: "London", salary: null, postedAt: "2023-12-07T14:16:04.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4258713101", state: "new", reading: "unread", requirements: [], needsYou: 0 },
+      { id: expect.any(String), title: "Associate Product Manager", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-10-06T08:33:36.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4998241101", state: "new", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
+      { id: expect.any(String), title: "Customer Support Specialist", company: "Payhawk", location: "Sofia", salary: null, postedAt: "2026-04-21T08:19:01.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4512588101", state: "new", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
+      { id: expect.any(String), title: "Account Executive", company: "Payhawk", location: "London", salary: null, postedAt: "2023-12-07T14:16:04.000Z", postingCount: 1, url: "https://job-boards.eu.greenhouse.io/payhawkio/jobs/4258713101", state: "new", reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
     ]);
   });
 
@@ -32,11 +32,11 @@ describe("Greenhouse source", () => {
     const { engine, clock } = payhawkEngine();
     await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
     await engine.checkAll();
-    const first = await engine.queryFeed({ view: "new" });
+    const first = await engine.queryFeed({ view: "new", sort: "newest" });
 
     clock.advance(30 * 60_000);
     const again = await engine.checkAll();
-    const second = await engine.queryFeed({ view: "new" });
+    const second = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(again.sources[0]).toMatchObject({ ok: true, found: 3, newPostings: 0 });
     expect(second.counts.new).toBe(3);
@@ -52,7 +52,7 @@ describe("Greenhouse source", () => {
       await engine.checkAll();
     }
 
-    const ids = async (t: typeof a) => (await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.id);
+    const ids = async (t: typeof a) => (await t.engine.queryFeed({ view: "new", sort: "newest" })).jobs.map((j) => j.id);
     expect(await ids(b)).toEqual(await ids(a));
   });
 
@@ -62,7 +62,7 @@ describe("Greenhouse source", () => {
     const second = await engine.addSource({ kind: "greenhouse", config: { board: "PayhawkIO" } });
 
     expect(second).toEqual(first);
-    expect((await engine.queryFeed({ view: "new" })).health.sources).toBe(1);
+    expect((await engine.queryFeed({ view: "new", sort: "newest" })).health.sources).toBe(1);
   });
 
   it("rejects a Greenhouse source without a usable board token", async () => {
@@ -78,7 +78,7 @@ describe("Greenhouse source", () => {
     deps.fetch = async () => new Response("Service Unavailable", { status: 503 });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources).toEqual([
       { sourceId: "greenhouse:payhawkio", name: "payhawkio", ok: false, outcome: "error", error: 'Greenhouse answered 503 for board "payhawkio"' },

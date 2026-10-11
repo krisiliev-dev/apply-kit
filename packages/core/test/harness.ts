@@ -79,6 +79,7 @@ export function fixtureFetch(routes: Record<string, string> = {}): typeof fetch 
 export function cannedFacts(overrides: Partial<PostingFacts> = {}): PostingFacts {
   return {
     language: "en",
+    titleTranslation: null,
     requirements: [],
     years: [],
     languages: [],

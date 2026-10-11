@@ -19,14 +19,14 @@ describe("Jooble source", () => {
     const source = await engine.addSource({ kind: "jooble", config: "security|Bulgaria" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(source).toEqual({ id: "jooble:security|bulgaria", kind: "jooble", name: "Jooble · security · Bulgaria" });
     expect(check.sources[0]).toMatchObject({ ok: true, found: 2, newPostings: 2 });
     expect(feed.jobs).toEqual([
       // The id comes from the link exactly: as a JSON number it's too big to survive parsing.
-      { id: "job:jooble:security|bulgaria:-1111111111111111111", title: "Security Operations Analyst", company: "Synthetic Systems", location: "Sofia, Bulgaria", salary: "4000 - 5500 BGN", postedAt: "2026-10-09T00:00:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/-1111111111111111111"), reading: "unread", requirements: [], needsYou: 0 },
-      { id: "job:jooble:security|bulgaria:2222222222222222222", title: "Penetration Tester", company: "Company not stated", location: "Bulgaria", salary: null, postedAt: "2026-10-07T14:30:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/2222222222222222222"), reading: "unread", requirements: [], needsYou: 0 },
+      { id: "job:jooble:security|bulgaria:-1111111111111111111", title: "Security Operations Analyst", company: "Synthetic Systems", location: "Sofia, Bulgaria", salary: "4000 - 5500 BGN", postedAt: "2026-10-09T00:00:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/-1111111111111111111"), reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
+      { id: "job:jooble:security|bulgaria:2222222222222222222", title: "Penetration Tester", company: "Company not stated", location: "Bulgaria", salary: null, postedAt: "2026-10-07T14:30:00.000Z", postingCount: 1, state: "new", url: expect.stringContaining("https://jooble.org/desc/2222222222222222222"), reading: "unread", requirements: [], needsYou: 0, titleTranslation: null, language: null, fit: expect.any(Object) },
     ]);
   });
 
@@ -68,7 +68,7 @@ describe("Reed source", () => {
     await engine.addSource({ kind: "reed", config: { keywords: "security", location: "London" } });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(check.sources[0]).toMatchObject({ sourceId: "reed:security|london", name: "Reed · security · London", ok: true, found: 2 });
     expect(feed.jobs.map((j) => [j.title, j.company, j.location, j.salary, j.postedAt, j.url])).toEqual([
@@ -109,7 +109,7 @@ describe("EURES source", () => {
     const source = await engine.addSource({ kind: "eures", config: "cybersecurity|BE" });
 
     const check = await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(source).toEqual({ id: "eures:cyber|be", kind: "eures", name: "EURES · cyber roles · BE" });
     expect(http.requests[0]!.json).toMatchObject({ occupationUris: cyberOccupations, keywords: [], locationCodes: ["be"], requestLanguage: "en", sortSearch: "MOST_RECENT" });
@@ -137,7 +137,7 @@ describe("EURES source", () => {
     await engine.addSource({ kind: "eures", config: { keywords: "software developer", country: "bg" } });
 
     await engine.checkAll();
-    const feed = await engine.queryFeed({ view: "new" });
+    const feed = await engine.queryFeed({ view: "new", sort: "newest" });
 
     expect(http.requests[0]!.json).toMatchObject({ occupationUris: [], keywords: [{ keyword: "software developer", specificSearchCode: "EVERYWHERE" }], locationCodes: ["bg"] });
     expect(feed.jobs).toMatchObject([{ title: "Software Developer", company: "Synthetic OOD", location: "Sofia, Bulgaria" }]);

@@ -378,8 +378,6 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   }
 
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
-  const countStates = (states: string[]) =>
-    count(`SELECT COUNT(*) AS n FROM job WHERE state IN (${states.map(() => "?").join(",")})`, ...states);
 
   async function checkOne(row: Record<string, unknown>, startedAt: string): Promise<SourceCheck> {
     const sourceId = String(row.id);

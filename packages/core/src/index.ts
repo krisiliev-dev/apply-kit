@@ -3,7 +3,7 @@ export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource,
   Decision, JobState, PassReason, PassInput,
-  ReadingState, ReadResult, JobDetail, BudgetInfo,
+  ReadingState, ReadResult, JobDetail, BudgetInfo, FeedSort,
 } from "./engine.ts";
 export { postingFactsSchema } from "./extraction/facts.ts";
 export type {
@@ -16,3 +16,8 @@ export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext } from
 export { adapters } from "./sources/registry.ts";
 export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts";
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
+export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
+export type { Angle } from "./fit/angles.ts";
+export type { Place, LocationTier } from "./locations.ts";
+export { defaultSearchSettings } from "./search-settings.ts";
+export type { SearchSettings } from "./search-settings.ts";
