@@ -5,6 +5,12 @@ export interface Clock {
   now(): Date;
 }
 
+/** Repeating timers, injected so the scheduler can be driven by a fake clock in tests. */
+export interface Timers {
+  setInterval(fn: () => void, ms: number): unknown;
+  clearInterval(handle: unknown): void;
+}
+
 /**
  * The slice of a synchronous SQLite connection the engine uses. `node:sqlite`'s DatabaseSync
  * satisfies it; tests use an in-memory one.

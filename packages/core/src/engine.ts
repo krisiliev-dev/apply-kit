@@ -147,12 +147,22 @@ export interface Decision {
   jobIds: string[];
 }
 
+export interface CheckOptions {
+  /** Called when the check starts, with how many Sources it will check. */
+  onStart?: (total: number) => void;
+  /** Called once per Source the moment its check finishes; its jobs are already in the Feed. */
+  onSourceChecked?: (check: SourceCheck) => void;
+}
+
 export interface DiscoveryEngine {
   queryFeed(query: FeedQuery): Promise<FeedResult>;
   /** Adds a Source. Adding the same Source again (same kind and key) changes nothing. */
   addSource(source: NewSource): Promise<SourceInfo>;
-  /** Checks every Source now. A failing Source is reported, never thrown, and changes nothing. */
-  checkAll(): Promise<CheckResult>;
+  /**
+   * Checks every Source now. A failing Source is reported, never thrown, and changes nothing.
+   * Each Source's results are stored as soon as it finishes, so the Feed fills while slower ones run.
+   */
+  checkAll(options?: CheckOptions): Promise<CheckResult>;
   /** Checks one Source now ("Try now"). Same rules as checkAll; throws only if the Source doesn't exist. */
   checkSource(sourceId: string): Promise<SourceCheck>;
   /** Every Source with its status, latest Checks and what a failure means for the Feed. */
@@ -402,10 +412,15 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
     },
 
-    async checkAll() {
+    async checkAll(options = {}) {
       const startedAt = clock.now().toISOString();
       const rows = db.prepare("SELECT id, name, kind, config FROM source ORDER BY created_at, id").all();
-      const sources = await Promise.all(rows.map((r) => checkOne(r, startedAt)));
+      options.onStart?.(rows.length);
+      const sources = await Promise.all(rows.map(async (r) => {
+        const result = await checkOne(r, startedAt);
+        options.onSourceChecked?.(result);
+        return result;
+      }));
       return { startedAt, sources };
     },
 

@@ -20,7 +20,7 @@ function when(iso: string, asOf: string): string {
  * Passed & closed: every passed job with Kris's reason (Undo pass), every closed job with how it
  * closed (Reopen). Nothing here is deleted. This is the lasting undo path behind the 15 s toast.
  */
-export function PassedClosed({ feed, toaster, onChanged }: { feed: FeedResult; toaster: Toaster; onChanged: () => void }) {
+export function PassedClosed({ feed, toaster, onChanged }: { feed: FeedResult; toaster: Toaster; onChanged: (touched?: string[]) => void }) {
   const passed = feed.jobs.filter((j) => j.state === "passed");
   const closed = feed.jobs.filter((j) => j.state === "closed");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -45,7 +45,7 @@ export function PassedClosed({ feed, toaster, onChanged }: { feed: FeedResult; t
         message: `Pass undone · ${named(job)}. It's back in All open.`,
         undo: () => {
           passJobs([job.id], { reason: p.reason, note: p.note })
-            .then(() => { onChanged(); toaster.announce("Passed again."); })
+            .then((d) => { onChanged(d.jobIds); toaster.announce("Passed again."); })
             .catch((err: unknown) => toaster.show({ message: `Couldn't pass again: ${message(err)}` }));
         },
       });
@@ -63,7 +63,7 @@ export function PassedClosed({ feed, toaster, onChanged }: { feed: FeedResult; t
         message: `Reopened · ${named(job)}. It's back in All open.`,
         undo: () => {
           undoDecision(d.id)
-            .then(() => { onChanged(); toaster.announce("Undone. The job is closed again."); })
+            .then((r) => { onChanged(r.jobIds); toaster.announce("Undone. The job is closed again."); })
             .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
         },
       });

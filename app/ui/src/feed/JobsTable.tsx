@@ -17,11 +17,17 @@ const leavesView = (view: FeedView, action: "save" | "pass") => action === "pass
  * multi-select with bulk Save and Pass, and single-key shortcuts that work only while focus is in
  * the table and can be turned off.
  */
-export function JobsTable({ feed, view, toaster, onChanged }: {
+export function JobsTable({ feed, view, toaster, onChanged, queued, onShowQueued, checking }: {
+  /** The Feed, with `jobs` set to the rows on screen. */
   feed: FeedResult;
   view: FeedView;
   toaster: Toaster;
-  onChanged: () => void;
+  /** Refresh after a change; `touched` rows show even if they'd otherwise wait under the bar. */
+  onChanged: (touched?: string[]) => void;
+  /** Rows found by a running check, waiting behind the "Show them" bar. */
+  queued: number;
+  onShowQueued: () => void;
+  checking: boolean;
 }) {
   const jobs = feed.jobs;
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -34,17 +40,16 @@ export function JobsTable({ feed, view, toaster, onChanged }: {
   const current = jobs.some((j) => j.id === activeId) ? activeId : (jobs[0]?.id ?? null);
   const chosen = jobs.filter((j) => selected.has(j.id));
 
-  // A row to focus once it is on screen, for a row an undo brings back after the refresh. Given
-  // up if the refresh doesn't bring it. (Focusing the row sets it active through its onFocus.)
-  const pendingFocus = useRef<{ id: string; asOf: string } | null>(null);
-  const focusLater = (id: string) => { pendingFocus.current = { id, asOf: feed.asOf }; };
+  // A row to focus once it is on screen, for a row an undo brings back: set when the undo is
+  // done, used (or given up) on the next Feed update. Focusing the row makes it active.
+  const pendingFocus = useRef<string | null>(null);
+  const focusLater = (id: string | undefined) => { pendingFocus.current = id ?? null; };
   useEffect(() => {
-    const p = pendingFocus.current;
-    if (!p) return;
-    const row = rowRefs.current.get(p.id);
-    if (row) row.focus();
-    if (row || feed.asOf !== p.asOf) pendingFocus.current = null;
-  }, [feed]);
+    const id = pendingFocus.current;
+    if (!id) return;
+    pendingFocus.current = null;
+    rowRefs.current.get(id)?.focus();
+  }, [jobs]);
 
   const focusRow = (id: string | undefined) => {
     if (!id) return;
@@ -81,9 +86,8 @@ export function JobsTable({ feed, view, toaster, onChanged }: {
       toaster.show({
         message: d.jobIds.length === 1 ? `Saved · ${named(fresh[0]!)}` : `Saved ${d.jobIds.length} jobs`,
         undo: () => {
-          focusLater(d.jobIds[0]!);
           undoDecision(d.id)
-            .then(() => { onChanged(); toaster.announce("Save undone."); })
+            .then((r) => { focusLater(r.jobIds[0]); onChanged(r.jobIds); toaster.announce("Save undone."); })
             .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
         },
         returnFocus: () => focusRow(current ?? undefined),
@@ -111,10 +115,10 @@ export function JobsTable({ feed, view, toaster, onChanged }: {
       toaster.show({
         message: d.jobIds.length === 1 ? `Passed · ${named(list[0]!)}. It's in Passed & closed.` : `Passed ${d.jobIds.length} jobs. They're in Passed & closed.`,
         undo: () => {
-          focusLater(d.jobIds[0]!);
           undoDecision(d.id)
             .then((r) => {
-              onChanged();
+              focusLater(r.jobIds[0]);
+              onChanged(r.jobIds);
               toaster.announce(r.jobIds.length === 1 ? `Pass undone. The job is back in ${backIn[view]}.` : `Pass undone. ${r.jobIds.length} jobs are back.`);
             })
             .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
@@ -161,7 +165,12 @@ export function JobsTable({ feed, view, toaster, onChanged }: {
     return (
       <div className="empty" ref={panelRef} tabIndex={-1}>
         <h2>Nothing here yet</h2>
-        <p>{view === "new" ? "No new jobs. Run a check to look again." : view === "saved" ? "No saved jobs. Save one from New to keep it here." : "No open jobs."}</p>
+        <p>
+          {checking ? "Jobs appear here as each source finishes."
+            : view === "new" ? "No new jobs. Run a check to look again."
+              : view === "saved" ? "No saved jobs. Save one from New to keep it here." : "No open jobs."}
+        </p>
+        {queued > 0 && <button className="btn sm" type="button" onClick={onShowQueued}>Show {queued} new {queued === 1 ? "job" : "jobs"}</button>}
         {passing && <PassDialog what={passing.what} onPass={(input) => void pass(passing.ids, input)} onCancel={() => setPassing(null)} />}
       </div>
     );
@@ -181,6 +190,12 @@ export function JobsTable({ feed, view, toaster, onChanged }: {
           <button className="linkish" type="button" onClick={toggleShortcuts}>{shortcutsOn ? "Turn off" : "Turn on"}</button>
         </span>
       </div>
+      {queued > 0 && (
+        <div className="queue">
+          <span>{queued} new {queued === 1 ? "job" : "jobs"} found</span>
+          <button className="btn sm" type="button" onClick={onShowQueued}>Show them</button>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table jobs" aria-label="Jobs, newest first" aria-describedby="jobs-keys-help">
           <thead>
@@ -222,7 +237,11 @@ export function JobsTable({ feed, view, toaster, onChanged }: {
       <p className="sr-only" id="jobs-keys-help">
         Up and down arrows move between jobs; Enter opens the posting.{shortcutsOn ? " J and K also move, S saves, X passes." : ""}
       </p>
-      <div className="foot"><span className="num">Showing {jobs.length} of {jobs.length}</span></div>
+      <div className="foot">
+        {checking
+          ? <span>More appear as sources finish. They wait under the bar above, so nothing moves while you work.</span>
+          : <span className="num">Showing {jobs.length} of {jobs.length + queued}</span>}
+      </div>
       {passing && (
         <PassDialog
           what={passing.what}
