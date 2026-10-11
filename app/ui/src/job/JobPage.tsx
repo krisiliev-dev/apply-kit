@@ -117,6 +117,13 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         </div>
       )}
       <PastedLinkNote />
+      {job.unverified && (
+        <div className="banner warning">
+          <span className="text">
+            <b>Unverified since {shortDate(job.unverified.since)}.</b> You captured or pasted this job, and no job system apply-kit checks has listed it for 30 days. It stays in your Feed; check the posting is still open before preparing a package.
+          </span>
+        </div>
+      )}
 
       {job.language === "bg" && <BulgarianBanner job={job} />}
 

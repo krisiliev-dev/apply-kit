@@ -327,6 +327,7 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         <a className="t" href={jobPage(job.id)} tabIndex={tab}>{titleOf(job)}</a>
         <span className="co">{job.company}</span>
         {showSavedChip && job.state === "saved" && <span className="chip met saved-chip">Saved</span>}
+        {job.unverified && <span className="chip partly" title="Captured or pasted, and nothing has seen it for 30 days. Still in the Feed.">Unverified after 30 days</span>}
         {job.titleTranslation && <span className="meta"> · <span lang={job.language ?? undefined}>{job.title}</span></span>}
         {job.siteCount > 1
           ? <span className="meta"> · on {job.siteCount} sites</span>

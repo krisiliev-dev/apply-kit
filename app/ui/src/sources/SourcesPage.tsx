@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { checkAndWait, checkSource, fetchSources, pauseSource, removeSource, resumeSource, undoDecision } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { AddCompany, type Added } from "./AddCompany.tsx";
+import { ExtensionPanel } from "./ExtensionPanel.tsx";
 import { RemoveDialog } from "./RemoveDialog.tsx";
 import { CoverageCard, CoveragePage } from "./Coverage.tsx";
 import { StarterWatchlist } from "./StarterWatchlist.tsx";
@@ -177,6 +178,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
           />
         )}
         {screen === "list" && load.state === "ready" && <StarterWatchlist reloadKey={attempt} onSeeded={seeded} onError={say} />}
+        {screen === "list" && <ExtensionPanel />}
         {removing && (
           <RemoveDialog
             source={removing}

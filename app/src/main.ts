@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { createEngine, createScheduler } from "@apply-kit/core";
+import { createEngine, createPairing, createScheduler } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
 import { createImapMailReader, readMailSettings } from "./mail.ts";
@@ -52,7 +52,10 @@ const scheduler = createScheduler({
   schedule: config.schedule,
 });
 
-const app = createServer({ engine, scheduler, uiDir: config.uiDir });
+// The Chrome extension pairs once with a code shown in the app; only paired extensions are answered.
+const pairing = createPairing({ db, clock });
+
+const app = createServer({ engine, scheduler, pairing, uiDir: config.uiDir });
 
 // localhost only: the extension and UI talk to this, nothing else should.
 const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1" }, (info) => {

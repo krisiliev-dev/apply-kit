@@ -217,6 +217,20 @@ const migrations: string[] = [
      created_at TEXT NOT NULL,
      undone_at TEXT
    );`,
+  // #19: the Chrome extension, paired once. The code the app shows while Kris pairs (one at a time),
+  // and each paired extension with a hash of its token (the token itself is never stored).
+  `CREATE TABLE pairing_code (
+     code TEXT NOT NULL,
+     expires_at TEXT NOT NULL,
+     wrong_tries INTEGER NOT NULL DEFAULT 0
+   );
+   CREATE TABLE extension_device (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     token_hash TEXT NOT NULL UNIQUE,
+     paired_at TEXT NOT NULL,
+     last_used_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

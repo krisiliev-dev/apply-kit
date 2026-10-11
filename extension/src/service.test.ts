@@ -1,0 +1,101 @@
+import { describe, expect, it } from "vitest";
+import { createClient, defaultServiceUrl, type Store } from "./service.ts";
+
+/** browser.storage.local held in memory, recording every write. */
+function memoryStore(initial: Record<string, unknown> = {}) {
+  const data: Record<string, unknown> = { ...initial };
+  const writes: string[] = [];
+  const store: Store = {
+    async get(keys) {
+      return Object.fromEntries(keys.filter((k) => k in data).map((k) => [k, data[k]]));
+    },
+    async set(items) {
+      writes.push(...Object.keys(items));
+      Object.assign(data, items);
+    },
+    async remove(keys) {
+      for (const k of keys) delete data[k];
+    },
+  };
+  return { store, data, writes };
+}
+
+type Route = (req: { url: string; method: string; auth: string | null; body: unknown }) => Response | undefined;
+
+/** A fake service at the default address; anything it doesn't answer fails like a closed port. */
+function fakeService(route: Route) {
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const headers = new Headers(init?.headers);
+    const res = route({ url, method: init?.method ?? "GET", auth: headers.get("authorization"), body: init?.body ? JSON.parse(String(init.body)) : null });
+    if (!res) throw new TypeError("Failed to fetch");
+    return res;
+  };
+  return fetch;
+}
+
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+const page = { url: "https://www.linkedin.com/jobs/view/4100000009/", html: "<html><body><h1>Application Security Engineer</h1></body></html>", frames: [] };
+const report = { kind: "job", site: "LinkedIn", source: "Captured · LinkedIn", listings: [], counts: { new: 1, inFeed: 0, hidden: 0, unreadable: 0 }, notLoaded: 0, message: null };
+
+describe("the extension talking to apply-kit", () => {
+  it("says the app isn't running when nothing answers on this laptop", async () => {
+    const { store } = memoryStore({ token: "t0k3n" });
+    const client = createClient({ fetch: fakeService(() => undefined), store });
+
+    expect(await client.connect()).toEqual({ state: "not-running", serviceUrl: defaultServiceUrl });
+    expect(await client.preview(page)).toEqual({ ok: false, state: "not-running" });
+  });
+
+  it("asks to pair when it has no token, or the service no longer accepts it", async () => {
+    const service = fakeService((r) => (r.url.endsWith("/api/ext/status") ? json({ problem: "not-paired" }, 401) : undefined));
+
+    expect(await createClient({ fetch: service, store: memoryStore().store }).connect()).toMatchObject({ state: "unpaired" });
+    expect(await createClient({ fetch: service, store: memoryStore({ token: "old" }).store }).connect()).toMatchObject({ state: "unpaired" });
+  });
+
+  it("pairs with the code from the app, keeping only the token and the service address", async () => {
+    const { store, data } = memoryStore();
+    const service = fakeService((r) => {
+      if (r.url === `${defaultServiceUrl}/api/ext/pair`) {
+        return (r.body as { code: string }).code === "482913" ? json({ token: "fresh-token", deviceId: "device:1" }, 201) : json({ problem: "wrong-code", error: "That isn't the code apply-kit shows." }, 400);
+      }
+      if (r.url === `${defaultServiceUrl}/api/ext/status`) return r.auth === "Bearer fresh-token" ? json({ app: "apply-kit", paired: true }) : json({ problem: "not-paired" }, 401);
+      return undefined;
+    });
+    const client = createClient({ fetch: service, store });
+
+    expect(await client.pair("111111")).toEqual({ ok: false, error: "That isn't the code apply-kit shows." });
+    expect(await client.pair("482 913")).toEqual({ ok: true });
+
+    expect(await client.connect()).toEqual({ state: "ready", serviceUrl: defaultServiceUrl });
+    expect(data).toEqual({ token: "fresh-token", serviceUrl: defaultServiceUrl });
+  });
+
+  it("sends the page with its token and keeps nothing of it", async () => {
+    const { store, writes } = memoryStore({ token: "t0k3n" });
+    const sent: unknown[] = [];
+    const service = fakeService((r) => {
+      if (r.auth !== "Bearer t0k3n") return json({ problem: "not-paired" }, 401);
+      sent.push(r.body);
+      if (r.url.endsWith("/api/ext/capture/preview")) return json(report);
+      if (r.url.endsWith("/api/ext/capture")) return json(report, 201);
+      return undefined;
+    });
+    const client = createClient({ fetch: service, store });
+
+    expect(await client.preview(page)).toEqual({ ok: true, report });
+    expect(await client.capture(page)).toEqual({ ok: true, report });
+
+    expect(sent).toEqual([page, page]);
+    expect(writes).toEqual([]);
+  });
+
+  it("forgets its token when the service says it isn't paired any more", async () => {
+    const { store, data } = memoryStore({ token: "revoked", serviceUrl: defaultServiceUrl });
+    const client = createClient({ fetch: fakeService(() => json({ problem: "not-paired" }, 401)), store });
+
+    expect(await client.capture(page)).toEqual({ ok: false, state: "unpaired" });
+    expect(data).toEqual({ serviceUrl: defaultServiceUrl });
+  });
+});

@@ -1,5 +1,10 @@
 {
   "extends": "../tsconfig.base.json",
-  "compilerOptions": { "outDir": "../node_modules/.tsc/extension", "types": [] },
-  "include": ["src"]
+  "compilerOptions": {
+    "outDir": "../node_modules/.tsc/extension",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": []
+  },
+  "include": ["src", "wxt.config.ts"],
+  "references": [{ "path": "../packages/core" }]
 }

@@ -10,6 +10,7 @@
     "setup:data": "node scripts/setup.mjs",
     "dev": "pnpm --filter @apply-kit/app dev",
     "start": "pnpm --filter @apply-kit/app start",
+    "build:extension": "pnpm --filter @apply-kit/extension build",
     "service:install": "sh scripts/launchagent.sh install",
     "service:uninstall": "sh scripts/launchagent.sh uninstall",
     "service:status": "sh scripts/launchagent.sh status",
