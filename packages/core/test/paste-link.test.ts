@@ -86,6 +86,19 @@ describe("pasting a link already in the Feed", () => {
     expect((await t.engine.queryFeed({ view: "new" })).jobs).toHaveLength(before.jobs.length);
   });
 
+  it("finds a Job stored before links were indexed (an older database), once the engine starts on it", async () => {
+    const t = withPages({ [kestrelBoard]: { fixture: "greenhouse-kestrel.json" } });
+    await t.engine.addSource({ kind: "greenhouse", config: "kestrel" });
+    await t.engine.checkAll();
+    const security = (await t.engine.queryFeed({ view: "new" })).jobs.find((j) => j.title === "Security Engineer")!;
+    // Postings stored by a version without the link index carry no link key.
+    t.deps.db.exec("UPDATE posting SET link_key = NULL");
+
+    const restarted = createTestEngine({ db: t.deps.db, fetch: t.deps.fetch });
+
+    expect(await restarted.engine.addJobLink("https://job-boards.eu.greenhouse.io/kestrel/jobs/7001/?gh_src=x")).toEqual({ outcome: "existing", jobId: security.id });
+  });
+
   it("pasting the same link twice keeps one Job", async () => {
     const { engine, requests } = withPages({ [orbitlyJob]: html("page-orbitly-backend.html") });
 
@@ -283,5 +296,96 @@ describe("pasted links and Sources", () => {
     expect(feed.health.state).toBe("no-sources");
     expect(feed.firstRun).toBe(false);
     expect(feed.jobs).toHaveLength(1);
+  });
+});
+
+describe("a pasted page that doesn't name its company", () => {
+  it("says the company isn't stated rather than guessing it from the site", async () => {
+    const link = "https://jobs.hostedboards.example/p/88231";
+    const page = `<!doctype html><html><head><title>Data Engineer</title></head><body><main><h1>Data Engineer</h1>
+      <p>We are hiring a data engineer to build pipelines for our analytics team in Sofia.</p>
+      <h2>What you will do</h2><ul><li>Design and run batch and streaming pipelines</li><li>Model data for the reporting team</li><li>Keep data quality checks green</li></ul>
+      <h2>What you bring</h2><ul><li>3+ years with Python and SQL</li><li>Experience with Airflow or a similar scheduler</li><li>English at work level</li></ul>
+      <p>Hybrid in Sofia, two days a week in the office. You will join a small team of four engineers and work closely with analysts and product managers.</p></main></body></html>`;
+    const { engine } = withPages({ [link]: new Response(page) });
+
+    const added = await engine.addJobLink(link);
+
+    expect(added).toMatchObject({ outcome: "added" });
+    if (added.outcome !== "added") return;
+    expect((await engine.getJob(added.jobId))!.company).toBe("Company not stated");
+  });
+});
+
+describe("redirects from a pasted link", () => {
+  const short = "https://go.shortlinks.example/abc123";
+  const redirect = (to: string, status = 302) => new Response(null, { status, headers: { location: to } });
+
+  it("follows a redirect to the job page, checking robots.txt on the new host too", async () => {
+    const { engine, requests } = withPages({
+      [short]: redirect(orbitlyJob),
+      [orbitlyJob]: html("page-orbitly-backend.html"),
+    });
+
+    const added = await engine.addJobLink(short);
+
+    expect(added).toMatchObject({ outcome: "added" });
+    expect(requests.map((r) => r.url)).toEqual([
+      "https://go.shortlinks.example/robots.txt", short,
+      "https://careers.orbitly.example/robots.txt", orbitlyJob,
+    ]);
+  });
+
+  it("never follows a redirect into a protected site, and asks for the text instead", async () => {
+    const linkedin = "https://www.linkedin.com/jobs/view/4012345678/";
+    const { engine, requests } = withPages({ [short]: redirect(linkedin, 301) });
+
+    expect(await engine.addJobLink(short)).toMatchObject({ outcome: "unreadable", problem: "protected", alertSender: "linkedin" });
+    expect(requests.some((r) => r.url.includes("linkedin.com"))).toBe(false);
+  });
+
+  it("stops at a redirect onto a page the new host's robots.txt disallows", async () => {
+    const target = "https://jobs.example-bank.bg/vacancies/1201";
+    const { engine, requests } = withPages({
+      [short]: redirect(target),
+      "https://jobs.example-bank.bg/robots.txt": new Response("User-agent: *\nDisallow: /vacancies/\n"),
+    });
+
+    expect(await engine.addJobLink(short)).toMatchObject({ outcome: "unreadable", problem: "robots" });
+    expect(requests.some((r) => r.url === target)).toBe(false);
+  });
+
+  it("treats LinkedIn's lnkd.in short links as LinkedIn: never fetched", async () => {
+    const { engine, requests } = withPages({});
+
+    expect(await engine.addJobLink("https://lnkd.in/dXyZ123")).toMatchObject({ outcome: "unreadable", problem: "protected", alertSender: "linkedin" });
+    expect(requests).toEqual([]);
+  });
+});
+
+describe("robots.txt that can't be fetched", () => {
+  const timeout = () => Promise.reject(new DOMException("The operation timed out.", "TimeoutError"));
+  const urlOf = (input: Parameters<typeof fetch>[0]) => (typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+
+  it("counts as allowed: the page itself is read", async () => {
+    const pages: typeof fetch = async (input) => {
+      const url = urlOf(input);
+      if (url.endsWith("/robots.txt")) return timeout();
+      if (url === orbitlyJob) return html("page-orbitly-backend.html");
+      throw new Error(`nothing answers ${url}`);
+    };
+    const { engine } = createTestEngine({ fetch: pages });
+
+    expect(await engine.addJobLink(orbitlyJob)).toMatchObject({ outcome: "added" });
+  });
+
+  it("doesn't make the page's own failure read as a timeout", async () => {
+    const pages: typeof fetch = async (input) => {
+      if (urlOf(input).endsWith("/robots.txt")) return timeout();
+      throw new Error("connection refused");
+    };
+    const { engine } = createTestEngine({ fetch: pages });
+
+    expect(await engine.addJobLink(orbitlyJob)).toMatchObject({ outcome: "unreadable", problem: "error" });
   });
 });

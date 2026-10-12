@@ -1,10 +1,4 @@
-- index.html served with browser caching: stale UI after rebuild (from #14)
-- For #16 (drops/closing): search sources (microsoft, amazon, jooble, reed, eures) return capped lists — never expire their postings just because they're missing from one check. Workday is complete-or-fails.
 - First real run: confirm Amazon result_limit/country param, dev.bg page links and .job-list wrapper (assumed from trimmed fixtures).
-- Don't send email-only postings (no description) to extraction until full text is fetched (from #17)
-- Salary only from target posting: if only a board (e.g. Jooble) lists salary, Feed says 'Not read yet' — consider falling back to other postings' salary (from #9)
-- HTTP routes have no direct tests (thin wrappers) — consider a small server test suite (from #9)
-- After a Source is removed, its postings still show on the Job page and can be picked as target in merging.ts — filter removed Sources out (from #8)
 - Feed query builds all live Jobs and filters in memory (for relocation-free counts) — fine at personal scale, revisit if large (from #13)
 - Package language switch is page-local; persist it when Packages exist (from #13)
 - Location dealbreaker: "Plovdiv, Bulgaria" reads as "Bulgaria, city not stated" (unknown), so it is never hidden; only a bare non-Sofia city or a foreign place is. Teach locations.ts other Bulgarian cities (from #12)
@@ -15,5 +9,5 @@
 - "Why-line names an adjustment when it affected the rank" is read as "when it changed the Fit" (the sort key); an adjustment that leaves a clamped Fit at 0 or 100 isn't named (from #15)
 - Every Fit now reads the active learned adjustments; affectedCounts rebuilds every open Job's Fit per listing. Fine at personal scale (from #15)
 - A Job also listed by a capped search (or an email alert) never closes by absence, even when the company's own ATS stops listing it; consider letting the ATS close it, or the 30-day 'unverified' rule for captured/emailed postings (from #16)
-- dev.bg is treated as listing everything; if a category ever exceeds its maxPages, postings past the cap would close. Consider failing the check instead of truncating (from #16)
 - Drop UI: 'Keep them open and wait', 'Check their site' and 'Detect their job system again' from the Sources hi-fi aren't built; the history chart (#4 follow-up) should mark unusual checks (CheckRecord.unusual) (from #16)
+- Removing a Source: a copy Kris pasted or captured still covers the Job (removal says nothing about the job), so it stays open; closing by absence and confirming a drop ignore such copies (the job systems decide). Revisit if removal should close captured-only Jobs too (from the review fixes)

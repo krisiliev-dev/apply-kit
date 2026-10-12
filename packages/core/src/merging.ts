@@ -17,6 +17,7 @@
 import type { SqlDatabase } from "./ports.ts";
 import { locationsCompatible, matchKey, type MergeReason } from "./matching.ts";
 import { adapters } from "./sources/registry.ts";
+import { linkKey } from "./capture/links.ts";
 
 interface PostingRow {
   id: string;
@@ -85,6 +86,25 @@ function fits(db: SqlDatabase, p: PostingRow, members: PostingRow[]): MergeReaso
 /** Stores a Posting's match key from its current title and company. */
 export function refreshMatchKey(db: SqlDatabase, postingId: string, p: { title: string; company: string }): void {
   db.prepare("UPDATE posting SET match_key = ? WHERE id = ?").run(matchKey(p), postingId);
+}
+
+/** Stores a Posting's link key (what two links to the same job share), for lookups by link. */
+export function refreshLinkKey(db: SqlDatabase, postingId: string, url: string): void {
+  db.prepare("UPDATE posting SET link_key = ? WHERE id = ?").run(linkKey(url), postingId);
+}
+
+/** Fills link keys for Postings stored before they were kept. */
+export function backfillLinkKeys(db: SqlDatabase): void {
+  const rows = db.prepare("SELECT id, url FROM posting WHERE link_key IS NULL").all();
+  if (rows.length === 0) return;
+  db.exec("BEGIN");
+  try {
+    for (const r of rows) refreshLinkKey(db, String(r.id), String(r.url));
+    db.exec("COMMIT");
+  } catch (err) {
+    db.exec("ROLLBACK");
+    throw err;
+  }
 }
 
 /** Fills match keys for Postings stored before merging existed. */
@@ -207,11 +227,11 @@ export function split(db: SqlDatabase, jobId: string, postingId: string, now: st
   return { jobIds: [jobId, newJobId] };
 }
 
-/** Kris's choice of target posting for a Job. */
+/** Kris's choice of target posting for a Job: one of the Postings it shows (not one of a removed Source). */
 export function setTarget(db: SqlDatabase, jobId: string, postingId: string): void {
   const job = jobRow(db, jobId);
   if (!job || job.merged_into) throw new Error(`No job "${jobId}"`);
-  const member = db.prepare("SELECT 1 AS hit FROM posting WHERE id = ? AND job_id = ?").get(postingId, jobId);
+  const member = db.prepare(`SELECT 1 AS hit FROM posting p WHERE p.id = ? AND p.job_id = ? AND ${shownPostingSql("p")}`).get(postingId, jobId);
   if (!member) throw new Error(`Posting "${postingId}" isn't part of job "${jobId}"`);
   db.prepare("UPDATE job SET target_posting_id = ? WHERE id = ?").run(postingId, jobId);
 }
@@ -223,15 +243,26 @@ export interface TargetChoice {
 
 const atsKinds = Object.entries(adapters).filter(([, a]) => a.category === "ats").map(([kind]) => `'${kind}'`).join(", ");
 
+/** SQL: the Posting `p` isn't from a removed Source. */
+const fromLiveSource = (p: string) => `NOT EXISTS (SELECT 1 FROM source rs WHERE rs.id = ${p}.source_id AND rs.removed_at IS NOT NULL)`;
+
+/**
+ * SQL condition for a Posting (alias `p`) a Job shows: one from a Source on the watchlist, or, when
+ * every Posting of its Job is from a removed Source (the removal closed it), all of them.
+ */
+export const shownPostingSql = (p: string) => `(${fromLiveSource(p)} OR NOT EXISTS (
+  SELECT 1 FROM posting vp WHERE vp.job_id = ${p}.job_id AND ${fromLiveSource("vp")}))`;
+
 /**
  * SQL for a Job's target posting id, given SQL for the Job's id: Kris's choice, else the company's
- * own page (the first Posting from an ATS Source, the company's own system), else the first Posting seen.
+ * own page (the first Posting from an ATS Source, the company's own system), else the first Posting
+ * seen. Postings of removed Sources are passed over while the Job has any other.
  */
 export const targetPostingSql = (jobIdSql: string) => `COALESCE(
-  (SELECT p.id FROM posting p JOIN job tj ON tj.id = p.job_id WHERE tj.id = ${jobIdSql} AND p.id = tj.target_posting_id),
+  (SELECT p.id FROM posting p JOIN job tj ON tj.id = p.job_id WHERE tj.id = ${jobIdSql} AND p.id = tj.target_posting_id AND ${shownPostingSql("p")}),
   (SELECT p.id FROM posting p JOIN source s ON s.id = p.source_id
-    WHERE p.job_id = ${jobIdSql} AND s.kind IN (${atsKinds}) ORDER BY p.first_seen_at, p.id LIMIT 1),
-  (SELECT id FROM posting WHERE job_id = ${jobIdSql} ORDER BY first_seen_at, id LIMIT 1))`;
+    WHERE p.job_id = ${jobIdSql} AND s.kind IN (${atsKinds}) AND ${shownPostingSql("p")} ORDER BY p.first_seen_at, p.id LIMIT 1),
+  (SELECT p.id FROM posting p WHERE p.job_id = ${jobIdSql} AND ${shownPostingSql("p")} ORDER BY p.first_seen_at, p.id LIMIT 1))`;
 
 /** The target posting (see targetPostingSql) and whether Kris chose it. */
 export function targetOf(db: SqlDatabase, jobId: string): TargetChoice {

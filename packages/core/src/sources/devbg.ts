@@ -11,7 +11,7 @@ export interface DevBgConfig {
 }
 
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-/** A category longer than this many pages is far bigger than any dev.bg has; stop there. */
+/** A category longer than this many pages is far bigger than any dev.bg has: stop there, and say the Check is incomplete. */
 const maxPages = 10;
 
 export const devbg: SourceAdapter<DevBgConfig> = {
@@ -30,7 +30,7 @@ export const devbg: SourceAdapter<DevBgConfig> = {
   key: (c) => c.category,
   defaultName: (c) => `dev.bg · ${c.category}`,
 
-  async fetchPostings(config, { fetch }) {
+  async fetchPostings(config, { fetch, incomplete }) {
     const base = `https://dev.bg/company/jobs/${config.category}/`;
     const load = async (url: string) => {
       const res = await fetch(url, { headers: { accept: "text/html" } });
@@ -43,7 +43,10 @@ export const devbg: SourceAdapter<DevBgConfig> = {
     if (cards.length === 0 && !first.querySelector(".job-list")) {
       throw new Error(`dev.bg's ${config.category} page has no job list (the page layout may have changed)`);
     }
-    const lastPage = Math.min(maxPages, pageCount(first, base));
+    const pages = pageCount(first, base);
+    // Jobs on the pages past the limit aren't read this time; they aren't gone either.
+    if (pages > maxPages) incomplete?.();
+    const lastPage = Math.min(maxPages, pages);
     for (let n = 2; n <= lastPage; n++) cards.push(...(await load(`${base}page/${n}/`)).querySelectorAll(".job-list-item"));
 
     const byId = new Map<string, FoundPosting>();

@@ -36,6 +36,19 @@ describe("source health: failure safety", () => {
   });
 });
 
+describe("source health: your locations", () => {
+  it("counts the postings in the locations Kris saved, not the defaults", async () => {
+    const { engine } = createTestEngine({ fetch: goodFetch });
+    const settings = await engine.getSearchSettings();
+    await engine.saveSearchSettings({ ...settings, locations: { ...settings.locations, cities: ["London"], remoteInEurope: false } });
+    await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+
+    await engine.checkAll();
+
+    expect((await engine.sourceHealth()).sources[0]!.history[0]).toMatchObject({ inLocations: 1, total: 3 });
+  });
+});
+
 describe("source health: check history", () => {
   it("records every check with its time, outcome, count in your locations and total", async () => {
     const { engine, deps, clock } = await checkedPayhawk();

@@ -18,8 +18,8 @@ import { isEmailAlertAdapter, listsEverything, type SourceAdapter } from "./sour
 import { currentDrop, dropWording, isDrop, normalVolume, type NormalVolume, type UnusualDrop } from "./drops.ts";
 import { adapterFor, adapters, kindLabel } from "./sources/registry.ts";
 import { devbgPageListings } from "./sources/devbg.ts";
-import { backfillMatchKeys, liveJobId, reconcile, refreshMatchKey, setTarget, split, targetOf, targetPostingSql } from "./merging.ts";
-import { describeMergeReason, type MergeReason } from "./matching.ts";
+import { backfillLinkKeys, backfillMatchKeys, liveJobId, reconcile, refreshLinkKey, refreshMatchKey, setTarget, shownPostingSql, split, targetOf, targetPostingSql } from "./merging.ts";
+import { companyNotStated, describeMergeReason, type MergeReason } from "./matching.ts";
 import {
   answersSearch, coverageHistory, isReadableResultsPage, loadCoverageCheck, matchListing, parseListings, storeCoverageCheck,
   totalsOf, unreadableResultsPage, whereFound, whyMissing,
@@ -73,8 +73,9 @@ export interface FeedJob {
   company: string;
   location: string | null;
   /**
-   * The Source's own salary text, else the salary read from the posting ("Unclear" while it waits
-   * for Kris). Null means none is stated, or the posting isn't read yet (see `reading`).
+   * The Source's own salary text (the target posting's, else another posting of the Job that states
+   * one), else the salary read from the posting ("Unclear" while it waits for Kris). Null means none
+   * is stated, or the posting isn't read yet (see `reading`).
    */
   salary: string | null;
   /** When the Source says the job was first published (ISO 8601), if known. */
@@ -147,7 +148,10 @@ export interface JobDetail {
   packageLanguage: "bg" | "en";
   company: string;
   location: string | null;
-  /** Salary as the Source's structured data states it, or null. The read salary is in keyFacts. */
+  /**
+   * Salary as the Source's structured data states it (the target posting's, else another posting of
+   * the Job that states one), or null. The read salary is in keyFacts.
+   */
   salary: string | null;
   postedAt: string | null;
   /** Link to the target posting. */
@@ -168,7 +172,10 @@ export interface JobDetail {
     /** Why this is the target, in plain words. */
     why: string;
   };
-  /** The reading below is of the target posting (the one Kris applies through). */
+  /**
+   * The reading below is of the target posting (the one Kris applies through); when that has no text
+   * (an email alert's few lines), of the first other posting of the Job that has the full text.
+   */
   reading: { state: ReadingState; error: string | null };
   /** The posting as plain text, one line per paragraph or list item; fact sources point at its lines. */
   postingText: string;
@@ -820,6 +827,9 @@ const historyLength = 14;
 /** How far back a mailbox read looks. Alerts older than this are left alone. */
 const mailLookbackMs = 14 * 24 * 60 * 60_000;
 
+/** How many redirects a pasted link may go through before apply-kit gives up on it. */
+const maxRedirects = 5;
+
 /** How long one Source request may take before the Check counts as timed out. */
 const checkTimeoutMs = 30_000;
 
@@ -836,15 +846,27 @@ interface StateFields {
 
 const sqlText = (v: unknown): string | null => (v == null ? null : String(v));
 
-/** The company a Posting carries when its page doesn't say (never evidence for merging). */
-const companyNotStated = "Company not stated";
-
 /**
  * SQL condition for Sources on the watchlist: every Source but the ones Kris adds jobs through himself
  * (pasted links), which are never checked and have no health to show.
  */
 const captureKinds = Object.entries(adapters).filter(([, a]) => a.category === "capture").map(([k]) => `'${k}'`).join(", ");
 const onWatchlist = `kind NOT IN (${captureKinds})`;
+
+/**
+ * SQL condition (posting p, source s) for a Posting that still covers its Job: not gone, and its
+ * Source not removed (paused ones count). Removing a Source closes the open Jobs nothing else covers;
+ * a copy Kris pasted or captured covers it, since removing a Source says nothing about the job itself.
+ */
+const covers = "p.gone_at IS NULL AND s.removed_at IS NULL";
+
+/**
+ * SQL condition for a Posting that keeps its Job open when a Source stops listing it (closing by
+ * absence, and confirming a drop): it covers the Job and a watchlist Source lists it. A captured or
+ * pasted copy doesn't: the job systems re-check the job, and once none lists it, it closes like any
+ * other. Every closing by absence uses this one rule, so what a button says will close is what closes.
+ */
+const keepsOpen = `${covers} AND s.kind NOT IN (${captureKinds})`;
 
 /** A captured or pasted Job nothing has seen for this long shows as unverified (it is never closed for it). */
 const unverifiedAfterMs = 30 * 24 * 60 * 60_000;
@@ -861,6 +883,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
   backfillMatchKeys(db);
+  backfillLinkKeys(db);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
   /** Kris's search settings: as he saved them, else the ones the engine was given, else the defaults. */
@@ -949,7 +972,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     switch (reason) {
       case "company":
       case "salary":
-        return [companyMatcher(job.company)];
+        return [companyMatcher(job.company)].filter((m) => m != null);
       case "location":
         return job.fit.place.label === NOT_STATED ? [] : [{ by: "place", place: job.fit.place.label }];
       case "skills-gap": {
@@ -1112,13 +1135,16 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const config = adapter.parseConfig(JSON.parse(String(row.config)));
       let emails: { email: AlertEmail; postings: FoundPosting[] }[] = [];
       let found: FoundPosting[];
+      // False when the adapter stopped short of the whole list (a page limit): nothing is expired then.
+      let complete = true;
       if (isEmailAlertAdapter(adapter)) {
         emails = (await mail()).filter((e) => adapter.isFrom(config, e)).map((email) => ({ email, postings: adapter.parseEmail(config, email) }));
         found = emails.flatMap((e) => e.postings);
       } else {
-        found = await adapter.fetchPostings(config, { fetch: watched, setting, mail });
+        found = await adapter.fetchPostings(config, { fetch: watched, setting, mail, incomplete: () => { complete = false; } });
       }
-      const inLocations = found.filter((p) => isInYourLocations(p.location)).length;
+      const locations = searchSettings().locations;
+      const inLocations = found.filter((p) => isInYourLocations(p.location, locations)).length;
       const newPostings = transaction(db, () => {
         for (const { email, postings } of emails) recordAlertEmail(db, sourceId, email, postings.length);
         const back = found.flatMap((p) => db.prepare(
@@ -1128,7 +1154,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         listedAgain(back);
         const unusual = watchesVolume(adapter) && isDrop(db, sourceId, found.length);
         recordCheck(db, sourceId, { at: startedAt, outcome: "ok", inLocations, total: found.length, error: null, unusual });
-        if (listsEverything(adapter) && !unusual) {
+        if (listsEverything(adapter) && complete && !unusual) {
           const missing = db.prepare("SELECT id FROM posting WHERE source_id = ? AND gone_at IS NULL AND last_seen_at < ? ORDER BY id")
             .all(sourceId, startedAt).map((r) => String(r.id));
           markGone(missing, noLongerListedBy(name));
@@ -1152,6 +1178,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const spentThisMonth = () =>
     Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
   const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
+  /** Estimated cost of the reads running right now, held against the cap until each one is billed. */
+  let reservedUsd = 0;
   /** The month in which a read was last refused because it would have crossed the cap. */
   let refusedInMonth: string | null = null;
   const budget = (): BudgetInfo => {
@@ -1182,9 +1210,23 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
   }
 
-  /** The posting a Job is read from: its target posting (the company's own page by default). */
+  /**
+   * The Posting a Job is read from: its target posting (the company's own page by default), unless
+   * that has no text (an email alert lists only a title and a line or two). Then it is the first of
+   * the Job's other Postings with the full text, and until one brings it, the target (nothing to read yet).
+   */
+  function readingPostingId(jobId: string): string {
+    const target = targetOf(db, jobId).postingId;
+    const rows = db.prepare(
+      `SELECT p.id, p.description_html FROM posting p JOIN source s ON s.id = p.source_id
+       WHERE p.job_id = ? AND s.removed_at IS NULL ORDER BY p.id = ? DESC, p.first_seen_at, p.id`,
+    ).all(jobId, target);
+    return String(rows.find((r) => postingText(r.description_html) !== "")?.id ?? target);
+  }
+
+  /** The posting a Job is read from (see readingPostingId), with what the extractor is given. */
   function postingToRead(jobId: string): Record<string, unknown> | undefined {
-    return db.prepare("SELECT id, title, company, location, description_html FROM posting WHERE id = ?").get(targetOf(db, jobId).postingId);
+    return db.prepare("SELECT id, title, company, location, description_html FROM posting WHERE id = ?").get(readingPostingId(jobId));
   }
 
   async function readAllPending(): Promise<ReadResult> {
@@ -1240,13 +1282,22 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       text: text.slice(0, MAX_TEXT_CHARS),
     };
     const estimate = deps.extractor.estimateCostUsd(input);
-    if (spentThisMonth() + estimate > cap()) {
+    // The estimate is reserved before the first await, so reads that start together can't all fit
+    // under the cap at once: each one counts what the others are still spending.
+    if (spentThisMonth() + reservedUsd + estimate > cap()) {
       refusedInMonth = month();
       return "unscreened";
     }
+    reservedUsd += estimate;
+    let reserved = true;
+    const settle = () => {
+      if (reserved) reservedUsd -= estimate;
+      reserved = false;
+    };
 
     try {
       const out = await deps.extractor.extract(input);
+      settle();
       recordSpend(postingId, Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
       const parsed = postingFactsSchema.safeParse(out.facts);
       if (!parsed.success) {
@@ -1256,6 +1307,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       store("read", parsed.data, out.model, null);
       return "read";
     } catch (err) {
+      settle();
       const billed = (err as { costUsd?: unknown } | null)?.costUsd;
       if (typeof billed === "number" && billed > 0) recordSpend(postingId, billed);
       store("failed", null, null, err instanceof Error ? err.message : String(err));
@@ -1370,8 +1422,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
    */
   function stillListed(jobId: string): boolean {
     return !!db.prepare(
-      `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
-       WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL AND s.kind NOT IN (${captureKinds}) LIMIT 1`,
+      `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id WHERE p.job_id = ? AND ${keepsOpen} LIMIT 1`,
     ).get(jobId);
   }
 
@@ -1383,8 +1434,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   // A Job's display fields come from its target posting (the company's own page by default).
   const jobSelect = `SELECT j.id, j.state, j.state_changed_at, j.pass_reason, j.pass_note, j.closed_how,
-                p.title, p.company, p.location, p.salary, p.posted_at, p.url,
-                (SELECT COUNT(*) FROM posting WHERE job_id = j.id) AS n,
+                p.title, p.company, p.location, p.posted_at, p.url,
+                -- The target's salary, else the first other Posting of the Job that states one.
+                COALESCE(p.salary, (SELECT o.salary FROM posting o JOIN source os ON os.id = o.source_id
+                  WHERE o.job_id = j.id AND o.salary IS NOT NULL AND os.removed_at IS NULL ORDER BY o.first_seen_at, o.id LIMIT 1)) AS salary,
+                (SELECT COUNT(*) FROM posting c WHERE c.job_id = j.id AND ${shownPostingSql("c")}) AS n,
                 (SELECT decision_id FROM decision_job
                   WHERE job_id = j.id AND undone_at IS NULL ORDER BY rowid DESC LIMIT 1) AS decision_id
          FROM job j
@@ -1392,8 +1446,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments()): FeedJob {
     const links = linksOf(String(r.id));
-    const reading = readingOf(links.targetId, money.reached);
-    const read = readOf(links.targetId, reading);
+    const readId = readingPostingId(String(r.id));
+    const reading = readingOf(readId, money.reached);
+    const read = readOf(readId, reading);
     const base = { title: String(r.title), company: String(r.company), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
     const fit = fitOf(base, read, reading.facts, active);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
@@ -1441,7 +1496,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const target = targetOf(db, jobId);
     const postings = db.prepare(
       `SELECT p.*, s.name AS source_name, s.kind FROM posting p JOIN source s ON s.id = p.source_id
-       WHERE p.job_id = ? ORDER BY p.first_seen_at, p.id`,
+       WHERE p.job_id = ? AND ${shownPostingSql("p")} ORDER BY p.first_seen_at, p.id`,
     ).all(jobId).map((p): JobPosting => {
       const kind = String(p.kind);
       const reason = sqlText(p.merge_reason);
@@ -1466,8 +1521,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       : t.source.category === "ats" ? `The company's own page (${t.source.label})`
       : "First seen here: none of the postings is on the company's own page";
     const money = budget();
-    const reading = readingOf(target.postingId, money.reached);
-    const read = readOf(target.postingId, reading);
+    const readId = readingPostingId(jobId);
+    const reading = readingOf(readId, money.reached);
+    const read = readOf(readId, reading);
     const base = { title: String(row.title), company: String(row.company), location: sqlText(row.location), postedAt: sqlText(row.posted_at) };
     const language = reading.facts?.language ?? null;
     const fit = fitOf(base, read, reading.facts);
@@ -1535,7 +1591,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** The target posting's link and how many sites list the Job. */
   function linksOf(jobId: string): { siteCount: number; url: string; targetId: string } {
-    const rows = db.prepare("SELECT id, url FROM posting WHERE job_id = ?").all(jobId);
+    const rows = db.prepare(`SELECT p.id, p.url FROM posting p WHERE p.job_id = ? AND ${shownPostingSql("p")}`).all(jobId);
     const target = targetOf(db, jobId).postingId;
     return {
       siteCount: new Set(rows.map((r) => siteOf(String(r.url)))).size,
@@ -1597,11 +1653,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     return { id: String(row.id), kind: String(row.kind), name: String(row.name) };
   }
 
-  /** Other watchlist Sources (paused ones included) with a Posting in this Job. */
+  /** Other Sources (paused ones included) with a Posting that still covers this Job (see covers). */
   function coveringSources(jobId: string, exceptSourceId: string) {
     return db.prepare(
       `SELECT DISTINCT s.id, s.name FROM posting p JOIN source s ON s.id = p.source_id
-       WHERE p.job_id = ? AND s.id != ? AND s.removed_at IS NULL ORDER BY s.created_at, s.id`,
+       WHERE p.job_id = ? AND s.id != ? AND ${covers} ORDER BY s.created_at, s.id`,
     ).all(jobId, exceptSourceId);
   }
 
@@ -1693,8 +1749,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const open = db.prepare("SELECT 1 AS hit FROM job WHERE id = ? AND state IN ('new', 'saved')").get(jobId);
       const elsewhere = db.prepare(
         `SELECT 1 AS hit FROM posting p JOIN source s ON s.id = p.source_id
-         WHERE p.job_id = ? AND p.gone_at IS NULL AND s.removed_at IS NULL
-           AND NOT (p.source_id = ? AND p.last_seen_at < ?) LIMIT 1`,
+         WHERE p.job_id = ? AND ${keepsOpen} AND NOT (p.source_id = ? AND p.last_seen_at < ?) LIMIT 1`,
       ).get(jobId, sourceId, latestAt);
       return !!open && !elsewhere;
     });
@@ -1714,11 +1769,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** The live Job holding a Posting at this link (any state), or undefined. */
   function jobWithLink(link: string): string | undefined {
-    const key = linkKey(link);
-    for (const r of db.prepare("SELECT job_id, url FROM posting ORDER BY first_seen_at, id").all()) {
-      if (linkKey(String(r.url)) === key) return liveJobId(db, String(r.job_id));
-    }
-    return undefined;
+    const r = db.prepare("SELECT job_id FROM posting WHERE link_key = ? ORDER BY first_seen_at, id LIMIT 1").get(linkKey(link));
+    return r ? liveJobId(db, String(r.job_id)) : undefined;
   }
 
   /** Stores a Posting found at a pasted link; it merges with a Job already in the Feed like any other. */
@@ -1744,7 +1796,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const body = pasted.text.trim();
       if (!title || !body) throw new Error("A pasted job needs its title and text");
       return storePasted({
-        url: link.href, title, company: pasted.company?.trim() || "Company not stated", location: pasted.location?.trim() || null,
+        url: link.href, title, company: pasted.company?.trim() || companyNotStated, location: pasted.location?.trim() || null,
         salary: null, postedAt: null, descriptionHtml: textToHtml(body),
       }, "text");
     }
@@ -1762,44 +1814,60 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const known = jobWithLink(posting.url);
     if (known) return { outcome: "existing", jobId: known };
     return storePasted({
-      url: link.href, title: posting.title, company: posting.company ?? siteOf(link.href), location: posting.location,
+      url: link.href, title: posting.title, company: posting.company ?? companyNotStated, location: posting.location,
       salary: posting.salary, postedAt: posting.postedAt, descriptionHtml: posting.descriptionHtml,
     }, via);
   }
 
   /** One polite GET of a pasted job page, or why it couldn't (or mustn't) be read. */
   async function fetchJobPage(link: URL): Promise<{ html: string; url: string } | { problem: LinkProblem; message: string; alertSender?: string | null }> {
-    const site = protectedSite(link);
-    if (site) {
-      return {
-        problem: "protected", alertSender: site.alertSender,
-        message: `${site.name} doesn't allow apps to read its pages, so apply-kit won't open this link. Paste the job's text${site.alertSender ? `, or let its job alert emails bring it in` : ""}.`,
-      };
+    const pastedHost = link.hostname.replace(/^www\./, "");
+    let url = link;
+    // Redirects are followed by hand, so every hop is checked like the pasted link itself: never
+    // into a protected site, never past a robots.txt that says no, and politely per host.
+    for (let hop = 0; ; hop++) {
+      const site = protectedSite(url);
+      if (site) {
+        return {
+          problem: "protected", alertSender: site.alertSender,
+          message: `${site.name} doesn't allow apps to read its pages, so apply-kit won't open this link. Paste the job's text${site.alertSender ? `, or let its job alert emails bring it in` : ""}.`,
+        };
+      }
+      const host = url.hostname.replace(/^www\./, "");
+      // A robots.txt that can't be fetched allows everything (the usual convention); only the page's own answer is reported.
+      const robots = await fetchFor("capture")(`${url.origin}/robots.txt`).then((r) => (r.ok ? r.text() : ""), () => "");
+      if (!robotsAllows(robots, `${url.pathname}${url.search}`, "apply-kit")) {
+        return { problem: "robots", message: `${host} asks apps not to read this page (its robots.txt). Paste the job's text instead.` };
+      }
+      let timedOut = false;
+      const get = fetchFor("capture", { failed: (err) => { if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true; } });
+      let res: Response;
+      try {
+        res = await get(url.href, { headers: { accept: "text/html,application/xhtml+xml" }, redirect: "manual" });
+      } catch {
+        return timedOut
+          ? { problem: "timeout", message: `${host} didn't answer in time. Try again later, or paste the job's text.` }
+          : { problem: "error", message: `Couldn't reach ${host}. Check the link, or paste the job's text.` };
+      }
+      const location = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+      if (location) {
+        const next = URL.canParse(location, url.href) ? new URL(location, url) : null;
+        if (!next || (next.protocol !== "https:" && next.protocol !== "http:") || hop >= maxRedirects) {
+          return { problem: "error", message: `${pastedHost} sends the link somewhere apply-kit can't follow. Paste the job's text instead.` };
+        }
+        url = next;
+        continue;
+      }
+      const html = await res.text().catch(() => "");
+      if (looksBlocked(res, html)) {
+        return { problem: "blocked", message: `${host} blocks apps from reading its pages. Paste the job's text instead.` };
+      }
+      if (res.status === 404 || res.status === 410) {
+        return { problem: "not-found", message: `${host} says this page doesn't exist (${res.status}). The job may have closed, or the link may be cut short.` };
+      }
+      if (!res.ok) return { problem: "error", message: `${host} answered ${res.status}. Try again later, or paste the job's text.` };
+      return { html, url: url.href };
     }
-    let timedOut = false;
-    const get = fetchFor("capture", { failed: (err) => { if (err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError")) timedOut = true; } });
-    const host = link.hostname.replace(/^www\./, "");
-    const robots = await get(`${link.origin}/robots.txt`).then((r) => (r.ok ? r.text() : ""), () => "");
-    if (!robotsAllows(robots, `${link.pathname}${link.search}`, "apply-kit")) {
-      return { problem: "robots", message: `${host} asks apps not to read this page (its robots.txt). Paste the job's text instead.` };
-    }
-    let res: Response;
-    try {
-      res = await get(link.href, { headers: { accept: "text/html,application/xhtml+xml" } });
-    } catch {
-      return timedOut
-        ? { problem: "timeout", message: `${host} didn't answer in time. Try again later, or paste the job's text.` }
-        : { problem: "error", message: `Couldn't reach ${host}. Check the link, or paste the job's text.` };
-    }
-    const html = await res.text().catch(() => "");
-    if (looksBlocked(res, html)) {
-      return { problem: "blocked", message: `${host} blocks apps from reading its pages. Paste the job's text instead.` };
-    }
-    if (res.status === 404 || res.status === 410) {
-      return { problem: "not-found", message: `${host} says this page doesn't exist (${res.status}). The job may have closed, or the link may be cut short.` };
-    }
-    if (!res.ok) return { problem: "error", message: `${host} answered ${res.status}. Try again later, or paste the job's text.` };
-    return { html, url: res.url || link.href };
   }
 
   /** The Source a site's captured pages belong to ("Captured · LinkedIn"), created on the first capture there. */
@@ -2043,7 +2111,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       db.prepare("INSERT OR IGNORE INTO source (id, name, kind, config, created_at) VALUES (?, ?, ?, ?, ?)").run(
         id, name ?? adapter.defaultName(parsed), kind, JSON.stringify(parsed), clock.now().toISOString(),
       );
-      if (!options.onlyIfNew) db.prepare("UPDATE source SET removed_at = NULL, removed_decision_id = NULL, paused_at = NULL WHERE id = ?").run(id);
+      if (!options.onlyIfNew) {
+        transaction(db, () => {
+          // Adding a removed Source back is undoing its removal: the Jobs it closed reopen (unless Kris decided on them since).
+          const removal = db.prepare("SELECT removed_decision_id FROM source WHERE id = ? AND removed_at IS NOT NULL").get(id)?.removed_decision_id;
+          if (removal != null) undoNow(String(removal));
+          db.prepare("UPDATE source SET removed_at = NULL, removed_decision_id = NULL, paused_at = NULL WHERE id = ?").run(id);
+        });
+      }
       return sourceInfo(id);
     },
 
@@ -2088,7 +2163,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     async confirmFact(jobId, factKey, answer) {
       const live = liveJobId(db, jobId);
       if (!live) throw new Error(`No job with id "${jobId}"`);
-      const postingId = targetOf(db, live).postingId;
+      const postingId = readingPostingId(live);
       const read = readOf(postingId, readingOf(postingId));
       if (!read?.needsYou.some((n) => n.key === factKey)) throw new Error(`"${factKey}" doesn't need an answer on this job`);
       if (answer !== "extracted" && answer !== "cautious") throw new Error(`Unknown answer "${String(answer)}"`);
@@ -2135,6 +2210,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return detectCompany(input, {
         fetchFor: (kind) => fetchFor(kind),
         setting,
+        locations: searchSettings().locations,
         existingSource: (id) => (db.prepare("SELECT id FROM source WHERE id = ? AND removed_at IS NULL").get(id) ? id : undefined),
         aggregatorJobs: (_company, slug) => {
           const rows = db.prepare(
@@ -2240,7 +2316,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const hidden = jobIds.map((id) => feedJob(id)).filter((j): j is FeedJob => j?.hidden === true);
       const decision = decide("unhide", hidden.map((j) => j.id), ["new"], "new");
       if (!input.learn) return decision;
-      const ids = transaction(db, () => hidden.map((j) => learn("unhide", companyMatcher(j.company), j.id, decision.id, null)));
+      const ids = transaction(db, () => hidden.flatMap((j) => {
+        const matcher = companyMatcher(j.company);
+        return matcher ? [learn("unhide", matcher, j.id, decision.id, null)] : [];
+      }));
       const affected = affectedCounts();
       return { ...decision, learned: [...new Set(ids)].map((id) => adjustment(id, affected)) };
     },
@@ -2294,7 +2373,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const live = liveJobId(db, jobId);
       const job = live && feedJob(live);
       if (!job) throw new Error(`No job with id "${jobId}"`);
-      return adjustment(learn("boost", companyMatcher(job.company, job.fit.angle), job.id, null, null));
+      const matcher = companyMatcher(job.company, job.fit.angle);
+      if (!matcher) throw new Error("This job doesn't say which company it's at, so there's nothing to boost");
+      return adjustment(learn("boost", matcher, job.id, null, null));
     },
 
     async sourceHealth() {
@@ -2551,6 +2632,7 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
               description_html = ?, last_seen_at = ?, gone_at = NULL, gone_decision_id = NULL WHERE id = ?`,
     ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, id);
     refreshMatchKey(db, id, p);
+    refreshLinkKey(db, id, p.url);
     reconcile(db, id);
     return false;
   }
@@ -2562,6 +2644,7 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, sourceId, p.externalId, jobId, p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, now);
   refreshMatchKey(db, id, p);
+  refreshLinkKey(db, id, p.url);
   reconcile(db, id);
   return true;
 }

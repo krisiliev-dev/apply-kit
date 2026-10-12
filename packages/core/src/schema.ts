@@ -231,6 +231,10 @@ const migrations: string[] = [
      paired_at TEXT NOT NULL,
      last_used_at TEXT NOT NULL
    );`,
+  // Review fixes: each Posting's link key (see capture/links.ts linkKey), indexed, so a link is found
+  // by lookup instead of re-reading every Posting's link. Filled for older Postings on start (backfillLinkKeys).
+  `ALTER TABLE posting ADD COLUMN link_key TEXT;
+   CREATE INDEX posting_link_key ON posting(link_key);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

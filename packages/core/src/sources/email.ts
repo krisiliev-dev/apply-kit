@@ -6,6 +6,7 @@ import type { EmailAlertAdapter, FoundPosting } from "./adapter.ts";
 import { jobCards } from "./email/cards.ts";
 import { readEmailHtml } from "./email/html.ts";
 import { parseFrom, senders, type SenderKey } from "./email/senders.ts";
+import { companyNotStated } from "../matching.ts";
 
 export interface EmailAlertConfig {
   sender: SenderKey;
@@ -38,7 +39,7 @@ export const emailAlerts: EmailAlertAdapter<EmailAlertConfig> = {
       externalId: card.id,
       url: card.url,
       title: card.title,
-      ...withCompany(sender.readCard(card, email), sender.name),
+      ...withCompany(sender.readCard(card, email)),
       // Alerts list jobs published since the previous alert; the email's time is the best date we have.
       postedAt: email.receivedAt.toISOString(),
       descriptionHtml: null,
@@ -51,6 +52,7 @@ export const emailAlerts: EmailAlertAdapter<EmailAlertConfig> = {
   },
 };
 
-function withCompany(facts: { company: string | null; location: string | null; salary: string | null }, fallback: string) {
-  return { company: facts.company ?? fallback, location: facts.location, salary: facts.salary };
+/** A card that doesn't name the company says so, rather than naming the sender (which isn't the employer). */
+function withCompany(facts: { company: string | null; location: string | null; salary: string | null }) {
+  return { company: facts.company ?? companyNotStated, location: facts.location, salary: facts.salary };
 }

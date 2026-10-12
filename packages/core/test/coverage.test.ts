@@ -369,6 +369,18 @@ describe("coverage check: what Kris can give", () => {
       reason: { kind: "not-covered", text: "None of your sources listed this job. Paste its title and company to see why." },
     });
   });
+
+  it("a pasted link finds its Job however the link is written (tracking, www, trailing slash)", async () => {
+    const { engine } = acme();
+    await engine.addSource({ kind: "greenhouse", config: "acme" });
+    await engine.checkAll();
+
+    const result = await engine.recordCoverageCheck({
+      site: "Google", query: "security", listings: "https://www.job-boards.eu.greenhouse.io/acme/jobs/4/?utm_source=google&gh_src=abc",
+    });
+
+    expect(result.listings[0]).toMatchObject({ title: "Application Security Lead", status: "in-feed" });
+  });
 });
 
 describe("coverage check: what it needs", () => {

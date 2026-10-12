@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alertEmail, createTestEngine, fakeMailbox } from "./harness.ts";
+import { alertEmail, createTestEngine, fakeExtractor, fakeMailbox } from "./harness.ts";
 
 // Every sample email is synthetic: made-up companies, jobs, ids and addresses in each sender's real layout.
 const linkedin = (id: string, receivedAt: string) => alertEmail("email-linkedin.html", {
@@ -83,6 +83,73 @@ async function feedFacts(engine: Awaited<ReturnType<typeof withEmailSource>>["en
   const feed = await engine.queryFeed({ view: "new", sort: "newest", relocation: true });
   return feed.jobs.map(({ title, company, location, salary, url }) => ({ title, company, location, salary, url }));
 }
+
+describe("email alerts: a card without its company", () => {
+  it("says the company isn't stated rather than naming the alert's sender", async () => {
+    const { engine, mailbox } = await withEmailSource("jobsbg");
+    mailbox.deliver({
+      id: "<alert-bare@jobs.bg.example>", receivedAt: new Date("2026-10-12T06:12:00Z"),
+      from: "jobs.bg <alerts@jobs.bg>", subject: "Нови обяви", text: "",
+      html: `<html><body><p><a href="https://www.jobs.bg/job/7654321">Security Engineer</a></p><p><a href="https://www.jobs.bg/unsubscribe">Unsubscribe</a></p></body></html>`,
+    });
+
+    await engine.checkAll();
+
+    const { jobs } = await engine.queryFeed({ view: "new" });
+    expect(jobs.map((j) => [j.title, j.company])).toEqual([["Security Engineer", "Company not stated"]]);
+  });
+});
+
+describe("email alerts: reading a job that came by email", () => {
+  it("isn't read from the alert's few lines, but from the full text once another posting of the Job brings it", async () => {
+    const extractor = fakeExtractor();
+    const mailbox = fakeMailbox();
+    const { engine, clock } = createTestEngine({ mailReader: mailbox, extractor });
+    await engine.addSource({ kind: "email", config: "linkedin" });
+    mailbox.deliver(linkedin("<alert-1@linkedin.example>", "2026-10-12T06:12:00Z"));
+    await engine.checkAll();
+    const security = (await engine.queryFeed({ view: "new" })).jobs.find((j) => j.title === "Security Engineer")!;
+
+    await engine.readPending();
+    expect(extractor.calls).toEqual([]);
+
+    await clock.advance(60 * 60_000);
+    const pasted = await engine.addJobLink("https://careers.northwind.example/jobs/security-engineer", {
+      title: "Security Engineer", company: "Northwind Labs", location: "Sofia, Bulgaria",
+      text: "Protect our cloud platform.\n3+ years in security engineering.",
+    });
+    expect(pasted).toEqual({ outcome: "merged", jobId: security.id });
+    const job = await engine.readJob(security.id);
+
+    expect(extractor.calls.map((c) => c.text)).toEqual(["Protect our cloud platform.\n3+ years in security engineering."]);
+    expect(job.reading.state).toBe("read");
+    expect(job.postingText).toContain("Protect our cloud platform.");
+  });
+});
+
+describe("email alerts: salary from another posting of the Job", () => {
+  it("shows the alert's salary when the target posting states none", async () => {
+    const mailbox = fakeMailbox();
+    const { engine, clock } = createTestEngine({ mailReader: mailbox });
+    const pasted = await engine.addJobLink("https://careers.contoso.example/jobs/appsec", {
+      title: "Application Security Specialist & Pentester", company: "Contoso Cloud", location: "European Union (Remote)",
+      text: "Test our cloud products.\nOSCP or similar.",
+    });
+    if (pasted.outcome !== "added") throw new Error("expected the pasted job to be added");
+    await clock.advance(60 * 60_000);
+    await engine.addSource({ kind: "email", config: "linkedin" });
+    mailbox.deliver(linkedin("<alert-1@linkedin.example>", "2026-10-12T08:12:00Z"));
+    await engine.checkAll();
+
+    const job = (await engine.getJob(pasted.jobId))!;
+    const row = (await engine.queryFeed({ view: "new" })).jobs.find((j) => j.id === pasted.jobId)!;
+
+    expect(job.postingCount).toBe(2);
+    expect(job.url).toBe("https://careers.contoso.example/jobs/appsec");
+    expect(job.salary).toBe("€60K/yr - €75K/yr");
+    expect(row.salary).toBe("€60K/yr - €75K/yr");
+  });
+});
 
 describe("email alerts: Google Careers", () => {
   it("reads each job with the Google company that posted it, without tracking parameters", async () => {
