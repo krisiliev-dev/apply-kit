@@ -42,6 +42,32 @@ describe("dev.bg source", () => {
     expect(http.requests.map((r) => r.url)).toEqual([itSecurity, `${itSecurity}page/2/`]);
   });
 
+  it("closes nothing after a check that stopped at its page limit, since jobs past it weren't read", async () => {
+    let lastPage = 2;
+    const page1 = () => loadFixture("devbg-it-security.html").replace("</div></body>", `</div><a class="page-numbers" href="${itSecurity}page/${lastPage}/">${lastPage}</a></body>`);
+    const soc = `<div class="job-list"><div class="job-list-item" data-job-id="999001"><a href="https://dev.bg/company/jobads/acme-soc-analyst/" class="overlay-link"></a>
+      <span class="company-name">Acme</span><h6 class="job-title"> SOC Analyst </h6><span class="badge">София</span></div></div>`;
+    const http = routedFetch((r) => {
+      if (r.url === itSecurity) return new Response(page1());
+      const n = Number(/page\/(\d+)\/$/.exec(r.url)?.[1]);
+      // The SOC Analyst job sits on the last page: page 2 at first, then page 11 once the category grows.
+      if (n >= 2) return new Response(n === lastPage ? soc : `<div class="job-list"></div>`);
+      return undefined;
+    });
+    const { engine, clock } = createTestEngine({ fetch: http.fetch });
+    await engine.addSource({ kind: "devbg", config: "it-security" });
+    await engine.checkAll();
+    expect((await engine.queryFeed({ view: "new" })).jobs.map((j) => j.title)).toContain("SOC Analyst");
+
+    lastPage = 11;
+    await clock.advance(30 * 60_000);
+    await engine.checkAll();
+
+    expect(http.requests.some((r) => r.url === `${itSecurity}page/11/`)).toBe(false);
+    expect((await engine.queryFeed({ view: "new" })).jobs.map((j) => j.title)).toContain("SOC Analyst");
+    expect((await engine.queryFeed({ view: "passed" })).jobs).toEqual([]);
+  });
+
   it("fails the check when the page has no job cards it can read", async () => {
     const { engine } = createTestEngine({ fetch: async () => new Response("<html><body>Maintenance</body></html>") });
     await engine.addSource({ kind: "devbg", config: "it-security" });

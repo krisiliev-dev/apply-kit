@@ -8,6 +8,7 @@ import { placeOf } from "./locations.ts";
 import type { SearchSettings } from "./search-settings.ts";
 import { senders, type SenderKey } from "./sources/email/senders.ts";
 import { words } from "./words.ts";
+import { linkKey } from "./capture/links.ts";
 
 /** One job Kris saw in his manual search, as he saw it. */
 export interface CoverageListing {
@@ -409,7 +410,8 @@ interface PostingCandidate { id: string; job_id: string; url: string; title: str
 export function matchListing(db: SqlDatabase, l: CoverageListing): PostingCandidate | null {
   const cols = "id, job_id, url, title, company, location, match_key";
   if (l.url) {
-    const byUrl = db.prepare(`SELECT ${cols} FROM posting WHERE url = ? LIMIT 1`).get(l.url) as unknown as PostingCandidate | undefined;
+    // Compared by link key, as pasted links are: tracking, "www." and a trailing slash don't matter.
+    const byUrl = db.prepare(`SELECT ${cols} FROM posting WHERE link_key = ? ORDER BY first_seen_at, id LIMIT 1`).get(linkKey(l.url)) as unknown as PostingCandidate | undefined;
     if (byUrl) return byUrl;
   }
   const key = matchKey({ company: l.company, title: l.title });

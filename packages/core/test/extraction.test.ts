@@ -210,6 +210,20 @@ describe("reading postings: the monthly AI budget", () => {
     expect(feed.budget).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0.008, reached: true });
   });
 
+  it("never crosses the cap when reads start at the same time", async () => {
+    // Each read costs $0.006; the cap of $0.01 fits one. Both Job pages ask for a read at once.
+    const extractor = fakeExtractor({ "Security Engineer": securityEngineer }, { costUsd: 0.006 });
+    const t = await checked(kestrelEngine(extractor, { aiMonthlyCapUsd: 0.01 }));
+    const withText = (await t.engine.queryFeed({ view: "new" })).jobs.filter((j) => j.reading !== "failed" && j.title !== "Office Manager");
+    expect(withText).toHaveLength(2);
+
+    const jobs = await Promise.all(withText.map((j) => t.engine.readJob(j.id)));
+
+    expect(extractor.calls).toHaveLength(1);
+    expect(jobs.map((j) => j.reading.state).sort()).toEqual(["read", "unscreened"]);
+    expect((await t.engine.queryFeed({ view: "new" })).budget).toMatchObject({ spentUsd: 0.006, reached: true });
+  });
+
   it("reads nothing and screens nothing when no budget is set, but still shows every Posting", async () => {
     const extractor = fakeExtractor();
     const t = await checked(kestrelEngine(extractor, { aiMonthlyCapUsd: undefined }));

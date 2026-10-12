@@ -4,6 +4,9 @@
 // and locations that don't contradict each other. Two Postings with the same link are always the
 // same Job. Anything less certain stays apart: a wrong split costs a glance, a wrong merge hides a job.
 
+/** The company a Posting carries when its Source doesn't say: never evidence for merging or learning. */
+export const companyNotStated = "Company not stated";
+
 /** Company names adapters use when the Source doesn't state one: never evidence of anything. */
 const unknownCompanies = new Set(["", "company not stated", "dev bg"]);
 

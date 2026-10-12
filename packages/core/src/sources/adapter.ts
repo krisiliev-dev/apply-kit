@@ -38,6 +38,11 @@ export interface AdapterContext {
    * with that message instead of crashing anything. Never put a setting's value in an error.
    */
   setting(name: string): string | undefined;
+  /**
+   * Says this Check listed only part of the Source (it stopped at a page limit): the postings it
+   * didn't reach aren't gone, so the engine expires nothing from this Check.
+   */
+  incomplete?(): void;
 }
 
 /** What sort of Source this is, as the Sources screen groups them. */

@@ -55,6 +55,8 @@ export interface ProtectedSite {
 
 const protectedSites: { host: RegExp; path?: RegExp; site: ProtectedSite }[] = [
   { host: /(^|\.)linkedin\.com$/, site: { name: "LinkedIn", alertSender: "linkedin" } },
+  // LinkedIn's link shortener: it only ever leads to LinkedIn (or wherever a post pointed).
+  { host: /(^|\.)lnkd\.in$/, site: { name: "LinkedIn", alertSender: "linkedin" } },
   { host: /(^|\.)jobs\.bg$/, site: { name: "jobs.bg", alertSender: "jobsbg" } },
   { host: /(^|\.)google\.com$/, path: /^\/about\/careers\//, site: { name: "Google Careers", alertSender: "google" } },
   { host: /(^|\.)jobs\.apple\.com$/, site: { name: "Apple Jobs", alertSender: null } },

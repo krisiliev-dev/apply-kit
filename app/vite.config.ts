@@ -11,6 +11,7 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5173,
     strictPort: true,
-    proxy: { "/api": `http://127.0.0.1:${apiPort}` },
+    // changeOrigin: the service answers only requests addressed to its own host and port.
+    proxy: { "/api": { target: `http://127.0.0.1:${apiPort}`, changeOrigin: true } },
   },
 });

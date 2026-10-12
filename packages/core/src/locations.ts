@@ -93,7 +93,7 @@ export function placeOf(input: PlaceInput, settings: SearchSettings["locations"]
   return { tier: "other", label: "Outside your locations" };
 }
 
-/** Whether a Source's location text is in Kris's first-priority locations (source health counts). */
-export function isInYourLocations(location: string | null): boolean {
-  return placeOf({ location }).tier === "first";
+/** Whether a Source's location text is in Kris's first-priority locations (source health counts), as Kris saved them. */
+export function isInYourLocations(location: string | null, settings: SearchSettings["locations"] = defaultSearchSettings.locations): boolean {
+  return placeOf({ location }, settings).tier === "first";
 }

@@ -2,6 +2,7 @@
 // One probe per job system, each one request through the engine's polite fetch; a careers link is
 // read once and searched for links to a job system. Nothing here touches the database.
 import { isInYourLocations } from "./locations.ts";
+import type { SearchSettings } from "./search-settings.ts";
 import type { SourceAdapter } from "./sources/adapter.ts";
 import { humanizeSlug } from "./sources/normalise.ts";
 import { adapters, kindLabel } from "./sources/registry.ts";
@@ -78,6 +79,8 @@ export interface DetectDeps {
   existingSource(id: string): string | undefined;
   /** Jobs from this company seen on aggregator and job-site Sources in the last 30 days. */
   aggregatorJobs(company: string, slug: string): { id: string; name: string; jobs: number }[];
+  /** Kris's saved locations, which "in your locations" counts are measured against. */
+  locations?: SearchSettings["locations"];
 }
 
 /** Job systems in the order the Sources screen lists them. */
@@ -291,7 +294,7 @@ async function probeOne(adapter: SourceAdapter<unknown>, config: unknown, deps: 
     const postings = await adapter.fetchPostings(config, { fetch: once, setting: deps.setting });
     // SmartRecruiters answers an unknown company with an empty list, so empty means not there.
     if (postings.length === 0 && adapter.kind === "smartrecruiters") return notThere("No jobs under this name");
-    return { status: "found", openJobs: postings.length, inLocations: postings.filter((p) => isInYourLocations(p.location)).length };
+    return { status: "found", openJobs: postings.length, inLocations: postings.filter((p) => isInYourLocations(p.location, deps.locations)).length };
   } catch (err) {
     const f = first as { status: number; total: number | null } | null;
     if (f && f.status >= 200 && f.status < 300) {

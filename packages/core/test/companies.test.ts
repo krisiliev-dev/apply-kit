@@ -31,6 +31,17 @@ describe("adding a company: detecting its job system", () => {
     expect(found.systems.find((s) => s.kind === "lever")).toMatchObject({ status: "not-found", tried: "payhawk" });
     expect(found.fallbacks).toEqual([]);
   });
+
+  it("counts the jobs in the locations Kris saved, not the defaults", async () => {
+    const http = onlyThese({ [greenhouse("payhawk")]: { fixture: "greenhouse-payhawkio.json" } });
+    const { engine } = createTestEngine({ fetch: http.fetch });
+    const settings = await engine.getSearchSettings();
+    await engine.saveSearchSettings({ ...settings, locations: { ...settings.locations, cities: ["London"], remoteInEurope: false } });
+
+    const found = await engine.detectCompany("Payhawk");
+
+    expect(found.systems.find((s) => s.kind === "greenhouse")).toMatchObject({ openJobs: 3, inLocations: 1 });
+  });
 });
 
 describe("adding a company: every job system", () => {

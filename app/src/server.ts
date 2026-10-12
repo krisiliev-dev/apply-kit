@@ -7,8 +7,21 @@ import type { CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
 
-export function createServer({ engine, scheduler, pairing, uiDir }: { engine: DiscoveryEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string }) {
+export function createServer({ engine, scheduler, pairing, uiDir, port }: {
+  engine: DiscoveryEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string;
+  /** The port the service listens on: only requests addressed to this machine on it are answered. */
+  port: number;
+}) {
   const app = new Hono();
+
+  // Only requests addressed to this machine itself, on the service's port, are answered. A web page
+  // that points its own domain name at 127.0.0.1 (DNS rebinding) still sends its own name as Host.
+  const ownHosts = new Set(["localhost", "127.0.0.1", "[::1]"].map((h) => `${h}:${port}`));
+  app.use("*", async (c, next) => {
+    const host = (c.req.header("host") ?? new URL(c.req.url).host).toLowerCase();
+    if (!ownHosts.has(host)) return c.json({ error: "apply-kit only answers requests to this machine (localhost)" }, 403);
+    return next();
+  });
 
   // The Chrome extension. Everything under /api/ext needs the token it got when Kris paired it, except
   // pairing itself. The extension calls from its own pages with host permission for localhost, so no
@@ -298,6 +311,12 @@ export function createServer({ engine, scheduler, pairing, uiDir }: { engine: Di
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
   // The built UI (pnpm start). In dev, Vite serves the UI and proxies /api here.
+  // index.html (the only HTML it serves) is never cached, so a rebuilt UI shows at once; the hashed
+  // assets it names may be.
+  app.use("/*", async (c, next) => {
+    await next();
+    if (c.res.headers.get("content-type")?.startsWith("text/html")) c.res.headers.set("cache-control", "no-cache");
+  });
   app.use("/*", serveStatic({ root: uiDir }));
   app.get("/*", serveStatic({ root: uiDir, path: "index.html" }));
 

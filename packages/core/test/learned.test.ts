@@ -261,6 +261,33 @@ describe("learned adjustments: each pass reason", () => {
     expect([a.learned, b.learned]).toEqual([[], []]);
     expect(await engine.learnedAdjustments()).toEqual([]);
   });
+
+  it("a company pass tells companies with Cyrillic names apart", async () => {
+    const { engine, ids, job } = await feedOf([
+      { title: "Security Analyst", company: "Банка ДСК" },
+      { title: "SOC Analyst", company: "Банка ДСК АД" },
+      { title: "Security Engineer", company: "Телелинк" },
+    ]);
+    const telelink = await job("Security Engineer");
+
+    await engine.pass([ids["Security Analyst"]!], { reason: "company", learn: true });
+
+    expect((await job("SOC Analyst")).fit.why).toContain("ranked lower: you passed a job at Банка ДСК");
+    expect((await job("Security Engineer")).fit).toEqual(telelink.fit);
+  });
+
+  it("a company pass on a job whose company isn't stated learns nothing", async () => {
+    const { engine, ids, job } = await feedOf([
+      { title: "Security Analyst", company: "Company not stated" },
+      { title: "SOC Analyst", company: "Company not stated" },
+    ]);
+    const soc = await job("SOC Analyst");
+
+    const d = await engine.pass([ids["Security Analyst"]!], { reason: "company", learn: true });
+
+    expect(d.learned).toEqual([]);
+    expect((await job("SOC Analyst")).fit).toEqual(soc.fit);
+  });
 });
 
 describe("learned adjustments: the why-line", () => {

@@ -88,6 +88,31 @@ describe("removing a Source", () => {
     expect((await engine.sourceHealth()).sources.map((s) => s.id)).toContain(mirror.id);
   });
 
+  it("leaves its postings off the Job page of a Job another Source keeps open, and they can't be its target", async () => {
+    const { engine, payhawk, mirror, ids } = await twoSources();
+    const apm = ids["payhawkio:Associate Product Manager"]!;
+    const before = (await engine.getJob(apm))!;
+    const payhawkPosting = before.postings.find((p) => p.source.id === payhawk.id)!;
+    expect(before.postings).toHaveLength(2);
+
+    await engine.removeSource(payhawk.id);
+    const after = (await engine.getJob(apm))!;
+
+    expect(after.postings.map((p) => p.source.id)).toEqual([mirror.id]);
+    expect(after).toMatchObject({ postingCount: 1, siteCount: 1, target: { postingId: after.postings[0]!.id } });
+    expect((await engine.queryFeed({ view: "open" })).jobs.find((j) => j.id === apm)).toMatchObject({ postingCount: 1 });
+    await expect(engine.setTarget(apm, payhawkPosting.id)).rejects.toThrow(/isn't part of job/);
+  });
+
+  it("a Job its removal closed still shows the postings it had", async () => {
+    const { engine, payhawk, ids } = await twoSources();
+    const support = ids["payhawkio:Customer Support Specialist"]!;
+
+    await engine.removeSource(payhawk.id);
+
+    expect((await engine.getJob(support))!).toMatchObject({ state: "closed", postingCount: 1, title: "Customer Support Specialist" });
+  });
+
   it("refuses to preview or remove a Source that isn't on the watchlist", async () => {
     const { engine, payhawk } = await twoSources();
     await engine.removeSource(payhawk.id);
@@ -136,5 +161,27 @@ describe("Sources from settings", () => {
     await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
 
     expect((await engine.sourceHealth()).sources.map((s) => s.id)).toContain(payhawk.id);
+  });
+
+  it("adding a removed Source back reopens the jobs its removal closed, as undoing it would", async () => {
+    const { engine, payhawk } = await twoSources();
+    await engine.removeSource(payhawk.id);
+
+    await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+
+    expect((await engine.queryFeed({ view: "saved" })).jobs.map((j) => j.title)).toEqual(["Customer Support Specialist"]);
+    expect((await engine.queryFeed({ view: "passed" })).jobs.map((j) => j.title)).toEqual(["Account Executive"]);
+  });
+
+  it("adding a removed Source back leaves a job Kris decided on since as it was left", async () => {
+    const { engine, payhawk, ids } = await twoSources();
+    await engine.removeSource(payhawk.id);
+    const support = ids["payhawkio:Customer Support Specialist"]!;
+    await engine.reopen([support]);
+    await engine.pass([support], { reason: "salary" });
+
+    await engine.addSource({ kind: "greenhouse", config: "payhawkio" });
+
+    expect((await engine.queryFeed({ view: "passed" })).jobs.find((j) => j.id === support)).toMatchObject({ state: "passed" });
   });
 });

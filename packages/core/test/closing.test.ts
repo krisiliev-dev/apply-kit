@@ -245,6 +245,57 @@ describe("closing: confirming a drop", () => {
   });
 });
 
+describe("closing: a copy Kris pasted or captured", () => {
+  const pasteEngineer1 = (engine: ReturnType<typeof createTestEngine>["engine"]) =>
+    engine.addJobLink("https://www.linkedin.com/jobs/view/4200000001/", {
+      title: "Engineer 1", company: "Payhawk", location: "Sofia", text: "Build payment systems.\n3+ years of Go.",
+    });
+
+  it("doesn't keep a dropped Job open: confirming closes exactly the count the drop stated", async () => {
+    const t = await sumupLearned();
+    expect(await pasteEngineer1(t.engine)).toMatchObject({ outcome: "merged" });
+    t.b.listing.sumup = [];
+    for (let i = 0; i < 3; i++) {
+      await t.clock.advance(halfHour);
+      await t.engine.checkAll();
+    }
+    const asked = (await t.engine.queryFeed({ view: "new" })).health.unusual[0]!;
+
+    const decision = await t.engine.confirmDrop(asked.sourceId);
+
+    expect(asked.closing).toBe(34);
+    expect(decision.jobIds).toHaveLength(asked.closing);
+  });
+
+  it("still covers a Job when its Source is removed (removal isn't news about the job): preview and removal agree", async () => {
+    const t = await sumupLearned();
+    await pasteEngineer1(t.engine);
+
+    const preview = await t.engine.previewRemoval(t.source.id);
+    const removal = await t.engine.removeSource(t.source.id);
+
+    expect(preview).toMatchObject({ openJobs: 34, closing: 33, stayingOpen: 1, stayingVia: [expect.objectContaining({ name: "Pasted links", jobs: 1 })] });
+    expect(removal.decision.jobIds).toHaveLength(preview.closing);
+  });
+
+  it("a Posting another Source no longer lists doesn't keep a Job open on removal", async () => {
+    const b = boards({ a: boardOf(1), b: boardOf(4) });
+    const { engine, clock } = createTestEngine({ fetch: b.fetch });
+    const a = await engine.addSource({ kind: "greenhouse", config: "a", name: "A" });
+    await engine.addSource({ kind: "greenhouse", config: "b", name: "B" });
+    await engine.checkAll();
+    await engine.pauseSource(a.id);
+    b.listing.b = boardOf(4).slice(1);
+    await clock.advance(halfHour);
+    await engine.checkAll();
+    expect(await openTitles(engine)).toEqual(["Engineer 1", "Engineer 2", "Engineer 3", "Engineer 4"]);
+
+    const preview = await engine.previewRemoval(a.id);
+
+    expect(preview).toMatchObject({ openJobs: 1, closing: 1, stayingVia: [] });
+  });
+});
+
 describe("closing: a closed Job lists again", () => {
   it("reopens when its Source lists it again", async () => {
     const b = boards({ payhawkio: recorded.jobs });
