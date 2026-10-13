@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import { TrackerError } from "@apply-kit/core";
+import { TrackerError, maxCvBytes } from "@apply-kit/core";
 import type {
   AddApplicationInput, CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, GroupKey, Pairing, PassReason,
   PastedPosting, Scheduler, Status, Tracker,
@@ -313,7 +313,7 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   });
 
   // Applications (Track). The list grouped by Status (?all=applied,closed shows every row of those
-  // groups), Jobs to pick when adding (?q=), one Application, and its Events.
+  // groups), Jobs to pick when adding (?q=), and one Application in full (its page).
   app.get("/api/applications", async (c) => {
     const all = (c.req.query("all") ?? "").split(",").filter(Boolean) as GroupKey[];
     return c.json(await tracker.list({ limits: Object.fromEntries(all.map((k) => [k, Number.MAX_SAFE_INTEGER])) }));
@@ -321,7 +321,34 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));
   app.get("/api/applications/:id", async (c) => {
     const a = await tracker.get(c.req.param("id"));
-    return a ? c.json({ ...a, events: await tracker.events(a.id) }) : c.json({ error: "No such application" }, 404);
+    return a ? c.json(a) : c.json({ error: "No such application" }, 404);
+  });
+  // A note ({ text }) and a contact address or domain ({ value }) on one Application.
+  app.post("/api/applications/:id/notes", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.addNote(c.req.param("id"), typeof body.text === "string" ? body.text : ""), 201);
+  });
+  app.post("/api/applications/:id/contacts", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.addContact(c.req.param("id"), typeof body.value === "string" ? body.value : ""), 201);
+  });
+  // The CV sent with one added by hand: PUT the PDF itself (Content-Type: application/pdf, which a
+  // web page can't send here without asking first), ?name= its file name, &label= its CV version.
+  app.put("/api/applications/:id/cv", async (c) => {
+    if (c.req.header("content-type") !== "application/pdf") return c.json({ error: "Send the CV as Content-Type: application/pdf" }, 415);
+    if (Number(c.req.header("content-length") ?? 0) > maxCvBytes) return c.json({ problem: "invalid", error: "That PDF is over 10 MB. Attach a smaller export of your CV." }, 413);
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    return trackerCall(c, () => tracker.attachCv(c.req.param("id"), { fileName: c.req.query("name") ?? "", label: c.req.query("label") ?? null, bytes }), 201);
+  });
+  app.get("/api/applications/:id/cv", async (c) => {
+    const file = await tracker.cvFile(c.req.param("id"));
+    if (!file) return c.json({ error: "No CV attached" }, 404);
+    return c.body(new Uint8Array(file.bytes), 200, {
+      "content-type": "application/pdf",
+      "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    });
   });
 
   // "Add application" and "I applied": { job: { jobId } | { company, title, link? }, appliedOn, status, contact?, how? }.
@@ -369,13 +396,14 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
 
 type Body = Record<string, unknown>;
 
-/** Runs a tracker change; a refusal answers 404 (not found) or 409 with its problem and words. */
-async function trackerCall(c: Context, act: () => Promise<unknown>) {
+/** Runs a tracker change; a refusal answers 404 (not found), 422 (invalid input) or 409 with its problem and words. */
+async function trackerCall(c: Context, act: () => Promise<unknown>, ok: 200 | 201 = 200) {
   try {
-    return c.json(await act());
+    return c.json(await act(), ok);
   } catch (err) {
     if (!(err instanceof TrackerError)) throw err;
-    return c.json({ problem: err.problem, error: err.message, applicationId: err.applicationId }, err.problem === "not-found" ? 404 : 409);
+    const status = err.problem === "not-found" ? 404 : err.problem === "invalid" ? 422 : 409;
+    return c.json({ problem: err.problem, error: err.message, applicationId: err.applicationId }, status);
   }
 }
 
