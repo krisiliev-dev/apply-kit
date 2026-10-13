@@ -45,3 +45,46 @@ describe("the shared monthly AI budget", () => {
     expect((await t.discovery.queryFeed({ view: "new" })).budget).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0.008, reached: true });
   });
 });
+
+describe("writer calls within the budget", () => {
+  it("books a failed call that was still billed, and lets the error through", async () => {
+    const billed = Object.assign(new Error("The model's answer didn't fit the schema"), { costUsd: 0.003 });
+    const writer = fakeWriter({ draftPieces: billed });
+    const t = createTestPreparation({ capUsd: 0.01, writer });
+
+    const call = t.budget.call({ task: "draft-pieces", estimateUsd: 0.004 }, () => writer.draftPieces(cvText));
+
+    await expect(call).rejects.toThrow("didn't fit the schema");
+    expect(t.preparation.budget()).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0.003, reached: false });
+  });
+
+  it("books nothing for a failed call that wasn't billed, and frees its estimate", async () => {
+    const writer = fakeWriter({ draftPieces: new Error("The model didn't answer within 90 seconds") });
+    const t = createTestPreparation({ capUsd: 0.01, writer });
+
+    await expect(t.budget.call({ task: "draft-pieces", estimateUsd: 0.008 }, () => writer.draftPieces(cvText))).rejects.toThrow();
+    const retry = await t.budget.call({ task: "draft-pieces", estimateUsd: 0.008 }, () => fakeWriter().draftPieces(cvText));
+
+    expect(retry.refused).toBe(false);
+    expect(t.preparation.budget().spentUsd).toBe(0.002);
+  });
+});
+
+describe("the preparation engine", () => {
+  it("starts beside the discovery engine on the same database, with nothing spent yet", () => {
+    const t = createTestPreparation();
+
+    expect(t.preparation.budget()).toEqual({ month: "2026-10", capUsd: 10, spentUsd: 0, reached: false });
+  });
+
+  it("counts a new month from zero", async () => {
+    const writer = fakeWriter({}, { costUsd: 0.01 });
+    const t = createTestPreparation({ capUsd: 0.01, writer });
+    await t.budget.call({ task: "draft-pieces", estimateUsd: 0.01 }, () => writer.draftPieces(cvText));
+    expect(t.preparation.budget().reached).toBe(true);
+
+    t.clock.set("2026-11-01T07:00:00Z");
+
+    expect(t.preparation.budget()).toEqual({ month: "2026-11", capUsd: 0.01, spentUsd: 0, reached: false });
+  });
+});
