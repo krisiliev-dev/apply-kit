@@ -116,11 +116,75 @@ _Avoid_: Tailored resume, variant
 A letter written for one job in the user's voice.
 
 **Answer bank**:
-The user's reusable answers to standard and screening questions.
+The user's reusable answers to standard and screening questions, each with the wordings it matches and a version per language.
 _Avoid_: Q&A store, autofill data
+
+**Standard answer**:
+An answer-bank entry for a question most application forms ask, such as right to work, notice period or a profile link.
+_Avoid_: Default answer, profile field
+
+**Screening answer**:
+An answer to a question a particular job's form asks, kept in the answer bank when it can be reused for the same question elsewhere.
+_Avoid_: Custom answer, pre-screen answer
 
 **Voice sample**:
 A piece of the user's own writing used to match their voice.
+
+**Voice rule**:
+A readable statement of how the user writes (for example "opens with the company's problem"), learned from voice samples and edits to drafts, sent with every draft and removable.
+_Avoid_: Style profile, tone setting
+
+**Import**:
+Reading files the user already has (old CVs, the LinkedIn export, a GitHub profile) into drafted profile pieces for the user to check.
+_Avoid_: Upload, parse
+
+**Coach interview**:
+A conversation in which the AI coach questions imported pieces, gaps in the timeline and likely unwritten skills, and writes pieces only from the user's answers.
+_Avoid_: Chat, onboarding wizard
+
+**Unconfirmed piece**:
+A profile piece the model wrote from the user's answer that the user hasn't confirmed yet; it is used only where it came from.
+_Avoid_: Suggestion, draft piece
+
+**Honesty line**:
+The limit on what a package may claim: anything that survives an interview question and a reference check.
+_Avoid_: Truthfulness score, fact check
+
+**Evidence**:
+The profile piece a CV version relies on to show that a requirement is met, shown with the requirement and the CV line it became.
+_Avoid_: Proof, match
+
+**Gap**:
+A required item of a job that the master profile has no evidence for; it is named, never covered up.
+_Avoid_: Missing skill, weakness
+
+**Flag**:
+Something in a package draft that needs the user's decision before its step can be approved: a near-the-line edit, a gap, or a low-confidence answer.
+_Avoid_: Warning, issue, alert
+
+**Near-the-line edit**:
+A change that states a claim more strongly than its evidence while possibly still defensible; always flagged, never applied silently.
+_Avoid_: Exaggeration, stretch
+
+**Change**:
+One edit a CV version makes to the master profile's wording or order for a job, listed with its reason and undoable.
+_Avoid_: Diff, rewrite
+
+**Package step**:
+One of the five guided parts of a package (target posting, CV version, cover letter, screening answers, ATS check), approved in order.
+_Avoid_: Stage, tab, section
+
+**ATS check**:
+Reading a CV version's PDF back as plain text, the way an applicant tracking system would, with a pass or fail per check and no overall score.
+_Avoid_: ATS score, parse score
+
+**Approved package**:
+A package whose steps are all approved; its files are frozen, and it is what the extension fills a portal from.
+_Avoid_: Final package, submitted package
+
+**CV template**:
+The fixed one-page A4 layout every CV version and cover letter is rendered in; the AI fills content only.
+_Avoid_: Theme, design, format
 
 ## After applying
 

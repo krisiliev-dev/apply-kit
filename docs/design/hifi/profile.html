@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Profile · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../../../app/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../app/ui/src/styles/components.css">
+<style>
+/* page-local layout for Profile: tokens only */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.head { display: flex; flex-wrap: wrap; align-items: end; gap: var(--s-4) var(--s-6) }
+.head .lead { display: grid; gap: var(--s-2); flex: 1 1 360px }
+.panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4) }
+.sec-head .grow { flex: 1 1 auto }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center }
+.toolbar .search { flex: 1 1 220px; max-width: 320px }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--s-6); align-items: start }
+.col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 960px) { .cols { grid-template-columns: minmax(0, 1fr) } }
+.src { display: grid; gap: var(--s-1); border-left: 3px solid var(--rule); background: var(--surface-sunken); padding: var(--s-3) var(--s-4); border-radius: 0 var(--r-small) var(--r-small) 0; font-size: var(--fs-small); color: var(--ink) }
+.src .where { font-size: var(--fs-caption); color: var(--ink-3) }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+.opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-small) }
+.opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 3px 0 0; flex: none }
+.textarea { font: inherit; width: 100%; min-height: 88px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); resize: vertical; line-height: var(--lh-body) }
+.textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+.textarea[aria-invalid="true"] { border-color: var(--gap); box-shadow: 0 0 0 3px var(--gap-soft) }
+.form { max-width: 640px; display: grid; gap: var(--s-6) }
+.angles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s-5) }
+.angle ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
+.angle.thin { border-left: 4px solid var(--partly) }
+.rules { list-style: none; margin: 0; padding: 0; display: grid }
+.rules li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-4); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.rules li:first-child { border-top: 0; padding-top: 0 }
+.rules b { font-weight: 600; font-size: var(--fs-body) }
+.table .ans { max-width: 46ch; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.table tbody tr { cursor: default }
+.table .q { font-weight: 600; color: var(--ink); background: none; border: 0; padding: 0; font: inherit; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px }
+.table .q:hover { text-decoration-color: var(--action) }
+.local { display: flex; gap: var(--s-3); align-items: center; font-size: var(--fs-small); color: var(--ink-2) }
+.local svg { width: 14px; height: 14px; color: var(--action) }
+.errsum { display: grid; gap: var(--s-2) }
+.errsum ul { margin: 0; padding-left: var(--s-6) }
+.chips-edit { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; padding: var(--s-2) var(--s-3); border: 1px solid var(--border-control); border-radius: var(--r-control); background: var(--surface); min-height: 40px }
+.chips-edit .chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 var(--s-1); min-width: 24px; min-height: 24px }
+.chips-edit input { border: 0; outline: 0; font: inherit; flex: 1 1 120px; min-width: 80px; background: transparent; color: var(--ink) }
+.chips-edit:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4) }
+@media (max-width: 640px) { .pair { grid-template-columns: 1fr } }
+.mini { font-size: var(--fs-small) }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · Profile</span>
+  <a href="index.html">All screens</a>
+  <div class="states" role="tablist" aria-label="State"></div>
+</div>
+
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
+    <nav class="nav" aria-label="Main">
+      <a href="feed.html">Feed</a>
+      <a href="#">Applications</a>
+      <a href="profile.html" aria-current="page">Profile<span class="badge" aria-hidden="true">4</span><span class="sr-only">, 4 need you</span></a>
+      <a href="sources.html">Settings</a>
+    </nav>
+    <span class="grow"></span>
+    <a class="health" href="sources.html"><i aria-hidden="true"></i><span>15 sources OK · 10:30</span></a>
+  </header>
+
+  <main class="main" id="main" tabindex="-1">
+    <div class="sr-only" id="live" role="status" aria-live="polite"></div>
+
+    <!-- ================= MASTER PROFILE ================= -->
+    <section data-state="master" data-state-name="Master profile" class="stack" style="gap:var(--s-6)">
+      <div class="head"><div class="lead"><h1>Profile</h1><p class="muted">Everything tailoring draws from. Nothing goes into a CV, letter or answer that isn't here.</p></div>
+        <span class="local"><span data-i="lock"></span>Stored on this laptop only · <a href="#">Export</a></span></div>
+      <nav class="subnav" aria-label="Profile">
+        <a href="#master" data-go="master" aria-current="page">Master profile <span class="n" aria-hidden="true">3</span><span class="sr-only">, 3 need you</span></a>
+        <a href="#angles" data-go="angles">Angles</a>
+        <a href="#answers" data-go="answers">Answer bank <span class="n" aria-hidden="true">1</span><span class="sr-only">, 1 needs you</span></a>
+        <a href="#voice" data-go="voice">Voice</a>
+        <a href="../wireframes/profile.html#search">Search and dealbreakers</a>
+      </nav>
+      <div class="needs"><span class="grow"><b>3 pieces learned during packages are waiting for your OK.</b> <span class="muted">Each was used only in the package where you gave it.</span></span><a class="btn sm" href="#learned" data-go="learned">Review 3 pieces</a></div>
+
+      <div class="panel">
+        <div class="sec-head"><h2 class="grow">Contact and links</h2><button class="btn sm" type="button">Edit<span class="sr-only"> contact and links</span></button></div>
+        <dl class="kv"><dt>Name</dt><dd>Nia Koleva · <span lang="bg">Ния Колева</span></dd><dt>Email</dt><dd>nia.koleva@example.com <span class="meta">· the job address, so portal emails are tracked</span></dd><dt>Phone</dt><dd class="num">+359 88 000 0142</dd><dt>Location</dt><dd>Sofia, Bulgaria</dd><dt>Links</dt><dd>linkedin.com/in/nia-koleva-example · github.com/nia-koleva-example</dd><dt>Photo</dt><dd>1 photo, used only in packages where you switch it on</dd></dl>
+      </div>
+
+      <div class="panel">
+        <div class="sec-head"><h2 class="grow">Master profile <span class="meta">· 52 pieces · 49 confirmed</span></h2><button class="btn" type="button" data-go="edit">Add piece</button></div>
+        <div class="toolbar">
+          <div class="search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><label class="sr-only" for="ps">Search pieces</label><input class="input" id="ps" type="search" placeholder="Search pieces, e.g. Splunk…"></div>
+          <div class="segmented" role="group" aria-label="Type"><button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Achievements 29</button><button type="button" aria-pressed="false">Skills 15</button><button type="button" aria-pressed="false">Roles 4</button><button type="button" aria-pressed="false">Education 4</button></div>
+          <label class="sr-only" for="pa">Angle</label><select class="input" id="pa" style="width:auto"><option>Every angle</option><option>Developer</option><option>Security</option><option>Design</option></select>
+        </div>
+
+        <details class="group" open>
+          <summary><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Junior Security Analyst · Orbital Bank, Sofia · Jan 2023 – present <span class="meta">21 pieces</span></summary>
+          <div class="pieces">
+            <div class="piece"><div class="stack"><div class="top"><span class="type">ROLE</span><span>From CV 2025 and CV 2023, they agree</span></div><p class="text">Junior Security Analyst, Orbital Bank, Sofia · Jan 2023 – present</p><div class="chips"><span class="chip neutral">SOC</span><span class="chip neutral">banking</span><span class="chip met">Security</span></div></div><div class="acts"><button class="btn ghost sm" type="button" data-go="edit">Edit<span class="sr-only"> role at Orbital Bank</span></button></div></div>
+            <div class="piece"><div class="stack"><div class="top"><span class="type">ACHIEVEMENT</span><span>Measured · team dashboard</span><span>Used in 6 packages</span></div><p class="text">Built 40 Splunk detections that cut false positives by about a third.</p><div class="chips"><span class="chip neutral">Splunk</span><span class="chip neutral">detection engineering</span><span class="chip met">Security</span></div></div><div class="acts"><button class="btn ghost sm" type="button" data-go="edit">Edit<span class="sr-only"> Splunk detections</span></button></div></div>
+            <div class="piece"><div class="stack"><div class="top"><span class="type">ACHIEVEMENT</span><span>From the coach interview, 11 Oct</span></div><p class="text">Led the response to 1 phishing incident and supported 2 more, from first alert to write-up.</p><div class="chips"><span class="chip neutral">incident response</span><span class="chip neutral">phishing</span><span class="chip met">Security</span></div></div><div class="acts"><button class="btn ghost sm" type="button">Edit<span class="sr-only"> phishing response</span></button></div></div>
+            <div class="piece"><div class="stack"><div class="top"><span class="type">ACHIEVEMENT</span><span>Estimate you'd defend</span></div><p class="text">Triaged about 25 alerts a day in a 6-person SOC.</p><div class="chips"><span class="chip neutral">triage</span><span class="chip met">Security</span></div></div><div class="acts"><button class="btn ghost sm" type="button">Edit<span class="sr-only"> alert triage</span></button></div></div>
+          </div>
+          <button class="btn ghost sm" type="button" style="justify-self:start">Show 17 more from Orbital Bank</button>
+        </details>
+        <details class="group"><summary><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>SOC Intern · Varna Telecom · Jun – Aug 2022 <span class="meta">7 pieces</span></summary></details>
+        <details class="group"><summary><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Freelance Full-stack Developer · 2021 – 2023 <span class="meta">13 pieces</span></summary></details>
+        <details class="group"><summary><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>BSc Computer Science · Danube Institute of Technology · 2018 – 2022 <span class="meta">4 pieces</span></summary></details>
+        <details class="group"><summary><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>Skills and languages not tied to a role <span class="meta">7 pieces · Figma, Python, Bulgarian (native), English (C1)…</span></summary></details>
+      </div>
+    </section>
+
+    <!-- ================= LEARNED PIECES (phase C) ================= -->
+    <section data-state="learned" data-state-name="Learned pieces to confirm" class="stack" style="gap:var(--s-6)">
+      <div class="head"><div class="lead"><h1>Profile</h1></div></div>
+      <nav class="subnav" aria-label="Profile">
+        <a href="#master" data-go="master" aria-current="page">Master profile <span class="n" aria-hidden="true">3</span><span class="sr-only">, 3 need you</span></a><a href="#angles" data-go="angles">Angles</a><a href="#answers" data-go="answers">Answer bank <span class="n" aria-hidden="true">1</span><span class="sr-only">, 1 needs you</span></a><a href="#voice" data-go="voice">Voice</a><a href="../wireframes/profile.html#search">Search and dealbreakers</a>
+      </nav>
+      <div class="panel">
+        <div class="sec-head"><h2 class="grow">Learned during packages <span class="meta">· 3 waiting</span></h2><a class="btn ghost sm" href="#master" data-go="master">Back to all pieces</a></div>
+        <p class="muted mini">When a package asked you something your profile didn't have, your answer became a piece here. It was used only for that job. Confirm it to use it everywhere.</p>
+        <div class="pieces">
+          <div class="piece unconfirmed">
+            <div class="stack">
+              <div class="top"><span class="type">ACHIEVEMENT · ORBITAL BANK</span><span class="chip ask" data-i="ask">Unconfirmed</span><span>From the Kestrel Payments package · 9 Oct</span></div>
+              <p class="text">Worked with the fraud team to trace a card-testing pattern in payment alerts and wrote a Splunk detection for it.</p>
+              <div class="src"><span>Asked: "The posting wants payments fraud experience. Have you seen any?"</span><span>You answered: "once, card testing, we built a detection for it with fraud"</span><span class="where">Check the rewrite didn't stretch your answer.</span></div>
+              <div class="chips"><span class="chip neutral">fraud</span><span class="chip neutral">payments</span><span class="chip neutral">Splunk</span><span class="chip met">Security</span></div>
+            </div>
+            <div class="acts"><button class="btn sm" type="button" data-say="Confirmed. It can now be used in every package.">Confirm</button><button class="btn ghost sm" type="button" data-go="edit">Edit</button><button class="btn ghost sm" type="button" data-say="Discarded. The Kestrel package already approved isn't changed.">Discard</button></div>
+          </div>
+          <div class="piece unconfirmed">
+            <div class="stack">
+              <div class="top"><span class="type">ACHIEVEMENT · ORBITAL BANK</span><span class="chip ask" data-i="ask">Unconfirmed</span><span>From the Halden Systems package · 7 Oct</span></div>
+              <p class="text">Wrote Python scripts that added threat-intel lookups to Splunk alerts.</p>
+              <div class="src"><span>You answered: "I wrote some python to pull threat intel into our splunk alerts"</span></div>
+              <div class="chips"><span class="chip neutral">Python</span><span class="chip neutral">threat intel</span><span class="chip met">Security</span><span class="chip met">Developer</span></div>
+            </div>
+            <div class="acts"><button class="btn sm" type="button">Confirm</button><button class="btn ghost sm" type="button">Edit</button><button class="btn ghost sm" type="button">Discard</button></div>
+          </div>
+          <div class="piece flagged">
+            <div class="stack">
+              <div class="top"><span class="type">SKILL</span><span class="chip partly" data-i="line">Near the line</span><span>From the Halden Systems package · 7 Oct</span></div>
+              <p class="text">Kubernetes</p>
+              <div class="src"><span>You said: "played with k3s once for a side project"</span></div>
+              <p class="mini muted">A skill on your CV should hold up to 5 minutes of questions. "Kubernetes" alone suggests more than one try.</p>
+              <fieldset><legend>How should it be stored?</legend>
+                <label class="opt"><input type="radio" name="k3s"><span><b>"Learning: Kubernetes (k3s, one personal project)"</b><span class="meta"> Honest and still matches the keyword.</span></span></label>
+                <label class="opt"><input type="radio" name="k3s"><span><b>Leave it out</b></span></label>
+              </fieldset>
+            </div>
+            <div class="acts"><button class="btn sm" type="button">Save choice</button><button class="btn ghost sm" type="button">Discard</button></div>
+          </div>
+        </div>
+        <div class="row"><button class="btn" type="button">Confirm the 2 unflagged</button><span class="meta">A near-the-line piece always needs its own decision.</span></div>
+      </div>
+    </section>
+
+    <!-- ================= EDIT PIECE, WITH HONESTY ERRORS ================= -->
+    <section data-state="edit" data-state-name="Edit piece · honesty check" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs meta" aria-label="Breadcrumb"><a href="#master" data-go="master">Profile</a> / <span aria-current="page">Edit piece</span></nav>
+      <h1 style="font-size:var(--fs-h2)">Edit piece</h1>
+      <div class="cols">
+        <form class="form panel" novalidate onsubmit="return false">
+          <div class="banner error errsum" role="alert" tabindex="-1"><b>2 things to fix before saving</b><ul><li><a href="#pw">The number goes beyond your source</a></li><li><a href="#pn">Say where the number comes from</a></li></ul></div>
+          <fieldset><legend>Type</legend><div class="row"><label class="opt"><input type="radio" name="t" checked> Achievement</label><label class="opt"><input type="radio" name="t"> Skill</label><label class="opt"><input type="radio" name="t"> Role</label><label class="opt"><input type="radio" name="t"> Education</label></div></fieldset>
+          <div class="field"><label for="pb">Belongs to</label><select class="input" id="pb"><option>Junior Security Analyst · Orbital Bank · 2023 – present</option><option>SOC Intern · Varna Telecom · 2022</option><option>Freelance Full-stack Developer · 2021 – 2023</option><option>BSc Computer Science · 2018 – 2022</option><option>No role (general skill)</option></select></div>
+          <div class="field"><label for="pw">What you did</label><span class="help" id="pw-help">Start with a verb and say what changed because of you. One sentence.</span>
+            <textarea class="textarea" id="pw" aria-invalid="true" aria-describedby="pw-help pw-err pw-count">Built 40 Splunk detections that cut false-positive alerts by 50%.</textarea>
+            <span class="err" id="pw-err">Your source says "about a third". 50% is more than favourable rounding, and an interviewer asking how you measured it would catch it.</span>
+            <div class="row"><button class="btn sm" type="button">Use "about a third"</button><button class="btn sm" type="button">Use "33%"</button><span class="count num" id="pw-count">64 of 200 characters</span></div>
+          </div>
+          <fieldset id="pn" aria-describedby="pn-help pn-err"><legend>Where does the number come from?</legend><span class="help" id="pn-help">Tailoring states measured numbers plainly and estimates with "about".</span>
+            <label class="opt"><input type="radio" name="n" aria-invalid="true"> Measured (dashboard, report)</label>
+            <label class="opt"><input type="radio" name="n"> An estimate I'd defend</label>
+            <label class="opt"><input type="radio" name="n"> Someone told me (lead, review)</label>
+            <span class="err" id="pn-err">This piece has a number, so pick where it comes from.</span></fieldset>
+          <div class="field"><label for="tags-in">Tags</label><span class="help" id="tags-help">Used to match job requirements. Press Enter to add.</span>
+            <div class="chips-edit"><span class="chip neutral">Splunk<button type="button" aria-label="Remove tag Splunk">✕</button></span><span class="chip neutral">SIEM<button type="button" aria-label="Remove tag SIEM">✕</button></span><span class="chip neutral">detection engineering<button type="button" aria-label="Remove tag detection engineering">✕</button></span><input id="tags-in" aria-describedby="tags-help"></div></div>
+          <fieldset><legend>Angles it belongs to</legend><div class="row"><label class="check"><input type="checkbox"> Developer</label><label class="check"><input type="checkbox" checked> Security</label><label class="check"><input type="checkbox"> Design</label></div></fieldset>
+          <div class="row"><button class="btn primary" type="submit">Save</button><a class="btn ghost" href="#master" data-go="master">Cancel</a><span class="grow"></span><button class="btn ghost sm danger" type="button">Delete piece…</button></div>
+        </form>
+        <aside class="col">
+          <div class="panel"><h2>Source</h2><div class="src"><span>"Built 40 Splunk detections, reducing false positives by about a third."</span><span class="where">CV-2025.pdf, page 1 · imported 10 Oct</span></div></div>
+          <div class="panel"><h2>The honesty line</h2><p class="mini muted">Allowed: stronger verbs, confident framing of real work, favourable but plausible rounding. Not allowed: numbers with nothing behind them, or skills you couldn't talk about for 5 minutes.</p></div>
+          <div class="panel"><h2>Used in</h2><p class="mini muted">6 packages, last in Kestrel Payments on 9 Oct. Saving changes future packages only; approved and submitted ones keep their files.</p></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= ANGLES ================= -->
+    <section data-state="angles" data-state-name="Angles" class="stack" style="gap:var(--s-6)">
+      <div class="head"><div class="lead"><h1>Profile</h1></div></div>
+      <nav class="subnav" aria-label="Profile">
+        <a href="#master" data-go="master">Master profile <span class="n" aria-hidden="true">3</span><span class="sr-only">, 3 need you</span></a><a href="#angles" data-go="angles" aria-current="page">Angles</a><a href="#answers" data-go="answers">Answer bank <span class="n" aria-hidden="true">1</span><span class="sr-only">, 1 needs you</span></a><a href="#voice" data-go="voice">Voice</a><a href="../wireframes/profile.html#search">Search and dealbreakers</a>
+      </nav>
+      <p class="muted" style="max-width:68ch">Each angle is where tailoring starts: a summary line and the pieces that lead. A package picks the closest angle for the job, then tailors from it. Angles also decide which jobs count as yours in the Feed's Fit.</p>
+      <div class="angles">
+        <article class="panel angle"><div class="sec-head"><h2 class="grow">Security</h2><span class="meta">used in 11 packages</span></div>
+          <div class="field"><label for="as-s">Summary line</label><textarea class="textarea" id="as-s">Security analyst who built 40 Splunk detections that cut false positives by about a third. SOC triage and phishing response at a bank.</textarea></div>
+          <div class="stack"><h3>Leads with</h3><ol><li>Built 40 Splunk detections, about a third fewer false positives</li><li>Led the response to 1 phishing incident, supported 2 more</li><li>Triaged about 25 alerts a day in a 6-person SOC</li><li>SOC Intern, Varna Telecom</li></ol></div>
+          <div class="row"><button class="btn sm" type="button">Reorder…</button><span class="meta">34 pieces available</span></div></article>
+        <article class="panel angle"><div class="sec-head"><h2 class="grow">Developer</h2><span class="meta">used in 6 packages</span></div>
+          <div class="field"><label for="as-d">Summary line</label><textarea class="textarea" id="as-d">Full-stack developer (React, Node.js) with two years of client work and a security background that shows in the code.</textarea></div>
+          <div class="stack"><h3>Leads with</h3><ol><li>Freelance Full-stack Developer, 2021 – 2023</li><li>Booking site with Stripe deposits for a dental clinic</li><li>Python scripts adding threat intel to Splunk alerts</li></ol></div>
+          <div class="row"><button class="btn sm" type="button">Reorder…</button><span class="meta">22 pieces available</span></div></article>
+        <article class="panel angle thin"><div class="sec-head"><h2 class="grow">Design</h2><span class="chip partly" data-i="partly">Thin</span><span class="meta">used in 1 package</span></div>
+          <div class="field"><label for="as-g">Summary line</label><textarea class="textarea" id="as-g">Designer-developer who designs and builds interfaces in Figma and React.</textarea></div>
+          <div class="stack"><h3>Leads with</h3><ol><li>Designed and built the clinic booking flow in Figma and React</li><li>Figma</li></ol></div>
+          <p class="mini" style="color:var(--partly)"><b>Only 6 pieces, and 1 has a result.</b> Design packages will be thin and ask you more.</p>
+          <a class="btn sm" href="onboarding.html#interview">Let the coach ask about design work</a></article>
+      </div>
+    </section>
+
+    <!-- ================= ANSWER BANK ================= -->
+    <section data-state="answers" data-state-name="Answer bank" class="stack" style="gap:var(--s-6)">
+      <div class="head"><div class="lead"><h1>Profile</h1></div></div>
+      <nav class="subnav" aria-label="Profile">
+        <a href="#master" data-go="master">Master profile <span class="n" aria-hidden="true">3</span><span class="sr-only">, 3 need you</span></a><a href="#angles" data-go="angles">Angles</a><a href="#answers" data-go="answers" aria-current="page">Answer bank <span class="n" aria-hidden="true">1</span><span class="sr-only">, 1 needs you</span></a><a href="#voice" data-go="voice">Voice</a><a href="../wireframes/profile.html#search">Search and dealbreakers</a>
+      </nav>
+      <div class="needs"><span class="grow"><b>1 answer was changed in a portal.</b> <span class="muted">You edited "Kubernetes experience" in the Halden Systems Workday form on 7 Oct. Keep the new version for next time?</span></span><button class="btn sm" type="button" data-toggle="cmp" aria-expanded="false" aria-controls="cmp">Compare</button><button class="btn sm" type="button" data-say="Kept the new version. The old one is in the answer's history.">Keep new</button><button class="btn ghost sm" type="button">Keep old</button></div>
+      <div id="cmp" class="panel" hidden><div class="pair"><div class="src"><span class="where">In your answer bank</span><span>"I haven't used Kubernetes in production."</span></div><div class="src"><span class="where">What you typed in the portal</span><span>"No production experience; one personal k3s project in 2025, and I'm working through the CKS material."</span></div></div></div>
+      <div class="panel flush">
+        <div class="sec-head" style="padding:var(--s-5) var(--s-6) var(--s-4)"><h2 class="grow">Answer bank <span class="meta">· 34 answers</span></h2><button class="btn" type="button" data-go="answer-edit">Add answer</button></div>
+        <div class="toolbar" style="padding:0 var(--s-6) var(--s-4)">
+          <div class="segmented" role="group" aria-label="Show"><button type="button" aria-pressed="true">All 34</button><button type="button" aria-pressed="false">Standard 14</button><button type="button" aria-pressed="false">Screening 20</button><button type="button" aria-pressed="false">Not used in 90 days 5</button></div>
+          <div class="search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M10.5 10.5 14 14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><label class="sr-only" for="as">Search answers</label><input class="input" id="as" type="search" placeholder="Search questions…"></div>
+        </div>
+        <div class="table-wrap"><table class="table" aria-label="Answer bank"><thead><tr><th scope="col">Question</th><th scope="col">Answer</th><th scope="col">Kind</th><th scope="col">Languages</th><th scope="col">Last used</th><th scope="col">Used</th></tr></thead>
+          <tbody>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Right to work in Bulgaria</button></td><td><span class="ans">Yes · EU citizen</span></td><td>Standard</td><td>EN · BG</td><td class="num">9 Oct</td><td class="num">9</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Visa sponsorship needed</button></td><td><span class="ans">No</span></td><td>Standard</td><td>EN · BG</td><td class="num">9 Oct</td><td class="num">8</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Notice period</button></td><td><span class="ans">1 month</span></td><td>Standard</td><td>EN · BG</td><td class="num">9 Oct</td><td class="num">7</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Salary expectations</button></td><td><span class="ans meta">Ask each time · rule: upper half of a stated range, never under €2,000</span></td><td>Standard</td><td>—</td><td class="num">9 Oct</td><td class="num">6</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Gender, ethnicity and other diversity questions</button></td><td><span class="ans meta">Leave blank · "Prefer not to say" when a portal requires an answer</span></td><td>Standard</td><td>EN · BG</td><td class="num">2 Oct</td><td class="num">3</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Describe a security incident you handled</button></td><td><span class="ans">In March 2024 a phishing email posing as our payroll provider reached about 60 staff at Orbital Bank. I led the response: I pulled the sender and link indicators, searched Splunk for clicks and found 4 people who had entered credentials…</span></td><td>Screening</td><td>EN</td><td class="num">9 Oct</td><td class="num">4</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Kubernetes experience</button> <span class="chip ask" data-i="ask">Changed in a portal</span></td><td><span class="ans">I haven't used Kubernetes in production.</span></td><td>Screening</td><td>EN</td><td class="num">7 Oct</td><td class="num">2</td></tr>
+            <tr><td><button class="q" type="button" data-go="answer-edit">Years of experience with Splunk</button></td><td><span class="ans">3</span></td><td>Screening</td><td>EN · BG</td><td class="num">1 Oct</td><td class="num">5</td></tr>
+          </tbody></table></div>
+        <div class="row" style="padding:var(--s-4) var(--s-6)"><span class="meta grow">1–8 of 34</span><button class="btn sm" type="button" aria-disabled="true">Previous</button><button class="btn sm" type="button">Next</button></div>
+      </div>
+      <p class="meta">"Why this company?" and letter-style questions aren't stored: they're written fresh for each job. The extension fills portals only from this bank, your contact details and an approved package, and never fills an "ask each time" or "leave blank" answer by itself.</p>
+    </section>
+
+    <!-- ================= EDIT ANSWER ================= -->
+    <section data-state="answer-edit" data-state-name="Edit answer" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs meta" aria-label="Breadcrumb"><a href="#answers" data-go="answers">Answer bank</a> / <span aria-current="page">Notice period</span></nav>
+      <h1 style="font-size:var(--fs-h2)">Notice period</h1>
+      <div class="cols">
+        <form class="form panel" onsubmit="return false">
+          <fieldset><legend>Kind</legend><div class="row"><label class="opt"><input type="radio" name="k" checked> Standard <span class="meta">asked by most portals</span></label><label class="opt"><input type="radio" name="k"> Screening <span class="meta">a question some jobs ask</span></label></div></fieldset>
+          <div class="field"><label for="ae-en">Answer in English</label><textarea class="textarea" id="ae-en" aria-describedby="ae-en-c" style="min-height:56px">1 month</textarea><span class="count num" id="ae-en-c">7 characters</span></div>
+          <div class="field"><label for="ae-bg">Answer in Bulgarian <span class="meta">used in Bulgarian packages</span></label><textarea class="textarea" id="ae-bg" lang="bg" style="min-height:56px">1 месец</textarea></div>
+          <div class="field"><label for="ae-ph">Also matches these wordings</label><span class="help" id="ae-ph-help">How portals phrase it. The extension and packages use these to find the answer. One per line.</span><textarea class="textarea" id="ae-ph" aria-describedby="ae-ph-help">When could you start?
+Earliest start date
+How much notice do you need to give?
+Срок на предизвестие</textarea></div>
+          <fieldset><legend>When a form asks it</legend>
+            <label class="opt"><input type="radio" name="f" checked><span>Fill it <span class="meta">you still see it before you press Submit</span></span></label>
+            <label class="opt"><input type="radio" name="f"><span>Ask me each time <span class="meta">for answers that depend on the job, like salary; a rule can suggest a value</span></span></label>
+            <label class="opt"><input type="radio" name="f"><span>Leave it blank <span class="meta">for voluntary questions; "Prefer not to say" only where an answer is required</span></span></label></fieldset>
+          <div class="row"><button class="btn primary" type="submit">Save</button><a class="btn ghost" href="#answers" data-go="answers">Cancel</a><span class="grow"></span><button class="btn ghost sm danger" type="button">Delete answer…</button></div>
+        </form>
+        <aside class="col"><div class="panel"><h2>History</h2><dl class="kv"><dt>2 Sep</dt><dd>Changed from "2 weeks" in Profile</dd><dt>11 Oct</dt><dd>Created during setup</dd></dl></div><div class="panel"><h2>Used in</h2><p class="mini muted">7 packages · last Kestrel Payments, 9 Oct. Saving changes future packages and fills; approved packages keep their answers.</p></div></aside>
+      </div>
+    </section>
+
+    <!-- ================= VOICE ================= -->
+    <section data-state="voice" data-state-name="Voice samples" class="stack" style="gap:var(--s-6)">
+      <div class="head"><div class="lead"><h1>Profile</h1></div></div>
+      <nav class="subnav" aria-label="Profile">
+        <a href="#master" data-go="master">Master profile <span class="n" aria-hidden="true">3</span><span class="sr-only">, 3 need you</span></a><a href="#angles" data-go="angles">Angles</a><a href="#answers" data-go="answers">Answer bank <span class="n" aria-hidden="true">1</span><span class="sr-only">, 1 needs you</span></a><a href="#voice" data-go="voice" aria-current="page">Voice</a><a href="../wireframes/profile.html#search">Search and dealbreakers</a>
+      </nav>
+      <div class="banner info"><span class="text"><span class="local"><span data-i="lock"></span><span><b>Local only.</b> Samples stay on this laptop and are never committed. Each draft sends the rules below plus a few short excerpts (about 150 words) through the pinned non-China hosts, never a whole sample.</span></span></span></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head"><h2 class="grow">What it learned</h2><span class="meta" aria-live="polite"><span class="spin" aria-hidden="true"></span> Updating from 3 new edits…</span></div>
+            <p class="mini muted">From 4 samples and 47 edits. Remove a rule that's wrong; it won't come back unless your writing shows it again.</p>
+            <ul class="rules">
+              <li><span><b>Opens with the company's problem, not with you</b><span class="meta" style="display:block">All 4 samples; you rewrote 6 "I am applying" openers</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> rule: opens with the company's problem</span></button></li>
+              <li><span><b>Short declarative sentences; about 18 words on average</b><span class="meta" style="display:block">Samples; 11 edits split long sentences</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> rule: short sentences</span></button></li>
+              <li><span><b>Names a gap plainly, then says how you'd close it</b><span class="meta" style="display:block">cover-letter-orbital-2023, 2 edits</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> rule: names a gap</span></button></li>
+              <li><span><b>Never: "passionate", "excited to apply", "team player"</b><span class="meta" style="display:block">You deleted each at least twice</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> rule: banned phrases</span></button></li>
+              <li><span><b>Signs off "Kind regards"</b><span class="meta" style="display:block">3 of 4 samples</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> rule: sign-off</span></button></li>
+            </ul>
+          </div>
+        </div>
+        <aside class="col">
+          <div class="panel">
+            <div class="sec-head"><h2 class="grow">Samples</h2><button class="btn sm" type="button">Add samples</button></div>
+            <ul class="files">
+              <li><span><span class="name">cover-letter-orbital-2023.docx</span><span class="meta" style="display:block">Cover letter · 310 words</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> cover-letter-orbital-2023.docx</span></button></li>
+              <li><span><span class="name">cover-letter-varna-telecom.pdf</span><span class="meta" style="display:block">Cover letter · 240 words</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> cover-letter-varna-telecom.pdf</span></button></li>
+              <li><span><span class="name">portfolio-about-page.txt</span><span class="meta" style="display:block">Personal writing · 180 words</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> portfolio-about-page.txt</span></button></li>
+              <li><span><span class="name">linkedin-about.txt</span><span class="meta" style="display:block">Personal writing · 90 words</span></span><button class="btn ghost sm" type="button">Remove<span class="sr-only"> linkedin-about.txt</span></button></li>
+              <li><span><span class="name">cover-letter-2022.pages</span><span class="err" style="display:block;font-size:var(--fs-caption);color:var(--gap)">Couldn't read a .pages file. Export it as PDF or DOCX from Pages; the other samples still count.</span></span><button class="btn sm" type="button">Replace<span class="sr-only"> cover-letter-2022.pages</span></button></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h2>Your edits to drafts</h2>
+            <p class="mini muted">47 edits from 9 packages, added automatically.</p>
+            <label class="check"><input type="checkbox" checked> Learn from my edits</label>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= EMPTY / FIRST RUN ================= -->
+    <section data-state="empty" data-state-name="Empty · first run" class="stack" style="gap:var(--s-6)">
+      <div class="head"><div class="lead"><h1>Profile</h1></div></div>
+      <div class="empty">
+        <h2>Your master profile is empty</h2>
+        <p>Every CV, cover letter and portal answer is built from it. Setup imports your old CVs, lets a coach question them and fill the gaps, then checks your search settings. About 30–45 minutes; you can stop any time and nothing is lost.</p>
+        <div class="row"><a class="btn primary" href="onboarding.html">Start setup</a><a class="btn" href="onboarding.html#import">Import one CV and start applying</a></div>
+        <p class="meta">The quick start works, but your first packages will be thinner. The profile fills in from questions asked while you apply.</p>
+      </div>
+    </section>
+
+    <div id="toast-host" aria-live="off"></div>
+  </main>
+</div>
+<script src="prepare.js"></script>
+</body>
+</html>

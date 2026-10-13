@@ -46,6 +46,27 @@ Fonts: Bricolage Grotesque and Figtree (the original Vitosha pair) were replaced
 | **Empty state** | per screen | Says what will appear and offers the first step |
 | **Toast** | confirmation, with undo | Uses the action's own words ("Passed", "Saved") |
 
+### Added for Prepare (2026-10-13)
+
+Styles in `components.css` under "Prepare components"; hi-fi in `hifi/package.html`, `profile.html`, `onboarding.html`, `cv-template.html`.
+
+| Component | Variants and states | Rules |
+|---|---|---|
+| **Package stepper** (`.pk-steps`) | done, current, flagged, working, failed, upcoming | A named `nav` with an ordered list; current has `aria-current="step"`. Each item shows an icon shape and a text sub-label ("Approved", "2 flags", "Failed"), never colour alone. Steps are approved in order; any step can be read ahead, and its Approve waits for the ones before it. Also used for setup's steps |
+| **Action bar** (`.actionbar`) | default | Sticky at the bottom of a long step: Back, the reason when Approve is blocked, and the one primary action. Keeps focus clear of itself with `scroll-padding-bottom`; static on short viewports |
+| **Approve (blocked)** | Button with `aria-disabled="true"` | Stays focusable and names its reason with `aria-describedby`. Pressing it moves focus to what blocks it, and to an alert when the reason needs words |
+| **Per-part progress** (`.parts`) | done, working, waiting, failed, stopped | For anything over 10 seconds with parts (a package generating, files importing). Each finished part is usable at once; a failed part says what still works |
+| **Flag** (`.flag`) | near the line, gap, low confidence; resolved; must (after a blocked Approve) | Sits inside the step it belongs to, also listed with jump links at the top of the step. Options are never pre-selected, each says how it holds up in an interview, and wording that would cross the honesty line isn't offered. Resolved flags stay visible with what was chosen |
+| **Choice card** (`.choice`) | default, checked, focus | Radio cards where each option states its consequence (what it costs or loses). The recommended option may be pre-selected only when it isn't an honesty decision |
+| **Evidence row** (`.ev-row`) | met, partly, gap | Requirement and its state on the left; the piece used (linked to Profile) and the CV line it became on the right; the flag, if any, under both |
+| **Change** (`.edit`) | applied, undone, flagged | One edit to the master profile's wording or order: what was, what is now (`del`/`ins`, not colour alone), why, and Undo |
+| **Piece card** (`.piece`) | default, unconfirmed, flagged, confirmed | Type, source and status on top; the text; tags and angles as chips; actions on the right (below on narrow screens). Flagged pieces are never bulk-confirmed |
+| **Drop zone** (`.dropzone`) + file list | default, drag-over | A real file input behind a visible label button; the label shows the focus ring. Lists each file with type, size and a Remove |
+| **Coach transcript** (`.chat`, `.msg`) | coach, you, not sent | A polite `role="log"`. An unsent answer stays on screen with a dashed edge after a failure |
+| **Word count** (`.count`) | under, over | Always visible against the form limit or target, not only on overflow |
+| **Document frame and page** (`.doc-frame`, `.doc`) | Fit, 100%; 1 page, over one page | The exact PDF on white paper, inside a focusable, named, scrollable region. The page chip says "1 page" or "2 pages · N lines on page 2" with an icon. The theme never touches the page |
+| **Section links** (`.subnav`) | default, current | Profile's areas as links (not tabs); a count only where something needs the user, and the counts add up to the nav badge |
+
 ## Documents: CV and cover letter
 
 - **A4, single column, reverse-chronological**, standard headings (Experience, Skills, Education; localised in Bulgarian), **one page**, margins 18mm, body 9.5–10pt Onest, headings Geologica.
@@ -54,6 +75,10 @@ Fonts: Bricolage Grotesque and Figtree (the original Vitosha pair) were replaced
 - **Photo:** slot off by default, switchable per package, suggested for local Bulgarian employers.
 - **Language:** English or Bulgarian, same template and fonts; Bulgarian postings default to Bulgarian.
 - **Fixed template:** the AI fills content and never changes layout. The cover letter shares the letterhead.
+- **Tokens:** the template's geometry and type are the `--doc-*` print tokens (page 210 × 297mm, margin 18mm, name 20pt, section titles 10.5pt, body 9.75pt, small 8.75pt, line height 1.38, photo 26mm), in `tokens.css` and the `document` group of `tokens.json`. Specimen: [hifi/cv-template.html](hifi/cv-template.html).
+- **Sections in a fixed order:** Summary, Experience, Skills, Education, Languages and courses (Bulgarian: Профил, Професионален опит, Умения, Образование, Езици и курсове). Dates are real months and years (MM.YYYY in Bulgarian). File names are ASCII: `Name_CV_Company_Role.pdf`.
+- **Overflow:** a CV that runs onto page 2 is reported with ways to tighten it, each an undoable change; type and margins never shrink.
+- **Rendering and storage:** [ADR 0003](../adr/0003-profile-files-and-pdf-rendering.md).
 - **To validate when built:** run the generated PDFs through text extraction (e.g. `pdftotext`) and at least one ATS parser to confirm every field reads correctly, in both languages.
 
 ## Rules from the Discover review (2026-10-11)
@@ -69,6 +94,19 @@ From the heuristic evaluation and accessibility audit in `critique/`:
 - **Keyboard shortcuts are opt-out and scoped.** Single-key shortcuts work only inside the jobs table, use real focus (roving tabindex), and can be turned off.
 - **Async changes are announced** politely (source checks, health, toasts); toasts give at least 10 seconds to undo and move focus sensibly.
 - `--bloom` (light) darkened to `#a33d62` so pink text passes on its soft background (5.0:1).
+
+## Rules from the Prepare review (2026-10-13)
+
+From `critique/prepare-heuristics.md` and `critique/prepare-a11y.md`:
+
+- **Honesty decisions are conscious.** Flag options are never pre-selected and a wording that crosses the honesty line is never offered. A step with an open flag can't be approved, and editing an approved part reopens its step.
+- **Model-written pieces are confirmed before they spread.** Whether from the coach interview or a package question, a piece the model wrote from the user's answer is used only where it came from until the user confirms it. A learned piece never changes a CV line without a new flag.
+- **Steps approve in order; reading ahead is free.** A later part never contradicts an earlier decision (the letter repeats the CV's incident wording; the gap the user chose to name is named).
+- **Everything sent to the model can be seen.** The Package shows which voice excerpts went with each draft.
+- **The document is the file.** Previews show the exact PDF; draft downloads say "draft"; approved files are frozen.
+- **A cap or a failure stops only the part that needs the model.** Everything finished stays, local checks still run, and each message offers a way forward without the model. The app never raises the cap.
+- **One language per package.** Switching rewrites all parts together and keeps the earlier drafts; an answer with no version in the package's language is a translated draft for review, never filled silently.
+- **Async parts are announced once each**, focus follows refusals to their reason, and sticky bars never cover focus.
 
 ## How to use this in later steps
 
