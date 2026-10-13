@@ -8,6 +8,7 @@ import { defaultSearchSettings, type SearchSettings } from "../search-settings.t
 import { defaultAnswers } from "./answer-defaults.ts";
 import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, type AnswerLanguage, type AnswerList, type AnswerMatch, type AnswerQuery, type AnswerOrigin, type PortalEditInput, type SaveAnswerResult } from "./answers.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
+import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -120,6 +121,18 @@ export interface PreparationEngine {
    * and reads it back: page count, overflow and (for a CV) the ATS check come from the PDF itself.
    */
   draftDocument(request: DraftRequest): Promise<DocumentDraft>;
+  /** The three angles (developer, security, design), each with its summary line, leads and whether it's thin. */
+  angles(): AngleView[];
+  /**
+   * Saves an angle's summary line, its lead order (piece ids, first leads), or both. Only confirmed
+   * pieces of that angle can lead. The next package for a Job of this angle starts from them.
+   */
+  saveAngle(input: SaveAngleInput): SaveAngleResult;
+  /**
+   * The angle a package for this Job starts from: the closest one by Discover's angle keywords and
+   * the tags of Kris's confirmed pieces, with the reason.
+   */
+  closestAngle(posting: AnglePosting): AngleChoice;
   /** Drafts one of the fictional demo profile's documents (package "demo"), for checking the template. */
   demoDocument(options: DemoOptions): Promise<DocumentDraft>;
 }
@@ -128,6 +141,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   migrate(deps.db);
   const profile = createProfileStore(deps);
   const contact = createContactStore(deps);
+  const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
   const answers = createAnswerStore(deps);
   /** The salary floor in Kris's search settings (the discovery engine keeps them in the same database). */
   const salaryFloor = () => {
@@ -161,6 +175,9 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     budget: () => deps.budget.info(),
     draftDocument,
     demoDocument: (options) => draftDocument({ packageId: "demo", document: demoDocument(options), fileName: demoFileName }),
+    angles: () => angles.list(),
+    saveAngle: (input) => angles.save(input),
+    closestAngle: (posting) => angles.closest(posting),
     savePiece: (input, origin) => profile.save(input, origin),
     deletePiece: (id) => profile.remove(id),
     piece: (id) => profile.get(id),

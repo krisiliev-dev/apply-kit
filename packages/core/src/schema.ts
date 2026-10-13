@@ -264,6 +264,14 @@ const migrations: string[] = [
      photo_size INTEGER,
      updated_at TEXT NOT NULL
    );`,
+  // #58: angles. Kris's summary line per angle and the pieces that lead it, in order (a JSON list of
+  // piece ids; NULL until he orders them, which means the default order). No row means neither is set.
+  `CREATE TABLE angle (
+     angle TEXT PRIMARY KEY,
+     summary TEXT NOT NULL,
+     leads TEXT,
+     updated_at TEXT NOT NULL
+   );`,
   // #56: the answer bank. Each answer with its wordings and per-language versions (JSON), its
   // category (standard or screening), kind, fill mode, rule (JSON), source (JSON), use count and last
   // use, and a portal edit waiting for "keep new or old" (JSON). Its history is one row per change (JSON:

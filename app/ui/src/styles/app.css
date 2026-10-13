@@ -318,3 +318,20 @@ h2[tabindex="-1"]:focus { outline: none }
 .wordings li:first-child { border-top: 0 }
 .wordings li > span:first-child { flex: 1 1 200px }
 .form .row .input.grow { flex: 1 1 200px; width: auto }
+
+/* Angles (from the Profile hi-fi, state Angles). Tokens only. */
+.measure { max-width: 68ch }
+.angles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s-5); align-items: start }
+.angle { display: grid; gap: var(--s-4); min-width: 0 }
+.angle ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
+.angle.thin { border-left: 4px solid var(--partly) }
+.angle .thin-why { color: var(--partly); margin: 0 }
+.angle > .btn { justify-self: start }
+.reorder { width: min(640px, calc(100vw - var(--s-8))) }
+.reorder h2:focus { outline: none }
+.lead-order { list-style: none; margin: 0; padding: 0; display: grid }
+.lead-order li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; padding: var(--s-3) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.lead-order li:first-child { border-top: 0 }
+.lead-order .num { color: var(--ink-3); font-variant-numeric: tabular-nums }
+.lead-order .acts { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s-1) }
+@media (min-width: 640px) { .lead-order li { grid-template-columns: auto minmax(0, 1fr) auto } .lead-order .acts { grid-column: auto } }
