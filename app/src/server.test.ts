@@ -247,6 +247,22 @@ describe("Profile's API", () => {
     expect(s.preparation.profileSummary().pieces).toBe(0);
   });
 
+  it("saves an angle's summary line and lead order, answering a refused lead with its problem", async () => {
+    const s = service();
+    const piece = s.preparation.savePiece({ kind: "skill", text: "Wireshark", angles: ["security"] });
+    if (!piece.saved) throw new Error("not saved");
+
+    const refused = await s.request("/api/profile/angles/security", { ...s.json({ leads: ["piece:gone"] }), method: "PUT" });
+    const saved = await s.request("/api/profile/angles/security", { ...s.json({ summary: "Analyst who reads packets.", leads: [piece.piece.id] }), method: "PUT" });
+    const unknown = await s.request("/api/profile/angles/marketing", { ...s.json({ summary: "x" }), method: "PUT" });
+    const list = await s.request("/api/profile/angles");
+
+    expect(refused.status).toBe(422);
+    expect(saved.status).toBe(200);
+    expect(unknown.status).toBe(404);
+    expect(((await list.json()) as unknown[])[1]).toMatchObject({ angle: "security", summary: "Analyst who reads packets.", leads: [{ text: "Wireshark" }] });
+  });
+
   it("exports the profile as a JSON file to download", async () => {
     const s = service();
     s.preparation.savePiece({ kind: "skill", text: "Python" });

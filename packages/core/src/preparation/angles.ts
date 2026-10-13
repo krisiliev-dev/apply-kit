@@ -135,13 +135,20 @@ export function createAngleStore({ db, clock, pieces }: { db: SqlDatabase; clock
       return { angle, score, said, tagged };
     });
     const top = scored.reduce((a, b) => (b.score > a.score ? b : a));
+    if (top.score === 0) {
+      // Nothing points anywhere: start from where Kris has the most to tailor from.
+      const most = angles.map(view).reduce((a, b) => (b.available > a.available ? b : a));
+      const reason = `Nothing in the posting points to an angle, so it starts from ${most.label}, where you have the most pieces.`;
+      return { angle: most.angle, reason, summary: most.summary, leads: most.leads };
+    }
     const quote = (xs: string[]) => xs.slice(0, 4).map((x) => `“${x}”`).join(", ");
     const parts = [
       top.said.length ? `The posting says ${quote(top.said)}` : null,
       top.tagged.length ? `your ${top.angle} pieces are tagged ${quote(top.tagged)}` : null,
     ].filter(Boolean);
     const { summary, leads } = view(top.angle);
-    return { angle: top.angle, reason: `${parts.join(", and ")}.`, summary, leads };
+    const said = parts.join(", and ");
+    return { angle: top.angle, reason: `${said[0]!.toUpperCase()}${said.slice(1)}.`, summary, leads };
   }
 
   return { list: () => angles.map(view), save, closest };

@@ -8,8 +8,8 @@ import { createTestPreparation } from "./preparation-harness.ts";
 /** Elin Varga's made-up profile: a security role with results, some developer work, little design. */
 function elinProfile(options: Parameters<typeof createTestPreparation>[0] = {}) {
   const t = createTestPreparation(options);
-  const ids: Record<string, string> = {};
-  const save = (key: string, input: PieceInput) => {
+  const ids = {} as Record<"analyst" | "detections" | "phishing" | "triage" | "wazuh" | "shop" | "typescript", string>;
+  const save = (key: keyof typeof ids, input: PieceInput) => {
     const r = t.preparation.savePiece(input);
     if (!r.saved) throw new Error(`${key}: ${r.problems[0]!.message}`);
     ids[key] = r.piece.id;
@@ -36,6 +36,14 @@ describe("choosing the closest angle for a job", () => {
 
     expect(choice.angle).toBe("security");
     expect(choice.reason).toBe("The posting says “soc”, “siem”, “incident response”, and your security pieces are tagged “Wazuh”.");
+  });
+});
+
+describe("choosing by the pieces' tags alone", () => {
+  it("picks the angle whose pieces' tags the posting names", () => {
+    const t = elinProfile();
+    const choice = t.preparation.closestAngle({ title: "Analyst", titleTranslation: null, requirements: [{ text: "Wazuh administration" }] });
+    expect(choice).toMatchObject({ angle: "security", reason: "Your security pieces are tagged “Wazuh”." });
   });
 });
 
@@ -105,5 +113,30 @@ describe("saving an angle", () => {
     expect(next.angle).toBe("security");
     expect(next.summary).toBe("Security analyst who writes detection rules and runs phishing response at an insurer.");
     expect(next.leads.map((p) => p.id)).toEqual([t.ids.phishing, t.ids.wazuh, t.ids.detections]);
+  });
+
+  it("refuses a lead that isn't a confirmed piece of the angle, and keeps what was there", () => {
+    const t = elinProfile();
+    const result = t.preparation.saveAngle({ angle: "security", leads: [t.ids.detections, t.ids.typescript] });
+    expect(result).toEqual({
+      saved: false,
+      problems: [{ field: "leads", message: "Only confirmed security pieces can lead this angle. One of these was deleted, taken off the angle or isn't confirmed yet." }],
+    });
+    expect(t.preparation.angles()[1]!.leads.map((p) => p.id)).toEqual([t.ids.detections, t.ids.triage, t.ids.phishing, t.ids.analyst]);
+  });
+
+  it("drops a deleted piece from the order and keeps the rest", () => {
+    const t = elinProfile();
+    t.preparation.saveAngle({ angle: "security", leads: [t.ids.wazuh, t.ids.phishing, t.ids.triage] });
+    t.preparation.deletePiece(t.ids.phishing);
+    expect(t.preparation.angles()[1]!.leads.map((p) => p.id)).toEqual([t.ids.wazuh, t.ids.triage]);
+  });
+});
+
+describe("a posting that points to no angle", () => {
+  it("starts from the angle with the most pieces, and says so", () => {
+    const t = elinProfile();
+    const choice = t.preparation.closestAngle({ title: "Warehouse Shift Lead", titleTranslation: null, requirements: [{ text: "Forklift licence" }] });
+    expect(choice).toMatchObject({ angle: "security", reason: "Nothing in the posting points to an angle, so it starts from Security, where you have the most pieces." });
   });
 });
