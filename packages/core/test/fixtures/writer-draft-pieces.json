@@ -1,0 +1,6 @@
+{
+  "pieces": [
+    { "kind": "role", "text": "Security Analyst at Northwind Bank, 2022–2025", "quote": "Security Analyst, Northwind Bank, 2022–2025" },
+    { "kind": "achievement", "text": "Cut false positives by about a third", "quote": "Cut false positives by about a third." }
+  ]
+}

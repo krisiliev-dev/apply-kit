@@ -4,7 +4,7 @@ export type {
   DiscoveryEngine, FeedQuery, FeedResult, FeedJob, FeedView, HealthState,
   NewSource, SourceInfo, SourceCheck, CheckFailure, CheckResult, CheckOptions, CheckRecord, SourceHealth, SourceStatus, HealthReport, HealthSummary, FailingSource, AlertRhythm, QuietSource, MailboxHealth,
   Decision, JobState, PassReason, PassInput, UnhideInput, LearnedAdjustment,
-  ReadingState, ReadResult, JobDetail, JobPosting, BudgetInfo, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
+  ReadingState, ReadResult, JobDetail, JobPosting, AddSourceOptions, RemovalPreview, FeedSort, RuleChange, FilteredToNothing,
   AddLinkResult, LinkProblem, PastedPosting, CaptureReport, CaptureItem, CaptureStatus,
   SeedStatus, SeededSource, CompanyWithoutFeed, WatchlistSeed,
 } from "./engine.ts";
@@ -47,3 +47,13 @@ export { scoreCase, similarity, TEXT_MATCH } from "./evaluation/score.ts";
 export type { CaseScore, ListScore } from "./evaluation/score.ts";
 export { runEvaluation } from "./evaluation/run.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
+export { createAiBudget } from "./budget.ts";
+export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcome } from "./budget.ts";
+export { draftedPiecesSchema } from "./writing/writer.ts";
+export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces } from "./writing/writer.ts";
+export { createPreparationEngine } from "./preparation/engine.ts";
+export type { PreparationEngine } from "./preparation/engine.ts";
+export type {
+  PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
+  PdfTextReader, PdfText, FileStore, StoredFile,
+} from "./preparation/ports.ts";
