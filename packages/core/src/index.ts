@@ -50,5 +50,5 @@ export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult
 export { createTracker, statuses, happyPath, statusName, isClosed, TrackerError } from "./tracker.ts";
 export type {
   Tracker, TrackerDeps, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
-  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep,
+  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry,
 } from "./tracker.ts";

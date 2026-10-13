@@ -26,8 +26,11 @@ export interface ApplicationEvent {
   id: string;
   applicationId: string;
   at: string;
-  /** created: the Application was added. status: its Status changed. undo: an earlier Event was undone. */
-  kind: "created" | "status" | "undo";
+  /**
+   * created: the Application was added. status: its Status changed. note: the user wrote a note.
+   * undo: an earlier Event was undone.
+   */
+  kind: "created" | "status" | "note" | "undo";
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -72,9 +75,39 @@ export interface StatusStep {
   state: "done" | "current" | "skipped" | "todo";
 }
 
+/**
+ * What now, at the top of the page. For now: wait for a reply, or the latest note; a closed
+ * Application has nothing left to do. (Follow-ups and interviews take this over in later tickets.)
+ */
+export type NextStep =
+  | { kind: "wait"; text: string }
+  | { kind: "note"; text: string; at: string }
+  | { kind: "closed"; text: string };
+
+/** One entry on the timeline: an Event, or something apply-kit saw (the posting closing). */
+export interface TimelineEntry {
+  id: string;
+  at: string;
+  kind: ApplicationEvent["kind"] | "posting-closed";
+  cause: EventCause;
+  from: Status | null;
+  to: Status | null;
+  /** What happened, in plain words. */
+  text: string;
+  /** More about it, when there is more to say. */
+  detail: string | null;
+  /** When it was undone, or null. */
+  undoneAt: string | null;
+  /** Whether Undo applies to it now. */
+  undoable: boolean;
+}
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
   steps: StatusStep[];
+  nextStep: NextStep;
+  /** Newest first. */
+  timeline: TimelineEntry[];
 }
 
 /** What the user gives "Add application". */
@@ -153,7 +186,7 @@ export interface JobChoice {
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
   constructor(
-    readonly problem: "not-found" | "accepted" | "unchanged" | "already-open" | "changed-since" | "not-undoable",
+    readonly problem: "not-found" | "accepted" | "unchanged" | "already-open" | "changed-since" | "not-undoable" | "invalid",
     message: string,
     readonly applicationId: string | null = null,
   ) {
@@ -182,6 +215,8 @@ export interface Tracker {
    * and the reversal is recorded. Throws a TrackerError when refused.
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
+  /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
+  addNote(applicationId: string, text: string): Promise<{ event: ApplicationEvent }>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
 }
@@ -413,17 +448,16 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     if (ev.kind === "undo") throw new TrackerError("not-undoable", "An undo can't itself be undone; change the Status instead.", ev.applicationId);
     const app = db.prepare("SELECT * FROM application WHERE id = ?").get(ev.applicationId)!;
     if (app.removed_at) throw new TrackerError("not-found", "That Application was removed.", ev.applicationId);
-    const later = db.prepare(
-      `SELECT COUNT(*) AS n FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind != 'undo' AND rowid > (SELECT rowid FROM application_event WHERE id = ?)`,
-    ).get(ev.applicationId, eventId);
-    if (Number(later?.n ?? 0) > 0 || (ev.kind === "status" && app.status !== ev.to)) {
+    if (ev.kind !== "note" && movedSince(ev, String(app.status))) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this can't be undone. Set the Status you want instead.", ev.applicationId);
     }
     db.exec("BEGIN");
     try {
       db.prepare("UPDATE application_event SET undone_at = ? WHERE id = ?").run(now(), eventId);
       let event: ApplicationEvent;
-      if (ev.kind === "created") {
+      if (ev.kind === "note") {
+        event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Note removed", undoes: eventId });
+      } else if (ev.kind === "created") {
         db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), ev.applicationId);
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Adding undone: removed", undoes: eventId });
       } else {
@@ -439,6 +473,29 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       db.exec("ROLLBACK");
       throw err;
     }
+  }
+
+  /** Whether the Status has moved since this Event (a later Status change or adding stands), so undo would rewrite history. */
+  function movedSince(ev: ApplicationEvent, status: string): boolean {
+    const later = db.prepare(
+      `SELECT COUNT(*) AS n FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind IN ('created', 'status')
+       AND rowid > (SELECT rowid FROM application_event WHERE id = ?)`,
+    ).get(ev.applicationId, ev.id);
+    return Number(later?.n ?? 0) > 0 || (ev.kind === "status" && status !== ev.to);
+  }
+
+  async function addNote(applicationId: string, text: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    const note = text.trim();
+    if (!note) throw new TrackerError("invalid", "Write the note first.", applicationId);
+    return { event: addEvent({ applicationId, kind: "note", cause: "you", from: null, to: null, text: note, undoes: null }) };
+  }
+
+  function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[]): NextStep {
+    if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
+    const note = standing.filter((e) => e.kind === "note").at(-1);
+    return note ? { kind: "note", text: note.text, at: note.at } : { kind: "wait", text: "Wait for a reply." };
   }
 
   /** The stepper: the furthest happy-path step reached; steps before it never reached are skipped. */
@@ -458,7 +515,11 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     if (!app) return null;
     const all = allEvents(applicationId);
     const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
-    return { ...app, steps: stepsOf(app, standing) };
+    const timeline: TimelineEntry[] = all.map((e) => ({
+      id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
+      undoable: !e.undoneAt && (e.kind === "note" || (e.kind === "status" && !movedSince(e, app.status))),
+    }));
+    return { ...app, steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline: timeline.reverse() };
   }
 
   const allEvents = (applicationId: string) =>
@@ -493,6 +554,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     events: async (id) => allEvents(id),
     setStatus,
     undoEvent,
+    addNote,
     findJobs,
   };
 }

@@ -52,3 +52,51 @@ describe("the status stepper", () => {
     expect(await stepStates(tracker, id)).toEqual(["applied:done", "screening:skipped", "interviewing:done", "offer:todo", "accepted:todo"]);
   });
 });
+
+describe("notes and the next step", () => {
+  it("says to wait for a reply until there's a note", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+
+    expect((await tracker.get(id))!.nextStep).toEqual({ kind: "wait", text: "Wait for a reply." });
+  });
+
+  it("adds a note to the timeline, by you, newest first, and the latest note becomes the next step", async () => {
+    const { tracker, clock } = tracked();
+    const id = await add(tracker);
+    await clock.advance(60_000);
+    await tracker.addNote(id, "  Recruiter called: second round next week.  ");
+    await clock.advance(60_000);
+
+    const { event } = await tracker.addNote(id, "Ask about the on-call rota.");
+
+    expect(event).toMatchObject({ kind: "note", cause: "you", text: "Ask about the on-call rota." });
+    const app = (await tracker.get(id))!;
+    expect(app.timeline.map((e) => [e.kind, e.cause, e.text])).toEqual([
+      ["note", "you", "Ask about the on-call rota."],
+      ["note", "you", "Recruiter called: second round next week."],
+      ["created", "you", "Added by hand"],
+    ]);
+    expect(app.nextStep).toEqual({ kind: "note", text: "Ask about the on-call rota.", at: event.at });
+    expect(app.status).toBe("applied");
+  });
+
+  it("refuses an empty note", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+
+    await expect(tracker.addNote(id, "   ")).rejects.toMatchObject({ problem: "invalid" });
+  });
+
+  it("lets a Status change be undone after a note was added since", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+    const { event } = await tracker.setStatus(id, "screening");
+    await tracker.addNote(id, "They want a portfolio link.");
+
+    const app = (await tracker.get(id))!;
+    expect(app.timeline.find((e) => e.id === event.id)).toMatchObject({ undoable: true });
+    await tracker.undoEvent(event.id);
+    expect((await tracker.get(id))!.status).toBe("applied");
+  });
+});
