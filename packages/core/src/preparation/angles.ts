@@ -95,7 +95,7 @@ export function createAngleStore({ db, clock, pieces }: { db: SqlDatabase; clock
       // Kris's order, without pieces deleted or taken off the angle since; the default order until he sets one.
       leads: leads ? leads.flatMap((id) => byId.get(id) ?? []) : [...mine].sort(leadFirst).slice(0, angleRules.defaultLeads),
       available: mine.length,
-      packagesUsed: 0,
+      packagesUsed: Number(db.prepare("SELECT COUNT(*) AS n FROM package WHERE angle = ?").get(angle)?.n ?? 0),
       thin: thinness(mine),
     };
   }

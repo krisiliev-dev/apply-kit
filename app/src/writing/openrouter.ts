@@ -3,7 +3,7 @@
 // output per task. Each task sends only the text it needs (extracted text, never files).
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import type { z } from "zod";
-import { draftedPiecesSchema, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
+import { draftedPiecesSchema, tailoredCvSchema, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
 import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
@@ -20,11 +20,21 @@ const draftPiecesInstructions = `You read the text of one of Kris's old CVs and 
 - One piece per role, achievement, skill or education entry.
 - Every "quote" is copied word for word from the text: the line the piece came from.`;
 
+const tailorCvInstructions = `You tailor Kris's CV to one job posting, as JSON matching the schema, using only the profile pieces given. Rules:
+- Every line cites the ids of the pieces it relies on ("pieceIds"). Never cite an id that isn't given.
+- Never add a skill, number, employer, title or date that isn't in the cited pieces. Employers, titles and dates stay exactly as given.
+- "claim" says how the line compares to its pieces: "as-written" (the piece's own words), "reworded" (same claim, different words, e.g. the posting's term for the same thing) or "stronger" (a stronger verb or a rounder number than the piece states). Say "stronger" whenever it is.
+- The summary starts from the angle's summary line and is one or two sentences.
+- "notes" explain the main choices in plain words, one per note.
+- Write in the language given ("en" English, "bg" Bulgarian); tool names stay in Latin script.`;
+
 /** What each task sends: its instructions and the prompt built from its input. */
 function promptOf(request: WriterRequest): { instructions: string; prompt: string } {
   switch (request.task) {
     case "draft-pieces":
       return { instructions: draftPiecesInstructions, prompt: `File: ${request.input.fileName}\n\n${request.input.text}` };
+    case "tailor-cv":
+      return { instructions: tailorCvInstructions, prompt: JSON.stringify(request.input) };
   }
 }
 
@@ -59,5 +69,6 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
       return usdFor(tokensIn(instructions.length + prompt.length + SCHEMA_CHARS), EXPECTED_OUTPUT_TOKENS);
     },
     draftPieces: (input) => write({ task: "draft-pieces", input }, draftedPiecesSchema, "drafted_pieces"),
+    tailorCv: (input) => write({ task: "tailor-cv", input }, tailoredCvSchema, "tailored_cv"),
   };
 }

@@ -50,8 +50,8 @@ export { runEvaluation } from "./evaluation/run.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
 export { createAiBudget } from "./budget.ts";
 export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcome } from "./budget.ts";
-export { draftedPiecesSchema } from "./writing/writer.ts";
-export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces } from "./writing/writer.ts";
+export { draftedPiecesSchema, tailoredCvSchema } from "./writing/writer.ts";
+export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces, TailorCvInput, TailoredCv } from "./writing/writer.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft } from "./preparation/engine.ts";
 export type { ProfileExport } from "./preparation/engine.ts";
@@ -62,6 +62,11 @@ export type {
 } from "./preparation/profile.ts";
 export { angleRules } from "./preparation/angles.ts";
 export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleResult, AngleProblem } from "./preparation/angles.ts";
+export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts";
+export type {
+  PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
+  TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult,
+} from "./preparation/packages.ts";
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,

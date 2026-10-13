@@ -24,9 +24,35 @@ export const draftedPiecesSchema = z.object({
 });
 export type DraftedPieces = z.infer<typeof draftedPiecesSchema>;
 
+/** What a CV version is tailored from: the posting, the angle it starts from and the confirmed pieces it may use. */
+export interface TailorCvInput {
+  posting: { title: string; company: string; requirements: string[] };
+  language: "en" | "bg";
+  angle: { label: string; summary: string };
+  /** Only confirmed pieces (and unconfirmed ones from this package); the model may cite nothing else. */
+  pieces: { id: string; kind: string; text: string; entry: { title: string; organisation: string; start: string; end: string | null } | null }[];
+}
+
+/**
+ * A tailored CV version: the summary and lines, each with the piece ids it relies on and how its
+ * claim compares to them (as written, reworded, or stronger), plus tailoring notes. The honesty
+ * validator (#63) checks every line before it is offered; until then the package shows the pieces as stored.
+ */
+export const tailoredCvSchema = z.object({
+  summary: z.string(),
+  lines: z.array(z.object({
+    text: z.string(),
+    pieceIds: z.array(z.string()),
+    claim: z.enum(["as-written", "reworded", "stronger"]),
+  })),
+  notes: z.array(z.string()),
+});
+export type TailoredCv = z.infer<typeof tailoredCvSchema>;
+
 /** Every writing task with its input, so one estimate covers them all. */
 export type WriterRequest =
-  | { task: "draft-pieces"; input: ImportedText };
+  | { task: "draft-pieces"; input: ImportedText }
+  | { task: "tailor-cv"; input: TailorCvInput };
 
 export type WriterTask = WriterRequest["task"];
 
@@ -56,4 +82,5 @@ export interface Writer {
    * may carry a numeric `costUsd` if the failed call was still billed.
    */
   draftPieces(input: ImportedText): Promise<Written<DraftedPieces>>;
+  tailorCv(input: TailorCvInput): Promise<Written<TailoredCv>>;
 }

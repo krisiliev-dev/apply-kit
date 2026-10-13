@@ -22,11 +22,11 @@ function service(uiDir = "/nonexistent/") {
   const noFiles = () => { throw new Error("no files in these tests"); };
   const preparation = createPreparationEngine({
     db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
-    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi() },
+    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), tailorCv: async () => noAi() },
     renderer: { render: async () => noAi() },
     pdfReader: { read: async () => noAi() },
     files: { put: async () => noFiles(), get: async () => null, remove: async () => {} },
-    packages: { saveDraft: async () => noFiles() },
+    packages: { saveDraft: async () => noFiles(), read: async () => null },
   });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
@@ -288,11 +288,11 @@ describe("developer route: the demo documents", () => {
     const rendered: DocumentToRender[] = [];
     const preparation = createPreparationEngine({
       db, clock, budget: createAiBudget({ db, clock, capUsd: 10 }),
-      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); } },
+      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); } },
       renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
       pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
       files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
-      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }) },
+      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), read: async () => null },
     });
     const scheduler = { status: () => ({}) } as unknown as Scheduler;
     const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });

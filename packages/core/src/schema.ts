@@ -272,6 +272,36 @@ const migrations: string[] = [
      leads TEXT,
      updated_at TEXT NOT NULL
    );`,
+  // #62: packages, one per Job. `job` (JSON) is the Job as it was when the package started (title,
+  // company, requirements, postings), so the package reads the same however Discover changes later.
+  // `approved` (JSON) maps each approved step to when, `reviewed_at` is Kris's first approval; `cv_draft` (JSON) is the CV's current draft file.
+  // Each part (target, cv, letter, answers, ats) has a row with its state, attempts, error, cost and output.
+  `CREATE TABLE package (
+     id TEXT PRIMARY KEY,
+     job_id TEXT NOT NULL UNIQUE,
+     job TEXT NOT NULL,
+     angle TEXT NOT NULL,
+     angle_reason TEXT NOT NULL,
+     language TEXT NOT NULL,
+     target_posting_id TEXT NOT NULL,
+     photo INTEGER NOT NULL DEFAULT 0,
+     approved TEXT NOT NULL DEFAULT '{}',
+     reviewed_at TEXT,
+     cv_draft TEXT,
+     started_at TEXT NOT NULL,
+     stopped_at TEXT
+   );
+   CREATE TABLE package_part (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     part TEXT NOT NULL,
+     state TEXT NOT NULL,
+     attempts INTEGER NOT NULL DEFAULT 0,
+     error TEXT,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     output TEXT,
+     updated_at TEXT NOT NULL,
+     PRIMARY KEY (package_id, part)
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
