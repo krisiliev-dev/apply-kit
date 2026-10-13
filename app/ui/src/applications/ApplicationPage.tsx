@@ -216,9 +216,15 @@ function Timeline({ app, refresh, toaster }: { app: ApplicationDetail; refresh: 
   const fieldId = useId();
   const errId = useId();
 
-  useEffect(() => { if (writing) fieldRef.current?.focus(); }, [writing]);
+  // The field takes focus when it opens; "Add note" gets it back once it is rendered again.
+  const opened = useRef(false);
+  useEffect(() => {
+    if (writing) fieldRef.current?.focus();
+    else if (opened.current) addRef.current?.focus();
+    opened.current = writing;
+  }, [writing]);
 
-  const cancel = () => { setWriting(false); setText(""); setError(null); requestAnimationFrame(() => addRef.current?.focus()); };
+  const cancel = () => { setWriting(false); setText(""); setError(null); };
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -227,8 +233,7 @@ function Timeline({ app, refresh, toaster }: { app: ApplicationDetail; refresh: 
     try {
       const { event } = await addApplicationNote(app.id, text);
       await refresh();
-      setWriting(false); setText(""); setError(null);
-      requestAnimationFrame(() => addRef.current?.focus());
+      cancel();
       toaster.show({
         message: "Note added to the timeline.",
         returnFocus: () => addRef.current?.focus(),
@@ -325,12 +330,17 @@ function WhatYouSent({ app, refresh, toaster }: { app: ApplicationDetail; refres
     if (!f) return;
     setFile(f);
     setLabel(f.name.replace(/\.pdf$/i, ""));
-    requestAnimationFrame(() => labelRef.current?.focus());
   };
+  // The label takes focus when a file is chosen; the Attach button gets it back after.
+  const chosen = useRef(false);
+  useEffect(() => {
+    if (file) labelRef.current?.focus();
+    else if (chosen.current) pickRef.current?.focus();
+    chosen.current = !!file;
+  }, [file]);
   const cancel = () => {
     setFile(null); setError(null);
     if (inputRef.current) inputRef.current.value = "";
-    requestAnimationFrame(() => pickRef.current?.focus());
   };
 
   async function attach(e: FormEvent) {
@@ -433,8 +443,13 @@ function Contacts({ app, refresh, toaster, addRef }: {
   const fieldId = useId();
   const errId = useId();
 
-  useEffect(() => { if (adding) fieldRef.current?.focus(); }, [adding]);
-  const cancel = () => { setAdding(false); setValue(""); setError(null); requestAnimationFrame(() => addRef.current?.focus()); };
+  const opened = useRef(false);
+  useEffect(() => {
+    if (adding) fieldRef.current?.focus();
+    else if (opened.current) addRef.current?.focus();
+    opened.current = adding;
+  }, [adding]);
+  const cancel = () => { setAdding(false); setValue(""); setError(null); };
 
   async function save(e: FormEvent) {
     e.preventDefault();
