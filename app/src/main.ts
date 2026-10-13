@@ -85,7 +85,7 @@ const scheduler = createScheduler({
 // The Chrome extension pairs once with a code shown in the app; only paired extensions are answered.
 const pairing = createPairing({ db, clock });
 
-const app = createServer({ engine, scheduler, pairing, uiDir: config.uiDir, port: config.port });
+const app = createServer({ engine, preparation, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 
 // localhost only: the extension and UI talk to this, nothing else should.
 const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1" }, (info) => {

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createEngine, createPairing, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createPairing, createPreparationEngine, type Scheduler } from "@apply-kit/core";
 import { createServer } from "./server.ts";
 
 const port = 4310;
@@ -18,15 +18,24 @@ function service(uiDir = "/nonexistent/") {
     extractor: { estimateCostUsd: () => 0, extract: async () => { throw new Error("no AI in tests"); } },
     mailReader: { fetchSince: async () => [] },
   });
+  const noAi = () => { throw new Error("no AI in tests"); };
+  const noFiles = () => { throw new Error("no files in these tests"); };
+  const preparation = createPreparationEngine({
+    db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
+    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi() },
+    renderer: { render: async () => noAi() },
+    pdfReader: { read: async () => noAi() },
+    files: { put: async () => noFiles(), get: async () => null, remove: async () => {} },
+  });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const app = createServer({ engine, scheduler, pairing, uiDir, port });
+  const app = createServer({ engine, preparation, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
   // Requests as a browser on this machine sends them: to the service's own address and port.
   const request = (path: string, init?: RequestInit) => app.request(`http://127.0.0.1:${port}${path}`, init);
-  return { app, json, engine, request };
+  return { app, json, engine, preparation, request };
 }
 
 /** A synthetic job search page with one listing (made-up company). */
@@ -207,5 +216,43 @@ describe("the app's routes", () => {
     expect(missing.status).toBe(404);
     expect(form.status).toBe(415);
     expect(noIds.status).toBe(400);
+  });
+});
+
+describe("Profile's API", () => {
+  it("answers a refused piece with its problems and honest fixes, and keeps a saved one", async () => {
+    const s = service();
+
+    const refused = await s.request("/api/profile/pieces", s.json({ kind: "achievement", text: "Triaged 25 alerts a day." }));
+    const saved = await s.request("/api/profile/pieces", s.json({ kind: "achievement", text: "Triaged 25 alerts a day.", numberSource: "estimate" }));
+
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toEqual({ saved: false, problems: [{ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] }] });
+    expect(saved.status).toBe(201);
+    expect(s.preparation.profileSummary()).toMatchObject({ pieces: 1, confirmed: 1 });
+  });
+
+  it("only deletes a piece through a JSON request", async () => {
+    const s = service();
+    const saved = s.preparation.savePiece({ kind: "skill", text: "Python" });
+    if (!saved.saved) throw new Error("not saved");
+    const path = `/api/profile/pieces/${encodeURIComponent(saved.piece.id)}/delete`;
+
+    const form = await s.request(path, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const json = await s.request(path, s.json({}));
+
+    expect(form.status).toBe(415);
+    expect(await json.json()).toEqual({ deleted: true, untied: 0 });
+    expect(s.preparation.profileSummary().pieces).toBe(0);
+  });
+
+  it("exports the profile as a JSON file to download", async () => {
+    const s = service();
+    s.preparation.savePiece({ kind: "skill", text: "Python" });
+
+    const res = await s.request("/api/profile/export");
+
+    expect(res.headers.get("content-disposition")).toBe('attachment; filename="apply-kit-profile-2026-10-12.json"');
+    expect(await res.json()).toMatchObject({ format: "apply-kit master profile", pieces: [expect.objectContaining({ text: "Python" })] });
   });
 });

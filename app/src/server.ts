@@ -2,13 +2,14 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
+import type { CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, PreparationEngine, Scheduler } from "@apply-kit/core";
+import { mountProfileApi } from "./profile-api.ts";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
 
-export function createServer({ engine, scheduler, pairing, uiDir, port }: {
-  engine: DiscoveryEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string;
+export function createServer({ engine, preparation, scheduler, pairing, uiDir, port }: {
+  engine: DiscoveryEngine; preparation: PreparationEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string;
   /** The port the service listens on: only requests addressed to this machine on it are answered. */
   port: number;
 }) {
@@ -307,6 +308,9 @@ export function createServer({ engine, scheduler, pairing, uiDir, port }: {
     const check = await engine.getCoverageCheck(c.req.param("id"));
     return check ? c.json(check) : c.json({ error: "No such coverage check" }, 404);
   });
+
+  // Profile: the master profile's pieces, contact details, section counts and export.
+  mountProfileApi(app, preparation);
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
