@@ -7,7 +7,7 @@ import { createOpenRouterWriter } from "./openrouter.ts";
 const cv = { fileName: "mira-petrova-cv.pdf", text: "Mira Petrova\nSecurity Analyst, Northwind Bank, 2022–2025\nCut false positives by about a third." };
 
 const drafted: DraftedPieces = {
-  pieces: [{ kind: "achievement", text: "Cut false positives by about a third", quote: "Cut false positives by about a third." }],
+  pieces: [{ kind: "achievement", text: "Cut false positives by about a third", quote: "Cut false positives by about a third.", entry: null, role: null }],
 };
 
 /** A fetch that records the request and answers like OpenRouter's chat completions endpoint. Never touches the network. */

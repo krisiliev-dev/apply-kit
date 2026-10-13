@@ -29,6 +29,14 @@ export interface PdfTextReader {
   read(pdf: Uint8Array): Promise<PdfText>;
 }
 
+/**
+ * Reads the text off a scanned PDF's page images (text recognition), on this laptop. Scans misread,
+ * so pieces drafted from what it reads are marked "check this". Throws when it can't run here.
+ */
+export interface TextRecognizer {
+  recognise(pdf: Uint8Array): Promise<PdfText>;
+}
+
 export interface StoredFile {
   /** SHA-256 of the bytes, hex: also the file's name in the files folder. */
   sha256: string;
@@ -69,4 +77,8 @@ export interface PreparationDeps {
   packages: PackageFolder;
   /** Named settings. Missing means every setting is unset. */
   settings?: Settings;
+  /** For import: the public GitHub API and a portfolio page. Missing means links can't be read. */
+  fetch?: typeof fetch;
+  /** Text recognition for scanned PDFs. Missing means it isn't offered. */
+  recognizer?: TextRecognizer;
 }

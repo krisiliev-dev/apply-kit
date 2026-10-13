@@ -54,6 +54,10 @@ export interface ProfilePiece {
   numberSource: NumberSource | null;
   status: PieceStatus;
   source: PieceSource;
+  /** Other files that said the same, merged into this piece on import (see the import's merges). */
+  alsoFrom: PieceSource[];
+  /** Read by text recognition from a scan, which misreads: check it against the original. Cleared on Confirm. */
+  checkThis: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -75,6 +79,8 @@ export interface PieceOrigin {
   from: string;
   quote: string | null;
   status?: PieceStatus;
+  /** Read by text recognition (import): marked "check this". */
+  checkThis?: boolean;
 }
 
 /** The form field a problem belongs to; title, organisation, start and end are a role's or education's. */
@@ -152,6 +158,8 @@ export function entryLabel(e: PieceEntry): string {
 
 export interface ProfileStore {
   save(input: PieceInput, origin?: PieceOrigin): SavePieceResult;
+  /** Kris checked the piece: it becomes confirmed, once it passes every check a confirmed piece must. */
+  confirm(id: string): SavePieceResult;
   get(id: string): ProfilePiece | null;
   all(): ProfilePiece[];
   list(query?: PieceQuery): PieceList;
@@ -177,6 +185,9 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     numberSource: (r.number_source ?? null) as NumberSource | null,
     status: r.status as PieceStatus,
     source: { from: String(r.source_from), quote: r.source_quote == null ? null : String(r.source_quote) },
+    alsoFrom: db.prepare("SELECT source_from, source_quote FROM import_merge WHERE piece_id = ? ORDER BY id").all(String(r.id))
+      .map((m) => ({ from: String(m.source_from), quote: m.source_quote == null ? null : String(m.source_quote) })),
+    checkThis: Number(r.check_this ?? 0) === 1,
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   });
@@ -202,22 +213,42 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
       numberSource: quantities(input.text).length > 0 ? (input.numberSource ?? null) : null,
       status: before?.status ?? origin?.status ?? "confirmed",
       source: before?.source ?? (origin ? { from: origin.from, quote: origin.quote } : handSource),
+      alsoFrom: before?.alsoFrom ?? [],
+      checkThis: before?.checkThis ?? origin?.checkThis ?? false,
       createdAt: before?.createdAt ?? clock.now().toISOString(),
       updatedAt: clock.now().toISOString(),
     };
-    const problems = [...required(piece, input), ...check(piece)];
+    // A drafted piece waits for Kris: what only Kris can supply (the month, where a number comes from)
+    // is asked for when it's confirmed. Its numbers are checked against its quote all the same.
+    const strict = piece.status === "confirmed";
+    const problems = [...required(piece, input, strict), ...check(piece, strict)];
     if (problems.length > 0) return { saved: false, problems };
+    write(piece);
+    return { saved: true, piece };
+  }
+
+  function write(piece: ProfilePiece) {
     db.prepare(
-      `INSERT INTO profile_piece (id, kind, text, entry, belongs_to, tags, angles, number_source, status, source_from, source_quote, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO profile_piece (id, kind, text, entry, belongs_to, tags, angles, number_source, status, source_from, source_quote, check_this, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, text = excluded.text, entry = excluded.entry,
          belongs_to = excluded.belongs_to, tags = excluded.tags, angles = excluded.angles,
-         number_source = excluded.number_source, updated_at = excluded.updated_at`,
+         number_source = excluded.number_source, status = excluded.status, check_this = excluded.check_this,
+         updated_at = excluded.updated_at`,
     ).run(
       piece.id, piece.kind, piece.text, piece.entry ? JSON.stringify(piece.entry) : null, piece.belongsTo,
       JSON.stringify(piece.tags), JSON.stringify(piece.angles), piece.numberSource, piece.status,
-      piece.source.from, piece.source.quote, piece.createdAt, piece.updatedAt,
+      piece.source.from, piece.source.quote, piece.checkThis ? 1 : 0, piece.createdAt, piece.updatedAt,
     );
+  }
+
+  function confirm(id: string): SavePieceResult {
+    const before = get(id);
+    if (!before) return { saved: false, problems: [{ field: "kind", message: "This piece no longer exists. It may have been deleted.", fixes: [] }] };
+    const piece: ProfilePiece = { ...before, status: "confirmed", checkThis: false, updatedAt: clock.now().toISOString() };
+    const problems = [...required(piece, { ...piece }, true), ...check(piece, true)];
+    if (problems.length > 0) return { saved: false, problems };
+    write(piece);
     return { saved: true, piece };
   }
 
@@ -267,15 +298,15 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     };
   }
 
-  return { save, get, all, list, remove, summary };
+  return { save, confirm, get, all, list, remove, summary };
 }
 
 /** What every piece needs before it can be saved: its text, or a role's or education's facts. */
-function required(piece: ProfilePiece, input: PieceInput): PieceProblem[] {
+function required(piece: ProfilePiece, input: PieceInput, strict: boolean): PieceProblem[] {
   const problems: PieceProblem[] = [];
   const say = (field: PieceField, message: string) => problems.push({ field, message, fixes: [] });
   if (piece.kind === "achievement" && !piece.text) say("text", "Say what you did, in one sentence.");
-  if (piece.kind === "achievement" && piece.text.length > maxAchievementLength) {
+  if (strict && piece.kind === "achievement" && piece.text.length > maxAchievementLength) {
     say("text", `Keep it to one sentence of ${maxAchievementLength} characters or fewer; split a longer story into pieces.`);
   }
   if (piece.kind === "skill" && !piece.text) say("text", "Name the skill.");
@@ -284,6 +315,7 @@ function required(piece: ProfilePiece, input: PieceInput): PieceProblem[] {
     const e = piece.entry ?? cleanEntry({ title: "", organisation: "", city: null, start: "", end: null });
     if (!e.title) say("title", role ? "Give the role's title." : "Give the degree or course.");
     if (!e.organisation) say("organisation", role ? "Give the employer." : "Give the school.");
+    if (!strict) return problems;
     if (!MONTH.test(e.start)) say("start", "Give the start as a month and year.");
     if (e.end && !MONTH.test(e.end)) say("end", "Give the end as a month and year, or leave it empty if it's current.");
     else if (e.end && MONTH.test(e.start) && e.end < e.start) say("end", "The end can't be before the start.");
@@ -294,7 +326,7 @@ function required(piece: ProfilePiece, input: PieceInput): PieceProblem[] {
 }
 
 /** The honesty checks: every number in the text is one its source gives (within favourable rounding). */
-function check(piece: ProfilePiece): PieceProblem[] {
+function check(piece: ProfilePiece, strict: boolean): PieceProblem[] {
   const problems: PieceProblem[] = [];
   const quote = piece.source.quote;
   if (quote) {
@@ -315,7 +347,7 @@ function check(piece: ProfilePiece): PieceProblem[] {
       });
     }
   }
-  if (quantities(piece.text).length > 0 && !piece.numberSource) {
+  if (strict && quantities(piece.text).length > 0 && !piece.numberSource) {
     problems.push({ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] });
   }
   return problems;

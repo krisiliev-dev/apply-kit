@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
+import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -76,6 +77,29 @@ export interface PreparationEngine {
   removePhoto(): Promise<Contact>;
   /** Everything in Profile, for the one-click JSON export. */
   exportProfile(): Promise<ProfileExport>;
+  /**
+   * Kris checked a drafted piece and it's true: it becomes confirmed, once it has what a confirmed
+   * piece needs (months, where a number comes from); otherwise it comes back with the problems.
+   */
+  confirmPiece(id: string): SavePieceResult;
+  /**
+   * Imports old CVs (PDF, DOCX, TXT), the LinkedIn export, a GitHub profile and a portfolio page:
+   * files are copied into the file store, their text is read on this laptop, and only that text goes
+   * to the writer. Sources are read one after another; each one's pieces are in Profile, unconfirmed,
+   * as soon as it finishes, with near-duplicates merged into the piece already there. `done` resolves
+   * once every source has finished, couldn't be read, or waits for the budget.
+   */
+  startImport(input: ImportInput): Promise<StartImportResult>;
+  /** An import's progress and results (the latest one without an id); null if there's none. */
+  importStatus(id?: string): ImportStatus | null;
+  /** Stops reading: sources not started are cancelled, a draft in progress is dropped, finished pieces stay. */
+  cancelImport(id: string): ImportStatus | null;
+  /** Reads the sources that waited for the budget, or were cancelled or interrupted. */
+  resumeImport(id: string): ImportRun | null;
+  /** What to do with a source that couldn't be read: text recognition, a text version, try again, or skip. */
+  resolveUnreadable(itemId: string, choice: UnreadableChoice): Promise<ResolveResult>;
+  /** Every source an import merged into a piece already there ("See merges"). */
+  importMerges(id: string): ImportMerge[];
   /** One piece, for editing; null once it's deleted. */
   piece(id: string): ProfilePiece | null;
   /** The master profile grouped by role (roles, then education, then pieces tied to neither), filtered. */
@@ -93,6 +117,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   migrate(deps.db);
   const profile = createProfileStore(deps);
   const contact = createContactStore(deps);
+  const imports = createImportStore(deps, profile);
 
   async function draftDocument({ packageId, document, fileName: parts, keywords }: DraftRequest): Promise<DocumentDraft> {
     const fileName = documentFileName(document.kind, parts);
@@ -120,6 +145,13 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     demoDocument: (options) => draftDocument({ packageId: "demo", document: demoDocument(options), fileName: demoFileName }),
     savePiece: (input, origin) => profile.save(input, origin),
     deletePiece: (id) => profile.remove(id),
+    confirmPiece: (id) => profile.confirm(id),
+    startImport: (input) => imports.start(input),
+    importStatus: (id) => imports.status(id),
+    cancelImport: (id) => imports.cancel(id),
+    resumeImport: (id) => imports.resume(id),
+    resolveUnreadable: (itemId, choice) => imports.resolve(itemId, choice),
+    importMerges: (id) => imports.merges(id),
     piece: (id) => profile.get(id),
     listPieces: (query) => profile.list(query),
     profileSummary: () => profile.summary(),

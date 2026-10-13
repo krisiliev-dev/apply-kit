@@ -13,13 +13,25 @@ export interface ImportedText {
 
 /**
  * Pieces drafted from imported text, each with the quote it came from (copied word for word), for
- * Kris to check. The import ticket (#54) adds the fields a profile piece needs.
+ * Kris to check. A role or education entry carries its facts (months as "YYYY-MM", or "YYYY" when the
+ * text gives only the year); an achievement or skill names the role it sits under by its index in
+ * this list. Every field is present (null when unknown), as structured output requires.
  */
 export const draftedPiecesSchema = z.object({
   pieces: z.array(z.object({
     kind: z.enum(["role", "achievement", "skill", "education"]),
+    /** The achievement or skill; a role's or education's description (may be empty). */
     text: z.string(),
     quote: z.string(),
+    entry: z.object({
+      title: z.string(),
+      organisation: z.string(),
+      city: z.string().nullable(),
+      start: z.string(),
+      end: z.string().nullable(),
+    }).nullable(),
+    /** Index (in `pieces`) of the role or education entry this piece belongs to. */
+    role: z.number().int().nullable(),
   })),
 });
 export type DraftedPieces = z.infer<typeof draftedPiecesSchema>;

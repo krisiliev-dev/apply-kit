@@ -1,0 +1,8 @@
+{
+  "pieces": [
+    { "kind": "role", "text": "", "quote": "Northwind Bank, Security Analyst (Mar 2022 – now)", "entry": { "title": "Security Analyst", "organisation": "Northwind Bank", "city": null, "start": "2022-03", "end": null }, "role": null },
+    { "kind": "achievement", "text": "Reduced false positives by about a third through Splunk rule tuning.", "quote": "Reduced false positives by about a third through Splunk rule tuning", "entry": null, "role": 0 },
+    { "kind": "achievement", "text": "Trained 12 new analysts on alert triage.", "quote": "Trained 12 new analysts on alert triage", "entry": null, "role": 0 },
+    { "kind": "skill", "text": "Splunk", "quote": "Skills: Splunk, Python", "entry": null, "role": null }
+  ]
+}
