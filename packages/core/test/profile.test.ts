@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createTestPreparation } from "./preparation-harness.ts";
+import { createTestPreparation, memoryFileStore } from "./preparation-harness.ts";
 
 // The master profile through the preparation engine (ticket #53). Made-up person only: Mira Petrova.
 
@@ -116,7 +116,7 @@ describe("the honesty checks on saving a piece", () => {
         ],
       }],
     });
-    expect(t.preparation.listPieces().groups[0]!.pieces[0]!.text).toBe("Built 40 Splunk detections that cut false positives by about a third.");
+    expect(t.preparation.piece(drafted.piece.id)).toMatchObject({ text: "Built 40 Splunk detections that cut false positives by about a third.", source: imported });
   });
 
   it("won't save a piece with a number until it says where the number comes from", () => {
@@ -201,6 +201,107 @@ describe("what Profile needs from Kris", () => {
 
     expect(t.preparation.profileSummary()).toEqual({
       pieces: 0, confirmed: 0, needsYou: { masterProfile: 0, angles: 0, answerBank: 0, voice: 0 }, needsYouTotal: 0,
+    });
+  });
+});
+
+const mira = {
+  nameLatin: "Mira Petrova",
+  nameCyrillic: "Мира Петрова",
+  email: "mira.jobs@example.com",
+  phone: "+359 88 000 0199",
+  city: "Sofia",
+  country: "Bulgaria",
+  links: ["https://www.linkedin.com/in/mira-petrova-example", "https://github.com/mira-petrova-example"],
+};
+/** A tiny PNG's first bytes: enough to be read as a PNG. */
+const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+describe("contact details and links", () => {
+  it("starts empty, then keeps what Kris saves", () => {
+    const t = createTestPreparation();
+    expect(t.preparation.contact()).toEqual({
+      nameLatin: "", nameCyrillic: "", email: "", phone: "", city: "", country: "", links: [], photo: null,
+    });
+
+    const saved = t.preparation.saveContact({ ...mira, links: [...mira.links, "  ", mira.links[0]!] });
+
+    expect(saved).toEqual({ saved: true, contact: { ...mira, photo: null } });
+    expect(t.preparation.contact()).toEqual({ ...mira, photo: null });
+  });
+
+  it.each([
+    ["no Latin name", { nameLatin: " " }, "nameLatin", "Give your name in Latin script, as on your CV."],
+    ["a Latin name in Cyrillic", { nameLatin: "Мира Петрова" }, "nameLatin", "Use Latin letters here; your name in Cyrillic has its own field."],
+    ["an email that isn't one", { email: "mira.jobs" }, "email", "Give an email address like name@example.com."],
+    ["a link that isn't a web address", { links: ["mira-petrova"] }, "links", "\"mira-petrova\" isn't a web address. Start links with https://."],
+  ] as const)("refuses %s", (_, patch, field, message) => {
+    const t = createTestPreparation();
+
+    expect(t.preparation.saveContact({ ...mira, ...patch, links: [...("links" in patch ? patch.links : mira.links)] })).toEqual({ saved: false, problems: [{ field, message }] });
+    expect(t.preparation.contact().nameLatin).toBe("");
+  });
+
+  it("reads a link without https:// as a web address", () => {
+    const t = createTestPreparation();
+
+    const saved = t.preparation.saveContact({ ...mira, links: ["github.com/mira-petrova-example"] });
+
+    expect(saved).toMatchObject({ saved: true, contact: { links: ["https://github.com/mira-petrova-example"] } });
+  });
+
+  it("keeps an optional photo in the file store, replacing or removing the copy", async () => {
+    const t = createTestPreparation();
+    t.preparation.saveContact(mira);
+
+    const first = await t.preparation.setPhoto({ fileName: "mira.png", bytes: png });
+    const second = await t.preparation.setPhoto({ fileName: "mira-2024.png", bytes: new Uint8Array([...png, 4]) });
+    const stored = [...(t.files as ReturnType<typeof memoryFileStore>).files.keys()];
+    const removed = await t.preparation.removePhoto();
+
+    expect(first).toMatchObject({ saved: true, contact: { photo: { fileName: "mira.png", size: 11 } } });
+    expect(second).toMatchObject({ saved: true, contact: { nameLatin: "Mira Petrova", photo: { fileName: "mira-2024.png", size: 12 } } });
+    expect(stored).toEqual([second.saved && second.contact.photo!.sha256]);
+    expect(removed.photo).toBeNull();
+    expect((t.files as ReturnType<typeof memoryFileStore>).files.size).toBe(0);
+  });
+
+  it("refuses a photo that isn't a JPEG or PNG", async () => {
+    const t = createTestPreparation();
+
+    const result = await t.preparation.setPhoto({ fileName: "mira.heic", bytes: new Uint8Array([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]) });
+
+    expect(result).toEqual({ saved: false, problems: [{ field: "photo", message: "Use a JPEG or PNG photo. On a Mac, Preview can export one." }] });
+    expect(t.preparation.contact().photo).toBeNull();
+  });
+});
+
+describe("exporting the profile", () => {
+  it("returns every piece with its source, the contact details with the photo, and the list of sources", async () => {
+    const t = createTestPreparation();
+    t.preparation.saveContact(mira);
+    await t.preparation.setPhoto({ fileName: "mira.png", bytes: png });
+    t.preparation.savePiece({ kind: "skill", text: "Python" });
+    t.preparation.savePiece({ kind: "achievement", text: "Built 40 Splunk detections that cut false positives by about a third.", numberSource: "measured" }, imported);
+    t.preparation.savePiece({ kind: "skill", text: "Kubernetes" }, { from: "Halden Systems package", quote: "played with k3s once", status: "flagged" });
+
+    const exported = await t.preparation.exportProfile();
+
+    expect(exported).toEqual({
+      format: "apply-kit master profile",
+      version: 1,
+      exportedAt: "2026-10-12T07:30:00.000Z",
+      contact: { ...mira, photo: { fileName: "mira.png", sha256: expect.any(String), size: 11, base64: Buffer.from(png).toString("base64") } },
+      pieces: [
+        expect.objectContaining({ text: "Python", status: "confirmed", source: { from: "Added in Profile", quote: null } }),
+        expect.objectContaining({ text: "Built 40 Splunk detections that cut false positives by about a third.", numberSource: "measured", source: imported }),
+        expect.objectContaining({ text: "Kubernetes", status: "flagged", source: { from: "Halden Systems package", quote: "played with k3s once" } }),
+      ],
+      sources: [
+        { from: "Added in Profile", pieces: 1 },
+        { from: "mira-petrova-cv.pdf, page 1", pieces: 1 },
+        { from: "Halden Systems package", pieces: 1 },
+      ],
     });
   });
 });
