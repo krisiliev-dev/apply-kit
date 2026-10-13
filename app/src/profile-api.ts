@@ -1,5 +1,5 @@
 // Profile's API (ticket #53): the master profile's pieces, contact details and links with the
-// optional photo, the section counts behind the nav badge, and the one-click export. Mutations need a
+// optional photo, the section counts behind the nav badge, and the one-click export. Angles (#58). Mutations need a
 // JSON body, like the rest of the service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
 import { angles, numberSources, pieceKinds, type Angle, type NumberSource, type PieceEntry, type PieceInput, type PieceKind, type PreparationEngine } from "@apply-kit/core";
@@ -41,6 +41,26 @@ export function mountProfileApi(app: Hono, preparation: PreparationEngine): void
     if (!jsonOnly(c)) return c.json({ error: "Send Content-Type: application/json" }, 415);
     const result = preparation.deletePiece(c.req.param("id"));
     return result.deleted ? c.json(result) : c.json({ error: "No such piece. It may have been deleted already." }, 404);
+  });
+
+  app.get("/api/profile/angles", (c) => c.json(preparation.angles()));
+
+  // { summary?, leads? }: a new summary line, a new lead order (piece ids), or both.
+  app.put("/api/profile/angles/:angle", async (c) => {
+    const angle = c.req.param("angle");
+    if (!angles.includes(angle as Angle)) return c.json({ error: `Unknown angle "${angle}"` }, 404);
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    if (body.summary !== undefined && typeof body.summary !== "string") return c.json({ error: "summary must be text" }, 400);
+    if (body.leads !== undefined && (!Array.isArray(body.leads) || body.leads.some((l) => typeof l !== "string"))) {
+      return c.json({ error: "leads must be a list of piece ids" }, 400);
+    }
+    const result = preparation.saveAngle({
+      angle: angle as Angle,
+      ...(typeof body.summary === "string" && { summary: body.summary }),
+      ...(Array.isArray(body.leads) && { leads: body.leads as string[] }),
+    });
+    return c.json(result, result.saved ? 200 : 422);
   });
 
   app.get("/api/profile/contact", (c) => c.json(preparation.contact()));
