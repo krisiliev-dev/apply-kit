@@ -213,3 +213,48 @@ describe("adding and editing an answer", () => {
     expect(t.preparation.answer(saved.id)).toBeNull();
   });
 });
+
+describe("browsing the answer bank", () => {
+  /** Mira's bank: 12 answers, one used today, one used 100 days ago, the rest never used. */
+  async function bank() {
+    const t = createTestPreparation();
+    const old = add(t, { question: "Years of experience with Splunk", versions: { en: "3" }, category: "screening", kind: "number" });
+    t.preparation.recordAnswerUse(old.id);
+    await t.clock.advance(100 * 24 * 3600_000);
+    const today = add(t, noticePeriod);
+    t.preparation.recordAnswerUse(today.id);
+    for (let i = 1; i <= 10; i++) add(t, { question: `Screening question ${i}`, versions: { en: `Answer ${i}` }, category: i <= 2 ? "standard" : "screening" });
+    return t;
+  }
+
+  it("lists standard answers first, counts standard, screening and not used in 90 days, and pages the table", async () => {
+    const t = await bank();
+
+    const first = t.preparation.listAnswers({ pageSize: 5 });
+    const third = t.preparation.listAnswers({ pageSize: 5, page: 3 });
+
+    expect(first.counts).toEqual({ all: 12, standard: 3, screening: 9, notUsedIn90Days: 1 });
+    expect(first).toMatchObject({ total: 12, page: 1, pageSize: 5 });
+    expect(first.answers.map((a) => a.question)).toEqual(["Notice period", "Screening question 1", "Screening question 2", "Years of experience with Splunk", "Screening question 3"]);
+    expect(third.answers.map((a) => a.question)).toEqual(["Screening question 9", "Screening question 10"]);
+  });
+
+  it("filters by category, by not used in 90 days, and searches questions, wordings and answers", async () => {
+    const t = await bank();
+
+    expect(t.preparation.listAnswers({ category: "standard" }).answers.map((a) => a.question)).toEqual(["Notice period", "Screening question 1", "Screening question 2"]);
+    expect(t.preparation.listAnswers({ notUsedIn90Days: true }).answers.map((a) => a.question)).toEqual(["Years of experience with Splunk"]);
+    expect(t.preparation.listAnswers({ search: "предизвестие" }).answers.map((a) => a.question)).toEqual(["Notice period"]);
+    expect(t.preparation.listAnswers({ search: "answer 10" })).toMatchObject({ total: 1, counts: { all: 1, standard: 0, screening: 1, notUsedIn90Days: 0 } });
+  });
+
+  it("lists the portal edits waiting for Kris, whatever the filters", async () => {
+    const t = await bank();
+    const notice = t.preparation.listAnswers({ search: "Notice period" }).answers[0]!;
+    t.preparation.recordPortalEdit(notice.id, { language: "en", text: "2 weeks", portal: "Kestrel Payments Greenhouse form" });
+
+    const list = t.preparation.listAnswers({ category: "screening" });
+
+    expect(list.portalEdits).toEqual([expect.objectContaining({ id: notice.id, question: "Notice period", portalEdit: expect.objectContaining({ before: "1 month", text: "2 weeks" }) })]);
+  });
+});

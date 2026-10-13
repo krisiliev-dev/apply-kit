@@ -160,6 +160,33 @@ export interface PortalEditInput {
   jobId?: string | null;
 }
 
+export interface AnswerQuery {
+  category?: AnswerCategory;
+  /** Answers neither used nor added in the last 90 days. */
+  notUsedIn90Days?: boolean;
+  /** Matches the question, its wordings and its versions, ignoring case. */
+  search?: string;
+  /** From 1. */
+  page?: number;
+  pageSize?: number;
+}
+
+export interface AnswerList {
+  /** This page, standard answers first, then screening, each in the order they were added. */
+  answers: Answer[];
+  /** Answers matching the filters and search, over every page. */
+  total: number;
+  page: number;
+  pageSize: number;
+  /** Among answers matching the search, for the filter's counts. */
+  counts: { all: number; standard: number; screening: number; notUsedIn90Days: number };
+  /** Every answer with a portal edit waiting for "keep new or old", whatever the filters. */
+  portalEdits: Answer[];
+}
+
+export const answerPageSize = 10;
+const STALE_MS = 90 * 24 * 3600_000;
+
 const handSource: AnswerSource = { from: "Added in Profile", jobId: null, portal: null };
 const CYRILLIC = /\p{Script=Cyrillic}/u;
 export const languageOf = (text: string): AnswerLanguage => (CYRILLIC.test(text) ? "bg" : "en");
@@ -171,6 +198,7 @@ export interface AnswerStore {
   save(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
   get(id: string): Answer | null;
   remove(id: string): boolean;
+  list(query?: AnswerQuery): AnswerList;
   find(question: string, language: AnswerLanguage): AnswerMatch | null;
   history(id: string): AnswerChange[];
   recordUse(id: string): void;
@@ -299,6 +327,30 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     return true;
   }
 
+  function list(query: AnswerQuery = {}): AnswerList {
+    const answers = all().sort((a, b) => answerCategories.indexOf(a.category) - answerCategories.indexOf(b.category));
+    const staleBefore = clock.now().getTime() - STALE_MS;
+    const stale = (a: Answer) => new Date(a.lastUsedAt ?? a.createdAt).getTime() < staleBefore;
+    const q = query.search?.trim().toLowerCase();
+    const matching = answers.filter((a) => !q || [a.question, ...a.wordings.map((w) => w.text), ...Object.values(a.versions)].some((s) => s.toLowerCase().includes(q)));
+    const shown = matching.filter((a) => (!query.category || a.category === query.category) && (!query.notUsedIn90Days || stale(a)));
+    const pageSize = Math.max(1, Math.floor(query.pageSize ?? answerPageSize));
+    const page = Math.max(1, Math.floor(query.page ?? 1));
+    return {
+      answers: shown.slice((page - 1) * pageSize, page * pageSize),
+      total: shown.length,
+      page,
+      pageSize,
+      counts: {
+        all: matching.length,
+        standard: matching.filter((a) => a.category === "standard").length,
+        screening: matching.filter((a) => a.category === "screening").length,
+        notUsedIn90Days: matching.filter(stale).length,
+      },
+      portalEdits: answers.filter((a) => a.portalEdit),
+    };
+  }
+
   const needsYou = () => Number(db.prepare("SELECT COUNT(*) AS n FROM answer WHERE portal_edit IS NOT NULL").get()?.n ?? 0);
 
   function find(question: string, language: AnswerLanguage): AnswerMatch | null {
@@ -315,7 +367,7 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     return { answerId: answer.id, question: answer.question, matched, confidence, fill: fillFor(answer, language) };
   }
 
-  return { save, get, remove, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou };
+  return { save, get, remove, list, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou };
 }
 
 /** Questions a cover letter answers: written fresh for each job, never stored. */

@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
-import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, type AnswerLanguage, type AnswerMatch, type AnswerOrigin, type PortalEditInput, type SaveAnswerResult } from "./answers.ts";
+import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, type AnswerLanguage, type AnswerList, type AnswerMatch, type AnswerQuery, type AnswerOrigin, type PortalEditInput, type SaveAnswerResult } from "./answers.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
@@ -89,6 +89,8 @@ export interface PreparationEngine {
    * new answer came from (the job and the portal). A refused answer comes back with its problems.
    */
   saveAnswer(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
+  /** The answer bank's table: filtered, searched and paged, with the filter counts and the portal edits waiting for Kris. */
+  listAnswers(query?: AnswerQuery): AnswerList;
   /** Deletes an answer and its history; false if it was already gone. Approved packages keep their answers. */
   deleteAnswer(id: string): boolean;
   /** One answer, for editing; null once it's deleted. */
@@ -162,6 +164,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     saveAnswer: (input, origin) => answers.save(input, origin),
     answer: (id) => answers.get(id),
     deleteAnswer: (id) => answers.remove(id),
+    listAnswers: (query) => answers.list(query),
     findAnswer: (question, language) => answers.find(question, language),
     recordAnswerUse: (id) => answers.recordUse(id),
     recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
