@@ -3,7 +3,7 @@
 /* The sticky footer never covers the focused control (WCAG 2.4.11): main.ts keeps --foot-h at its height. */
 html { scroll-padding-bottom: var(--foot-h, calc(var(--s-10) * 3)) }
 body { margin: 0; background: var(--surface); color: var(--ink); font-family: var(--font-text); font-size: var(--fs-small); line-height: var(--lh-body) }
-.sp { min-height: 100vh; display: grid; grid-template-rows: auto auto 1fr auto; min-width: 0 }
+.sp { min-height: 100vh; display: flex; flex-direction: column; min-width: 0 }
 .sp h1 { font-family: var(--font-display); font-size: var(--fs-title); line-height: var(--lh-tight); font-weight: 600; margin: 0; overflow-wrap: anywhere }
 .sp p { margin: 0 }
 .sp :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
@@ -22,7 +22,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .sp-modes .segmented { display: flex }
 .sp-modes .segmented button { flex: 1; min-height: 36px }
 
-.sp-body { padding: var(--s-5); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
+.sp-body { flex: 1 0 auto; padding: var(--s-5); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
 .sp-foot { position: sticky; bottom: 0; padding: var(--s-4) var(--s-5); border-top: 1px solid var(--rule); background: var(--surface); display: grid; gap: var(--s-3) }
 .sp-foot .btn.primary { min-height: 44px; font-size: var(--fs-body) }
 .bound { font-size: var(--fs-caption); color: var(--ink-3) }
@@ -37,6 +37,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .ctx .job { font-family: var(--font-text); font-size: var(--fs-body) }
 .ctx .why { display: flex; gap: var(--s-2); align-items: flex-start; font-size: var(--fs-small); color: var(--ink-2) }
 .ctx .why .ico { width: 14px; height: 14px; margin-top: 3px; color: var(--met) }
+.ctx .why .ico.info { color: var(--ink-3) }
 .callout { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); font-size: var(--fs-small); color: var(--ink-2) }
 .callout b { color: var(--ink); font-weight: 600 }
 .callout .btn { justify-self: start }

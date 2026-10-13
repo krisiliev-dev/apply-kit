@@ -1,6 +1,7 @@
 // apply-kit's side panel (ADR 0005): one panel, two views, Fill this application and Capture, switched
 // in place. It's opened from the toolbar icon or the "Fill this page" command, which is also what lets
-// it read the tab Kris is on (activeTab), unless Kris allowed the six portals. Capture reads the page
+// it read the tab Kris is on (activeTab, for that site until the tab moves to another one), unless Kris
+// allowed the six portals. Capture reads the page
 // once on a click, asks apply-kit what it would add, and only "Add" stores anything (in apply-kit,
 // never here). Fill, for now, recognises the portal and the job from the tab's address and fills
 // nothing. The panel follows the tab Kris looks at only to update what it says; it never reads or
@@ -32,8 +33,8 @@ function button(label: string, onClick: () => void, cls = "btn", attrs: Record<s
   b.addEventListener("click", onClick);
   return b;
 }
-function svg(markup: string): HTMLElement {
-  const span = h("span", { class: "ico", "aria-hidden": "true" });
+function svg(markup: string, cls = ""): HTMLElement {
+  const span = h("span", { class: `ico ${cls}`.trim(), "aria-hidden": "true" });
   span.innerHTML = markup;
   return span;
 }
@@ -208,7 +209,7 @@ async function fill(tab: Awaited<ReturnType<typeof currentTab>>) {
   const ctx = h("div", { class: "ctx" },
     h("span", { class: "where" }, card.where),
     h("h1", { class: "job" }, card.job),
-    h("span", { class: "why" }, svg(state === "portal" && page.ref ? icons.check : icons.info), h("span", {}, card.why)),
+    h("span", { class: "why" }, state === "portal" && page.ref ? svg(icons.check) : svg(icons.info, "info"), h("span", {}, card.why)),
   );
 
   if (state === "not-portal") {
@@ -401,6 +402,8 @@ function tabChanged() {
 }
 browser.tabs.onActivated.addListener((info) => { if (info.windowId === windowId) tabChanged(); });
 browser.tabs.onUpdated.addListener((_id, change, tab) => { if (tab.active && tab.windowId === windowId && (change.url || change.title)) tabChanged(); });
+// A click on the toolbar icon grants activeTab on the tab (ADR 0005): look at it again.
+browser.action.onClicked.addListener((tab) => { if (tab.windowId === windowId) tabChanged(); });
 browser.commands.onCommand.addListener((command) => {
   if (command !== "fill-this-page" || connection?.state !== "ready") return;
   chosen = "fill";

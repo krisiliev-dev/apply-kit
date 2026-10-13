@@ -11,7 +11,7 @@ Fillers are tested against **saved synthetic portal pages** (HTML fixtures with 
 - **Popup only (as Capture shipped).** Rejected: a popup closes the moment Kris clicks into the portal, which happens on every page of a multi-step application, so needs-you questions and the field list would vanish while being answered.
 - **UI injected into the portal page (shadow DOM overlay).** Rejected: our UI would live inside a third-party page (its CSS, its focus traps, its bot detection), it disappears on every full page load, and it can't hold the paired connection.
 - **Declared content scripts on the six portal hosts.** Rejected: code would run on every portal page Kris opens, and the user-driven rule ("nothing happens without a click") would rest on discipline instead of on the manifest.
-- **`activeTab` only.** Not enough on its own: it's dropped on a full page load, doesn't reach cross-origin embedded forms (a Greenhouse form inside a company site), and it's unverified whether a side panel opened from the toolbar receives it. Kept for unknown sites; the first Apply ticket checks the side-panel behaviour and, if `activeTab` covers the portals, the optional permission request can be dropped.
+- **`activeTab` only.** Not enough on its own: it's dropped when the tab loads a page on another site (Workday's account redirect, a company page linking to its portal), and it doesn't reach cross-origin embedded forms (a Greenhouse form inside a company site). Kept for unknown sites and for Kris saying "Not now" to the portals (see "Verified: `activeTab` and the side panel" below).
 - **Filling from the service with a remote-controlled browser (Playwright).** Rejected: it would drive the user's sessions and meet bot protection, which PRODUCT.md rules out.
 
 ## Consequences
@@ -19,3 +19,21 @@ Fillers are tested against **saved synthetic portal pages** (HTML fixtures with 
 - The manifest gains `sidePanel` and `optional_host_permissions` for the six portal hosts; no install-time host permission is added.
 - Kris clicks once per portal page. That's the price of "never acts on its own" and is within the 10-minute budget.
 - Portal markup changes break fillers silently in the wild; the portal trial and "Report this field" (structure only, no values) feed new fixtures, and a field a filler can't handle falls back to needs-you, never to a guess.
+
+## Verified: `activeTab` and the side panel (ticket #37, 2026-10-13)
+
+Checked in Chrome for Testing 147 with the built extension, a throwaway profile and local pages only (the toolbar click driven through the DevTools protocol's `Extensions.triggerAction`, which grants `activeTab` to an ordinary action click: a control extension with `action.onClicked` + `executeScript` got access the same way):
+
+| How the panel is opened | Panel gets `activeTab` on the tab? |
+|---|---|
+| `sidePanel.setPanelBehavior({ openPanelOnActionClick: true })` | **No.** `tabs.query` shows no URL or title and `executeScript` is refused. A second click on the icon closes the panel |
+| `action.onClicked` → `sidePanel.open({ windowId })` (what apply-kit does) | **Yes**: the panel sees the tab's URL and title and can inject |
+
+With the panel opened from `action.onClicked`, the grant then:
+
+- survives same-document navigation (`pushState`, how Workday, Ashby and Workable move between steps) and full page loads on the **same site**;
+- is dropped when the tab loads a page on **another site**; clicking the icon again with the panel open keeps the panel open and grants access to the new site;
+- is also granted by the "Fill this page" command (Chrome's documented behaviour for `commands`; not driven in this check, since the protocol can't press extension shortcuts).
+
+So: the extension opens its panel from `action.onClicked` (not `openPanelOnActionClick`), and the panel re-reads the tab when the icon is clicked again. `activeTab` covers a portal for as long as the tab stays on that portal's site, which is most of an application; the optional host permission is kept for the cross-site cases (account redirects, a company page that opens its portal, embedded forms) and so that Kris doesn't have to click the icon after each of those.
+

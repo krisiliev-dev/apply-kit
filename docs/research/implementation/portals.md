@@ -117,7 +117,7 @@ Every filler extracts a **portal job reference** `{ ats, board/tenant, jobId }` 
 
 ## 5. Open questions to settle in the first tickets
 
-1. Does the side panel opened from the toolbar get `activeTab` on the current tab? (Decides whether the generic fallback works without the keyboard shortcut.)
-2. Does `activeTab` survive Workday's step changes on every tenant (same-document) and the account-creation redirect?
+1. Does the side panel opened from the toolbar get `activeTab` on the current tab? (Decides whether the generic fallback works without the keyboard shortcut.) **Answered in ADR 0005** (ticket #37): not when opened with `openPanelOnActionClick`; yes when the extension opens it from `action.onClicked`, which is what apply-kit does.
+2. Does `activeTab` survive Workday's step changes on every tenant (same-document) and the account-creation redirect? Partly answered in ADR 0005: it survives same-document steps and full loads on the same site, and is dropped on a load on another site; the real tenants are for the portal trial.
 3. Which Workday tenants used by Sofia employers (Bosch, A1, Kestrel-like banks) require email verification before the application?
 4. Does Greenhouse's new board accept a `DataTransfer` file on `#resume` without a drop event?
