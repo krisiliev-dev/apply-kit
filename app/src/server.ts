@@ -6,6 +6,7 @@ import type {
   CapturedPage, CoverageInput, DiscoveryEngine, DocumentKind, DocumentLanguage, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting,
   PreparationEngine, Scheduler,
 } from "@apply-kit/core";
+import { mountProfileApi } from "./profile-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
 const documentLanguages: DocumentLanguage[] = ["en", "bg"];
@@ -337,6 +338,9 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
     if (draft instanceof Response) return draft;
     return c.json({ ...draft, pdf: undefined });
   });
+
+  // Profile: the master profile's pieces, contact details, section counts and export.
+  if (preparation) mountProfileApi(app, preparation);
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

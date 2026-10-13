@@ -235,6 +235,35 @@ const migrations: string[] = [
   // by lookup instead of re-reading every Posting's link. Filled for older Postings on start (backfillLinkKeys).
   `ALTER TABLE posting ADD COLUMN link_key TEXT;
    CREATE INDEX posting_link_key ON posting(link_key);`,
+  // #53: the master profile (ADR 0003). Each profile piece with its tags and angles (JSON lists), the
+  // role or education entry it belongs to, where a number in it comes from, its status and its source
+  // (the file or conversation it came from and the quote, kept word for word). `entry` (JSON) holds a
+  // role's or education's title, organisation, city and months. Contact details are one row (JSON),
+  // with the optional photo kept in the file store under its SHA-256.
+  `CREATE TABLE profile_piece (
+     id TEXT PRIMARY KEY,
+     kind TEXT NOT NULL,
+     text TEXT NOT NULL,
+     entry TEXT,
+     belongs_to TEXT,
+     tags TEXT NOT NULL,
+     angles TEXT NOT NULL,
+     number_source TEXT,
+     status TEXT NOT NULL,
+     source_from TEXT NOT NULL,
+     source_quote TEXT,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE INDEX profile_piece_belongs_to ON profile_piece(belongs_to);
+   CREATE TABLE profile_contact (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     details TEXT NOT NULL,
+     photo_sha256 TEXT,
+     photo_name TEXT,
+     photo_size INTEGER,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

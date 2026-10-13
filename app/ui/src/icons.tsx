@@ -1,7 +1,7 @@
 // State icons from the hi-fi screens. No state is shown by colour alone (DESIGN.md principle 5).
 import type { ReactNode } from "react";
 
-export type IconName = "met" | "partly" | "gap" | "ask" | "unknown" | "info" | "target";
+export type IconName = "met" | "partly" | "gap" | "ask" | "unknown" | "info" | "target" | "line" | "lock";
 
 const paths: Record<IconName, ReactNode> = {
   met: <path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />,
@@ -30,6 +30,19 @@ const paths: Record<IconName, ReactNode> = {
     <>
       <circle cx="6" cy="6" r="4.4" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <circle cx="6" cy="6" r="1.7" fill="currentColor" />
+    </>
+  ),
+  // Near the honesty line: a warning triangle.
+  line: (
+    <>
+      <path d="M6 1.5 11 10.5H1z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M6 5v2.4M6 8.9v.1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="2.5" y="5.2" width="7" height="5" rx="1" fill="none" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M4 5.2V4a2 2 0 0 1 4 0v1.2" fill="none" stroke="currentColor" strokeWidth="1.3" />
     </>
   ),
 };

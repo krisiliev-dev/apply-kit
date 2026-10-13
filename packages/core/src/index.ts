@@ -34,6 +34,7 @@ export type { LdJobPosting } from "./capture/jsonld.ts";
 export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts";
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
+export { angles } from "./fit/angles.ts";
 export type { Angle } from "./fit/angles.ts";
 export type { Place, LocationTier } from "./locations.ts";
 export { defaultSearchSettings } from "./search-settings.ts";
@@ -53,6 +54,13 @@ export { draftedPiecesSchema } from "./writing/writer.ts";
 export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces } from "./writing/writer.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft } from "./preparation/engine.ts";
+export type { ProfileExport } from "./preparation/engine.ts";
+export { pieceKinds, numberSources, entryLabel, unattachedGroupLabel, maxAchievementLength } from "./preparation/profile.ts";
+export type {
+  ProfilePiece, PieceKind, PieceStatus, NumberSource, PieceEntry, PieceSource, PieceInput, PieceOrigin, PieceField, PieceFix,
+  PieceProblem, SavePieceResult, PieceQuery, PieceGroup, PieceList, DeletedPiece, ProfileSummary,
+} from "./preparation/profile.ts";
+export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
   PdfTextReader, PdfText, FileStore, StoredFile, PackageFolder,

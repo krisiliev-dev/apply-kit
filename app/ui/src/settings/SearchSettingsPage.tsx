@@ -32,7 +32,7 @@ const draftOf = (s: SearchSettings): Draft => ({
 });
 
 /**
- * Dealbreakers & search: the minimal search-settings form (until onboarding builds the full
+ * Dealbreakers & search (Profile's last section, under Profile's h1): the minimal search-settings form (until onboarding builds the full
  * profile), every rule changed from the Feed with "Not a dealbreaker for me", and every ranking
  * adjustment learned from Kris (pass reasons, Show this job, boosts), each undoable.
  */
@@ -144,7 +144,7 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
     <section className="stack" style={{ gap: "var(--s-7)" }}>
       <div className="page-head">
         <div className="lead">
-          <h1>Dealbreakers and search</h1>
+          <h2>Dealbreakers and search</h2>
           <p className="meta">What the Feed ranks by and what it hides. Hidden jobs always keep their reason and are never deleted.</p>
         </div>
         <span className="grow" />
