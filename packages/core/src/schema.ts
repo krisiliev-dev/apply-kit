@@ -306,6 +306,30 @@ const migrations: string[] = [
      bytes BLOB NOT NULL,
      attached_at TEXT NOT NULL
    );`,
+  // Track #29: follow-ups. One per stage of an Application, tied to the Event that began the stage
+  // (`started_by`), so a Status change leaves it behind and undoing that change brings it back. Its
+  // state (sent, skipped, snoozed) comes from the Events that name it (`follow_up_id`; a snooze keeps
+  // the day in `due_on`). The text is kept as the user types it. The delays are settings (one row).
+  `CREATE TABLE follow_up (
+     id TEXT PRIMARY KEY,
+     application_id TEXT NOT NULL REFERENCES application(id),
+     kind TEXT NOT NULL,
+     stage TEXT NOT NULL,
+     started_by TEXT NOT NULL REFERENCES application_event(id),
+     anchor_on TEXT NOT NULL,
+     text TEXT NOT NULL DEFAULT '',
+     text_saved_at TEXT,
+     created_at TEXT NOT NULL,
+     UNIQUE (started_by, kind)
+   );
+   CREATE INDEX follow_up_app ON follow_up(application_id);
+   ALTER TABLE application_event ADD COLUMN follow_up_id TEXT REFERENCES follow_up(id);
+   ALTER TABLE application_event ADD COLUMN due_on TEXT;
+   CREATE TABLE track_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     value TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
