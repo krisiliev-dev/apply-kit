@@ -125,21 +125,49 @@ A piece of the user's own writing used to match their voice.
 ## After applying
 
 **Application**:
-A package that has been submitted for a job.
+A Job the user has applied to, with a Status: created when a Package is marked submitted, when the user presses "I applied" on a Job, or when the user adds one by hand (for applications made outside apply-kit). At most one open Application per Job.
 _Avoid_: Package (once submitted), submission
 
 **Status**:
-Where an application stands: applied, screening, interviewing, offer, accepted, rejected or withdrawn.
+Where an application stands: applied, screening, interviewing, offer, accepted, rejected or withdrawn. Rejected and withdrawn are closed; declining an offer is withdrawn. A Status changes only through an Event, caused by the user or by a matched email.
 _Avoid_: Stage, progress (for a single application)
 
 **Event**:
-Something that happened to an application, such as an email, a status change or a note.
+Something that happened to an application, such as a matched email, a status change, a follow-up marked sent, an interview or a note. Every Event names its cause: by email, by you, or by apply-kit.
 _Avoid_: Activity, update
 
+**Matched email**:
+An email from the job mailbox tied to one application, with its kind (confirmation, rejection, interview invitation, offer, request for information or other) and the signals it matched on. A low-confidence match never changes anything until the user picks the application.
+_Avoid_: Linked email, parsed email
+
+**Reply**:
+An email from the employer that is a human response to an application: a rejection, an invitation, a request for information or an offer. An automatic confirmation is not a reply.
+_Avoid_: Response (unqualified), answer
+
+**Response rate**:
+Replies divided by applications at least 14 days old. Rejections count as replies.
+_Avoid_: Success rate, conversion
+
 **Follow-up**:
-A due reminder to nudge an application after a status change.
+A due action on an application that the user carries out themselves: a nudge after applying, a thank-you note after an interview, a check-in after interviews go quiet, a note to self after an offer, or a withdrawal note. Usually comes with a draft; done when the user marks it sent (or done).
 _Avoid_: Reminder (unqualified), chaser
 
+**Mark sent**:
+The user telling apply-kit that they sent a drafted message from their own mail. apply-kit never sends mail itself.
+_Avoid_: Send, auto-send
+
+**Interview**:
+A scheduled conversation with an employer for one application, with its time, format, people and round. Its start time anchors the thank-you note, due within 24 hours.
+_Avoid_: Meeting, call (when meaning a recorded interview)
+
+**Prep sheet**:
+A light, per-application page for an interview: company facts with their source, and likely questions mapped to the posting's requirements and to true stories from the master profile. Never writes a story the user doesn't have.
+_Avoid_: Interview coaching, interview guide
+
+**Needs you**:
+The short queue at the top of Applications of things only the user can do now: a follow-up or thank-you due, an email to match, an upcoming interview, an offer to answer, a withdrawal to send.
+_Avoid_: Inbox, notifications, to-do
+
 **Stats**:
-The user's overall numbers across applications, such as applications per week, response rate and what is working.
+The user's overall numbers across applications: applications per week, response rate, interviews, and what is working by angle, source and CV version.
 _Avoid_: Progress, analytics, insights

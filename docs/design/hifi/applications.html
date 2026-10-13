@@ -1,0 +1,591 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Applications · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../../../app/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../app/ui/src/styles/components.css">
+<link rel="stylesheet" href="track.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · Applications</span>
+  <a href="index.html">All hi-fi screens</a>
+  <a href="application.html">Application page</a>
+  <div class="states" role="group" aria-label="Show state"></div>
+</div>
+
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
+    <nav class="nav" aria-label="Main">
+      <a href="feed.html">Feed</a>
+      <a href="applications.html" aria-current="page">Applications<span class="badge" aria-hidden="true" id="nav-badge">4</span><span class="sr-only" id="nav-badge-sr">, 4 need you</span></a>
+      <a href="../wireframes/profile.html">Profile</a>
+      <a href="sources.html">Settings</a>
+    </nav>
+    <span class="grow"></span>
+    <a class="health" id="health" href="sources.html"><i aria-hidden="true"></i><span id="health-text">All sources working · mail read 07:30</span></a>
+  </header>
+
+  <main class="main" id="main" tabindex="-1">
+
+    <!-- ================= NORMAL ================= -->
+    <section data-state="normal" data-state-name="Normal · 39" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">39 since 17 Aug · 27 open · mail read 07:30, next read 08:00</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div data-stats="normal"></div>
+      <section class="stack" aria-labelledby="ny-normal" style="gap:var(--s-4)">
+        <div class="sec-head"><h2 id="ny-normal">Needs you · 4</h2><span class="meta">Most urgent first</span></div>
+        <ul class="queue">
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">FOLLOW-UP DUE TODAY</span><span class="what"><a href="application.html#followup">Application Security Engineer · Tidewater Pay</a></span><span class="why">Applied 7 days ago (Tue 6 Oct), no reply since the confirmation. A draft is ready: 84 words, in your voice.</span></div>
+            <div class="acts"><button class="btn primary sm" type="button" data-open="fu-dlg">Review draft</button><button class="btn sm" type="button" data-snooze="Tidewater Pay">Snooze 3 days</button></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">THANK-YOU NOTE · DUE TODAY 16:00</span><span class="what"><a href="application.html#thanks">Cloud Security Engineer · Ostwind Cloud</a></span><span class="why">Your interview with Ivo Marinov was yesterday at 16:00. Thank-you notes are due within 24 hours. A draft mentions the IAM drift question you discussed.</span></div>
+            <div class="acts"><a class="btn primary sm" href="application.html#thanks">Review draft</a><button class="btn sm" type="button" data-skip-thanks>No note this time</button></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">EMAIL TO MATCH · TODAY 09:14</span><span class="what">"Interview invitation" from talent@nimbus.io</span><span class="why">It looks like an interview invitation, but no Application is with Nimbus. Nothing has changed until you choose.</span></div>
+            <div class="acts"><a class="btn primary sm" href="#low-confidence">Choose application</a></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">INTERVIEW · THU 15 OCT, 14:00</span><span class="what"><a href="application.html#interview">Full-stack Engineer (React, Node) · Medora</a></span><span class="why">Video call with Mara Ivanova, engineering manager. Prep sheet ready: 8 likely questions, 6 matched to your stories, 2 to prepare.</span></div>
+            <div class="acts"><a class="btn sm" href="application.html#interview">Open prep sheet</a><a class="btn ghost sm" href="#" download>Add to calendar</a></div>
+          </li>
+        </ul>
+        <p class="coming"><span><b>Coming up:</b> Rilo Freight recruiter call Wed 14 Oct 11:00 · Ardent Labs follow-up Wed 14 Oct</span></p>
+      </section>
+      <div data-list="normal"></div>
+    </section>
+
+    <!-- ================= ONE APPLICATION ================= -->
+    <section data-state="one" data-state-name="One application" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">1 since today · mail read 07:30</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div data-stats="one"></div>
+      <div class="calm">
+        <h2 class="sr-only">Needs you</h2>
+        <h3>Nothing needs you yet</h3>
+        <p class="muted">Your first Application is in. If Tidewater Pay hasn't replied by <b>Tue 20 Oct</b>, a follow-up draft will be waiting here. Replies to the job mailbox are matched to it automatically.</p>
+      </div>
+      <div data-list="one"></div>
+    </section>
+
+    <!-- ================= NO APPLICATIONS ================= -->
+    <section data-state="empty" data-state-name="No applications" class="stack" style="gap:var(--s-7)">
+      <div class="empty">
+        <svg viewBox="0 0 120 48" width="120" height="48" aria-hidden="true"><path d="M2 46 32 12l18 20 14-14 26 28z" fill="var(--met-soft)" stroke="var(--action)" stroke-width="2" stroke-linejoin="round"/><circle cx="96" cy="10" r="5" fill="var(--bloom)"/></svg>
+        <h1>No applications yet</h1>
+        <p>An Application appears here when you mark a Package submitted, press <b>I applied</b> on a Job, or add one by hand. From then on, replies in the job mailbox are matched to it and move its Status, and follow-ups come due on their own.</p>
+        <div class="row"><a class="btn primary" href="feed.html">Find a job in the Feed</a><button class="btn" type="button" data-open="add-dlg">Add an application from before</button></div>
+        <p class="meta">Applied somewhere before apply-kit? Add it so replies to it are matched instead of asked about.</p>
+      </div>
+    </section>
+
+    <!-- ================= LOADING ================= -->
+    <section data-state="loading" data-state-name="Reading mail" class="stack" style="gap:var(--s-7)" aria-busy="false">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta" aria-live="polite"><span class="spin" aria-hidden="true"></span> Reading the job mailbox for replies… The list below is from 07:30 and stays usable.</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div class="strip" aria-hidden="true">
+        <div class="tile"><span class="skel w40"></span><span class="skel tall"></span></div>
+        <div class="tile"><span class="skel w60"></span><span class="skel w40" style="height:28px"></span><span class="skel w80"></span></div>
+        <div class="tile"><span class="skel w60"></span><span class="skel w40" style="height:28px"></span><span class="skel w80"></span></div>
+        <div class="tile"><span class="skel w40"></span><span class="skel w90"></span><span class="skel w80"></span><span class="skel w60"></span></div>
+      </div>
+      <section class="stack" style="gap:var(--s-4)" aria-labelledby="ny-loading">
+        <div class="sec-head"><h2 id="ny-loading">Needs you</h2><span class="meta">Updating…</span></div>
+        <div class="needs wide" aria-hidden="true"><div class="stack"><span class="skel w30"></span><span class="skel w60"></span><span class="skel w90"></span></div></div>
+        <div class="needs wide" aria-hidden="true"><div class="stack"><span class="skel w30"></span><span class="skel w60"></span><span class="skel w80"></span></div></div>
+      </section>
+      <div data-list="loading"></div>
+    </section>
+
+    <!-- ================= MAILBOX NOT CONNECTED ================= -->
+    <section data-state="no-mailbox" data-state-name="Mailbox not connected" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">39 since 17 Aug · 27 open · replies aren't being read</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div class="banner warning">
+        <span class="text"><b>The job mailbox isn't connected, so replies aren't matched.</b> Everything else works: Applications, Status changes, follow-ups and stats. Set GMAIL_ADDRESS and GMAIL_APP_PASSWORD in .env and restart apply-kit; it then reads the last 30 days of mail once and matches what it finds.</span>
+        <a class="btn sm" href="sources.html">Mailbox settings</a>
+      </div>
+      <div data-stats="no-mailbox"></div>
+      <section class="stack" style="gap:var(--s-4)" aria-labelledby="ny-nomail">
+        <div class="sec-head"><h2 id="ny-nomail">Needs you · 2</h2><span class="meta">Date-based items only until mail is connected</span></div>
+        <ul class="queue">
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">FOLLOW-UP DUE TODAY</span><span class="what"><a href="application.html#followup">Application Security Engineer · Tidewater Pay</a></span><span class="why">Applied 7 days ago. apply-kit can't see replies right now, so check your inbox for one before sending.</span></div>
+            <div class="acts"><button class="btn primary sm" type="button" data-open="fu-dlg">Review draft</button><button class="btn sm" type="button" data-snooze="Tidewater Pay">Snooze 3 days</button></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">INTERVIEW · THU 15 OCT, 14:00</span><span class="what"><a href="application.html#interview">Full-stack Engineer (React, Node) · Medora</a></span><span class="why">Prep sheet ready.</span></div>
+            <div class="acts"><a class="btn sm" href="application.html#interview">Open prep sheet</a></div>
+          </li>
+        </ul>
+      </section>
+      <div data-list="no-mailbox"></div>
+    </section>
+
+    <!-- ================= MAILBOX FAILING ================= -->
+    <section data-state="mail-failing" data-state-name="Mailbox sign-in failed" class="stack" style="gap:var(--s-7)">
+      <div class="banner error">
+        <span class="text"><b>apply-kit can't read the job mailbox since Sat 10 Oct, 21:00.</b> Gmail refused the app password. Nothing is lost: mail keeps arriving there, and apply-kit reads everything since Saturday once you fix it. Create a new app password for the job mailbox's Google account (myaccount.google.com/apppasswords), put it in GMAIL_APP_PASSWORD in .env and restart apply-kit.</span>
+        <a class="btn sm" href="sources.html">Mailbox health</a>
+      </div>
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">39 since 17 Aug · 27 open · replies since Sat 21:00 not read yet</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div data-stats="mail-failing"></div>
+      <section class="stack" style="gap:var(--s-4)" aria-labelledby="ny-fail">
+        <div class="sec-head"><h2 id="ny-fail">Needs you · 2</h2><span class="meta">Date-based items only until the mailbox is back</span></div>
+        <ul class="queue">
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">FOLLOW-UP DUE TODAY</span><span class="what"><a href="application.html#followup">Application Security Engineer · Tidewater Pay</a></span><span class="why">Applied 7 days ago. A reply since Saturday wouldn't be visible yet, so check your inbox before sending.</span></div>
+            <div class="acts"><button class="btn primary sm" type="button" data-open="fu-dlg">Review draft</button><button class="btn sm" type="button" data-snooze="Tidewater Pay">Snooze 3 days</button></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">THANK-YOU NOTE · DUE TODAY 16:00</span><span class="what"><a href="application.html#thanks">Cloud Security Engineer · Ostwind Cloud</a></span><span class="why">Interview yesterday at 16:00. Drafts don't need the mailbox.</span></div>
+            <div class="acts"><a class="btn primary sm" href="application.html#thanks">Review draft</a></div>
+          </li>
+        </ul>
+      </section>
+      <div data-list="mail-failing"></div>
+    </section>
+
+    <!-- ================= LOW-CONFIDENCE MATCH ================= -->
+    <section data-state="low-confidence" data-state-name="Email to match" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">39 since 17 Aug · 27 open · mail read 09:30</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div data-stats="normal"></div>
+      <section class="stack" style="gap:var(--s-4)" aria-labelledby="ny-low">
+        <div class="sec-head"><h2 id="ny-low">Needs you · 1</h2></div>
+        <div class="needs wide">
+          <form class="stack" style="gap:var(--s-5)" id="match-form">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">EMAIL TO MATCH · TODAY 09:14</span><span class="what">"Interview invitation" from talent@nimbus.io</span></div>
+            <div class="quote"><span class="where">Nina Petrova &lt;talent@nimbus.io&gt; · to the job mailbox</span><span>"Hi Kris, thanks for your interest in the Platform Security Engineer role. We'd love to invite you to a 45-minute video interview. Could you share a few times that work next week?"</span></div>
+            <p class="why">It reads like an <b>interview invitation</b> (would move an Application to Interviewing), but nimbus.io hasn't written before and no Application is with Nimbus. That's too important to guess, so nothing has changed.</p>
+            <fieldset aria-describedby="match-err">
+              <legend>Which application is it about?</legend>
+              <label class="opt"><input type="radio" name="m" value="ostwind"><span>Cloud Security Engineer · Ostwind Cloud <span class="meta">Closest guess: Ostwind's posting says "part of the Nimbus group"</span></span></label>
+              <label class="opt"><input type="radio" name="m" value="tidewater"><span>Application Security Engineer · Tidewater Pay <span class="meta">Similar title, different domain</span></span></label>
+              <label class="opt"><input type="radio" name="m" value="search"><span>Another application… <span class="meta">Search all 39</span></span></label>
+              <label class="opt"><input type="radio" name="m" value="new"><span>A new Application: Platform Security Engineer · Nimbus <span class="meta">Applied outside apply-kit or through a recruiter</span></span></label>
+              <label class="opt"><input type="radio" name="m" value="none"><span>Not about an application <span class="meta">Keep the email, change nothing</span></span></label>
+            </fieldset>
+            <p class="err" id="match-err" role="alert" hidden style="color:var(--gap);font-size:var(--fs-small);font-weight:500">Choose where this email belongs first.</p>
+            <div class="row"><button class="btn primary" type="submit" data-match="move">Match and move to Interviewing</button><button class="btn" type="submit" data-match="keep">Match, keep the Status</button><a class="btn ghost" href="#">Open full email</a></div>
+            <p class="meta">Your choice is remembered: later mail from nimbus.io goes to the same Application without asking, and you can undo the match from its timeline.</p>
+          </form>
+        </div>
+      </section>
+      <div data-list="low-confidence"></div>
+    </section>
+
+    <!-- ================= FOLLOW-UP DUE (draft dialog) ================= -->
+    <section data-state="followup" data-state-name="Follow-up due · draft" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">39 since 17 Aug · 27 open · mail read 07:30</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="fu-dlg">Reopen the draft</button>
+      </div>
+      <p class="muted">The draft dialog opens over the list from "Review draft" in Needs you.</p>
+      <div data-list="followup"></div>
+    </section>
+
+    <!-- ================= OFFER ================= -->
+    <section data-state="offer" data-state-name="Offer received" class="stack" style="gap:var(--s-7)">
+      <p class="meta">Illustrative: the same list two weeks later, Wed 28 Oct.</p>
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">47 since 17 Aug · 29 open · mail read 16:45</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div data-stats="offer"></div>
+      <section class="stack" style="gap:var(--s-4)" aria-labelledby="ny-offer">
+        <div class="sec-head"><h2 id="ny-offer">Needs you · 2</h2></div>
+        <ul class="queue">
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">OFFER · RESPOND BY FRI 6 NOV</span><span class="what"><a href="application.html#offer">Detection Engineer · Ardent Labs</a></span><span class="why">Matched from Lea Hristova's email at 16:40, offer letter (PDF) kept. Check the details against the letter, then accept or decline when you're ready. Nothing is sent for you.</span></div>
+            <div class="acts"><a class="btn primary sm" href="application.html#offer">Open offer</a></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">FOLLOW-UP DUE TODAY</span><span class="what"><a href="application.html#followup">Platform Engineer · Velta Logistics</a></span><span class="why">Applied 20 days ago, no reply. You snoozed this once.</span></div>
+            <div class="acts"><button class="btn primary sm" type="button" data-open="fu-dlg">Review draft</button><button class="btn sm" type="button" data-snooze="Velta Logistics">Snooze 3 days</button></div>
+          </li>
+        </ul>
+      </section>
+      <div data-list="offer"></div>
+    </section>
+
+    <!-- ================= 200 APPLICATIONS ================= -->
+    <section data-state="many" data-state-name="214 applications" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">214 since 3 Jun · 61 open · mail read 07:30</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <div data-stats="many"></div>
+      <section class="stack" style="gap:var(--s-4)" aria-labelledby="ny-many">
+        <div class="sec-head"><h2 id="ny-many">Needs you · 9</h2><span class="meta">Same kinds grouped</span></div>
+        <ul class="queue">
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">6 FOLLOW-UPS DUE · OLDEST TUE 6 OCT</span><span class="what">Tidewater Pay, Velta Logistics, Lumio Maps and 3 more</span><span class="why">Drafts are ready for all six. You review and send each one yourself; "Next" moves to the following draft.</span></div>
+            <div class="acts"><button class="btn primary sm" type="button" data-open="fu-dlg" data-of="6">Review 6 drafts</button><button class="btn sm" type="button" data-snooze="6 follow-ups">Snooze all 3 days</button></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">2 EMAILS TO MATCH</span><span class="what">From talent@nimbus.io and noreply@hire.example-ats.com</span><span class="why">Neither could be matched confidently. Nothing has changed.</span></div>
+            <div class="acts"><a class="btn primary sm" href="#low-confidence">Match 2 emails</a></div>
+          </li>
+          <li class="needs">
+            <div class="stack" style="gap:var(--s-1)"><span class="kind">INTERVIEW · THU 15 OCT, 14:00</span><span class="what"><a href="application.html#interview">Full-stack Engineer (React, Node) · Medora</a></span><span class="why">Prep sheet ready.</span></div>
+            <div class="acts"><a class="btn sm" href="application.html#interview">Open prep sheet</a></div>
+          </li>
+        </ul>
+      </section>
+      <div data-list="many"></div>
+    </section>
+
+    <!-- ================= ERROR ================= -->
+    <section data-state="error" data-state-name="Error" class="stack" style="gap:var(--s-7)">
+      <div class="page-head"><div class="lead"><h1>Applications</h1></div></div>
+      <div class="banner error" role="alert">
+        <span class="text"><b>Applications couldn't load: the apply-kit service didn't answer.</b> Your Applications are safe in the database; this page just couldn't reach it. If the service was stopped, it restarts at your next login, or start it from the Terminal with <kbd>pnpm start</kbd>.</span>
+        <button class="btn sm" type="button" id="retry">Try again</button>
+      </div>
+      <div class="empty" style="border-style:solid">
+        <h2>Nothing to show until the service answers</h2>
+        <p>Follow-ups don't go missing in the meantime: they come due by date and wait in Needs you until you act on them.</p>
+      </div>
+    </section>
+
+    <!-- ================= ADD APPLICATION ================= -->
+    <section data-state="add" data-state-name="Add application" class="stack" style="gap:var(--s-7)">
+      <div class="page-head">
+        <div class="lead"><h1>Applications</h1><p class="meta">39 since 17 Aug · 27 open</p></div>
+        <span class="grow"></span>
+        <button class="btn" type="button" data-open="add-dlg">Add application</button>
+      </div>
+      <p class="muted">The dialog opens from "Add application". It also opens from "I applied" on a Job, with the Job already chosen.</p>
+      <div data-list="add"></div>
+    </section>
+
+    <!-- ================= FEED AND JOB MARKERS ================= -->
+    <section data-state="markers" data-state-name="On Feed and Job" class="stack" style="gap:var(--s-7)">
+      <div class="lead stack"><h1>Track on the Feed and the Job page</h1><p class="muted" style="max-width:68ch">Discover screens show what Track knows, so the user never applies twice by accident and sees a recent rejection before investing time. These pieces slot into <a href="feed.html">feed.html</a> and <a href="job.html">job.html</a>.</p></div>
+      <div class="panel flush">
+        <div class="sec-head"><h2>Feed rows · All open</h2><span class="meta">A Job with an Application leaves New and Saved and stays in All open with its Status</span></div>
+        <div class="table-wrap"><table class="table">
+          <thead><tr><th scope="col">Job</th><th scope="col">Requirements</th><th scope="col" style="text-align:right">Fit</th></tr></thead>
+          <tbody>
+            <tr><td><a class="t" href="job.html#applied">Security Engineer</a><span class="co">Kestrel Payments · Sofia · hybrid</span><div class="why">Security angle · 4 of 5 required met · gap: Kubernetes security</div><div class="chips" style="margin-top:var(--s-2)"><span class="chip partly"><svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>Kestrel rejected you 18 Jun · SOC Analyst</span></div></td><td><div class="chips"><span class="chip gap">Kubernetes security</span><span class="chip met">+3 met</span></div></td><td class="fit">91<small>fit</small></td></tr>
+            <tr><td><a class="t" href="job.html">SOC Analyst L2</a><span class="co">Ardent Labs · Sofia · on-site</span><div class="why">Security angle · 3 of 3 required met</div><div class="chips" style="margin-top:var(--s-2)"><span class="chip applied">Applied to Ardent Labs 7 Oct · Detection Engineer · Applied</span></div></td><td><div class="chips"><span class="chip partly">Night shifts</span><span class="chip met">+3 met</span></div></td><td class="fit">84<small>fit</small></td></tr>
+            <tr><td><a class="t" href="application.html">Detection Engineer</a><span class="co">Ardent Labs · Sofia · hybrid</span><div class="why">You applied to this job</div><div class="chips" style="margin-top:var(--s-2)"><span class="status applied"><i></i>Applied 7 Oct</span><a class="mini" href="application.html">Open application</a></div></td><td><div class="chips"><span class="chip met">All 5 met</span></div></td><td class="fit">82<small>fit</small></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <h2>Job page · this job applied</h2>
+            <div class="banner info"><span class="text"><b>You applied to this job on Wed 7 Oct</b> through ardentlabs.recruitee.com. Status: Applied, follow-up due Wed 14 Oct.</span><a class="btn sm" href="application.html">Open application</a></div>
+            <p class="meta">Replaces Prepare package as the Job's main action. Prepare package stays available as a secondary action for reapplying.</p>
+          </div>
+        </div>
+        <div class="col">
+          <div class="panel decide" role="group" aria-label="Decide">
+            <h2>Job page · decide panel</h2>
+            <a class="btn primary" href="../wireframes/package.html">Prepare package</a>
+            <div class="row"><button class="btn" type="button">Save</button><button class="btn ghost" type="button">Pass…</button></div>
+            <button class="btn ghost sm" type="button" data-open="add-dlg" style="justify-self:start">I applied without apply-kit…</button>
+            <p class="meta">For a job you applied to on the company's site directly. Opens Add application with this Job chosen.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Design notes" style="background:var(--surface-sunken);box-shadow:none">
+      <h2>Design notes</h2>
+      <ul class="mini muted" style="margin:0;padding-left:var(--s-6);display:grid;gap:var(--s-2)">
+        <li><b>Order:</b> Stats (small, for motivation), then Needs you (the focal point, pink edge is the only pink in a list), then every Application grouped by Status. Concept "B on top of A".</li>
+        <li><b>Needs you kinds:</b> follow-up due, thank-you due, email to match, upcoming interview, offer to answer. At most one primary per item. Items only coming up get one quiet "Coming up" line.</li>
+        <li><b>Response rate</b> counts a rejection as a reply and leaves out Applications under 14 days old, and says how many are left out.</li>
+        <li><b>Weekly chart:</b> one series, pine. The current week is a pale bar labelled "so far". The bar turns pink only when the current week beats the median pace, and the label says so. Every bar has a tooltip and the numbers are in a table.</li>
+        <li><b>Quick status change</b> is a labelled select per row. A change makes an Event "by you" and shows a 10-second undo toast. Accepted asks about withdrawing the others.</li>
+        <li><b>Nothing sends:</b> every draft is copied or opened in Mail by the user, then "Mark sent".</li>
+      </ul>
+    </aside>
+  </main>
+</div>
+
+<!-- ============ Follow-up draft dialog ============ -->
+<dialog class="dlg" id="fu-dlg" aria-labelledby="fu-title">
+  <form method="dialog">
+    <div class="dlg-head"><div class="stack" style="gap:var(--s-1)"><span class="meta" id="fu-count">Follow-up · 1 of 1</span><h2 id="fu-title" tabindex="-1">Follow up with Tidewater Pay</h2></div><button class="btn ghost sm x" type="button" data-dismiss aria-label="Close">✕</button></div>
+    <p class="muted mini">Application Security Engineer · applied Tue 6 Oct · no reply in 7 days. You send this from your own mail.</p>
+    <div class="field">
+      <label for="fu-body">Draft · body only, edit freely</label>
+      <textarea class="input" id="fu-body" name="body" autofocus>I applied for the Application Security Engineer role on 6 October and wanted to say I'm still very interested. Your posting's focus on threat-modelling new payment features stood out: at Velora I ran threat-modelling sessions for our card-payment services and turned the findings into 40 tracked fixes, so it's work I'd enjoy doing again. I'm happy to share more about it, and I'm free for a call any weekday this month.</textarea>
+      <span class="help">84 words · to careers@tidewaterpay.eu, as a reply to their confirmation email · "40 tracked fixes" comes from your Master profile</span>
+    </div>
+    <div class="draft-acts"><button class="btn primary" type="button" data-copy>Copy text</button><a class="btn" href="mailto:careers@tidewaterpay.eu?subject=Re%3A%20Application%20received%3A%20Application%20Security%20Engineer">Open in Mail</a></div>
+    <div class="dlg-foot"><button class="btn" type="button" data-sent>Mark sent</button><button class="btn ghost" type="button" data-snooze="Tidewater Pay" data-dismiss>Snooze 3 days</button><span class="grow"></span><button class="btn ghost" type="button" data-next hidden>Next draft</button><button class="btn ghost" type="button" data-dismiss>Close</button></div>
+    <p class="never">apply-kit never sends mail. "Mark sent" logs an Event and stops this follow-up. If you BCC the job mailbox, apply-kit notices the sent copy and marks it for you.</p>
+  </form>
+</dialog>
+
+<!-- ============ Add application dialog ============ -->
+<dialog class="dlg" id="add-dlg" aria-labelledby="add-title">
+  <form method="dialog" id="add-form" novalidate>
+    <div class="dlg-head"><h2 id="add-title" tabindex="-1">Add an application</h2><button class="btn ghost sm x" type="button" data-dismiss aria-label="Close">✕</button></div>
+    <p class="muted mini">For applications made outside apply-kit, so replies to them are matched and they count in Stats.</p>
+    <fieldset>
+      <legend>Which job?</legend>
+      <div class="choice">
+        <label><input type="radio" name="from" value="job" checked autofocus><span><b>A job in apply-kit</b><span class="meta">Search the Feed, including passed and closed jobs</span></span></label>
+        <label><input type="radio" name="from" value="other"><span><b>Somewhere else</b><span class="meta">Type the company and title, or paste a link</span></span></label>
+      </div>
+    </fieldset>
+    <div class="stack" id="add-job">
+      <div class="field"><label for="add-q">Search jobs</label><div class="search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m11 11 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input class="input" id="add-q" type="search" name="q" value="fennel" autocomplete="off"></div></div>
+      <ul class="results" aria-label="Matching jobs">
+        <li><label><input type="radio" name="job" value="fennel" checked><span><b>UX Engineer</b> · Fennel Studio<span class="meta">Saved 2 Oct · remote · EU</span></span></label></li>
+        <li><label><input type="radio" name="job" value="fennel2"><span><b>Design Systems Engineer</b> · Fennel Studio<span class="meta">Closed 20 Sep</span></span></label></li>
+      </ul>
+    </div>
+    <div class="stack" id="add-other" hidden>
+      <div class="field-row">
+        <div class="field"><label for="add-co">Company</label><input class="input" id="add-co" name="company" autocomplete="organization" aria-describedby="add-co-err"><span class="err" id="add-co-err" hidden>Enter the company, so replies can be matched to it.</span></div>
+        <div class="field"><label for="add-title-in">Job title</label><input class="input" id="add-title-in" name="title" autocomplete="off"></div>
+      </div>
+      <div class="field"><label for="add-link">Link to the posting <span class="meta">(optional)</span></label><span class="help">apply-kit reads it like a pasted job, so the Job page and prep sheet have the posting.</span><input class="input" id="add-link" name="link" type="url" inputmode="url" spellcheck="false" autocomplete="off" placeholder="https://"></div>
+    </div>
+    <div class="field-row">
+      <div class="field"><label for="add-date">Applied on</label><input class="input" id="add-date" name="applied" type="date" value="2026-10-09" max="2026-10-13"></div>
+      <div class="field"><label for="add-status">Status now</label><select class="input" id="add-status" name="status"><option>Applied</option><option>Screening</option><option>Interviewing</option><option>Offer</option><option>Rejected</option><option>Withdrawn</option></select></div>
+    </div>
+    <div class="field"><label for="add-contact">Their email address or domain <span class="meta">(optional)</span></label><span class="help">Helps match replies, for example a recruiter's address. The company's domain is used if you leave it empty.</span><input class="input" id="add-contact" name="contact" autocomplete="off" spellcheck="false" placeholder="jobs@fennel.studio"></div>
+    <div class="dlg-foot"><button class="btn primary" type="submit" id="add-go">Add application</button><button class="btn ghost" type="button" data-dismiss>Cancel</button><span class="grow"></span><span class="meta">Follow-up comes due 7 days after the date applied</span></div>
+  </form>
+</dialog>
+
+<script src="track.js"></script>
+<script>
+(function () {
+  const { $, $$, esc, announce, toast, openDialog, init } = window.Track;
+
+  // ---------- data (fictional persona; companies made up) ----------
+  const STATUSES = ["Applied", "Screening", "Interviewing", "Offer", "Accepted", "Rejected", "Withdrawn"];
+  const A = {
+    medora:   { t: "Full-stack Engineer (React, Node)", c: "Medora", s: "Interviewing", d: "28 Sep", last: ["Interview invite matched · 9 Oct", "email"], next: "Interview Thu 15 Oct, 14:00", a: "Developer" },
+    ostwind:  { t: "Cloud Security Engineer", c: "Ostwind Cloud", s: "Interviewing", d: "22 Sep", last: ["Interview held · Mon 12 Oct", "you"], next: "Thank-you due today 16:00", due: true, a: "Security" },
+    varna:    { t: "IT Security Specialist (Специалист информационна сигурност)", c: "Varna Trust Bank", s: "Screening", d: "6 Oct", last: ["Moved to Screening · today 08:40", "email"], next: "Phone call Thu 15 Oct, 10:00", a: "Security" },
+    rilo:     { t: "Backend Engineer (Node.js)", c: "Rilo Freight", s: "Screening", d: "30 Sep", last: ["Recruiter call booked · 8 Oct", "you"], next: "Call Wed 14 Oct, 11:00", a: "Developer" },
+    pellucid: { t: "Junior Penetration Tester", c: "Pellucid Security", s: "Screening", d: "25 Sep", last: ["Screening questions answered · 7 Oct", "email"], next: "Check-in Wed 21 Oct", a: "Security" },
+    tidewater:{ t: "Application Security Engineer", c: "Tidewater Pay", s: "Applied", d: "6 Oct", last: ["Confirmation matched · 6 Oct", "email"], next: "Follow-up due today", due: true, a: "Security" },
+    ardent:   { t: "Detection Engineer", c: "Ardent Labs", s: "Applied", d: "7 Oct", last: ["Confirmation matched · 7 Oct", "email"], next: "Follow-up Wed 14 Oct", a: "Security" },
+    lumio:    { t: "Frontend Engineer", c: "Lumio Maps", s: "Applied", d: "8 Oct", last: ["Submitted · Lever", "you"], next: "Follow-up Thu 15 Oct", a: "Developer" },
+    velta:    { t: "Platform Engineer", c: "Velta Logistics", s: "Applied", d: "8 Oct", last: ["Confirmation matched · 8 Oct", "email"], next: "Follow-up Thu 15 Oct", a: "Developer" },
+    fennel:   { t: "UX Engineer", c: "Fennel Studio", s: "Applied", d: "9 Oct", last: ["Added by hand · 9 Oct", "you"], next: "Follow-up Fri 16 Oct", a: "Design" },
+    pixelmoor:{ t: "UI Designer", c: "Pixelmoor", s: "Rejected", d: "1 Oct", last: ["Rejection matched · yesterday", "email"], next: "", a: "Design" },
+    kestrel:  { t: "SOC Analyst", c: "Kestrel Payments", s: "Rejected", d: "3 Jun", last: ["Rejection matched · 18 Jun", "email"], next: "", a: "Security" },
+    gridline: { t: "Frontend Developer", c: "Gridline Analytics", s: "Withdrawn", d: "12 Sep", last: ["Withdrawn · 29 Sep", "you"], next: "", a: "Developer" },
+  };
+  const byIcon = { email: '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1.5" y="2.5" width="9" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="m2 3.2 4 3 4-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>', you: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2 10.5c.6-2 2.1-3 4-3s3.4 1 4 3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>' };
+  const by = k => `<span class="by ${k}">${byIcon[k]}by ${k}</span>`;
+
+  let rowSeq = 0;
+  const row = (k, a) => {
+    const id = "st-" + (++rowSeq), closed = a.s === "Rejected" || a.s === "Withdrawn";
+    return `<tr class="${closed ? "closed" : ""}" data-k="${k}">
+      <td><a class="t" href="application.html">${esc(a.t)}</a><span class="co">${esc(a.c)}</span><span class="narrow">Applied ${a.d} · ${esc(a.next || a.last[0])}</span></td>
+      <td><label class="sr-only" for="${id}">Status of ${esc(a.t)} at ${esc(a.c)}</label><select class="input" id="${id}" data-status>${STATUSES.map(s => `<option${s === a.s ? " selected" : ""}>${s}</option>`).join("")}</select></td>
+      <td class="wide num">${a.d}</td>
+      <td class="wide"><div class="last">${esc(a.last[0])}</div>${by(a.last[1])}</td>
+      <td class="wide next${a.due ? " due" : ""}">${a.due ? '<span aria-hidden="true">● </span>' : ""}${esc(a.next || "—")}</td>
+      <td class="wide mini muted">${a.a}</td>
+    </tr>`;
+  };
+  const table = (rows, label) => `<div class="table-wrap"><table class="table apps" aria-label="${esc(label)}"><colgroup><col class="c-job"><col class="c-status"><col class="c-date wide"><col class="c-last wide"><col class="c-next wide"><col class="c-angle wide"></colgroup><thead><tr><th scope="col">Job</th><th scope="col">Status</th><th scope="col" class="wide">Applied</th><th scope="col" class="wide">Last event</th><th scope="col" class="wide">Next</th><th scope="col" class="wide">Angle</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+
+  let gSeq = 0;
+  const group = (name, count, keys, opts = {}) => {
+    const id = "g-" + (++gSeq), open = opts.open !== false;
+    const rows = keys.map(k => row(k, typeof k === "string" ? A[k] : k)).join("");
+    return `<div class="group">
+      <div class="group-h"><h3><button class="disclose" type="button" aria-expanded="${open}" aria-controls="${id}"><svg class="chev" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2.5 7.5 6 4 9.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>${name} <span class="count">${count}</span></button></h3>${opts.hint ? `<span class="meta">${opts.hint}</span>` : ""}</div>
+      <div id="${id}"${open ? "" : " hidden"}>${table(rows, name + " applications")}${opts.foot ? `<div class="group-foot">${opts.foot}</div>` : ""}</div>
+    </div>`;
+  };
+  const toolbar = (n, extra = "") => `<div class="toolbar">
+      <div class="search" style="width:min(300px,100%)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m11 11 3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><input class="input" type="search" name="q" autocomplete="off" placeholder="Search job, company, contact or email…" aria-label="Search applications"></div>
+      ${extra}
+      <div class="end"><label class="sr-only" for="ang-${n}">Angle</label><select class="input" id="ang-${n}"><option>All angles</option><option>Developer</option><option>Security</option><option>Design</option></select><label class="sr-only" for="sent-${n}">Applied</label><select class="input" id="sent-${n}"><option>Any time</option><option>Last 30 days</option><option>Last 90 days</option></select></div>
+    </div>`;
+  const listPanel = (title, body) => `<section class="panel flush" aria-label="${esc(title)}"><div class="sec-head"><h2>${title}</h2></div><div style="padding:0 var(--s-6) var(--s-4)">${body.toolbar}</div><div class="groups">${body.groups}</div></section>`;
+
+  const normalGroups = () =>
+    group("Interviewing", 2, ["medora", "ostwind"]) +
+    group("Screening", 3, ["varna", "rilo", "pellucid"]) +
+    group("Applied", 22, ["tidewater", "ardent", "lumio", "velta", "fennel"], { hint: "soonest due first", foot: `Showing 5 of 22 <button class="btn sm" type="button" data-more>Show 17 more</button>` }) +
+    group("Closed", 12, ["pixelmoor", "kestrel", "gridline"], { open: false, hint: "9 rejected · 3 withdrawn · never deleted", foot: `Showing 3 of 12 <button class="btn sm" type="button">Show 9 more</button>` });
+
+  const lists = {
+    normal: () => listPanel("All applications · 39", { toolbar: toolbar("n"), groups: normalGroups() }),
+    loading: () => listPanel("All applications · 39", { toolbar: toolbar("l"), groups: normalGroups() }),
+    "no-mailbox": () => listPanel("All applications · 39", { toolbar: toolbar("nm"), groups: normalGroups() }),
+    "mail-failing": () => listPanel("All applications · 39", { toolbar: toolbar("mf"), groups: normalGroups() }),
+    "low-confidence": () => listPanel("All applications · 39", { toolbar: toolbar("lc"), groups: normalGroups() }),
+    followup: () => listPanel("All applications · 39", { toolbar: toolbar("fu"), groups: normalGroups() }),
+    add: () => listPanel("All applications · 39", { toolbar: toolbar("ad"), groups: normalGroups() }),
+    one: () => listPanel("All applications · 1", { toolbar: "", groups: group("Applied", 1, [{ ...A.tidewater, d: "today", last: ["Added by hand · today", "you"], next: "Follow-up Tue 20 Oct", due: false }]) }),
+    offer: () => listPanel("All applications · 47", { toolbar: toolbar("of"), groups:
+      group("Offer", 1, [{ ...A.ardent, s: "Offer", last: ["Offer matched · today 16:40", "email"], next: "Respond by Fri 6 Nov", due: true }]) +
+      group("Interviewing", 3, ["medora", { ...A.varna, s: "Interviewing", last: ["Moved to Interviewing · 22 Oct", "email"], next: "Interview Fri 30 Oct, 10:00" }, "ostwind"]) +
+      group("Screening", 2, ["rilo", "pellucid"]) +
+      group("Applied", 23, [{ ...A.velta, next: "Follow-up due today", due: true }, "lumio", "fennel"], { hint: "soonest due first", foot: `Showing 3 of 23 <button class="btn sm" type="button">Show 20 more</button>` }) +
+      group("Closed", 18, ["pixelmoor", "kestrel", "gridline"], { open: false, hint: "15 rejected · 3 withdrawn" }) }),
+    many: () => listPanel("All applications · 214", { toolbar: toolbar("m", `<div class="chips" role="group" aria-label="Status filter"><button class="filter" type="button" aria-pressed="true">Open <span class="n">61</span></button><button class="filter" type="button" aria-pressed="false">Offer <span class="n">1</span></button><button class="filter" type="button" aria-pressed="false">Interviewing <span class="n">4</span></button><button class="filter" type="button" aria-pressed="false">Screening <span class="n">9</span></button><button class="filter" type="button" aria-pressed="false">Applied <span class="n">47</span></button><button class="filter" type="button" aria-pressed="false">Closed <span class="n">153</span></button></div>`) + `<p class="active-filters" style="margin-top:var(--s-3)">Showing open applications · counts follow the search and filters</p>`, groups:
+      group("Offer", 1, [{ ...A.ardent, s: "Offer", last: ["Offer matched · 12 Oct", "email"], next: "Respond by Fri 23 Oct", due: true }]) +
+      group("Interviewing", 4, ["medora", "ostwind", { ...A.rilo, s: "Interviewing", c: "International Clearing and Settlement Services Bulgaria EAD", t: "Senior Application Security Engineer, Payments Platform (Fraud and Risk Engineering)", next: "Interview Mon 19 Oct" }, { ...A.pellucid, s: "Interviewing" }]) +
+      group("Screening", 9, ["varna", "rilo", "pellucid"], { foot: `Showing 3 of 9 <button class="btn sm" type="button">Show 6 more</button>` }) +
+      group("Applied", 47, ["tidewater", "velta", "lumio", "ardent", "fennel"], { hint: "soonest due first", foot: `Applied 1–25 of 47 <button class="btn sm" type="button" disabled aria-disabled="true">Previous</button><button class="btn sm" type="button">Next 22</button>` }) }),
+  };
+
+  // ---------- stats strip ----------
+  // weekly chart: one series in pine. viewBox 300 × 96, baseline y = 76, 3 px per application.
+  let hatchSeq = 0;
+  const weekly = (weeks, labels, pace, opts = {}) => {
+    const n = weeks.length, slot = 280 / n, bw = Math.min(20, slot - 6), max = Math.max(...weeks, pace, 1), scale = 60 / max;
+    const py = 76 - pace * scale, pid = "hatch-" + (++hatchSeq);
+    const bars = weeks.map((v, i) => {
+      const x = 10 + i * slot + (slot - bw) / 2, h = Math.max(v * scale, v ? 3 : 0), y = 76 - h, last = i === n - 1;
+      const cls = last ? (opts.win ? "bar win" : "bar partial") : "bar";
+      const fill = last && !opts.win ? ` style="fill:url(#HATCH)"` : "";
+      const lab = `Week of ${labels[i]}: ${v} applied${last ? (opts.win ? " so far, above your pace" : " so far") : ""}`;
+      const path = h ? `M${x} 76V${y + 4}a4 4 0 0 1 4-4h${bw - 8}a4 4 0 0 1 4 4V76z` : "";
+      return `<rect class="hit" x="${10 + i * slot}" y="4" width="${slot}" height="76" tabindex="${last ? 0 : -1}" aria-label="${lab}" role="img"></rect><path class="${cls}" d="${path}"${fill.replace("HATCH", pid)}></path>` ;
+    }).join("");
+    return `<div class="chart-wrap"><svg class="chart" viewBox="0 0 300 96" role="group" aria-label="Applications per week, last ${n} weeks">
+      <defs><pattern id="${pid}" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" class="hatch-bg"></rect><rect width="2" height="5" class="hatch-line"></rect></pattern></defs>
+      <line class="grid" x1="10" x2="290" y1="76" y2="76"/>
+      ${pace ? `<line class="pace" x1="10" x2="290" y1="${py}" y2="${py}"/><text x="10" y="${py - 4}">pace ${pace}/wk</text>` : ""}
+      ${bars}
+      <text x="10" y="92">${labels[0]}</text><text x="290" y="92" text-anchor="end">This week: <tspan class="val">${weeks[n - 1]} so far</tspan>${opts.win ? " · above pace" : ""}</text>
+    </svg></div>`;
+  };
+  const dataTable = (id, weeks, labels) => `<button class="btn ghost sm table-toggle" type="button" aria-expanded="false" aria-controls="${id}">Show as table</button>
+    <div id="${id}" hidden><table class="data-table"><thead><tr><th scope="col">Week of</th><th scope="col">Applied</th></tr></thead><tbody>${weeks.map((v, i) => `<tr><td>${labels[i]}</td><td>${v}</td></tr>`).join("")}</tbody></table></div>`;
+  const parts = rows => `<ul class="parts">${rows.map(([name, rep, sent, few]) => `<li><span class="name">${name}</span><span class="track" role="img" aria-label="${name}: ${rep} of ${sent} replied"><span style="width:${sent ? rep / sent * 100 : 0}%"></span></span><span class="n">${rep}/${sent}${few ? ' <span class="few">· too few</span>' : ` · ${Math.round(rep / sent * 100)}%`}</span></li>`).join("")}</ul>`;
+  const working = (id, sets) => `<div class="tile">
+      <div class="head"><span class="label" id="${id}-l">What's working · replies per sent</span>
+        <div class="segmented" role="group" aria-labelledby="${id}-l">${Object.keys(sets).map((k, i) => `<button type="button" aria-pressed="${i === 0}" data-ww="${id}" data-set="${k}">${k}</button>`).join("")}</div></div>
+      ${Object.entries(sets).map(([k, rows], i) => `<div data-ww-panel="${id}" data-set="${k}"${i ? " hidden" : ""}>${parts(rows)}</div>`).join("")}
+      <span class="sub">Applications 14+ days old · under 5 sent is "too few" to tell</span>
+    </div>`;
+
+  const W8 = ["17 Aug", "24 Aug", "31 Aug", "7 Sep", "14 Sep", "21 Sep", "28 Sep", "5 Oct", "12 Oct"];
+  const stats = {
+    normal: { weeks: [4, 2, 4, 5, 4, 6, 3, 8, 3], pace: 4, sub: "39 since 17 Aug · last week 8, your best yet", rr: ["25%", "7 of 28 replied", "Rejections count as replies · 11 sent in the last 14 days aren't counted yet"], iv: ["2", "upcoming", "4 interviews so far, at 3 companies"],
+      ww: { Angle: [["Security", 5, 14], ["Developer", 2, 11], ["Design", 0, 3, true]], Source: [["Career page", 4, 12], ["LinkedIn alert", 2, 9], ["dev.bg", 1, 7]], "CV version": [["Security v3", 4, 9], ["Developer v2", 2, 10], ["Security v2", 1, 5]] } },
+    "no-mailbox": null, "mail-failing": null,
+    one: { weeks: [0, 0, 0, 0, 0, 0, 0, 0, 1], pace: 0, sub: "Your first one. The weekly chart fills in from here.", rr: ["—", "Counts from Tue 27 Oct", "Applications under 14 days old aren't counted, so 1 new one can't drag the rate down"], iv: ["0", "upcoming", "None yet"], ww: null },
+    offer: { weeks: [2, 4, 5, 4, 6, 3, 8, 6, 2], pace: 4, sub: "47 since 17 Aug", rr: ["29%", "10 of 35 replied", "Rejections count as replies · 12 newer than 14 days not counted"], iv: ["3", "upcoming", "8 interviews so far · 1 offer"],
+      ww: { Angle: [["Security", 7, 18], ["Developer", 3, 14], ["Design", 0, 3, true]], Source: [["Career page", 5, 15], ["LinkedIn alert", 3, 11], ["dev.bg", 2, 9]], "CV version": [["Security v3", 6, 12], ["Developer v2", 3, 12], ["Security v2", 1, 6]] } },
+    many: { weeks: [7, 9, 6, 8, 11, 7, 10, 12, 9], pace: 8, win: true, sub: "214 since 3 Jun", rr: ["31%", "58 of 187 replied", "Rejections count as replies · 27 newer than 14 days not counted"], iv: ["4", "upcoming", "23 interviews so far · 1 offer"],
+      ww: { Angle: [["Security", 34, 89], ["Developer", 19, 78], ["Design", 5, 20]], Source: [["Career page", 27, 61], ["LinkedIn alert", 14, 58], ["dev.bg", 9, 40], ["Captured", 8, 28]], "CV version": [["Security v4", 18, 41], ["Developer v3", 11, 37], ["Design v2", 5, 20]] } },
+  };
+  stats["no-mailbox"] = { ...stats.normal, stale: "Replies aren't being read, so this may be low" };
+  stats["mail-failing"] = { ...stats.normal, stale: "May be missing replies since Sat 10 Oct, 21:00" };
+  const renderStats = key => {
+    const s = stats[key];
+    const labels = key === "many" ? ["10 Aug", "17 Aug", "24 Aug", "31 Aug", "7 Sep", "14 Sep", "21 Sep", "28 Sep", "5 Oct"] : W8;
+    return `<section class="strip" aria-label="Stats">
+      <div class="tile">
+        <div class="head"><span class="label">Applications per week</span><span class="sub">${s.sub}</span></div>
+        ${weekly(s.weeks, labels, s.pace, { win: s.win })}
+        ${dataTable("wt-" + key, s.weeks, labels)}
+      </div>
+      <div class="tile${s.stale ? " stale" : ""}"><span class="label">Response rate</span><span class="value">${s.rr[0]}<small>${s.rr[1]}</small></span><span class="sub">${s.stale ? `<b>${s.stale}.</b> ` : ""}${s.rr[2]}</span></div>
+      <div class="tile"><span class="label">Interviews</span><span class="value">${s.iv[0]}<small>${s.iv[1]}</small></span><span class="sub">${s.iv[2]}</span></div>
+      ${s.ww ? working("ww-" + key, s.ww) : `<div class="tile"><span class="label">What's working</span><p class="muted mini">Shows which angle, source and CV version get replies, once 5 applications in a group are 14 days old.</p></div>`}
+    </section>`;
+  };
+
+  // ---------- render ----------
+  $$("[data-stats]").forEach(el => el.innerHTML = renderStats(el.dataset.stats));
+  $$("[data-list]").forEach(el => el.innerHTML = lists[el.dataset.list]());
+
+  // ---------- interactions ----------
+  document.addEventListener("click", e => {
+    const ww = e.target.closest("[data-ww]");
+    if (ww) { const id = ww.dataset.ww; $$(`[data-ww="${id}"]`).forEach(b => b.setAttribute("aria-pressed", String(b === ww))); $$(`[data-ww-panel="${id}"]`).forEach(p => p.hidden = p.dataset.set !== ww.dataset.set); return; }
+    const sn = e.target.closest("[data-snooze]");
+    if (sn) { const item = sn.closest(".needs"); if (item) item.hidden = true; toast(`Snoozed · ${esc(sn.dataset.snooze)} follow-up due again Fri 16 Oct`, () => { if (item) item.hidden = false; announce("Snooze undone."); }); return; }
+    if (e.target.closest("[data-skip-thanks]")) { const item = e.target.closest(".needs"); item.hidden = true; toast("No thank-you note for Ostwind Cloud", () => { item.hidden = false; }); return; }
+    if (e.target.closest("[data-copy]")) { announce("Draft copied. Paste it into your mail, then press Mark sent."); e.target.closest("[data-copy]").textContent = "Copied"; return; }
+    if (e.target.closest("[data-sent]")) { $("#fu-dlg").close(); $$('.needs').forEach(n => { if (n.textContent.includes("Tidewater Pay") && n.textContent.includes("FOLLOW-UP")) n.classList.add("done"); }); toast("Marked sent · Tidewater Pay follow-up logged on its timeline", () => announce("Undone: the follow-up is due again.")); return; }
+    if (e.target.closest("[data-more]")) { const b = e.target.closest("[data-more]"); b.closest(".group-foot").firstChild.textContent = "Showing 22 of 22 "; b.remove(); announce("17 more applications shown."); return; }
+    if (e.target.closest(".filter[aria-pressed]")) { const f = e.target.closest(".filter"); f.setAttribute("aria-pressed", String(f.getAttribute("aria-pressed") !== "true")); return; }
+    if (e.target.closest("#retry")) { announce("Trying again…"); setTimeout(() => announce("Still no answer from the service."), 1200); }
+  });
+  document.addEventListener("click", e => {
+    const o = e.target.closest('[data-open="fu-dlg"]'); if (!o) return;
+    const of = +(o.dataset.of || 1); $("#fu-count").textContent = `Follow-up · 1 of ${of}`; $("[data-next]").hidden = of === 1;
+  }, true);
+  document.addEventListener("change", e => {
+    const sel = e.target.closest("[data-status]");
+    if (sel) {
+      const tr = sel.closest("tr"), a = A[tr.dataset.k] || {}, prev = [...sel.options].find(o => o.defaultSelected)?.value || "Applied", now = sel.value;
+      if (now === "Accepted") { location.href = "application.html#accept"; return; }
+      toast(`${esc(a.c || "Application")}: ${prev} → ${now}. Logged by you.`, () => { sel.value = prev; announce(`Back to ${prev}.`); sel.focus(); }, sel);
+      return;
+    }
+    if (e.target.name === "from") { const other = e.target.value === "other"; $("#add-job").hidden = other; $("#add-other").hidden = !other; }
+  });
+  $("#match-form").addEventListener("submit", e => {
+    e.preventDefault();
+    const pick = $('#match-form input[name="m"]:checked'), err = $("#match-err");
+    if (!pick) { err.hidden = false; $('#match-form input[name="m"]').focus(); return; }
+    err.hidden = true;
+    const move = e.submitter?.dataset.match === "move";
+    toast(move ? "Matched to Ostwind Cloud · moved to Interviewing" : "Matched to Ostwind Cloud · Status unchanged", () => announce("Match undone. The email is back in Needs you."));
+  });
+  $("#add-form").addEventListener("submit", e => {
+    if ($('#add-form input[name="from"]:checked').value === "other" && !$("#add-co").value.trim()) { e.preventDefault(); $("#add-co-err").hidden = false; $("#add-co").setAttribute("aria-invalid", "true"); $("#add-co").focus(); return; }
+    setTimeout(() => toast("Added · UX Engineer at Fennel Studio, Applied 9 Oct", () => announce("Removed again.")), 50);
+  });
+
+  const health = { "no-mailbox": ["warn", "Job mailbox not connected"], "mail-failing": ["bad", "Job mailbox: sign-in failed"], loading: ["", "Reading mail…"], error: ["warn", "Service not answering"] };
+  init({ onShow: id => {
+    const [cls, txt] = health[id] || ["", id === "offer" ? "All sources working · mail read 16:45" : "All sources working · mail read 07:30"];
+    $("#health").className = "health " + cls; $("#health-text").textContent = txt;
+    const n = { normal: 4, one: 0, empty: 0, "no-mailbox": 2, "mail-failing": 2, "low-confidence": 1, offer: 2, many: 9, followup: 4, add: 4, loading: 4, markers: 4, error: 0 }[id] ?? 0;
+    $("#nav-badge").textContent = n; $("#nav-badge").hidden = !n; $("#nav-badge-sr").textContent = n ? `, ${n} need you` : "";
+    if (id === "followup") setTimeout(() => openDialog("fu-dlg"), 30);
+    if (id === "add") setTimeout(() => openDialog("add-dlg"), 30);
+  } });
+})();
+</script>
+</body>
+</html>

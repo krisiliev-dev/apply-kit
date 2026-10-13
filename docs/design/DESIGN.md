@@ -37,14 +37,17 @@ Fonts: Bricolage Grotesque and Figtree (the original Vitosha pair) were replaced
 | **Requirement chip** | met, partly, gap, hidden-reason | Icon per state; hidden-reason is dashed and always readable |
 | **Status** | applied, screening, interviewing, offer, accepted, rejected, withdrawn | Filled = momentum; pink only for offer/accepted; closed statuses fade |
 | **Feed row** | default, focused (keyboard), selected, hidden | Title leads, why-line explains rank, fit is the only big number |
-| **Needs-you item** | open, done (fades then leaves) | Pink edge is the only pink in a list |
-| **Stepper** | done, current, flagged, upcoming | Flagged steps can't be approved until resolved |
+| **Needs-you item** | open, done (sunken, grey edge, "done" in its kind line, then leaves) | Pink edge is the only pink in a list. Kind line, what, a grey why-line, one primary action. Same kinds group at volume ("6 follow-ups due") but each draft is still reviewed alone |
+| **Stepper** | done, current, flagged, upcoming, skipped | Flagged steps can't be approved until resolved. Status stepper: happy path as steps, Rejected/Withdrawn after "or" as a branch; a step never reached is struck through, never ticked |
 | **Banner** | info, success, warning, error | What happened, what it means, what to do; no apologies |
 | **Form field** | text, select, textarea with count, checkbox/radio × default, focus, error, disabled | Labels above, help under label, errors under field, validated on blur |
 | **Segmented control** | 2–4 options | Switches a view in place; never navigates |
 | **Stat + ascent** | stat tile, ascent chart | Endpoint pink only on a week that beats your pace |
 | **Empty state** | per screen | Says what will appear and offers the first step |
 | **Toast** | confirmation, with undo | Uses the action's own words ("Passed", "Saved") |
+| **Event cause tag** | by email, by you, by apply-kit | Icon plus words on every timeline Event and list row; email is filled sunken, apply-kit dashed |
+| **Draft panel** | AI draft, outline (no AI budget), sent | Body only, word count and where any number came from; actions Copy text (primary), Open in Mail, Mark sent, Snooze. Never a Send button |
+| **Weekly chart** | normal, current week (hatched), above pace (pink) | One series in `action`; pace as a hairline; current week's value in the x-axis label; tooltip per bar and a table view |
 
 ## Documents: CV and cover letter
 
@@ -69,6 +72,18 @@ From the heuristic evaluation and accessibility audit in `critique/`:
 - **Keyboard shortcuts are opt-out and scoped.** Single-key shortcuts work only inside the jobs table, use real focus (roving tabindex), and can be turned off.
 - **Async changes are announced** politely (source checks, health, toasts); toasts give at least 10 seconds to undo and move focus sensibly.
 - `--bloom` (light) darkened to `#a33d62` so pink text passes on its soft background (5.0:1).
+
+## Rules from the Track review (2026-10-13)
+
+From `critique/track-heuristics.md` and `critique/track-a11y.md`:
+
+- **The app drafts, the user sends.** No screen has a Send button. Drafts offer Copy text and Open in Mail; a Status that implies a message was sent (Withdrawn after a withdrawal note) changes only on "Mark sent".
+- **Automatic changes explain themselves.** A Status moved by email shows the email, the signals it matched on and Undo. Low-confidence matches change nothing and go to Needs you. Undo restores the Status and any follow-up it cancelled.
+- **Rejections are data, not chores.** They never enter Needs you; a lesson is optional and nothing is pre-selected.
+- **History is never invented.** Skipped steps are shown as skipped; every Event names its cause.
+- **No fading for state.** Done, past or closed items keep text contrast ≥ 4.5:1 and change background, outline or wording instead of opacity.
+- **Hatching, not pale fills,** for partial data marks (the current week), so the mark keeps 3:1 against the surface.
+- Shared Track page styles for the hi-fi live in `docs/design/hifi/track.css` (tokens only); move the reusable parts into `components.css` when the screens are built.
 
 ## How to use this in later steps
 
