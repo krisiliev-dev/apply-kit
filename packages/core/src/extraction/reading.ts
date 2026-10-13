@@ -3,8 +3,12 @@
 import type { ExtractedSalary, PostingFacts, SourceQuote } from "./facts.ts";
 import { lineOf } from "./text.ts";
 
-/** Whether Kris meets a requirement. "unknown" until there is a master profile to check against. */
-export type RequirementStatus = "met" | "partly" | "gap" | "unknown";
+/**
+ * Whether Kris meets a requirement, from the master profile (fit/evidence.ts). "unknown" until there
+ * is a master profile, and for what the profile can't tell (location, work authorisation). A
+ * preferred item with no evidence is "not-held": never a gap.
+ */
+export type RequirementStatus = "met" | "partly" | "gap" | "not-held" | "unknown";
 
 export interface FeedRequirement {
   text: string;

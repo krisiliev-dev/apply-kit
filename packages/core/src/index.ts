@@ -35,6 +35,8 @@ export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts"
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
 export { angles } from "./fit/angles.ts";
+export { matchEvidence } from "./fit/evidence.ts";
+export type { Evidence, EvidencePiece, RequirementToMatch, RequirementCategory } from "./fit/evidence.ts";
 export type { Angle } from "./fit/angles.ts";
 export type { Place, LocationTier } from "./locations.ts";
 export { defaultSearchSettings } from "./search-settings.ts";

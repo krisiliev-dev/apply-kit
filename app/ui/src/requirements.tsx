@@ -9,6 +9,7 @@ const chipFor: Record<RequirementStatus, { cls: string; icon: IconName; sr: stri
   met: { cls: "met", icon: "met", sr: "met" },
   partly: { cls: "partly", icon: "partly", sr: "partly met" },
   gap: { cls: "gap", icon: "gap", sr: "missing" },
+  "not-held": { cls: "partly", icon: "partly", sr: "preferred, not held, not a gap" },
   unknown: { cls: "neutral", icon: "unknown", sr: "not checked yet" },
 };
 

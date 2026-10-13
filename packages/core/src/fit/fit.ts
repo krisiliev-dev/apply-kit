@@ -122,7 +122,7 @@ function requirementsReason(input: FitInput): Omit<FitReason, "points"> {
     const n = input.requirements.length;
     return { ...base, score: null, text: n === 0 ? "None listed" : `${plural(n, "requirement")} read; not checked yet: that needs your master profile` };
   }
-  const per = { met: W.requirements.met, partly: W.requirements.partly, gap: W.requirements.gap, unknown: 0 };
+  const per = { met: W.requirements.met, partly: W.requirements.partly, gap: W.requirements.gap, "not-held": 0, unknown: 0 };
   const preferredMet = input.requirements.filter((r) => r.kind === "preferred" && r.status === "met").length;
   const score = clamp01(required.reduce((n, r) => n + per[r.status], 0) / required.length + preferredMet * W.requirements.preferredMetBonus);
   return { ...base, score, text: coverage(input.requirements) };
