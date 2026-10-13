@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
-import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView } from "./angles.ts";
+import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -89,6 +89,11 @@ export interface PreparationEngine {
   /** The three angles (developer, security, design), each with its summary line, leads and whether it's thin. */
   angles(): AngleView[];
   /**
+   * Saves an angle's summary line, its lead order (piece ids, first leads), or both. Only confirmed
+   * pieces of that angle can lead. The next package for a Job of this angle starts from them.
+   */
+  saveAngle(input: SaveAngleInput): SaveAngleResult;
+  /**
    * The angle a package for this Job starts from: the closest one by Discover's angle keywords and
    * the tags of Kris's confirmed pieces, with the reason.
    */
@@ -101,7 +106,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   migrate(deps.db);
   const profile = createProfileStore(deps);
   const contact = createContactStore(deps);
-  const angles = createAngleStore({ db: deps.db, pieces: () => profile.all() });
+  const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
 
   async function draftDocument({ packageId, document, fileName: parts, keywords }: DraftRequest): Promise<DocumentDraft> {
     const fileName = documentFileName(document.kind, parts);
@@ -128,6 +133,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     draftDocument,
     demoDocument: (options) => draftDocument({ packageId: "demo", document: demoDocument(options), fileName: demoFileName }),
     angles: () => angles.list(),
+    saveAngle: (input) => angles.save(input),
     closestAngle: (posting) => angles.closest(posting),
     savePiece: (input, origin) => profile.save(input, origin),
     deletePiece: (id) => profile.remove(id),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PieceInput } from "../src/index.ts";
+import { memoryDb } from "./harness.ts";
 import { createTestPreparation } from "./preparation-harness.ts";
 
 // Angles through the preparation engine (ticket #58). Made-up people and companies only.
@@ -50,5 +51,59 @@ describe("the three angles", () => {
     expect(security!.thin).toEqual({ reason: "Only 5 pieces, and 2 have a result." });
     expect(developer).toMatchObject({ angle: "developer", available: 2, thin: { reason: "Only 2 pieces, and none has a result." } });
     expect(design).toMatchObject({ angle: "design", available: 1, thin: { reason: "Only 1 piece, and none has a result." } });
+  });
+});
+
+describe("the thin-angle rule", () => {
+  /** Adds `n` confirmed security achievements, the first `withResult` of them with a number. */
+  function securityPieces(n: number, withResult: number) {
+    const t = createTestPreparation();
+    for (let i = 0; i < n; i++) {
+      const r = t.preparation.savePiece(i < withResult
+        ? { kind: "achievement", text: `Closed ${i + 2} audit findings in a week.`, angles: ["security"], numberSource: "measured" }
+        : { kind: "achievement", text: `Reviewed firewall rule set number ${"ABCDEFGHIJKLMNOP"[i]}.`, angles: ["security"] });
+      if (!r.saved) throw new Error(r.problems[0]!.message);
+    }
+    return t.preparation.angles().find((a) => a.angle === "security")!;
+  }
+
+  it("isn't thin with enough pieces and enough of them with a result", () => {
+    expect(securityPieces(10, 3).thin).toBeNull();
+  });
+
+  it("is thin with many pieces but few results", () => {
+    expect(securityPieces(12, 1).thin).toEqual({ reason: "Only 1 of 12 pieces has a result." });
+  });
+
+  it("counts only confirmed pieces", () => {
+    const t = createTestPreparation();
+    t.preparation.savePiece({ kind: "skill", text: "Burp Suite", angles: ["security"] }, { from: "Coach interview", quote: null, status: "unconfirmed" });
+    expect(t.preparation.angles().find((a) => a.angle === "security")).toMatchObject({ available: 0, leads: [], thin: { reason: "No pieces yet." } });
+  });
+});
+
+const securityPosting = {
+  title: "Information Security Analyst",
+  titleTranslation: null,
+  requirements: [{ text: "Experience triaging alerts in a SIEM" }],
+};
+
+describe("saving an angle", () => {
+  it("keeps the summary line and the lead order, and the next package starts from them", () => {
+    const db = memoryDb();
+    const t = elinProfile({ db });
+
+    const saved = t.preparation.saveAngle({
+      angle: "security",
+      summary: "  Security analyst who writes detection rules and runs phishing response at an insurer.  ",
+      leads: [t.ids.phishing, t.ids.wazuh, t.ids.detections],
+    });
+    expect(saved).toMatchObject({ saved: true, angle: { summary: "Security analyst who writes detection rules and runs phishing response at an insurer." } });
+
+    // A restart: a new engine on the same database.
+    const next = createTestPreparation({ db }).preparation.closestAngle(securityPosting);
+    expect(next.angle).toBe("security");
+    expect(next.summary).toBe("Security analyst who writes detection rules and runs phishing response at an insurer.");
+    expect(next.leads.map((p) => p.id)).toEqual([t.ids.phishing, t.ids.wazuh, t.ids.detections]);
   });
 });

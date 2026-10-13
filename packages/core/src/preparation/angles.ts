@@ -3,7 +3,7 @@
 // the closest one for its Job. Stored in SQLite (ADR 0003). Every tunable number is in `angleRules`.
 import { angleKeywords, angleLabel, angles, type Angle } from "../fit/angles.ts";
 import { fitWeights } from "../fit/weights.ts";
-import type { SqlDatabase } from "../ports.ts";
+import type { Clock, SqlDatabase } from "../ports.ts";
 import { phrasesIn, words } from "../words.ts";
 import type { ProfilePiece } from "./profile.ts";
 
@@ -16,6 +16,8 @@ export const angleRules = {
   thin: { minPieces: 10, minWithResult: 3 },
   /** How many pieces lead an angle until Kris orders them himself. */
   defaultLeads: 4,
+  /** A summary line is one or two sentences: this many characters at most. */
+  maxSummaryLength: 300,
   /** The closest angle: Discover's keyword score (as in Fit), plus this much per piece tag the posting names. */
   closest: { perTag: fitWeights.angle.perExtraWord },
 } as const;
@@ -27,11 +29,29 @@ export interface AnglePosting {
   requirements: { text: string }[];
 }
 
+/** The angle a package starts from, why, and what it starts with. */
 export interface AngleChoice {
   angle: Angle;
   /** Why, in plain words: what in the posting points to it. */
   reason: string;
+  summary: string;
+  /** The pieces that lead, in Kris's order. */
+  leads: ProfilePiece[];
 }
+
+/** A new summary line, a new lead order (piece ids), or both; what's left out stays as it was. */
+export interface SaveAngleInput {
+  angle: Angle;
+  summary?: string;
+  leads?: string[];
+}
+
+export interface AngleProblem {
+  field: "summary" | "leads";
+  message: string;
+}
+
+export type SaveAngleResult = { saved: true; angle: AngleView } | { saved: false; problems: AngleProblem[] };
 
 /** One angle as Profile shows it and a package starts from it. */
 export interface AngleView {
@@ -51,24 +71,53 @@ export interface AngleView {
 
 export interface AngleStore {
   list(): AngleView[];
+  save(input: SaveAngleInput): SaveAngleResult;
   closest(posting: AnglePosting): AngleChoice;
 }
 
-export function createAngleStore({ pieces }: { db: SqlDatabase; pieces: () => ProfilePiece[] }): AngleStore {
+export function createAngleStore({ db, clock, pieces }: { db: SqlDatabase; clock: Clock; pieces: () => ProfilePiece[] }): AngleStore {
   /** Confirmed pieces of an angle: what tailoring from it can use. */
   const available = (angle: Angle) => pieces().filter((p) => p.status === "confirmed" && p.angles.includes(angle));
 
+  const stored = (angle: Angle) => {
+    const r = db.prepare("SELECT summary, leads FROM angle WHERE angle = ?").get(angle);
+    return { summary: r ? String(r.summary) : "", leads: r?.leads == null ? null : (JSON.parse(String(r.leads)) as string[]) };
+  };
+
   function view(angle: Angle): AngleView {
     const mine = available(angle);
+    const { summary, leads } = stored(angle);
+    const byId = new Map(mine.map((p) => [p.id, p]));
     return {
       angle,
       label: angleLabel[angle],
-      summary: "",
-      leads: [...mine].sort(leadFirst).slice(0, angleRules.defaultLeads),
+      summary,
+      // Kris's order, without pieces deleted or taken off the angle since; the default order until he sets one.
+      leads: leads ? leads.flatMap((id) => byId.get(id) ?? []) : [...mine].sort(leadFirst).slice(0, angleRules.defaultLeads),
       available: mine.length,
       packagesUsed: 0,
       thin: thinness(mine),
     };
+  }
+
+  function save(input: SaveAngleInput): SaveAngleResult {
+    const before = stored(input.angle);
+    const summary = input.summary === undefined ? before.summary : input.summary.trim();
+    const leads = input.leads === undefined ? before.leads : [...new Set(input.leads)];
+    const problems: AngleProblem[] = [];
+    if (summary.length > angleRules.maxSummaryLength) {
+      problems.push({ field: "summary", message: `Keep the summary line to ${angleRules.maxSummaryLength} characters or fewer.` });
+    }
+    const ids = new Set(available(input.angle).map((p) => p.id));
+    if (input.leads && leads!.some((id) => !ids.has(id))) {
+      problems.push({ field: "leads", message: `Only confirmed ${input.angle} pieces can lead this angle. One of these was deleted, taken off the angle or isn't confirmed yet.` });
+    }
+    if (problems.length > 0) return { saved: false, problems };
+    db.prepare(
+      `INSERT INTO angle (angle, summary, leads, updated_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(angle) DO UPDATE SET summary = excluded.summary, leads = excluded.leads, updated_at = excluded.updated_at`,
+    ).run(input.angle, summary, leads ? JSON.stringify(leads) : null, clock.now().toISOString());
+    return { saved: true, angle: view(input.angle) };
   }
 
   function closest(posting: AnglePosting): AngleChoice {
@@ -91,10 +140,11 @@ export function createAngleStore({ pieces }: { db: SqlDatabase; pieces: () => Pr
       top.said.length ? `The posting says ${quote(top.said)}` : null,
       top.tagged.length ? `your ${top.angle} pieces are tagged ${quote(top.tagged)}` : null,
     ].filter(Boolean);
-    return { angle: top.angle, reason: `${parts.join(", and ")}.` };
+    const { summary, leads } = view(top.angle);
+    return { angle: top.angle, reason: `${parts.join(", and ")}.`, summary, leads };
   }
 
-  return { list: () => angles.map(view), closest };
+  return { list: () => angles.map(view), save, closest };
 }
 
 const hasResult = (p: ProfilePiece) => p.numberSource !== null;
@@ -105,6 +155,7 @@ function thinness(pieces: ProfilePiece[]): AngleView["thin"] {
   const n = pieces.length;
   const results = pieces.filter(hasResult).length;
   if (n >= minPieces && results >= minWithResult) return null;
+  if (n === 0) return { reason: "No pieces yet." };
   const counted = `${n} ${n === 1 ? "piece" : "pieces"}`;
   const withResult = results === 0 ? "none has a result" : `${results} ${results === 1 ? "has" : "have"} a result`;
   if (n < minPieces) return { reason: `Only ${counted}, and ${withResult}.` };
