@@ -138,7 +138,13 @@ export interface ProfileStore {
   get(id: string): ProfilePiece | null;
   all(): ProfilePiece[];
   list(query?: PieceQuery): PieceList;
-  remove(id: string): boolean;
+  remove(id: string): DeletedPiece;
+}
+
+/** Whether the piece was there to delete, and how many pieces under it (a role's) now belong to no role. */
+export interface DeletedPiece {
+  deleted: boolean;
+  untied: number;
 }
 
 export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Clock }): ProfileStore {
@@ -216,7 +222,22 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     return { groups, total: pieces.length, confirmed: pieces.filter((p) => p.status === "confirmed").length, byKind };
   }
 
-  return { save, get, all, list, remove: () => false };
+  function remove(id: string): DeletedPiece {
+    if (!get(id)) return { deleted: false, untied: 0 };
+    db.exec("BEGIN");
+    try {
+      const untied = db.prepare("SELECT COUNT(*) AS n FROM profile_piece WHERE belongs_to = ?").get(id)?.n;
+      db.prepare("UPDATE profile_piece SET belongs_to = NULL, updated_at = ? WHERE belongs_to = ?").run(clock.now().toISOString(), id);
+      db.prepare("DELETE FROM profile_piece WHERE id = ?").run(id);
+      db.exec("COMMIT");
+      return { deleted: true, untied: Number(untied ?? 0) };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  return { save, get, all, list, remove };
 }
 
 /** What every piece needs before it can be saved: its text, or a role's or education's facts. */

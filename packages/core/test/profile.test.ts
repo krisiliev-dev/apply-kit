@@ -98,3 +98,25 @@ describe("the honesty checks on saving a piece", () => {
     expect(saved).toMatchObject({ saved: true, piece: { numberSource: null } });
   });
 });
+
+describe("deleting a piece", () => {
+  it("removes it, and the pieces under a deleted role stay as pieces tied to no role", () => {
+    const t = createTestPreparation();
+    const role = t.preparation.savePiece({ kind: "role", text: "", entry: { title: "SOC Intern", organisation: "Varna Telecom", city: null, start: "2021-06", end: "2021-08" } });
+    if (!role.saved) throw new Error("not saved");
+    const skill = t.preparation.savePiece({ kind: "skill", text: "Wireshark", belongsTo: role.piece.id });
+    const gone = t.preparation.savePiece({ kind: "skill", text: "Nmap", belongsTo: role.piece.id });
+    if (!skill.saved || !gone.saved) throw new Error("not saved");
+
+    expect(t.preparation.deletePiece(gone.piece.id)).toEqual({ deleted: true, untied: 0 });
+    expect(t.preparation.deletePiece(role.piece.id)).toEqual({ deleted: true, untied: 1 });
+    expect(t.preparation.deletePiece(role.piece.id)).toEqual({ deleted: false, untied: 0 });
+
+    expect(t.preparation.listPieces().groups).toEqual([
+      { id: "none", label: "Skills and languages not tied to a role", pieces: [expect.objectContaining({ text: "Wireshark", belongsTo: null })] },
+    ]);
+  });
+
+  // Packages arrive with a later ticket; then this asserts that an approved package's files keep their SHA-256.
+  it.todo("never changes a frozen package file when a piece it used is edited or deleted");
+});
