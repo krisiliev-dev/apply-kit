@@ -3,6 +3,7 @@
 // extension fills portals from it (spec #51, "Contract for Apply"). Stored in SQLite (ADR 0003).
 // Free of Node-only imports: the UI imports its constants as "@apply-kit/core/answers".
 import type { Clock, SqlDatabase } from "../ports.ts";
+import type { DefaultAnswer } from "./answer-defaults.ts";
 
 export type AnswerLanguage = "en" | "bg";
 export const answerLanguages: readonly AnswerLanguage[] = ["en", "bg"];
@@ -92,7 +93,7 @@ export interface Answer {
 export interface AnswerInput {
   id?: string;
   question: string;
-  wordings?: string[];
+  wordings?: readonly string[];
   versions?: Partial<Record<AnswerLanguage, string>>;
   category: AnswerCategory;
   kind?: AnswerKind;
@@ -192,7 +193,7 @@ const CYRILLIC = /\p{Script=Cyrillic}/u;
 export const languageOf = (text: string): AnswerLanguage => (CYRILLIC.test(text) ? "bg" : "en");
 
 /** Below this, a close wording isn't taken as the same question. */
-export const minMatchConfidence = 0.6;
+export const minMatchConfidence = 0.75;
 
 export interface AnswerStore {
   save(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
@@ -206,6 +207,8 @@ export interface AnswerStore {
   resolvePortalEdit(id: string, keep: "keep-new" | "keep-old"): Answer | null;
   /** Portal edits waiting for Kris. */
   needsYou(): number;
+  /** Adds the defaults not added before, and moves unedited ones to their new values. */
+  seed(defaults: DefaultAnswer[]): void;
 }
 
 export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock }): AnswerStore {
@@ -283,7 +286,7 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     else {
       for (const l of answerLanguages) {
         const [was, now] = [before.versions[l] ?? null, answer.versions[l] ?? null];
-        if (was !== now) note(answer.id, { event: "changed", where: "Profile", language: l, before: was, after: now });
+        if (was !== now) note(answer.id, { event: "changed", where: origin?.from ?? "Profile", language: l, before: was, after: now });
       }
     }
     return { saved: true, answer };
@@ -351,6 +354,27 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     };
   }
 
+  function seed(defaults: DefaultAnswer[]) {
+    for (const d of defaults) {
+      const row = db.prepare("SELECT answer_id, value FROM answer_seed WHERE key = ?").get(d.key);
+      const value = JSON.stringify(cleanVersions(d.input.versions ?? {}));
+      if (!row) {
+        let result = save(d.input, { from: d.from });
+        // Kris's own answers win: a default drops the wordings they already use, or isn't added.
+        if (!result.saved && result.problems.every((p) => p.field === "wordings")) {
+          const taken = new Set(all().flatMap((a) => [a.question, ...a.wordings.map((w) => w.text)]).map(normalise));
+          result = save({ ...d.input, wordings: (d.input.wordings ?? []).filter((w) => !taken.has(normalise(w))) }, { from: d.from });
+        }
+        db.prepare("INSERT INTO answer_seed (key, answer_id, value) VALUES (?, ?, ?)").run(d.key, result.saved ? result.answer.id : "", value);
+        continue;
+      }
+      const a = get(String(row.answer_id));
+      if (!a || String(row.value) === value || JSON.stringify(a.versions) !== String(row.value)) continue;
+      const moved = save({ ...a, wordings: a.wordings.map((w) => w.text), versions: d.input.versions ?? {} }, { from: "Your contact details" });
+      if (moved.saved) db.prepare("UPDATE answer_seed SET value = ? WHERE key = ?").run(value, d.key);
+    }
+  }
+
   const needsYou = () => Number(db.prepare("SELECT COUNT(*) AS n FROM answer WHERE portal_edit IS NOT NULL").get()?.n ?? 0);
 
   function find(question: string, language: AnswerLanguage): AnswerMatch | null {
@@ -367,7 +391,7 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     return { answerId: answer.id, question: answer.question, matched, confidence, fill: fillFor(answer, language) };
   }
 
-  return { save, get, remove, list, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou };
+  return { save, get, remove, list, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou, seed };
 }
 
 /** Questions a cover letter answers: written fresh for each job, never stored. */
@@ -419,7 +443,7 @@ function fillFor(a: Answer, language: AnswerLanguage): AnswerFill {
   return { action: "no-version", languages: answerLanguages.filter((l) => a.versions[l]) };
 }
 
-function cleanWordings(list: string[]): Wording[] {
+function cleanWordings(list: readonly string[]): Wording[] {
   const seen = new Set<string>();
   return list.map((w) => w.trim()).filter((w) => w && !seen.has(normalise(w)) && seen.add(normalise(w)))
     .map((text) => ({ text, language: languageOf(text) }));

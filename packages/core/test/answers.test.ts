@@ -47,21 +47,29 @@ describe("finding an answer for a portal's question", () => {
     const unrelated = t.preparation.findAnswer("Do you have a driving licence?", "en");
 
     expect(close?.question).toBe("Notice period");
-    expect(close?.confidence).toBeGreaterThanOrEqual(0.6);
+    expect(close?.confidence).toBeGreaterThanOrEqual(0.75);
     expect(close?.confidence).toBeLessThan(1);
     expect(unrelated).toBeNull();
   });
 
+  it("doesn't take a question about another skill for the same question", () => {
+    const t = createTestPreparation();
+    add(t, { question: "Years of experience with Splunk", versions: { en: "3" }, category: "screening", kind: "number" });
+
+    expect(t.preparation.findAnswer("Years of experience with Python", "en")).toBeNull();
+    expect(t.preparation.findAnswer("Years of Splunk experience", "en")?.confidence).toBe(1);
+  });
+
   it("never gives an 'ask each time' or 'leave blank' answer as a value", () => {
     const t = createTestPreparation();
-    const rule = { text: "Upper half of the posting's stated range, never under €2,000 a month", params: { kind: "salary", take: "upper-half", floor: 2000, currency: "EUR" } } as const;
-    add(t, { question: "Salary expectations", wordings: ["Expected salary", "Желано възнаграждение"], versions: { en: "€2,500 a month" }, category: "standard", kind: "rule", mode: "ask", rule });
-    add(t, { question: "Gender", wordings: ["What is your gender?", "Пол"], versions: { en: "Prefer not to say", bg: "Предпочитам да не посоча" }, category: "standard", mode: "blank" });
+    const rule = { text: "Upper half of the client's budget", params: null };
+    add(t, { question: "Day rate for contract work", wordings: ["Expected day rate", "Дневна ставка"], versions: { en: "€300" }, category: "screening", kind: "rule", mode: "ask", rule });
+    add(t, { question: "Religion", wordings: ["What is your religion?", "Вероизповедание"], versions: { en: "Prefer not to say", bg: "Предпочитам да не посоча" }, category: "standard", mode: "blank" });
 
-    expect(t.preparation.findAnswer("Expected salary", "en")?.fill).toEqual({ action: "ask", rule });
-    expect(t.preparation.findAnswer("Желано възнаграждение", "bg")?.fill).toEqual({ action: "ask", rule });
-    expect(t.preparation.findAnswer("What is your gender?", "en")?.fill).toEqual({ action: "leave-blank", whenRequired: "Prefer not to say" });
-    expect(t.preparation.findAnswer("Пол", "bg")?.fill).toEqual({ action: "leave-blank", whenRequired: "Предпочитам да не посоча" });
+    expect(t.preparation.findAnswer("Expected day rate", "en")?.fill).toEqual({ action: "ask", rule });
+    expect(t.preparation.findAnswer("Дневна ставка", "bg")?.fill).toEqual({ action: "ask", rule });
+    expect(t.preparation.findAnswer("What is your religion?", "en")?.fill).toEqual({ action: "leave-blank", whenRequired: "Prefer not to say" });
+    expect(t.preparation.findAnswer("Вероизповедание", "bg")?.fill).toEqual({ action: "leave-blank", whenRequired: "Предпочитам да не посоча" });
   });
 
   it("never fills an answer in another language: it says which languages the bank has", () => {
@@ -215,7 +223,7 @@ describe("adding and editing an answer", () => {
 });
 
 describe("browsing the answer bank", () => {
-  /** Mira's bank: 12 answers, one used today, one used 100 days ago, the rest never used. */
+  /** Mira's bank: the 2 defaults and 12 answers, one used today, one used 100 days ago, the rest never used. */
   async function bank() {
     const t = createTestPreparation();
     const old = add(t, { question: "Years of experience with Splunk", versions: { en: "3" }, category: "screening", kind: "number" });
@@ -233,17 +241,17 @@ describe("browsing the answer bank", () => {
     const first = t.preparation.listAnswers({ pageSize: 5 });
     const third = t.preparation.listAnswers({ pageSize: 5, page: 3 });
 
-    expect(first.counts).toEqual({ all: 12, standard: 3, screening: 9, notUsedIn90Days: 1 });
-    expect(first).toMatchObject({ total: 12, page: 1, pageSize: 5 });
-    expect(first.answers.map((a) => a.question)).toEqual(["Notice period", "Screening question 1", "Screening question 2", "Years of experience with Splunk", "Screening question 3"]);
-    expect(third.answers.map((a) => a.question)).toEqual(["Screening question 9", "Screening question 10"]);
+    expect(first.counts).toEqual({ all: 14, standard: 5, screening: 9, notUsedIn90Days: 3 });
+    expect(first).toMatchObject({ total: 14, page: 1, pageSize: 5 });
+    expect(first.answers.map((a) => a.question)).toEqual(["Salary expectations", "Gender, ethnicity and other diversity questions", "Notice period", "Screening question 1", "Screening question 2"]);
+    expect(third.answers.map((a) => a.question)).toEqual(["Screening question 7", "Screening question 8", "Screening question 9", "Screening question 10"]);
   });
 
   it("filters by category, by not used in 90 days, and searches questions, wordings and answers", async () => {
     const t = await bank();
 
-    expect(t.preparation.listAnswers({ category: "standard" }).answers.map((a) => a.question)).toEqual(["Notice period", "Screening question 1", "Screening question 2"]);
-    expect(t.preparation.listAnswers({ notUsedIn90Days: true }).answers.map((a) => a.question)).toEqual(["Years of experience with Splunk"]);
+    expect(t.preparation.listAnswers({ category: "standard", search: "question" }).answers.map((a) => a.question)).toEqual(["Gender, ethnicity and other diversity questions", "Screening question 1", "Screening question 2"]);
+    expect(t.preparation.listAnswers({ notUsedIn90Days: true, category: "screening" }).answers.map((a) => a.question)).toEqual(["Years of experience with Splunk"]);
     expect(t.preparation.listAnswers({ search: "предизвестие" }).answers.map((a) => a.question)).toEqual(["Notice period"]);
     expect(t.preparation.listAnswers({ search: "answer 10" })).toMatchObject({ total: 1, counts: { all: 1, standard: 0, screening: 1, notUsedIn90Days: 0 } });
   });
@@ -256,5 +264,58 @@ describe("browsing the answer bank", () => {
     const list = t.preparation.listAnswers({ category: "screening" });
 
     expect(list.portalEdits).toEqual([expect.objectContaining({ id: notice.id, question: "Notice period", portalEdit: expect.objectContaining({ before: "1 month", text: "2 weeks" }) })]);
+  });
+});
+
+describe("default answers", () => {
+  const mira = {
+    nameLatin: "Mira Petrova", nameCyrillic: "Мира Петрова", email: "mira.petrova@example.com", phone: "+359 88 000 0199",
+    city: "Sofia", country: "Bulgaria", links: ["https://www.linkedin.com/in/mira-petrova-example", "https://github.com/mira-example", "https://mira.example.com"],
+  };
+
+  it("start with salary as ask each time with its rule, and diversity questions left blank", () => {
+    const t = createTestPreparation();
+
+    const salary = t.preparation.findAnswer("What are your salary expectations?", "en");
+    const gender = t.preparation.findAnswer("What is your gender?", "bg");
+
+    expect(salary?.fill).toEqual({
+      action: "ask",
+      rule: { text: "Upper half of the posting's stated range, never under €2,000 a month", params: { kind: "salary", take: "upper-half", floor: 2000, currency: "EUR" } },
+    });
+    expect(gender?.fill).toEqual({ action: "leave-blank", whenRequired: "Предпочитам да не посоча" });
+    expect(t.preparation.listAnswers().counts).toMatchObject({ all: 2, standard: 2 });
+    expect(t.preparation.listAnswers().answers.map((a) => a.source.from)).toEqual(["Added as a default", "Added as a default"]);
+  });
+
+  it("come from the contact details once they're saved", () => {
+    const t = createTestPreparation();
+    t.preparation.saveContact(mira);
+
+    const fill = (q: string, l: "en" | "bg" = "en") => t.preparation.findAnswer(q, l)?.fill;
+
+    expect(fill("Email address")).toEqual({ action: "fill", value: "mira.petrova@example.com" });
+    expect(fill("Телефон", "bg")).toEqual({ action: "fill", value: "+359 88 000 0199" });
+    expect(fill("LinkedIn URL")).toEqual({ action: "fill", value: "https://www.linkedin.com/in/mira-petrova-example" });
+    expect(fill("GitHub")).toEqual({ action: "fill", value: "https://github.com/mira-example" });
+    expect(fill("Portfolio")).toEqual({ action: "fill", value: "https://mira.example.com" });
+    expect(fill("Current location")).toEqual({ action: "fill", value: "Sofia, Bulgaria" });
+    expect(t.preparation.listAnswers({ search: "mira.petrova" }).answers[0]?.source.from).toBe("From your contact details");
+  });
+
+  it("follow the contact details until Kris edits them, and a deleted one stays deleted", () => {
+    const t = createTestPreparation();
+    t.preparation.saveContact(mira);
+    const email = t.preparation.findAnswer("Email", "en")!;
+    const phone = t.preparation.findAnswer("Phone number", "en")!;
+    add(t, { ...t.preparation.answer(phone.answerId)!, wordings: t.preparation.answer(phone.answerId)!.wordings.map((w) => w.text), versions: { en: "+359 88 000 0100" } });
+    t.preparation.deleteAnswer(t.preparation.findAnswer("GitHub", "en")!.answerId);
+
+    t.preparation.saveContact({ ...mira, email: "mira.jobs@example.com", phone: "+359 88 000 0111" });
+
+    expect(t.preparation.findAnswer("Email", "en")?.fill).toEqual({ action: "fill", value: "mira.jobs@example.com" });
+    expect(t.preparation.answerHistory(email.answerId)[0]).toMatchObject({ event: "changed", where: "Your contact details", before: "mira.petrova@example.com", after: "mira.jobs@example.com" });
+    expect(t.preparation.findAnswer("Phone number", "en")?.fill).toEqual({ action: "fill", value: "+359 88 000 0100" });
+    expect(t.preparation.findAnswer("GitHub", "en")).toBeNull();
   });
 });

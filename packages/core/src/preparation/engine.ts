@@ -4,6 +4,8 @@
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
+import { defaultSearchSettings, type SearchSettings } from "../search-settings.ts";
+import { defaultAnswers } from "./answer-defaults.ts";
 import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, type AnswerLanguage, type AnswerList, type AnswerMatch, type AnswerQuery, type AnswerOrigin, type PortalEditInput, type SaveAnswerResult } from "./answers.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
@@ -127,6 +129,13 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const profile = createProfileStore(deps);
   const contact = createContactStore(deps);
   const answers = createAnswerStore(deps);
+  /** The salary floor in Kris's search settings (the discovery engine keeps them in the same database). */
+  const salaryFloor = () => {
+    const stored = deps.db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
+    return (stored ? (JSON.parse(String(stored.value)) as SearchSettings) : defaultSearchSettings).minMonthlySalaryEur || null;
+  };
+  const seedAnswers = () => answers.seed(defaultAnswers(contact.get(), salaryFloor()));
+  seedAnswers();
 
   async function draftDocument({ packageId, document, fileName: parts, keywords }: DraftRequest): Promise<DocumentDraft> {
     const fileName = documentFileName(document.kind, parts);
@@ -171,7 +180,11 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     resolvePortalEdit: (id, keep) => answers.resolvePortalEdit(id, keep),
     answerHistory: (id) => answers.history(id),
     contact: () => contact.get(),
-    saveContact: (details) => contact.save(details),
+    saveContact(details) {
+      const result = contact.save(details);
+      if (result.saved) seedAnswers();
+      return result;
+    },
     setPhoto: (photo) => contact.setPhoto(photo),
     removePhoto: () => contact.removePhoto(),
     async exportProfile() {
