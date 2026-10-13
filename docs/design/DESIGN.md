@@ -70,6 +70,31 @@ From the heuristic evaluation and accessibility audit in `critique/`:
 - **Async changes are announced** politely (source checks, health, toasts); toasts give at least 10 seconds to undo and move focus sensibly.
 - `--bloom` (light) darkened to `#a33d62` so pink text passes on its soft background (5.0:1).
 
+## Extension side panel (from the Apply hi-fi, 2026-10-13)
+
+Hi-fi: [hifi/extension-fill.html](hifi/extension-fill.html). Chrome's side panel, 320–480px wide (designed at 360). It hosts Capture and Fill; same tokens and components as the app.
+
+| Component | Variants and states | Rules |
+|---|---|---|
+| **Panel frame** | header (brand, connection), Fill / Capture switch, body, sticky footer | Footer holds the one primary action and the boundary line ("Fills only when you click. Never presses Next or Submit.") in every state; the document sets `scroll-padding-bottom` to the footer height |
+| **Context card** | matched, no package, different job, unknown portal | Names portal, company and job, and *why* it matched (job ID equals the package's target posting). The job title is the panel's h1 |
+| **Field row** | Profile, Answer bank, Package, CV version, You, Filling…, Waiting, Needs you, Skipped · your rule, Added by the portal, Didn't stick | A button (≥ 44px) that shows the field on the page. Reading order: label, value, source. Source always in words; chip colour follows the chip rules |
+| **Needs-you item** (panel) | choice, number, long text with count, yes/no | Pink edge (the `.needs` pattern). Question, basis line (where the suggestion came from), the answer control, "Fill …", "Show on page", and "Save to answer bank" where reusable |
+| **Page marks** (on the portal) | filled (pine edge + tick), needs you (pink edge + ?), check it (amber edge + half circle), didn't stick (red edge + cross) | Drawn as an outline and a positioned badge with `pointer-events: none`, `aria-hidden`; never change the portal's layout, tab order or values; removed by Undo |
+| **Copy row** | default, copied | Label (in the form's language, with English meaning), value, Copy; "Copied" for 2 s and announced |
+| **Checklist** | numbered steps, done | For sequences only Kris can finish (account creation) |
+
+### Rules from the Apply review
+
+- **Never act without a click.** Each fill is one click (or the keyboard command) on one page; the panel never reacts to page loads beyond noting that the address or title changed.
+- **Never the wrong package.** Every fill re-checks the job in the tab against the package; a different job is said out loud and never filled from the old package.
+- **Never overwrite silently.** A field that already has a value is kept and marked; portal-added entries (Workday's CV parsing) are reported and removed only on a click.
+- **Undo on every filled page**, working even if the app stops.
+- **Nothing learned silently.** Saving an answer to the answer bank is a visible, per-question tick; typed-on-the-portal answers are offered, not taken.
+- **Marking is a confirmation, not a guess.** "Mark as submitted" sits on the confirmation page (or unknown forms), never on a review page; its Undo stays until the panel closes.
+- **Honest progress.** Show the portal's own step count only when the portal prints it; otherwise "this page".
+- `--ink-3` on `--surface-sunken` is 4.64:1: don't use it there below 12px or at normal weight below 13px.
+
 ## How to use this in later steps
 
 - Hi-fi screens (step 6) apply these tokens to the wireframes in `wireframes/`. Tokens only: no raw hex, no one-off spacing.

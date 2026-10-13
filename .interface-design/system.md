@@ -10,3 +10,4 @@ Source of truth: docs/design/DESIGN.md, docs/design/tokens.json, app/ui/src/styl
 - Signature: the ascent chart (cumulative applications as a climb).
 - States never by colour alone (chips have icons, statuses differ in fill/outline).
 - Documents (CV, letter) always on white, single column, one pine accent, fixed template, ligatures off.
+- Extension side panel (Capture + Fill, 360px): context card says what matched and why; field rows name their source in words; one primary action plus the boundary line in a sticky footer; marks on portals are outline + shaped badge, never layout-changing.
