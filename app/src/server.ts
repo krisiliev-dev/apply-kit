@@ -290,6 +290,18 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
     }
   });
 
+  // The follow-up delays (Track): a nudge after applying, the note to self after an Offer, snooze.
+  app.get("/api/settings/follow-ups", async (c) => c.json(await tracker.followUpSettings()));
+  app.put("/api/settings/follow-ups", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    try {
+      return c.json(await tracker.saveFollowUpSettings(body));
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : String(err) }, 400);
+    }
+  });
+
   app.post("/api/jobs/:id/target", (c) => withPosting(c, (jobId, postingId) => engine.setTarget(jobId, postingId)));
   app.post("/api/jobs/:id/split", (c) => withPosting(c, (jobId, postingId) => engine.splitPosting(jobId, postingId)));
 
@@ -325,6 +337,8 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   // The Stats strip: applications per week with the pace, response rate, interviews, what's working.
   app.get("/api/applications/stats", async (c) => c.json(await tracker.stats()));
   app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));
+  // Needs you: follow-ups due, most urgent first, the count for the top bar's badge, and Coming up.
+  app.get("/api/applications/needs-you", async (c) => c.json(await tracker.needsYou()));
   app.get("/api/applications/:id", async (c) => {
     const a = await tracker.get(c.req.param("id"));
     return a ? c.json(a) : c.json({ error: "No such application" }, 404);
@@ -384,6 +398,25 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
     if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     return trackerCall(c, () => tracker.undoEvent(c.req.param("id")));
   });
+
+  // One follow-up: its outline and text (GET), the text as typed (PUT { text }), and what the user did:
+  // sent from their own mail, skipped, or snoozed. Each of those is an Event, undone like any other.
+  app.get("/api/follow-ups/:id", async (c) => {
+    const draft = await tracker.followUp(c.req.param("id"));
+    return draft ? c.json(draft) : c.json({ error: "No such follow-up" }, 404);
+  });
+  app.put("/api/follow-ups/:id/text", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.saveFollowUpText(c.req.param("id"), typeof body.text === "string" ? body.text : ""));
+  });
+  const followUpActions = { sent: tracker.markFollowUpSent, skip: tracker.skipFollowUp, snooze: tracker.snoozeFollowUp } as const;
+  for (const [path, act] of Object.entries(followUpActions)) {
+    app.post(`/api/follow-ups/:id/${path}`, async (c) => {
+      if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+      return trackerCall(c, () => act(c.req.param("id")));
+    });
+  }
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
