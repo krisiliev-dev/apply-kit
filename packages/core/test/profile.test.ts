@@ -58,4 +58,27 @@ describe("the honesty checks on saving a piece", () => {
     });
     expect(t.preparation.listPieces().groups[0]!.pieces[0]!.text).toBe("Built 40 Splunk detections that cut false positives by about a third.");
   });
+
+  it("won't save a piece with a number until it says where the number comes from", () => {
+    const t = createTestPreparation();
+    const input = { kind: "achievement" as const, text: "Triaged about 25 alerts a day in a 6-person SOC.", angles: ["security" as const] };
+
+    const without = t.preparation.savePiece(input);
+    const withSource = t.preparation.savePiece({ ...input, numberSource: "estimate" });
+
+    expect(without).toEqual({
+      saved: false,
+      problems: [{ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] }],
+    });
+    expect(withSource).toMatchObject({ saved: true, piece: { numberSource: "estimate" } });
+    expect(t.preparation.listPieces().total).toBe(1);
+  });
+
+  it("doesn't ask where a number comes from when the only numbers are years", () => {
+    const t = createTestPreparation();
+
+    const saved = t.preparation.savePiece({ kind: "achievement", text: "Moved the SOC's runbooks to the wiki in 2024.", numberSource: "measured" });
+
+    expect(saved).toMatchObject({ saved: true, piece: { numberSource: null } });
+  });
 });

@@ -174,7 +174,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
       belongsTo: hasEntry ? null : (input.belongsTo ?? null),
       tags: uniqueTags(input.tags ?? []),
       angles: allAngles.filter((a) => (input.angles ?? []).includes(a)),
-      numberSource: input.numberSource ?? null,
+      numberSource: quantities(input.text).length > 0 ? (input.numberSource ?? null) : null,
       status: before?.status ?? origin?.status ?? "confirmed",
       source: before?.source ?? (origin ? { from: origin.from, quote: origin.quote } : handSource),
       createdAt: before?.createdAt ?? clock.now().toISOString(),
@@ -239,6 +239,9 @@ function check(piece: ProfilePiece): PieceProblem[] {
         fixes,
       });
     }
+  }
+  if (quantities(piece.text).length > 0 && !piece.numberSource) {
+    problems.push({ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] });
   }
   return problems;
 }
