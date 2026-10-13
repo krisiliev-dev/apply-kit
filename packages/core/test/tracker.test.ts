@@ -324,3 +324,28 @@ describe("job markers for the Feed and the Job page", () => {
     expect((await tracker.jobMarkers([apm]))[apm]!.history[0]).toMatchObject({ title: "Associate Product Manager", onThisJob: true });
   });
 });
+
+describe("the Feed with Applications", () => {
+  it("leaves Jobs with an open Application out of New and Saved; All open keeps them", async () => {
+    const { engine, tracker, apm, support, ae } = await withFeed();
+    await engine.save([support]);
+    await tracker.addByHand({ job: { jobId: apm }, ...applied() });
+    await tracker.addByHand({ job: { jobId: support }, ...applied() });
+
+    const ids = async (view: "new" | "saved" | "open") => (await engine.queryFeed({ view })).jobs.map((j) => j.id).sort();
+    expect(await ids("new")).toEqual([ae]);
+    expect(await ids("saved")).toEqual([]);
+    expect(await ids("open")).toEqual([apm, support, ae].sort());
+    expect((await engine.queryFeed({ view: "new" })).counts).toMatchObject({ new: 1, saved: 0, open: 3 });
+  });
+
+  it("brings a Job back to New once its Application is closed", async () => {
+    const { engine, tracker, apm } = await withFeed();
+    const added = await tracker.addByHand({ job: { jobId: apm }, ...applied() });
+    if (added.outcome !== "added") throw new Error("not added");
+
+    await tracker.setStatus(added.application.id, "rejected");
+
+    expect((await engine.queryFeed({ view: "new" })).jobs.map((j) => j.id)).toContain(apm);
+  });
+});

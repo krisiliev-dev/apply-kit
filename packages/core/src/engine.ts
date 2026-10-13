@@ -2070,8 +2070,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const active = activeAdjustments();
       const all = rows.map((r) => ({ job: toFeedJob(r, money, active), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
+      // Jobs with an open Application (Track's) are decided: they leave New, Saved and the hidden pile
+      // and stay in All open with their Status.
+      const applied = new Set(db.prepare(
+        "SELECT job_id FROM application WHERE job_id IS NOT NULL AND removed_at IS NULL AND status NOT IN ('rejected', 'withdrawn')",
+      ).all().map((r) => liveJobId(db, String(r.job_id)) ?? String(r.job_id)));
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
-      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");
+      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state)
+        && (v === "passed" || (applied.has(j.id) ? v === "open" : j.hidden === (v === "hidden")));
       const countView = (v: FeedView) =>
         all.filter(({ job }) => inView(v, job) && (v === "passed" || v === "hidden" || !relocating(job))).length;
 
@@ -2089,7 +2095,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       }
       const ranked = query.view !== "passed" && query.view !== "hidden";
       // Jobs of this view's states that a filter holds back: relocation ones (filter off) and hidden ones.
-      const heldBack = ranked ? all.map(({ job }) => job).filter((j) => viewStates[query.view].includes(j.state)) : [];
+      const heldBack = ranked
+        ? all.map(({ job }) => job).filter((j) => viewStates[query.view].includes(j.state) && (query.view === "open" || !applied.has(j.id)))
+        : [];
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
