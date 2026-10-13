@@ -448,7 +448,7 @@ function Contacts({ app, refresh, toaster, addRef }: {
     if (adding) fieldRef.current?.focus();
     else if (opened.current) addRef.current?.focus();
     opened.current = adding;
-  }, [adding]);
+  }, [adding, addRef]);
   const cancel = () => { setAdding(false); setValue(""); setError(null); };
 
   async function save(e: FormEvent) {
