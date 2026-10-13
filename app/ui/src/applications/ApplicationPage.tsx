@@ -3,18 +3,21 @@
 // (skipped steps struck through, derived from Events) with the Status select; the Next step box; the
 // timeline, each Event naming its cause, with Undo where it applies and Add note; and beside it
 // "What you sent" (Attach CV) for one added by hand, the target posting and the contacts.
-// When an email moved the Status (state Moved by email): a banner with Looks right and Undo, and the
-// email that moved it with the signals it matched on (and an English line for one in Bulgarian).
-// Follow-ups, interviews, offers and the Package as sent come with later Track tickets.
-import type { ApplicationDetail, ApplicationSummary, HealthSummary, MovedByEmail, Status, TimelineEntry } from "@apply-kit/core";
+// When a follow-up is due, the Next step box holds it (hi-fi "Follow-up · AI budget out", without its
+// budget banner: this ticket has no drafting model, so the outline is always what's offered). When an
+// email moved the Status (state Moved by email): a banner with Looks right and Undo, and the email that
+// moved it with the signals it matched on (and an English line for one in Bulgarian). Interviews,
+// offers and the Package as sent come with later Track tickets.
+import type { ApplicationDetail, ApplicationSummary, FollowUp, HealthSummary, MovedByEmail, Status, TimelineEntry } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchSources,
-  setApplicationStatus, undoApplicationEvent,
+  followUpAction, needsYouChanged, setApplicationStatus, undoApplicationEvent,
 } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { By, StatusSelect } from "./ApplicationsPage.tsx";
-import { angleLabel, emailKindLabel, longDay, statusLabel, todaySofia } from "./words.ts";
+import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
+import { angleLabel, daysFrom, daysWord, dueWords, emailKindLabel, followUpName, longDay, statusLabel, todaySofia, weekDay } from "./words.ts";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; app: ApplicationDetail };
 
@@ -66,6 +69,7 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const refresh = useCallback(async () => {
     const app = await fetchApplication(id);
     setLoad({ state: "ready", app });
+    needsYouChanged();
     return app;
   }, [id]);
 
@@ -85,11 +89,11 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
 
   async function changeStatus(a: ApplicationSummary, to: Status): Promise<boolean> {
     try {
-      const { event } = await setApplicationStatus(a.id, to);
+      const { event, cancelled } = await setApplicationStatus(a.id, to);
       await refresh();
       focusStatus();
       toaster.show({
-        message: `${statusLabel[a.status]} → ${statusLabel[to]}. Logged by you.`,
+        message: `${statusLabel[a.status]} → ${statusLabel[to]}. Logged by you.${cancelled ? ` The ${followUpName(cancelled.kind).toLowerCase()} is cancelled; Undo brings it back.` : ""}`,
         returnFocus: focusStatus,
         undo: () => {
           undoApplicationEvent(event.id)
@@ -115,7 +119,7 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
       <div className="cols">
         <div className="col">
           {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
-          <NextStep app={app} onAddContact={() => contactRef.current?.click()} />
+          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} />
           <Timeline app={app} refresh={refresh} toaster={toaster} />
         </div>
         <div className="col">
@@ -179,15 +183,71 @@ function Check() {
   return <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
 }
 
-function NextStep({ app, onAddContact }: { app: ApplicationDetail; onAddContact: () => void }) {
+function NextStep({ app, onAddContact, refresh, toaster }: {
+  app: ApplicationDetail; onAddContact: () => void; refresh: () => Promise<ApplicationDetail>; toaster: Toaster;
+}) {
   const n = app.nextStep;
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
   const matched = app.contacts.map((c) => c.value);
+  const f = app.followUp;
+
+  async function act(followUp: FollowUp, action: FollowUpAction) {
+    const name = followUpName(followUp.kind).toLowerCase();
+    const focusPanel = () => requestAnimationFrame(() => document.getElementById("next-h")?.focus());
+    try {
+      const { event, followUp: after } = await followUpAction(followUp.id, action);
+      await refresh();
+      focusPanel();
+      toaster.show({
+        message: action === "sent" ? `Marked ${followUp.kind === "nudge" ? "sent" : "done"} · logged on the timeline.`
+          : action === "skip" ? `Skipped · no ${name} this time.` : `Snoozed · the ${name} is due again ${weekDay(after.dueOn)}.`,
+        returnFocus: focusPanel,
+        undo: () => {
+          undoApplicationEvent(event.id).then(refresh)
+            .then(() => { focusPanel(); toaster.announce(`Undone: the ${name} is ${dueWords(followUp.dueOn)} again.`); })
+            .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+        },
+      });
+    } catch (err) {
+      await refresh().catch(() => {});
+      toaster.show({ message: `Couldn't change the follow-up: ${message(err)}` });
+    }
+  }
+
+  if (n.kind === "follow-up") {
+    const fu = n.followUp;
+    return (
+      <div className="panel next-step ask">
+        <span className="kicker">{followUpName(fu.kind)} {dueWords(fu.dueOn)}{fu.kind === "nudge" && ` · ${daysWord(daysFrom(fu.anchorOn, fu.dueOn))} after ${app.status === "applied" ? "applying" : "moving to Screening"}`}</span>
+        <h2 id="next-h" tabIndex={-1}>{n.text}</h2>
+        <FollowUpWriter key={fu.id} id={fu.id} headingId="next-h" onAct={(action) => { act(fu, action).catch(() => {}); }} onAnnounce={toaster.announce} />
+      </div>
+    );
+  }
+
+  // When the follow-up of this stage comes, or how long it has been quiet since it went.
+  const followUpLine = f && (
+    f.state === "pending"
+      ? `${followUpName(f.kind)} due ${weekDay(f.dueOn)}${f.snoozedTo ? " (snoozed)" : ""}.`
+      : f.kind === "nudge" ? `No reply for ${daysWord(daysFrom(f.anchorOn, todaySofia()))}. Your follow-up was ${f.state === "sent" ? "sent" : "skipped"} ${dayOf(f.doneAt!)}; apply-kit won't push for another in this stage.` : null
+  );
   return (
     <div className="panel next-step">
       <span className="kicker">Next step</span>
-      <h2>{n.kind === "wait" ? `${n.text.replace(/\.$/, "")} from ${app.company}.` : n.text}</h2>
-      {n.kind === "note" && <p className="muted mini">From your latest note, {when(n.at)}. Add a newer note when it changes.</p>}
+      <h2 id="next-h" tabIndex={-1}>
+        {n.kind === "wait" ? `${n.text.replace(/\.$/, "")} from ${app.company}.` : n.text}
+        {n.kind === "wait" && f?.state === "pending" && ` ${followUpLine}`}
+      </h2>
+      {n.kind === "note" && <p className="muted mini">From your latest note, {when(n.at)}. Add a newer note when it changes.{followUpLine && ` ${followUpLine}`}</p>}
+      {n.kind === "wait" && f?.state === "pending" && f.kind === "nudge" && (
+        <p className="muted mini">
+          {f.snoozedTo
+            ? "You snoozed it to then. "
+            : <>That's {daysWord(daysFrom(f.anchorOn, f.dueOn))} after {app.status === "applied" ? "applying" : "moving to Screening"} (<a href="/settings/follow-ups">change the default in Settings</a>). </>}
+          Points to cover will be ready that morning. If {app.company} replies first, change the Status and the follow-up is cancelled.
+        </p>
+      )}
+      {n.kind === "wait" && f && f.state !== "pending" && <p className="muted mini">{followUpLine}</p>}
       {n.kind === "wait" && (
         <p className="muted mini">
           {matched.length

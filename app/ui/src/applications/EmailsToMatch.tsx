@@ -15,22 +15,21 @@ const addressOf = (from: string) => /<([^>]+)>/.exec(from)?.[1] ?? from;
 /** Bulgarian text is marked as such, so screen readers read it in Bulgarian. */
 const langOf = (text: string) => (/[Ѐ-ӿ]/.test(text) ? "bg" : undefined);
 
-export function EmailsToMatch({ emails, total, toaster, onAnswered }: {
+/** The emails to match, as items of Needs you's queue (newest first). */
+export function EmailToMatchItems({ emails, total, toaster, onAnswered }: {
   emails: EmailToMatch[];
   /** Every Application, for "Search all N". */
   total: number;
   toaster: Toaster;
-  /** Reloads the list (and the emails) after an answer or its undo. */
+  /** Reloads the list, Needs you and the emails after an answer or its undo. */
   onAnswered: () => Promise<unknown>;
 }) {
-  if (!emails.length) return null;
   return (
-    <section className="stack ny" aria-labelledby="ny-h">
-      <div className="sec-head"><h2 id="ny-h">Needs you · {emails.length}</h2>{emails.length > 1 && <span className="meta">Newest first</span>}</div>
-      <ul className="ny-list">
-        {emails.map((e) => <li key={e.email.id}><EmailCard item={e} total={total} toaster={toaster} onAnswered={onAnswered} /></li>)}
-      </ul>
-    </section>
+    <>
+      {emails.map((e) => (
+        <li key={e.email.id} className="needs wide"><EmailCard item={e} total={total} toaster={toaster} onAnswered={onAnswered} /></li>
+      ))}
+    </>
   );
 }
 
@@ -94,8 +93,7 @@ function EmailCard({ item, total, toaster, onAnswered }: { item: EmailToMatch; t
   const lang = email.language && email.language !== "en" ? email.language : langOf(`${email.subject} ${email.quote}`);
 
   return (
-    <div className="needs wide">
-      <form className="stack match-form" onSubmit={submit} noValidate>
+    <form className="stack match-form" onSubmit={submit} noValidate>
         <div className="stack tight">
           <span className="kind">Email to match · {dayTime(email.receivedAt)}</span>
           <span className="what">"<span lang={langOf(email.subject)}>{email.subject}</span>" from {address}</span>
@@ -142,8 +140,7 @@ function EmailCard({ item, total, toaster, onAnswered }: { item: EmailToMatch; t
             : "It comes from a job system many companies use, so your choice is kept for this email only. "}
           {moveTo ? `It reads like ${email.kind ? emailKindPhrase[email.kind] : "a reply"}; a Status it moves can be undone from the Application's timeline.` : ""}
         </p>
-      </form>
-    </div>
+    </form>
   );
 }
 

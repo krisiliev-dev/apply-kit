@@ -286,8 +286,10 @@ h2[tabindex="-1"]:focus { outline: none }
 .apps .closed td { color: var(--ink-3) }
 .apps .closed .t { color: var(--ink-2) }
 .apps tr.is-focused td { background: var(--met-soft) }
+.apps .next { font-size: var(--fs-small); color: var(--ink-2) }
+.apps .next.due { color: var(--bloom); font-weight: 600 }
 @media (min-width: 761px) {
-  .apps .c-status { width: 168px } .apps .c-date { width: 88px } .apps .c-last { width: 26% } .apps .c-angle { width: 96px }
+  .apps .c-status { width: 168px } .apps .c-date { width: 88px } .apps .c-last { width: 22% } .apps .c-next { width: 17% } .apps .c-angle { width: 96px }
 }
 @media (max-width: 760px) {
   .apps .wide, .apps col.wide { display: none }
@@ -408,13 +410,9 @@ h2[tabindex="-1"]:focus { outline: none }
 .data-table th, .data-table td { text-align: left; padding: var(--s-1) var(--s-3) var(--s-1) 0; border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums }
 .data-table th, .data-table tfoot td:first-child { color: var(--ink-3); font-weight: 600 }
 
-/* Needs you and email matching on Applications, the moved-by-email panel on an Application (from the
-   Track hi-fi, track.css "needs you"). Kind lines are sentence case in the source, capitals in CSS (TA-12). Tokens only. */
-.ny { gap: var(--s-4) }
-.ny-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3) }
-.needs .kind { font-size: var(--fs-caption); font-weight: 700; color: var(--bloom); letter-spacing: .02em; text-transform: uppercase }
-.needs .what { font-weight: 600; color: var(--ink); overflow-wrap: anywhere }
-.needs .why { font-size: var(--fs-small); color: var(--ink-2); margin: 0 }
+/* Email to match in Needs you, and the moved-by-email panel on an Application (from the Track hi-fi,
+   track.css "needs you"; the queue itself is in components.css). Tokens only. */
+.needs p.why { margin: 0 }
 .needs.wide { grid-template-columns: 4px minmax(0, 1fr) }
 .stack.tight { gap: var(--s-1) }
 .match-form { gap: var(--s-5) }

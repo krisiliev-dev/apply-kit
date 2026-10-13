@@ -131,6 +131,8 @@ describe("a doubtful email waits as Email to match", () => {
       remembers: "nimbus-cloud.example",
     });
     expect(waiting!.why).toContain("nothing has changed");
+    // It counts in Needs you beside the two follow-ups already due (both applied 8 days ago).
+    expect(await tracker.needsYou()).toMatchObject({ count: 3, emailsToMatch: 1, items: [{}, {}] });
 
     await tracker.answerEmail(waiting!.email.id, { choice: "application", applicationId: ostwind, move: true });
     expect(await statusOf(tracker, ostwind)).toBe("interviewing");
@@ -331,5 +333,26 @@ describe("the job mailbox's state on Applications", () => {
     expect(await tracker.mailbox()).toMatchObject({ state: "connected", since: null });
     expect((await tracker.stats()).mayBeMissingRepliesSince).toBeNull();
     expect(await statusOf(tracker, id)).toBe("rejected");
+  });
+});
+
+describe("replies and follow-ups", () => {
+  it("a reply cancels the pending nudge; a rejection's move cancels it too, and undoing that brings it back", async () => {
+    const { tracker, add, receive } = setup({ start: "2026-10-01T07:30:00Z" });
+    const northwind = await add("Northwind Labs", "Security Engineer", { contact: "northwind-labs.example", appliedOn: "2026-10-01" });
+    const orbitly = await add("Orbitly", "Backend Engineer (Go)", { contact: "hireloop.example", appliedOn: "2026-10-01" });
+    const nudges = async () => (await tracker.needsYou()).items.map((i) => i.application.company).sort();
+    await receive("2026-10-09T07:30:00Z");
+    expect(await nudges()).toEqual(["Northwind Labs", "Orbitly"]);
+
+    // A request for information is a reply, filed without moving anything.
+    await receive("2026-10-13T13:00:00Z", "recruiter-new-domain");
+    expect(await tracker.get(orbitly)).toMatchObject({ status: "applied", timeline: [{ kind: "email" }, {}] });
+    expect(await nudges()).toEqual(["Northwind Labs"]);
+
+    await receive("2026-10-14T10:00:00Z", "rejection");
+    expect(await nudges()).toEqual([]);
+    await tracker.undoEvent((await tracker.get(northwind))!.movedByEmail!.eventId);
+    expect(await nudges()).toEqual(["Northwind Labs"]);
   });
 });

@@ -3,19 +3,27 @@
 // and every Application grouped by Status. Interviewing, Screening, Offer and Applied start open;
 // Closed starts collapsed and is never deleted. Each row has a labelled Status select: a change is an
 // Event "by you" with a 10-second (or longer) undo toast. A row's title opens its Application page.
-// The Stats strip sits above (StatsStrip.tsx), then Needs you with emails to match (EmailsToMatch.tsx);
-// the job mailbox's state shows as a banner and in the page-head line (MailState.tsx). Follow-ups in
-// Needs you, search and filters come with other Track tickets.
-import type { ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, GroupKey, HealthSummary, Status, TrackMailbox } from "@apply-kit/core";
+// The Stats strip sits above (StatsStrip.tsx), then Needs you (NeedsYou.tsx): emails to match
+// (EmailsToMatch.tsx) and follow-ups due, written in a dialog over the list. Each row's Next says what
+// comes next. The job mailbox's state shows as a banner and in the page-head line (MailState.tsx).
+// Search and filters come later.
+import type {
+  ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, FollowUp, GroupKey, HealthSummary, NeedsYou, NeedsYouEntry, Status, TrackMailbox,
+} from "@apply-kit/core";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { fetchApplications, fetchEmailsToMatch, fetchSources, fetchTrackMailbox, setApplicationStatus, undoApplicationEvent } from "../api.ts";
+import {
+  fetchApplications, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
+  setApplicationStatus, undoApplicationEvent,
+} from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Chevron } from "../icons.tsx";
 import { AddApplicationDialog, type Added } from "./AddApplicationDialog.tsx";
-import { EmailsToMatch } from "./EmailsToMatch.tsx";
+import { EmailToMatchItems } from "./EmailsToMatch.tsx";
+import type { FollowUpAction } from "./FollowUpWriter.tsx";
 import { MailboxBanner, mailWords, useMailReading } from "./MailState.tsx";
+import { FollowUpDialog, itemId, NeedsYouSection } from "./NeedsYou.tsx";
 import { StatsStrip } from "./StatsStrip.tsx";
-import { angleLabel, eventTime, shortDay, statusLabel, statusOrder } from "./words.ts";
+import { angleLabel, dueWords, eventTime, followUpName, nextWords, shortDay, statusLabel, statusOrder, todaySofia, weekDay } from "./words.ts";
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; list: ApplicationList };
 
@@ -36,6 +44,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   const [adding, setAdding] = useState(false);
   const [linkProblem, setLinkProblem] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
+  const [needs, setNeeds] = useState<NeedsYou | null>(null);
+  const [writing, setWriting] = useState<{ entry: NeedsYouEntry; opener: HTMLElement } | null>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   /** Where focus goes once the next list has rendered (the button it targets may be a new one). */
   const focusNext = useRef<(() => void) | null>(null);
@@ -69,8 +79,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   useEffect(() => {
     const ctrl = new AbortController();
-    fetchApplications(all, ctrl.signal)
-      .then((list) => { setLoad({ state: "ready", list }); setLoadedAt(new Date().toISOString()); })
+    Promise.all([fetchApplications(all, ctrl.signal), fetchNeedsYou(ctrl.signal)])
+      .then(([list, n]) => { setNeeds(n); setLoad({ state: "ready", list }); setLoadedAt(new Date().toISOString()); })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setLoad({ state: "error", message: message(err) }); });
     return () => ctrl.abort();
   }, [all, attempt]);
@@ -83,11 +93,14 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     return () => ctrl.abort();
   }, [attempt]);
 
+  /** Loads the list and Needs you again; the top bar's badge counts again too. */
   const refresh = useCallback(async (show: GroupKey[] = all) => {
-    const list = await fetchApplications(show);
+    const [list, n] = await Promise.all([fetchApplications(show), fetchNeedsYou()]);
+    setNeeds(n);
     setLoad({ state: "ready", list });
     setLoadedAt(new Date().toISOString());
     refreshMail().catch(() => {});
+    needsYouChanged();
     return list;
   }, [all, refreshMail]);
 
@@ -136,12 +149,12 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   /** Applies a Status change; resolves false when it was refused (the list then shows the Status the service has). */
   async function changeStatus(app: ApplicationSummary, to: Status): Promise<boolean> {
     try {
-      const { event } = await setApplicationStatus(app.id, to);
+      const { event, cancelled } = await setApplicationStatus(app.id, to);
       const list = await refresh();
       const group = groupOf(list, app.id) ?? (to === "rejected" || to === "withdrawn" ? "closed" : (to as GroupKey));
       focusApplication(app.id, group);
       toaster.show({
-        message: `${app.company}: ${statusLabel[app.status]} → ${statusLabel[to]}. Logged by you.`,
+        message: `${app.company}: ${statusLabel[app.status]} → ${statusLabel[to]}. Logged by you.${cancelledWords(cancelled)}`,
         returnFocus: () => focusApplication(app.id, group),
         undo: () => {
           undoApplicationEvent(event.id)
@@ -159,6 +172,39 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
       focusApplication(app.id);
       toaster.show({ message: `Couldn't change the Status: ${message(err)}` });
       return false;
+    }
+  }
+
+  /** Mark sent, skip or snooze a follow-up (from Needs you or its dialog), with Undo in the toast. */
+  async function actOn(entry: NeedsYouEntry, action: FollowUpAction) {
+    const { application: a, followUp: f } = entry;
+    const name = `${a.company} ${followUpName(f.kind).toLowerCase()}`;
+    try {
+      const { event, followUp } = await followUpAction(f.id, action);
+      setWriting(null);
+      await refresh();
+      // Sent or skipped, it stays in place as done; snoozed, it leaves Needs you.
+      const focusAfter = () => requestAnimationFrame(() => {
+        const link = document.querySelector<HTMLElement>(`#${CSS.escape(itemId(f.id))} a`);
+        (action === "snooze" || !link ? document.getElementById("ny-h") : link)?.focus();
+      });
+      focusAfter();
+      toaster.show({
+        message: action === "sent"
+          ? `Marked ${f.kind === "nudge" ? "sent" : "done"} · ${name} logged on its timeline.`
+          : action === "skip" ? `Skipped · no ${followUpName(f.kind).toLowerCase()} for ${a.company} this time.`
+          : `Snoozed · ${name} due again ${weekDay(followUp.dueOn)}.`,
+        returnFocus: focusAfter,
+        undo: () => {
+          undoApplicationEvent(event.id)
+            .then(() => refresh())
+            .then(() => { focusAfter(); toaster.announce(`Undone: the ${name} is ${dueWords(f.dueOn)} again.`); })
+            .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+        },
+      });
+    } catch (err) {
+      await refresh().catch(() => {});
+      toaster.show({ message: `Couldn't change the follow-up: ${message(err)}` });
     }
   }
 
@@ -184,6 +230,15 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
       },
     });
   }
+
+  const followUpDialog = writing && (
+    <FollowUpDialog
+      entry={writing.entry}
+      onAct={(action) => { actOn(writing.entry, action).catch(() => {}); }}
+      onClose={() => { const o = writing.opener; setWriting(null); requestAnimationFrame(() => o.focus()); }}
+      onAnnounce={toaster.announce}
+    />
+  );
 
   const dialog = adding && (
     <AddApplicationDialog
@@ -211,7 +266,12 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         {(mailbox?.state === "failing" || mailbox?.state === "not-connected" || emails.length > 0) && (
           <div className="stack" style={{ gap: "var(--s-7)", marginBottom: "var(--s-7)" }}>
             <MailboxBanner mailbox={mailbox} />
-            <EmailsToMatch emails={emails} total={0} toaster={toaster} onAnswered={() => refresh()} />
+            {emails.length > 0 && (
+              <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
+                <div className="sec-head"><h2 id="ny-h" tabIndex={-1}>Needs you · {emails.length}</h2></div>
+                <ul className="needs-queue"><EmailToMatchItems emails={emails} total={0} toaster={toaster} onAnswered={() => refresh()} /></ul>
+              </section>
+            )}
           </div>
         )}
         <div className="empty">
@@ -277,14 +337,20 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
       <StatsStrip version={list} mailbox={mailbox} />
 
-      <EmailsToMatch emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />
-
-      {list.total === 1 && emails.length === 0 && (
+      {list.total === 1 && !needs?.items.length && emails.length === 0 ? (
         <div className="calm">
           <h2 className="sr-only">Needs you</h2>
           <h3>Nothing needs you yet</h3>
-          <p className="muted">Your first Application is in. Change its Status from the list whenever you hear back; every change is logged and can be undone.</p>
+          <p className="muted">
+            Your first Application is in. Change its Status from the list whenever you hear back; every change is logged and can be undone.
+            {needs?.comingUp[0] && ` Its follow-up comes due ${weekDay(needs.comingUp[0].dueOn)} if there's no reply.`}
+          </p>
         </div>
+      ) : needs && (
+        <NeedsYouSection
+          needs={needs} onWrite={(entry, opener) => setWriting({ entry, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
+          emails={<EmailToMatchItems emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />}
+        />
       )}
 
       <section className="panel flush" aria-labelledby="apps-h">
@@ -299,9 +365,16 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         </div>
       </section>
       {dialog}
+      {followUpDialog}
       {toaster.element}
     </section>
   );
+}
+
+/** What a Status change did to a pending follow-up, for its toast. */
+function cancelledWords(f: FollowUp | null): string {
+  if (!f) return "";
+  return ` The ${followUpName(f.kind).toLowerCase()} ${f.dueOn <= todaySofia() ? "that was due" : `due ${weekDay(f.dueOn)}`} is cancelled; Undo brings it back.`;
 }
 
 function Group({ group: g, list, open, highlight, onToggle, onMore, onStatus }: {
@@ -331,12 +404,12 @@ function Group({ group: g, list, open, highlight, onToggle, onMore, onStatus }: 
         <div className="table-wrap">
           <table className="table apps" aria-label={`${g.label} applications`}>
             <colgroup>
-              <col className="c-job" /><col className="c-status" /><col className="c-date wide" /><col className="c-last wide" /><col className="c-angle wide" />
+              <col className="c-job" /><col className="c-status" /><col className="c-date wide" /><col className="c-last wide" /><col className="c-next wide" /><col className="c-angle wide" />
             </colgroup>
             <thead>
               <tr>
                 <th scope="col">Job</th><th scope="col">Status</th><th scope="col" className="wide">Applied</th>
-                <th scope="col" className="wide">Last event</th><th scope="col" className="wide">Angle</th>
+                <th scope="col" className="wide">Last event</th><th scope="col" className="wide">Next</th><th scope="col" className="wide">Angle</th>
               </tr>
             </thead>
             <tbody>
@@ -359,16 +432,18 @@ function Row({ app: a, highlighted, onStatus }: { app: ApplicationSummary; highl
   const closed = a.status === "rejected" || a.status === "withdrawn";
   const last = `${a.lastEvent.text} · ${eventTime(a.lastEvent.at)}`;
   const lang = langOf(a.title);
+  const next = nextWords(a.next);
   return (
     <tr id={rowId(a.id)} className={[closed && "closed", highlighted && "is-focused"].filter(Boolean).join(" ") || undefined}>
       <td>
         <a className="t" href={`/applications/${encodeURIComponent(a.id)}`} lang={lang}>{a.title}</a>
         <span className="co">{a.company}</span>
-        <span className="narrow">Applied {shortDay(a.appliedOn)} · {last}</span>
+        <span className="narrow">Applied {shortDay(a.appliedOn)} · {next?.text ?? last}</span>
       </td>
       <td><StatusSelect key={a.status} app={a} onStatus={onStatus} /></td>
       <td className="wide num">{shortDay(a.appliedOn)}</td>
       <td className="wide"><div className="last">{last}</div><By cause={a.lastEvent.cause} /></td>
+      <td className={`wide next${next?.due ? " due" : ""}`}>{next?.due && <span aria-hidden="true">● </span>}{next?.text ?? "—"}</td>
       <td className="wide meta">{a.angle ? angleLabel[a.angle] : "—"}</td>
     </tr>
   );

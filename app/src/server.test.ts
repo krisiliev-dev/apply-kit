@@ -301,6 +301,33 @@ describe("the Applications routes", () => {
     expect(job).toMatchObject({ id: jobId, track: { application: { status: "applied" }, history: [{ title: "Security Engineer" }] } });
   });
 
+  it("lists Needs you, opens a follow-up to write, keeps its text, marks it sent with undo, and has the delays as settings", async () => {
+    const s = service();
+    await s.request("/api/applications", s.json({ job: { company: "Tidewater Pay", title: "Application Security Engineer" }, appliedOn: "2026-10-05", status: "applied", contact: "careers@tidewaterpay.example" }));
+
+    const needs = (await (await s.request("/api/applications/needs-you")).json()) as { count: number; items: { followUp: { id: string } }[] };
+    expect(needs).toMatchObject({ count: 1, items: [{ application: { company: "Tidewater Pay" }, followUp: { kind: "nudge", dueOn: "2026-10-12" } }] });
+    const at = `/api/follow-ups/${encodeURIComponent(needs.items[0]!.followUp.id)}`;
+
+    const text = await s.request(`${at}/text`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Still keen." }) });
+    expect(text.status).toBe(200);
+    expect(await (await s.request(at)).json()).toMatchObject({ followUp: { text: "Still keen." }, mail: { to: "careers@tidewaterpay.example" }, outline: expect.any(Array) });
+
+    const sent = await s.request(`${at}/sent`, s.json({}));
+    expect(sent.status).toBe(200);
+    expect(await (await s.request(`${at}/sent`, s.json({}))).json()).toMatchObject({ problem: "unchanged" });
+    const { event } = (await sent.json()) as { event: { id: string } };
+    await s.request(`/api/applications/events/${encodeURIComponent(event.id)}/undo`, s.json({}));
+    expect((await s.request(`${at}/snooze`, s.json({}))).status).toBe(200);
+    expect((await s.request(`${at}/skip`, s.json({}))).status).toBe(200);
+    expect((await s.request("/api/follow-ups/no-such-id")).status).toBe(404);
+
+    expect(await (await s.request("/api/settings/follow-ups")).json()).toEqual({ nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3 });
+    const put = (body: unknown) => s.request("/api/settings/follow-ups", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect((await put({ nudgeAfterDays: 0 })).status).toBe(400);
+    expect(await (await put({ nudgeAfterDays: 10, offerNoteAfterDays: 1, snoozeDays: 3 })).json()).toMatchObject({ nudgeAfterDays: 10 });
+  });
+
   it("gives the Stats strip its numbers", async () => {
     const s = service();
     await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
