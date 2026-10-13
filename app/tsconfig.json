@@ -1,0 +1,6 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": { "outDir": "../node_modules/.tsc/app", "types": ["node"] },
+  "include": ["src"],
+  "references": [{ "path": "../packages/core" }]
+}

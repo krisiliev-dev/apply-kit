@@ -10,6 +10,9 @@ build/
 dist/
 .vite/
 coverage/
+# WXT (extension): built extension and generated types
+.output/
+.wxt/
 *.tsbuildinfo
 
 # Environment / secrets
@@ -43,3 +46,6 @@ personal/
 
 # Personal database shortcut (symlink to ~/Library/Application Support/apply-kit)
 /data
+
+# Extraction evaluation reports (pnpm eval:extraction)
+eval/extraction/reports/

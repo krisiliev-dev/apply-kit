@@ -1,0 +1,77 @@
+{
+  "id": "en-security-kraken-security-architect",
+  "field": "security",
+  "source": {
+    "kind": "ashby",
+    "url": "https://jobs.ashbyhq.com/kraken.com/2bad131b-78ad-4266-8c18-7b035a11937d",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Staff Security Architect",
+    "company": "Kraken Com",
+    "location": "United Kingdom; Brazil; United Arab Emirates; Ireland; Peru; Sweden; Colombia; Argentina; Romania; Cyprus; Switzerland; Portugal; Lithuania; South Africa; Czech Republic; Canada; Hungary; Mexico; Chile; Poland; Spain; Bulgaria · Remote",
+    "text": "Building the Future of Open Finance\nPayward - the parent company behind Kraken, NinjaTrader, Breakout, xStocks, Payward Services and CF Benchmarks - has spent the last 15 years building one of the most modern and globally accessible financial infrastructure platforms in the industry, built to advance an open, global financial system.\nBefore you apply, we encourage you to explore our culture page to understand what drives us and how we work.\nThe team\nFounded in 2011, Kraken is one of the world's longest-standing crypto platforms, trusted by over 10 million individuals and institutions across the globe. It offers spot trading, margin, futures, staking, and OTC services, with products built for both individual investors and institutional clients.\nWe are seeking a skilled & hands-on Senior Security Architect for Kraken Security Labs. Kraken Security Labs provides boutique-style, deeply technical internal security consulting on current and future products.\nWe don't merely provide high-level guidance but indeed get deeply embedded in the different engineering teams and do not mind hands-on work.\nOur projects span from classical infrastructure security projects, over cryptography, web3, and complex Rust projects, to securing our next generation of AI products.\nYou will work in a small, highly technical team and collaborate with teams all across the company & world.\nThe opportunity\n• Design, review & verify robust security architecture in a heterogeneous environment\n• Conduct thorough security assessments and audits of existing architectures, recommending practical improvements\n• Stay updated with latest (blockchain) security trends, threats and mitigation techniques\n• Provide expertise to our blockchain teams, ensuring secure operational practices\nWhat You Bring\n• Proven experience as an IT security expert, with a strong background in application security\n• Experience in security testing diverse application\n• Experience with infrastructure security\n• Basic familiarity with security frameworks (OWASP, NIST, etc)\n• Excellent problem-solving skills and the ability to work in a dynamic, fast-paced environment\n• Strong communication and collaboration skills to effectively remotely work with stakeholders across the organization\nUnless a specific application deadline is stated in the job posting, applications are accepted on an ongoing basis.\nPlease note, applicants are permitted to redact or remove information on their resume that identifies age, date of birth, or dates of attendance at or graduation from an educational institution.\nWe consider qualified applicants with criminal histories for employment on our team, assessing candidates in a manner consistent with the requirements of the San Francisco Fair Chance Ordinance.\nOur commitment\nPayward is powered by people from around the world and we celebrate the diverse talents, backgrounds, contributions, and unique perspectives that everyone brings to the table. We hire based on merit, seeking out people with the right abilities, knowledge, and skills for the job. We encourage you to apply for roles where you don't fully meet the listed requirements, especially if you're passionate or knowledgeable about crypto.\nWe may ask candidates to complete job-related skills or work-style assessments as part of our hiring process. These assessments evaluate competencies relevant to the role and are applied consistently across candidates for similar positions. Results are considered alongside experience and interviews, and are not the sole basis for any employment decision.\nAs an equal opportunity employer, we don't tolerate discrimination or harassment of any kind, whether based on race, ethnicity, age, gender identity, citizenship, religion, sexual orientation, disability, pregnancy, veteran status, or any other protected characteristic as outlined by federal, state, or local laws.\nStay connected\nFollow us on Twitter\nLearn on the Kraken Blog\nConnect on LinkedIn\nCandidate Privacy Notice"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "IT security expert with a strong application security background",
+        "kind": "required"
+      },
+      {
+        "text": "Security testing diverse applications",
+        "kind": "required"
+      },
+      {
+        "text": "Infrastructure security",
+        "kind": "required"
+      },
+      {
+        "text": "Basic security frameworks (OWASP, NIST)",
+        "kind": "required"
+      },
+      {
+        "text": "Problem solving in a dynamic, fast-paced environment",
+        "kind": "required"
+      },
+      {
+        "text": "Communication and collaboration for remote work",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "remote",
+      "locations": [
+        "United Kingdom",
+        "Brazil",
+        "United Arab Emirates",
+        "Ireland",
+        "Peru",
+        "Sweden",
+        "Colombia",
+        "Argentina",
+        "Romania",
+        "Cyprus",
+        "Switzerland",
+        "Portugal",
+        "Lithuania",
+        "South Africa",
+        "Czech Republic",
+        "Canada",
+        "Hungary",
+        "Mexico",
+        "Chile",
+        "Poland",
+        "Spain",
+        "Bulgaria"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Remote and open to the 22 countries in the listed location."
+}

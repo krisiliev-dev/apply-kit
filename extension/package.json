@@ -1,0 +1,18 @@
+{
+  "name": "@apply-kit/extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Chrome-first WXT extension (ADR 0002): pairs once with the local service and captures the job page, or the search results, Kris is viewing.",
+  "scripts": {
+    "dev": "wxt",
+    "build": "wxt build",
+    "zip": "wxt zip"
+  },
+  "dependencies": {
+    "@apply-kit/core": "workspace:*"
+  },
+  "devDependencies": {
+    "wxt": "0.21.4"
+  }
+}

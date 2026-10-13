@@ -1,0 +1,207 @@
+{
+  "offset": 0,
+  "limit": 3,
+  "totalFound": 2,
+  "content": [
+    {
+      "id": "744000150972019",
+      "name": "Video Artist",
+      "uuid": "b6f5f456-a0db-45b0-b931-6d28e6abfb35",
+      "jobAdId": "144c89f5-2963-44ff-87ae-58ba4671f3e9",
+      "defaultJobAd": true,
+      "refNumber": "REF6221E",
+      "company": {
+        "identifier": "Gameloft",
+        "name": "Gameloft"
+      },
+      "releasedDate": "2026-09-22T08:57:54.882Z",
+      "location": {
+        "city": "Sofia",
+        "region": "Sofia City Province",
+        "country": "bg",
+        "remote": false,
+        "hybrid": true,
+        "latitude": "42.6977082",
+        "longitude": "23.3218675",
+        "fullLocation": "Sofia, Sofia City Province, Bulgaria"
+      },
+      "industry": {
+        "id": "computer_games",
+        "label": "Computer Games"
+      },
+      "department": {
+        "id": "3815725",
+        "label": "ART & VIDEO"
+      },
+      "function": {
+        "id": "art_creative",
+        "label": "Art/Creative"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "customField": [
+        {
+          "fieldId": "655b7c111f0a87319f555fe5",
+          "fieldLabel": "Gameloft employment type",
+          "valueId": "654e7566-15a2-4624-816e-33de33b53cec",
+          "valueLabel": "Permanent contract"
+        },
+        {
+          "fieldId": "6304915750b4d25854b4a8ea",
+          "fieldLabel": "Work Model",
+          "valueId": "64c7597f-f9c0-4b1f-8221-773d5b3c8051",
+          "valueLabel": "Hybrid"
+        },
+        {
+          "fieldId": "566eea9de4b0fa3f48a0fc0e",
+          "fieldLabel": "Office Location",
+          "valueId": "b83d043f-4f64-44ef-945d-b64638ad33d2",
+          "valueLabel": "Sofia"
+        },
+        {
+          "fieldId": "58b7e4d0e4b09a6d37a0cd8c",
+          "fieldLabel": "Department",
+          "valueId": "3815725",
+          "valueLabel": "ART & VIDEO"
+        },
+        {
+          "fieldId": "COUNTRY",
+          "fieldLabel": "Country/Region",
+          "valueId": "bg",
+          "valueLabel": "Bulgaria"
+        },
+        {
+          "fieldId": "56bcbc38e4b0b526efa7e47c",
+          "fieldLabel": "Brands",
+          "valueId": "9e9acc04-4613-4e80-a71f-1b08c18c91de",
+          "valueLabel": "Gameloft Sofia"
+        },
+        {
+          "fieldId": "577349a4e4b0d4e6b5c508e8",
+          "fieldLabel": "Gameloft Family Group",
+          "valueId": "054debd9-1cbe-42a7-9e6a-07c907378116",
+          "valueLabel": "CREATIVE & DESIGN"
+        }
+      ],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gameloft/postings/744000150972019",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    },
+    {
+      "id": "744000150674086",
+      "name": "Game Producer",
+      "uuid": "3fa67078-8cd8-4ae8-bf50-a83d423bf06a",
+      "jobAdId": "565d24bc-8be5-4849-bffa-2b41df6e40ca",
+      "defaultJobAd": true,
+      "refNumber": "REF6218I",
+      "company": {
+        "identifier": "Gameloft",
+        "name": "Gameloft"
+      },
+      "releasedDate": "2026-09-21T11:58:46.876Z",
+      "location": {
+        "city": "Sofia",
+        "region": "Sofia City Province",
+        "country": "bg",
+        "remote": false,
+        "hybrid": false,
+        "latitude": "42.6977082",
+        "longitude": "23.3218675",
+        "fullLocation": "Sofia, Sofia City Province, Bulgaria"
+      },
+      "industry": {
+        "id": "entertainment",
+        "label": "Entertainment"
+      },
+      "department": {
+        "id": "3816269",
+        "label": "PRODUCING"
+      },
+      "function": {
+        "id": "information_technology",
+        "label": "Information Technology"
+      },
+      "typeOfEmployment": {
+        "id": "permanent",
+        "label": "Full-time"
+      },
+      "experienceLevel": {
+        "id": "mid_senior_level",
+        "label": "Mid-Senior Level"
+      },
+      "customField": [
+        {
+          "fieldId": "655b7c111f0a87319f555fe5",
+          "fieldLabel": "Gameloft employment type",
+          "valueId": "654e7566-15a2-4624-816e-33de33b53cec",
+          "valueLabel": "Permanent contract"
+        },
+        {
+          "fieldId": "6362961a62097147f18b3f5b",
+          "fieldLabel": "Manager Role",
+          "valueId": "22414fb4-c7e6-449f-ba3d-60e661853e2d",
+          "valueLabel": "No"
+        },
+        {
+          "fieldId": "6304915750b4d25854b4a8ea",
+          "fieldLabel": "Work Model",
+          "valueId": "14035bc7-0b4f-4160-a065-13ef5e03b9d7",
+          "valueLabel": "On site"
+        },
+        {
+          "fieldId": "6318832b5532e069fe058e9f",
+          "fieldLabel": "Platform",
+          "valueId": "6e84dae8-ebbe-4039-867b-f06f73620a4a",
+          "valueLabel": "Cross-Platform"
+        },
+        {
+          "fieldId": "566eea9de4b0fa3f48a0fc0e",
+          "fieldLabel": "Office Location",
+          "valueId": "b83d043f-4f64-44ef-945d-b64638ad33d2",
+          "valueLabel": "Sofia"
+        },
+        {
+          "fieldId": "58b7e4d0e4b09a6d37a0cd8c",
+          "fieldLabel": "Department",
+          "valueId": "3816269",
+          "valueLabel": "PRODUCING"
+        },
+        {
+          "fieldId": "COUNTRY",
+          "fieldLabel": "Country/Region",
+          "valueId": "bg",
+          "valueLabel": "Bulgaria"
+        },
+        {
+          "fieldId": "56bcbc38e4b0b526efa7e47c",
+          "fieldLabel": "Brands",
+          "valueId": "9e9acc04-4613-4e80-a71f-1b08c18c91de",
+          "valueLabel": "Gameloft Sofia"
+        },
+        {
+          "fieldId": "577349a4e4b0d4e6b5c508e8",
+          "fieldLabel": "Gameloft Family Group",
+          "valueId": "bcc08879-6ae3-413b-a634-c5af8fa299fa",
+          "valueLabel": "PRODUCING FAMILY GROUP"
+        }
+      ],
+      "visibility": "PUBLIC",
+      "ref": "https://api.smartrecruiters.com/v1/companies/Gameloft/postings/744000150674086",
+      "language": {
+        "code": "en",
+        "label": "English",
+        "labelNative": "English (US)"
+      }
+    }
+  ]
+}

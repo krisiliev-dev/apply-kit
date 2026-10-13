@@ -1,0 +1,132 @@
+{
+  "id": "en-security-postbank-head-it-security-ops",
+  "field": "security",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/postbank-head-of-it-service-and-security-operations-department/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Head of IT Service and Security Operations Department",
+    "company": "Postbank",
+    "location": "София",
+    "text": "Role Overview\nThe Head of IT Service and Security Operations Department plays a pivotal role in advancing and supporting the ongoing improvement of both IT Service Operations and IT Security Operations teams. This position demands a blend of strong leadership and experienced management, ensuring seamless technical oversight and strategic direction. The successful candidate will be responsible for designing and refining key operational processes, coordinating efforts across essential tools, workflows, and personnel, and ensuring that all activities align with organizational goals. By serving as a manager who bridges the IT, Security, and Service management domains, this role is critical for integrating processes and fostering effective collaboration across departments and ensuring alignment with industry standards and national laws.\nThe main responsibilities for the position are:\n• Oversaw both IT Operations and IT Service & Security Operations, managing approximately 23 people within the Infrastructure Directorate at Eurobank Bulgaria – Postbank.\n• Leads and coaches Operations teams, promoting a service-oriented culture focused on high availability, resilience, improvement, security, and cost efficiency.\n• Management of strategic input on monitoring scope, technologies, strategy, security event handling, and operational maturity.\n• Managing the processes for the continuous monitoring of security and/or system events and incidents.\n• Lead the operations tasks, analyze and respond proactively to cybersecurity threats and vulnerabilities enhancing the current methods introducing holistic approaches.\n• Coordinate incident response activities and manage potential security breaches and potential security risks.\n• Conduct in-depth Threat Intelligence analysis of threat data.\n• Manage and maintain security tools and technologies.\n• Oversee security systems and methodologies to ensure compliance with laws, regulations, industry standards, and best practices.\n• Lead the Bank to mature department with high goals for automating routine tasks and streamlining workflows such as Security Orchestration, Automation, and Response (SOAR).\n• Support tool governance, platform lifecycle discussions, and risk-aligned monitoring practices.\n• Provide hands on support and guidance to the Direct Reports.\n• Assist in defining process improvements and maintaining regulatory or internal control alignment.\n• Facilitate knowledge transfer, documentation standardization, and operational scaling efforts.\nOur requirements (Fundamentals):\n• Experience: Minimum of 5+ years of leadership and management experience in cybersecurity or security operations with proven track record in managing security incidents and threat analysis.\n• Significant experience in IT service management, security operations, or infrastructure monitoring.\n• Previous involvement in platform optimization, cross-team alignment, or monitoring architecture.\n• Demonstrated ability to operate across departments and influence decisions with data and logic.\n• Familiarity with enterprise-grade monitoring, detection, and incident handling tools.\n• Strategic communication and documentation capabilities, with a process-oriented mindset.\n• Network & Security Skills: Strong knowledge understanding of networking protocols (TCP/IP) and security solutions like firewalls, IDS/IPS systems, and VPNs3.\n• SIEM Expertise: configure correlation rules, build dashboards, and manage alerts\n• Incident Response: techniques for identifying, isolating, and mitigating security incidents.\n• Bachelor’s degree in computer science, Information Security, or related field.\n• Advanced certifications such as CISSP, CISM, CCISO, or CEH are highly desirable.\n• Experience in Implementation of frameworks and industry standards (ITIL, NIST, MITRE ATT&CK, DORA, NIS 2).\nAdvantage (Considered as a Plus):\n• Experience advising or leading multi-platform monitoring environments. / Web application firewalls, IPS/IDS, Antispam solutions, EDR and XDR solutions.\n• Tool governance and risk alignment knowledge (e.g., IT controls, audit readiness).\n• SANS Institute Certifications, GIAC GSOM, Advanced Microsoft Azure Security Certifications.\n• Development and leading of IT Operations/Security Operations teams in financial institutions.\nWe offer:\n• A strategic role with influence on platform governance and operational roadmap.\n• Opportunities to shape cross-functional detection and response practices.\n• Engagement in coordination, advisory, and improvement-focused initia tives.\n• A mature environment that values critical thinking, depth, and systemic insight.\nInformation regarding the processing of personal data is provided via our Privacy Statement 20180529-PB-A4-Uvedomlenie-GDPR-kandidati.pdf (postbank.bg)https://www.postbank.bg/-/media/Postbank/files/GDPR/20180529-PB-A4-Uvedomlenie-GDPR-kandidati.pdf"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years of leadership in cybersecurity or security operations",
+        "kind": "required"
+      },
+      {
+        "text": "IT service management, security operations or infrastructure monitoring",
+        "kind": "required"
+      },
+      {
+        "text": "Platform optimisation, cross-team alignment or monitoring architecture",
+        "kind": "required"
+      },
+      {
+        "text": "Working across departments and influencing decisions with data",
+        "kind": "required"
+      },
+      {
+        "text": "Enterprise monitoring, detection and incident handling tools",
+        "kind": "required"
+      },
+      {
+        "text": "Strategic communication and documentation, process-oriented mindset",
+        "kind": "required"
+      },
+      {
+        "text": "Networking protocols (TCP/IP) and security solutions (firewalls, IDS/IPS, VPN)",
+        "kind": "required"
+      },
+      {
+        "text": "SIEM: correlation rules, dashboards and alerts",
+        "kind": "required"
+      },
+      {
+        "text": "Incident response techniques",
+        "kind": "required"
+      },
+      {
+        "text": "Bachelor's degree in computer science, information security or related",
+        "kind": "required"
+      },
+      {
+        "text": "Advanced certifications such as CISSP, CISM, CCISO or CEH",
+        "kind": "preferred"
+      },
+      {
+        "text": "Frameworks and standards (ITIL, NIST, MITRE ATT&CK, DORA, NIS 2)",
+        "kind": "required"
+      },
+      {
+        "text": "Multi-platform monitoring (WAF, IPS/IDS, antispam, EDR, XDR)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Tool governance and risk alignment (IT controls, audit readiness)",
+        "kind": "preferred"
+      },
+      {
+        "text": "SANS/GIAC GSOM or advanced Azure security certifications",
+        "kind": "preferred"
+      },
+      {
+        "text": "Leading IT or security operations teams in financial institutions",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "leadership in cybersecurity or security operations",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [
+      {
+        "name": "CISSP",
+        "kind": "preferred"
+      },
+      {
+        "name": "CISM",
+        "kind": "preferred"
+      },
+      {
+        "name": "CCISO",
+        "kind": "preferred"
+      },
+      {
+        "name": "CEH",
+        "kind": "preferred"
+      },
+      {
+        "name": "SANS Institute certification",
+        "kind": "preferred"
+      },
+      {
+        "name": "GIAC GSOM",
+        "kind": "preferred"
+      },
+      {
+        "name": "Microsoft Azure security certification",
+        "kind": "preferred"
+      }
+    ],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'Highly desirable' certifications are preferred even though they sit under the requirements heading. Each named certificate is its own entry."
+}

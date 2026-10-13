@@ -1,0 +1,71 @@
+{
+  "id": "en-security-crypto-identity-governance",
+  "field": "security",
+  "source": {
+    "kind": "lever",
+    "url": "https://jobs.lever.co/crypto/b17ac35d-1b67-40de-bd45-4de7dfda2cd8",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Senior Manager, Identity Governance",
+    "company": "Crypto",
+    "location": "Sofia, Bulgaria · Hybrid",
+    "text": "About the Team\nThe Identity Governance team is responsible for managing the services and controls that deliver stable, secure, and efficient Identity & Access Management (IAM) across Crypto.com and its related entities. IAM controls are foundational to the organisation, ensuring the right individuals have the right access to the right resources, backed by robust audit trails.\nRole overview\nYou'll lead a globally distributed Identity Governance team, owning the controls, risk assessments, and compliance posture that keep Crypto.com's identity ecosystem audit-ready. You'll set direction for your team's day-to-day work while staying hands-on with the highest-stakes risk assessments and stakeholder relationships yourself.\nResponsibilities:\n• Manage and develop the Identity Governance team spanning APAC and EU time zones — set priorities, review work quality, and support career growth across the team.\n• Establish, manage, and document effective IAM controls, including the evaluation, testing, and rollout of a new group-wide Identity and Access Management platform.\n• Identify, assess, and document identity-related risks across key business processes.\n• Manage identity lifecycle risks in alignment with the Operational Risk Management Framework.\n• Partner with business, risk management, and compliance stakeholders to maintain compliance with Group Policies, risk standards, and regulatory obligations.\n• Foster a strong risk and control culture across key business functions.\n• Lead process deep-dive activities to map workflows, evaluate existing risks and controls, and identify control gaps.\n• Coordinate across APAC, EU, and US working hours to ensure consistent stakeholder engagement.\nWhat success looks like:\n• Control gaps identified in process deep-dives are closed within an agreed SLA.\n• Team operates with clear ownership and consistent quality across regions.\n• Clean audit outcomes on IAM-related controls.\nRequirement:\n• 5+ years of experience in Identity and Access Management, information security, or risk & controls, ideally within financial services, an enterprise corporate environment, or a risk/compliance function supporting large-scale IT/Identity systems.\n• Background in Operational Risk, Product Risk, Compliance, or Audit.\n• Experience managing or mentoring a small team, including across distributed time zones.\n• Strong understanding of Information Technology risks and internal controls.\n• Demonstrated track record of identifying, analysing, and mitigating operational and security risks.\n• Strong stakeholder management, communication, and cross-functional collaboration skills.\nPreferred:\n• Experience designing or evaluating identity governance platforms/tooling.\n• Familiarity with financial-services regulatory frameworks.\nOur Security Team\nAt Crypto.com, our dedication to user security is led by our highly experienced Security Team. Comprising an international roster of seasoned cybersecurity experts, our team leads the company's Security, Privacy, and Security Compliance endeavors.\nThe team includes holders of international patents for technologies integrated in our security architecture. Under the stewardship of a distinguished CISO recognized by the Forbes Technology Council and among the Global Top 100 CISOs, our team has consistently championed industry standards, acquiring certifications like ISO27001, ISO27701, ISO22301, ISO42001, PCI:DSS 3.2.1 (Level 1), NIST Tier 4, and SOC 2 Type II, in addition to the MPI License from Singapore MAS. Our Chief Information Security Officer reports directly to the CEO, underscoring the prioritization of security in our organization's hierarchy.\nOur Security Team not only places great emphasis on credentials and expertise but also deeply values hands-on experience, rapid cognition, and dynamic learning. The challenges in the world of crypto are ever-evolving, and as such, our team prides itself on quick adaptability and robust teamwork, ensuring that we stay ahead of potential threats and always safeguard our user base.\n#LI-CY2"
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "5+ years in identity and access management, information security or risk and controls",
+        "kind": "required"
+      },
+      {
+        "text": "Background in operational risk, product risk, compliance or audit",
+        "kind": "required"
+      },
+      {
+        "text": "Managing or mentoring a small team across time zones",
+        "kind": "required"
+      },
+      {
+        "text": "IT risks and internal controls",
+        "kind": "required"
+      },
+      {
+        "text": "Identifying, analysing and mitigating operational and security risks",
+        "kind": "required"
+      },
+      {
+        "text": "Stakeholder management, communication and cross-functional collaboration",
+        "kind": "required"
+      },
+      {
+        "text": "Designing or evaluating identity governance platforms",
+        "kind": "preferred"
+      },
+      {
+        "text": "Financial-services regulatory frameworks",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 5,
+        "max": null,
+        "about": "IAM, information security or risk and controls",
+        "kind": "required"
+      }
+    ],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "hybrid",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "The ISO 27001 etc. in 'Our Security Team' are the company's certifications, not asks."
+}

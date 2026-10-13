@@ -1,0 +1,83 @@
+{
+  "id": "bg-dev-studioweb-junior-php",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/studioweb-bg-junior-php-developer/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Junior PHP Developer",
+    "company": "STUDIOWEB.BG",
+    "location": "София",
+    "text": "Компанията предлага:\n• Възможност за професионално развитие.\n• Работа с млад, креативен и динамичен екип.\n• Фиксирано работно времe.\n• Работа по комплексни и креативни проекти.\n• Възможност за обучение и усъвършенстване.\n• Допълнителни бонуси.\n• Ясно регламентирани условия за работа.\nИзисквания:\n• Добри познания в обектно-ориентираното програмиране на PHP.\n• Отлично владеене на MySQL.\n• Познаване на web стандартите (HTML, CSS, JavaScript, XML).\n• Владеене на английски и/или немски език на работно ниво.\nДопълнителни умения, считани за предимство:\n• Опит в работа с Framework решения.\n• Познания по AJAX, Flash.\n• Познаване на уеб стандартите.\n• Разбиране на ООП и алгоритми.\n• Познаване на MVC-модела и основните design patterns.\n• Опит в работа с SVN/CVS.\nКандидатстване:\nНеобходими документи за кандидатстване: CV и портфолио/списък с реализирани проекти"
+  },
+  "expected": {
+    "language": "bg",
+    "requirements": [
+      {
+        "text": "Object-oriented PHP",
+        "kind": "required"
+      },
+      {
+        "text": "Excellent MySQL",
+        "kind": "required"
+      },
+      {
+        "text": "Web standards (HTML, CSS, JavaScript, XML)",
+        "kind": "required"
+      },
+      {
+        "text": "English and/or German at working level",
+        "kind": "required"
+      },
+      {
+        "text": "Framework experience",
+        "kind": "preferred"
+      },
+      {
+        "text": "AJAX, Flash",
+        "kind": "preferred"
+      },
+      {
+        "text": "Web standards",
+        "kind": "preferred"
+      },
+      {
+        "text": "OOP and algorithms",
+        "kind": "preferred"
+      },
+      {
+        "text": "MVC and design patterns",
+        "kind": "preferred"
+      },
+      {
+        "text": "SVN/CVS",
+        "kind": "preferred"
+      }
+    ],
+    "years": [],
+    "languages": [
+      {
+        "language": "English",
+        "level": "working",
+        "kind": "preferred"
+      },
+      {
+        "language": "German",
+        "level": "working",
+        "kind": "preferred"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "'English and/or German': either one is enough, so neither language is required on its own (both preferred); the requirement itself is required. Fixed working hours is not a remote rule."
+}

@@ -1,0 +1,14 @@
+{
+  "name": "@apply-kit/core",
+  "private": true,
+  "type": "module",
+  "description": "Discovery engine and domain rules. Dependencies (fetch, clock, db, extractor, mail reader) are injected.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.1",
+    "node-html-parser": "9.0.4",
+    "zod": "4.6.5"
+  }
+}

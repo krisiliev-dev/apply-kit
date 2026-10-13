@@ -1,22 +1,119 @@
 # apply-kit
 
-A personal toolkit for applying to jobs. It has three goals:
+A personal tool that finds jobs, prepares tailored applications, fills application portals and tracks outcomes for one job seeker. It runs entirely on your Mac: a small local service with the UI in a browser tab, and all data in one SQLite file.
 
-1. **Generate and tailor CVs** (and cover letters) for each role.
-2. **Apply to jobs** with as little repetitive work as possible.
-3. **Discover jobs** automatically from job boards, ATS feeds and alerts.
+The first feature being built is **Discover**: one trustworthy Feed of every relevant job (spec: GitHub issue #1). The old prototypes (`cv-maker/`, `autofill-extension/`) live on in git history and the `archive-2026-10` tag.
 
-## Status: archive snapshot
+## Layout
 
-This commit is an **archive** of the earlier prototypes. A new project will replace these files, built design-first. Git history keeps this snapshot for reference.
+| Path | What |
+|---|---|
+| `app/` | Local service: Hono API (and later the scheduler, mail reader and PDF), in `app/src/` |
+| `app/ui/` | React + Vite UI. `app/ui/src/styles/tokens.css` and `components.css` are the design system's single copy |
+| `packages/core/` | Discovery engine and domain rules. Its dependencies (fetch, clock, database, AI extractor, mail reader) are injected |
+| `extension/` | Chrome-first WXT extension: captures the job page, or the search results, you're viewing |
+| `docs/` | Product, design, architecture ([ARCHITECTURE.md](docs/ARCHITECTURE.md)), ADRs, research |
+| `data` | Gitignored shortcut to `~/Library/Application Support/apply-kit`, where the database lives |
 
-| Part | Path | Goals | State |
-|---|---|---|---|
-| CV-maker web app | `cv-maker/` | 1, 3 (partly 2) | Working local-first Next.js 16 app: canvas CV editor + AI copilot, tailoring, cover letters, CV evaluation ("recruiter eye", six-second test, archetypes), application tracker, follow-ups, career advisor, discovery queue (Greenhouse/Lever/Ashby/SmartRecruiters/Workday/dev.bg/HN/RSS/Reed/Jooble/EURES/…), email-alert ingestion, MCP server, capture extension. Doesn't submit applications. |
-| Autofill extension | `autofill-extension/` | 2, 3 | Chrome MV3 extension (Vite + React) that learns your answers on application forms and suggests them later; pairs with CV-maker. Never auto-submits. |
-| Research notes | `docs/research/` | all | The previous agent's findings: job-source landscape, ToS/scraping limits (LinkedIn, jobs.bg), free job APIs, run setup, no-personal-data rule. |
+## Setup
+
+Needs Node 22 (`nvm use` reads `.nvmrc`) and pnpm.
+
+```sh
+pnpm install
+pnpm run setup:data      # creates the Application Support folder and the `data` shortcut
+cp .env.example .env     # then fill in the settings you need (names only in the example)
+```
+
+Add companies on the Sources screen (**Add company**: a name or a careers link; apply-kit detects the job system). The **Sofia starter watchlist** panel there adds the 46 companies from `docs/design/watchlist-draft.md` with a verified feed in one step (repeatable; Sources you paused or removed stay that way) and lists the 29 without a feed with the LinkedIn or jobs.bg alert that still catches their jobs. Sources can also be seeded in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`), which is the only way to add search, aggregator and email-alert Sources for now. Source types and their values:
+
+| Type | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token (`payhawkio`) | |
+| `lever` | site (`siteground`) or jobs link | EU accounts: `https://jobs.eu.lever.co/{site}`. Requests to Lever are spaced 1 s apart (its crawl delay). |
+| `ashby` | board name (`Dext-Careers`, case-sensitive) or jobs.ashbyhq.com link | |
+| `recruitee` | company (`accedia`) or careers-site link | |
+| `personio` | account (`acme`) or `https://acme.jobs.personio.com` | |
+| `teamtailor` | company (`superhosting`) or careers-site link | |
+| `smartrecruiters` | company id, optionally with a country (`Gameloft:bg`) | |
+
+Lever and Ashby don't state the company's name, so the Source's name is a guess from its value. Every Source request identifies apply-kit and goes one at a time per host. On each start, `APPLY_KIT_SOURCES` adds only Sources that were never added before: one you paused or removed on the Sources screen stays paused or removed even though it is still in the setting (add it again on the Sources screen to bring it back, or take it out of the setting). Settings › Sources (`/settings/sources`) shows each Source's health, and **Try now** retries a failed one. **Pause** stops checking a Source and closes nothing. **Remove…** first shows exactly which open Jobs would close (only those no other Source lists; paused Sources still count as listing them) and which stay open; removed Jobs close with "Source removed", Undo brings the Source and its Jobs back, and passed Jobs are never touched.
+
+| Kind | Value | Notes |
+|---|---|---|
+| `greenhouse` | board token, e.g. `payhawkio` | |
+| `workday` | careers link, optionally `\|Country`, e.g. `https://dxctechnology.wd1.myworkdayjobs.com/DXCJobs\|Bulgaria` | the country uses the site's own location filter |
+| `microsoft` | `query\|place`, e.g. `security engineer\|Dublin` | newest 100 |
+| `amazon` | `query\|ISO3 country`, e.g. `security engineer\|BGR` | newest 100 |
+| `devbg` | dev.bg category, e.g. `it-security` | |
+| `jooble` | `keywords\|location`, e.g. `security\|Bulgaria` | needs `JOOBLE_API_KEY` |
+| `reed` | `keywords\|location`, e.g. `security\|London` | needs `REED_API_KEY` |
+| `eures` | `keywords\|ISO2 country`, e.g. `cyber\|bg` | cyber keywords search by ESCO occupation |
+
+A Source whose key setting is missing shows as failing on the Sources screen with the setting's name.
+
+While the service runs it checks Sources every 30 minutes between 07:00 and 23:00 (local time), and after the Mac wakes it catches up within a minute if a check was missed. Change this with `APPLY_KIT_CHECK_EVERY_MINUTES` and `APPLY_KIT_CHECK_WINDOW` (e.g. `08:00-20:00`). **Check now** on the Feed checks straight away.
+
+### Paste a job link
+
+On the Feed (first run, or **Add job** in the toolbar), paste a job's link to add that one job. apply-kit reads the page once (its JSON-LD JobPosting, otherwise the page's heading and main text), only where the site's robots.txt allows it, and the Job is merged, ranked and read like any other. A link already in the Feed opens its Job. LinkedIn, jobs.bg, Google, Apple and Meta careers, Indeed and Glassdoor are never fetched, and a page behind bot protection is never retried: apply-kit keeps the link and asks you to paste the job's text instead. Pasted jobs aren't a Source to check, so they never close because a check missed them; one that no job system lists shows **Unverified after 30 days** and stays in the Feed.
+
+### Chrome extension (capture)
+
+Capture the job page you're viewing in Chrome, or every listing a search results page shows (LinkedIn and jobs.bg included), with one click.
+
+1. `pnpm build:extension`, then in Chrome open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick `extension/.output/chrome-mv3`. (`pnpm --filter @apply-kit/extension dev` opens a Chrome with it loaded and reloads on change.)
+2. With the service running, open apply-kit › **Settings** › **Pair the extension**, click the apply-kit icon in Chrome and type the 6-digit code. The code works once, for 10 minutes. Paired extensions are listed there and can be unpaired.
+3. On a job page or a page of search results, click the apply-kit icon, then **Capture this page** (or **Capture search results**). The panel shows each listing as New, Already in Feed, Hidden (with the dealbreaker) or Couldn't read; **Add to Feed** stores them under the Source "Captured · <site>".
+
+The extension reads a page only when you click, as Chrome has rendered it: it never scrolls, clicks, pages or opens listings, and has no access to any site until you open it on that tab (`activeTab`). Scroll or open the next page yourself, then capture again; listings already captured are recognised. It talks only to the service on this laptop (default `http://127.0.0.1:4310`; change it under **Service address** when pairing) and keeps nothing but that address and its pairing token. When the service isn't running it says so and retries. A captured job is re-checked on the company's own job system when apply-kit watches one (it closes when that stops listing it); otherwise it shows **Unverified after 30 days** and stays in the Feed.
+
+### Job mailbox (email alerts)
+
+Job-alert emails (LinkedIn, jobs.bg, Google Careers, Workday, MyGreenhouse) are read from a Gmail address used only for job mail, over IMAP and **read-only**: apply-kit opens one folder with EXAMINE, never marks mail read, moves or deletes anything.
+
+1. Create the dedicated Gmail account and turn on 2-Step Verification (Google requires it for app passwords).
+2. Create an app password at [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) (name it "apply-kit").
+3. In `.env`: `GMAIL_ADDRESS` (the job address), `GMAIL_APP_PASSWORD` (spaces are fine) and optionally `GMAIL_MAILBOX` (a Gmail label; default `INBOX`).
+4. On icloud.com › Mail › Settings › Rules, forward job mail from your usual address to the job Gmail. Either forward everything, or add one rule per alert sender (from contains `linkedin.com`, `jobs.bg`, `google.com`, `myworkday.com`, `greenhouse`). Point each site's alerts at your usual address, or straight at the job Gmail.
+5. Add the alert Sources to `APPLY_KIT_SOURCES`: `email:linkedin,email:jobsbg,email:google,email:workday,email:mygreenhouse` (only the ones you use), then restart.
+
+The mailbox is read at each scheduled check. Each alert learns its usual rhythm; one with no email for more than 3× its usual gap shows **Quiet longer than usual** on Sources. If Gmail refuses the app password (revoked, or the Google password changed), Sources says so with these steps; create a new app password and restart.
+
+### Start at login
+
+```sh
+nvm use                  # the Node 22 whose path goes into the LaunchAgent
+pnpm service:install     # builds the UI, installs ~/Library/LaunchAgents/dev.krisiliev.apply-kit.plist and starts it
+```
+
+Logs go to `~/Library/Logs/apply-kit/`. `pnpm service:status` shows whether it is running; `pnpm service:uninstall` removes it. Run install again after upgrading Node or moving the repo.
+
+Reading postings (requirements, key facts) uses OpenRouter: set `OPENROUTER_API_KEY` and a hard monthly cap `AI_MONTHLY_CAP_USD` (e.g. `10`). Without a cap nothing is read and jobs stay in the Feed unscreened. `OPENROUTER_MODEL` and `OPENROUTER_PROVIDERS` are optional; China-hosted providers are always excluded.
+
+Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that edits your shell profile.
+
+## Commands
+
+| Command | Does |
+|---|---|
+| `pnpm start` | Builds the UI and starts the service; open http://localhost:4310 (or your `PORT`) |
+| `pnpm dev` | Service with reload plus the Vite dev server; open http://localhost:5173 (it proxies `/api` to the service) |
+| `pnpm service:install` / `service:uninstall` / `service:status` | Start the service at login with launchd (see above) |
+| `pnpm build:extension` | Builds the Chrome extension into `extension/.output/chrome-mv3` (load it unpacked) |
+| `pnpm test` | Runs the tests (Vitest) |
+| `pnpm lint` | ESLint across the workspace |
+| `pnpm typecheck` | TypeScript project build, no output files |
+| `pnpm eval:extraction` | Checks how well postings are read (see below). Costs money; not part of `pnpm test` |
+
+### Extraction accuracy check
+
+`pnpm eval:extraction` runs the real extractor over 50 hand-labelled postings in `eval/extraction/postings/` (English and Bulgarian; dev, security, design) and prints accuracy per fact type: F1 for requirements, years, languages, certificates and locations; accuracy for the remote rule, work authorisation, salary and posting language; then the same per language and field. It reads the same `.env` settings as the service (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_PROVIDERS`) and refuses to run without the key or without `AI_MONTHLY_CAP_USD`. Its spending is booked in the service's monthly ledger, and it won't start if its estimate (about $0.35 at most; usually far less) is more than what is left of this month's cap.
+
+Each run saves a report to `eval/extraction/reports/` (gitignored) with every posting's extracted facts and scores; the next run shows the change against the newest report, so a new model (`OPENROUTER_MODEL`) or prompt can be compared. Labelling rules for adding or fixing postings: `eval/extraction/labelling-rules.md`.
 
 ## Rules carried forward
 
-- Never commit real CVs, profile data or secrets. Personal data stays local (`.gitignore` covers `.env*`, PDFs/DOCX/Pages and personal folders).
+- Never commit real CVs, profile data or secrets. Personal data stays local (`.gitignore` covers `.env*`, PDFs/DOCX/Pages, personal folders and `data`).
 - No automation that drives authenticated LinkedIn/jobs.bg sessions or defeats bot protection. Use official APIs, email alerts and user-driven capture instead.
+- The app drafts and pre-fills; you send messages and press Submit.

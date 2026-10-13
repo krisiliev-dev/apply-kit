@@ -1,0 +1,79 @@
+{
+  "id": "en-security-avenga-cyber-security",
+  "field": "security",
+  "source": {
+    "kind": "teamtailor",
+    "url": "https://career.avenga.com/jobs/8509015-senior-cyber-security-engineer",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Senior Cyber Security Engineer",
+    "company": "Avenga",
+    "location": "Bitola, North Macedonia; Banja Luka, Bosnia and Herzegovina; Beograd, Serbia; Kragujevac, Serbia; Niš, Serbia; Novi Sad, Serbia; Ohrid, North Macedonia; Skopje, North Macedonia",
+    "text": "Avenga is an international engineering firm helping businesses operate with AI at the core. With 6,000+ experts worldwide, we combine engineering expertise with AI-native thinking to turn ambitious ideas into real-world impact across industries, technologies, and markets.\nAt the core of the role\nThis role owns and manages corporate business applications and related services, ensuring operational stability, governance, security, compliance, and service performance. It coordinates L2/L3 support teams, manages vendors and budgets, drives application migrations and improvements, and serves as a key escalation point for critical issues. The role also ensures SOX, risk, audit, and IT governance compliance while partnering with senior business and IT stakeholders up to Director and VP level.\nCore skills you’ll bring\n• Strong experience in IT Service Management and ITIL practices\n• Proven expertise in Business Application Management\n• Solid understanding of IT Governance, Controls, and SOX Compliance\n• Experience in Information Security, Risk Management, and vulnerability management\n• Strong Vendor, Contract, and Service Level Management skills\n• Excellent Stakeholder Management and communication skills\n• Hands-on experience with ServiceNow and LeanIX\n• Familiarity with OneGRC and Brinqa platforms\n• Knowledge of Disaster Recovery and Business Continuity\n• Experience coordinating IT projects, migrations, and transformation initiatives\nThe impact you'll create\n• Own and manage corporate business applications and related services.\n• Coordinate L2/L3 support teams and act as the escalation point for critical issues.\n• Manage vendors, contracts, licenses, SLAs, and overall service performance.\n• Drive IT governance, including LeanIX, ServiceNow, DR, Backup, and SLA compliance.\n• Lead security and risk activities, including ITPF controls, vulnerability management, and OneGRC/Brinqa processes.\n• Ensure SOX compliance and support audits, control walkthroughs, and remediation activities.\n• Manage application budgets, forecasts, and project funding.\n• Lead application migrations, transformations, and continuous service improvement initiatives.\n• Collaborate with senior business and IT stakeholders up to Director/VP level.\nPeople are at the core of Avenga. We provide equal opportunities regardless of race, ethnicity, gender identity, sexual orientation, disability, age, religion, or any other characteristic. We are committed to a respectful environment where everyone can be themselves, share their ideas, and feel that they belong."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "IT service management and ITIL",
+        "kind": "required"
+      },
+      {
+        "text": "Business application management",
+        "kind": "required"
+      },
+      {
+        "text": "IT governance, controls and SOX compliance",
+        "kind": "required"
+      },
+      {
+        "text": "Information security, risk and vulnerability management",
+        "kind": "required"
+      },
+      {
+        "text": "Vendor, contract and service level management",
+        "kind": "required"
+      },
+      {
+        "text": "Stakeholder management and communication",
+        "kind": "required"
+      },
+      {
+        "text": "ServiceNow and LeanIX",
+        "kind": "required"
+      },
+      {
+        "text": "OneGRC and Brinqa",
+        "kind": "required"
+      },
+      {
+        "text": "Disaster recovery and business continuity",
+        "kind": "required"
+      },
+      {
+        "text": "Coordinating IT projects, migrations and transformations",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Bitola",
+        "Banja Luka",
+        "Belgrade",
+        "Kragujevac",
+        "Niš",
+        "Novi Sad",
+        "Ohrid",
+        "Skopje"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "Locations are the listed cities in English ('Beograd' is Belgrade)."
+}

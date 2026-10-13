@@ -1,6 +1,6 @@
 # apply-kit interface system (Vitosha)
 
-Source of truth: docs/design/DESIGN.md, docs/design/tokens.json, docs/design/tokens.css. Specimen: docs/design/system.html.
+Source of truth: docs/design/DESIGN.md, docs/design/tokens.json, app/ui/src/styles/tokens.css (moved from docs/design; components.css beside it). Specimen: docs/design/system.html.
 
 - Direction: calm, encouraging, dense. Stone mist ground, white surfaces, pine ink text, pine actions, alpine pink (`--bloom`) only for "needs you" and wins.
 - Type: Geologica for headings and numbers, Onest for text (both Cyrillic). 15px body, ratio 1.25. Weight and colour before size.

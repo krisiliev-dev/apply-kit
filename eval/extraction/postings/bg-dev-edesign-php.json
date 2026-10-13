@@ -1,0 +1,96 @@
+{
+  "id": "bg-dev-edesign-php",
+  "field": "dev",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/edesign-php-developer/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "PHP Developer",
+    "company": "eDesign",
+    "location": "София",
+    "text": "В момента eDesign разширява екипа си в България и търси да назначи: PHP Developer\nСвободни позиции: 1\nНашите изисквания към Вас:\n• Много добри познания и владеене на PHP\n• Опит с работа с CakePHP или подобен фреймуорк\n• Съществен опит в работа с бази данни – MySQL\n• Умение за работа в екип\n• Базови (като минимум) познания по HTML\n• Базови познания по JavaScript\n• Професионален стаж минимум 2 години\n• Добро владеене на английски език\nПредимства са:\n• Писане на сигурен софтуер и познаване на стандартните грешки по отношение на сигурността при програмирането в уеб\n• Опит с администриране на Linux\n• Опит в разработването на интензивно натоварени услуги\n• Опит в работата с готови платформи (WordPress, Magento и др.)\n• Разбиране и владеене на релационните бази данни, дизайн на бази данни, нормализация, оптимизиране\nКомпанията предлага:\n• Възнаграждение според уменията и опита на кандидата\n• Допълнително здравно обслужване\n• Обезпечаване на разходите за курсове, свързани с повишаване на квалификацията\n• Обезпечаване на разходи свързани със спортни активности\n• Бонуси\n• Перфектна среда за работа\n• Възможност за развитие\n• Работа по интересни, динамични и сложни проекти\nНеобходими документи:\n• CV\n• Portfolio\n* Кандидатури неотговарящи на изискванията няма да бъдат разглеждани\n** Избрани кандидати ще бъдат поканени на интервю\nОчакваме Вашите кандидатури."
+  },
+  "expected": {
+    "language": "bg",
+    "requirements": [
+      {
+        "text": "Very good PHP",
+        "kind": "required"
+      },
+      {
+        "text": "CakePHP or a similar framework",
+        "kind": "required"
+      },
+      {
+        "text": "Substantial MySQL database experience",
+        "kind": "required"
+      },
+      {
+        "text": "Teamwork",
+        "kind": "required"
+      },
+      {
+        "text": "Basic HTML",
+        "kind": "required"
+      },
+      {
+        "text": "Basic JavaScript",
+        "kind": "required"
+      },
+      {
+        "text": "2+ years of professional experience",
+        "kind": "required"
+      },
+      {
+        "text": "Good English",
+        "kind": "required"
+      },
+      {
+        "text": "Secure web coding and common security mistakes",
+        "kind": "preferred"
+      },
+      {
+        "text": "Linux administration",
+        "kind": "preferred"
+      },
+      {
+        "text": "Developing high-load services",
+        "kind": "preferred"
+      },
+      {
+        "text": "Ready-made platforms (WordPress, Magento)",
+        "kind": "preferred"
+      },
+      {
+        "text": "Relational database design, normalisation and optimisation",
+        "kind": "preferred"
+      }
+    ],
+    "years": [
+      {
+        "min": 2,
+        "max": null,
+        "about": "professional experience",
+        "kind": "required"
+      }
+    ],
+    "languages": [
+      {
+        "language": "English",
+        "level": "good",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  }
+}

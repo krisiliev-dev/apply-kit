@@ -1,0 +1,66 @@
+{
+  "id": "en-security-fibank-risk-compliance",
+  "field": "security",
+  "source": {
+    "kind": "devbg",
+    "url": "https://dev.bg/company/jobads/fibank-risk-analysis-and-information-security-compliance-specialist-information-security-department/",
+    "fetchedOn": "2026-10-12"
+  },
+  "input": {
+    "title": "Risk Analysis and Information Security Compliance Specialist, Information Security Department",
+    "company": "Fibank",
+    "location": "София",
+    "text": "Contribution and key responsibilities:\n• Participate in the development, implementation, and maintenance of information security policies, rules, procedures, and guidelines\n• Support the organization in identifying, analysing, assessing, and reporting ICT risks\n• Assist in the preparation and execution of internal and external audits and compliance assessments\n• Participate in the organization of campaigns and training to raise information security awareness among colleagues\n• Monitor changes in regulations, best practices, and professional standards within the financial sector and support their implementation\nFor efficiency and effective role performance:\n• Good/ basic knowledge of key regulations and security standards in the financial sector (such as DORA, NIS 2, ISO 27001, GDPR) or a keen interest to learn them\n• A university degree in IT, Cybersecurity or a related field (completed or in progress), or equivalent qualifications\n• Experience in a similar role within the field of information security (experience in a financial or tech company is a plus)\n• Working knowledge of English (B2 level)\n• Analytical thinking, initiative, prioritization skills\n• А strong team player, supportive of colleagues\nBecome part of Fibank family by sending a CV with a recent photo by 18.10.2026.\nFor additional information: contact the Human Capital Management Department, Internal Consultants Unit, phone [phone removed]."
+  },
+  "expected": {
+    "language": "en",
+    "requirements": [
+      {
+        "text": "Financial-sector security regulations and standards (DORA, NIS 2, ISO 27001, GDPR) or keen to learn them",
+        "kind": "required"
+      },
+      {
+        "text": "University degree in IT, cybersecurity or a related field (or in progress)",
+        "kind": "required"
+      },
+      {
+        "text": "Experience in a similar information security role",
+        "kind": "required"
+      },
+      {
+        "text": "Experience in a financial or tech company",
+        "kind": "preferred"
+      },
+      {
+        "text": "Working English (B2)",
+        "kind": "required"
+      },
+      {
+        "text": "Analytical thinking, initiative and prioritisation",
+        "kind": "required"
+      },
+      {
+        "text": "Strong team player",
+        "kind": "required"
+      }
+    ],
+    "years": [],
+    "languages": [
+      {
+        "language": "English",
+        "level": "B2",
+        "kind": "required"
+      }
+    ],
+    "certificates": [],
+    "visaSponsorship": "not-stated",
+    "remote": {
+      "mode": "not-stated",
+      "locations": [
+        "Sofia"
+      ]
+    },
+    "salary": null
+  },
+  "notes": "ISO 27001 here is knowledge of a standard, not a certificate."
+}

@@ -1,0 +1,266 @@
+/* App-level styles not yet in components.css. Tokens only. */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.toolbar .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
+.toolbar .segmented button { white-space: nowrap }
+.toolbar .end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); margin-left: auto }
+.toolbar .rank-link { font-size: var(--fs-small); font-weight: 500 }
+.empty h1 { font-size: var(--fs-h3) }
+
+/* Feed job rows (from the Feed hi-fi): two-line titles, narrow-screen summary line */
+.jobs .t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 52ch }
+.jobs tbody tr { cursor: default }
+.jobs .t:hover { text-decoration: underline }
+.narrow { display: none }
+@media (max-width: 760px) {
+  .jobs .wide { display: none }
+  .jobs .narrow { display: block }
+}
+.foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small); color: var(--ink-2) }
+
+/* Checking sources (from the Feed hi-fi): progress head and the new-jobs queue bar */
+.progress-head { display: grid; gap: var(--s-3) }
+.queue { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--met-soft); color: var(--met); font-size: var(--fs-small); font-weight: 600 }
+
+/* Settings layout and the Sources screen (from the Sources hi-fi). Tokens only. */
+.set { display: grid; grid-template-columns: 184px minmax(0, 1fr); gap: var(--s-7); align-items: start }
+.rail { display: grid; gap: var(--s-1); position: sticky; top: 84px }
+.rail .rail-h { font-size: var(--fs-caption); font-weight: 600; color: var(--ink-3); padding: 0 var(--s-4) var(--s-3) }
+.rail a { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-radius: var(--r-control); color: var(--ink-2); text-decoration: none; font-size: var(--fs-small); font-weight: 500 }
+.rail a:hover { background: var(--surface-sunken) }
+.rail a[aria-current="page"] { background: var(--surface); color: var(--ink); font-weight: 600; box-shadow: var(--shadow-raised); outline: 1px solid var(--border-control); outline-offset: -1px }
+@media (max-width: 760px) {
+  .set { grid-template-columns: minmax(0, 1fr); gap: var(--s-5) }
+  .rail { position: static; display: flex; overflow-x: auto; gap: var(--s-2); padding-bottom: var(--s-3); border-bottom: 1px solid var(--rule) }
+  .rail .rail-h { display: none }
+  .rail a { white-space: nowrap }
+}
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--s-4) }
+.tile { display: grid; gap: var(--s-2); align-content: start; padding: var(--s-5); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); min-width: 0 }
+.tile .n { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h2); line-height: 1; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: var(--s-3) }
+.tile .n svg { width: 18px; height: 18px }
+.tile.ok .n svg { color: var(--met) }
+.tile.bad { border-color: var(--gap) }
+.tile.bad .n { color: var(--gap) }
+.tile .l { font-size: var(--fs-small); color: var(--ink-2) }
+.src-name { font-weight: 600; color: var(--ink); display: block }
+.src-id { color: var(--ink-3); font-size: var(--fs-caption); white-space: nowrap }
+.note { color: var(--ink-3); font-size: var(--fs-caption); margin-top: var(--s-1); max-width: 40ch; white-space: normal }
+.quiet-note { color: var(--partly); font-weight: 500 }
+.table td.r, .table th.r { text-align: right }
+.table .total { color: var(--ink-3) }
+.table .usual { display: block; font-size: var(--fs-small) }
+.table .act { text-align: right; padding-block: var(--s-3); white-space: nowrap }
+.table .c-last { white-space: nowrap }
+.table-foot { padding: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-caption); color: var(--ink-3) }
+@media (max-width: 1100px) { .table .c-type { display: none } }
+@media (max-width: 560px) { .table .c-last { display: none } }
+.tile.warn .n svg { color: var(--partly) }
+.tile .n.word { font-size: var(--fs-title) }
+
+/* Triage (from the Feed and Job hi-fi): bulk bar, shortcuts toggle, row actions, real-focus rows */
+.bulk { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--surface); font-size: var(--fs-small); color: var(--ink-2) }
+.bulk .keys { margin-left: auto; display: inline-flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; font-size: var(--fs-caption) }
+.linkish { font: inherit; background: none; border: 0; padding: 0 var(--s-1); color: var(--action); text-decoration: underline; cursor: pointer; font-weight: 600 }
+.jobs tbody tr[data-id]:focus-within td { background: var(--met-soft) }
+.jobs tbody tr[data-id]:focus-within td:first-child { box-shadow: inset 3px 0 0 var(--action) }
+.jobs tbody tr[data-id]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
+.jobs .saved-chip { margin-left: var(--s-2); vertical-align: 1px }
+.row-acts { display: flex; gap: var(--s-2); margin-top: var(--s-2) }
+@media (hover: hover) and (min-width: 761px) {
+  .row-acts { opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard) }
+  .jobs tbody tr:hover .row-acts, .jobs tbody tr:focus-within .row-acts { opacity: 1 }
+}
+.panel:focus { outline: none }
+.sec-pad { padding: var(--s-5) var(--s-5) var(--s-3) }
+.sec-pad h2:focus { outline: none }
+.reason { color: var(--ink-2) }
+.learned { display: block; margin-top: var(--s-1); font-size: var(--fs-caption); color: var(--ink-3) }
+.table td.acts { text-align: right }
+.toast .x { min-width: 30px; padding: 0 var(--s-3) }
+.toast .cd { font-variant-numeric: tabular-nums; opacity: .85 }
+.pass-dialog { width: min(520px, calc(100vw - var(--s-8))); padding: var(--s-6); background: var(--surface); border-radius: var(--r-card); border: 1px solid var(--rule); color: var(--ink); box-shadow: var(--shadow-overlay) }
+.pass-dialog::backdrop { background: color-mix(in srgb, var(--ink) 35%, transparent) }
+.pass-dialog fieldset { border: 0; margin: 0; padding: 0 }
+.toast .btn { white-space: nowrap }
+.pass-dialog input[type="radio"] { accent-color: var(--action); width: var(--s-5); height: var(--s-5); margin: 0 }
+
+/* Job page (from the Job hi-fi). Tokens only. */
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-3) }
+.crumbs a { color: var(--ink-2); text-decoration: none; font-weight: 500 }
+.crumbs a:hover { color: var(--action); text-decoration: underline }
+.job-head { display: grid; gap: var(--s-3) }
+.job-head h1 { overflow-wrap: anywhere }
+.job-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-1) var(--s-5); color: var(--ink-2) }
+.job-meta b { color: var(--ink); font-weight: 600 }
+.job-page .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(290px, 336px); gap: var(--s-6); align-items: start }
+.job-page .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 900px) {
+  .job-page .cols { grid-template-columns: minmax(0, 1fr) }
+  .job-page .col, .job-page .col.side { display: contents }
+  .job-page .o1 { order: 1 } .job-page .o2 { order: 2 } .job-page .o3 { order: 3 } .job-page .o4 { order: 4 }
+}
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4) }
+.sec-head .grow { flex: 1 1 auto }
+.panel.flush .sec-head { padding: var(--s-5) var(--s-6) var(--s-4) }
+.job-page .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.fitcheck { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-4) var(--s-6); align-items: start }
+.fit-num { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-display); line-height: 1; letter-spacing: var(--track-display); color: var(--ink); font-variant-numeric: tabular-nums }
+.fit-num small { display: block; margin-top: var(--s-2); font-family: var(--font-text); font-size: var(--fs-caption); font-weight: 500; letter-spacing: 0; color: var(--ink-3) }
+.fit-num.provisional { color: var(--ink-3) }
+.fitcheck .verdict { display: grid; gap: var(--s-3); min-width: 0 }
+.decide { gap: var(--s-4) }
+.decide .btn.primary { width: 100%; min-height: 44px; font-size: var(--fs-body) }
+.why-off { font-size: var(--fs-small); color: var(--ink-2) }
+.req .ev { color: var(--ink-2); min-width: 22ch }
+.req td:first-child { font-weight: 600; color: var(--ink); min-width: 16ch }
+.req .asked { color: var(--ink-3); white-space: nowrap }
+.req tbody tr { cursor: default }
+.req tr.is-ask td:first-child { box-shadow: inset 3px 0 0 var(--bloom) }
+.src { display: grid; gap: var(--s-1); border-left: 3px solid var(--rule); background: var(--surface-sunken); padding: var(--s-3) var(--s-4); border-radius: 0 var(--r-small) var(--r-small) 0; font-size: var(--fs-small); color: var(--ink) }
+.src[hidden] { display: none }
+.src .where { font-size: var(--fs-caption); color: var(--ink-3) }
+.src .tr { color: var(--ink-2) }
+.facts { margin: 0; display: grid }
+.fact { display: grid; grid-template-columns: minmax(100px, 150px) minmax(0, 1fr) auto; gap: var(--s-3) var(--s-5); padding: var(--s-4) 0; border-top: 1px solid var(--rule); align-items: baseline }
+.fact:first-child { border-top: 0; padding-top: 0 }
+.fact dt { color: var(--ink-3); font-size: var(--fs-small) }
+.fact dd { margin: 0; min-width: 0 }
+.fact .src { grid-column: 1 / -1 }
+@media (max-width: 520px) { .fact { grid-template-columns: minmax(0, 1fr) auto } .fact dt { grid-column: 1 / -1 } }
+.chev { width: var(--s-4); height: var(--s-4); transition: rotate var(--dur-fast) var(--ease-standard) }
+[aria-expanded="true"] > .chev { rotate: 90deg }
+.disclose { font: inherit; display: flex; width: 100%; align-items: center; gap: var(--s-3); background: none; border: 0; padding: 0; color: var(--ink); cursor: pointer; text-align: left; font-weight: 600 }
+.disclose .meta { font-weight: 400 }
+.posting-text { display: grid; gap: var(--s-3); max-width: 68ch; color: var(--ink-2) }
+.posting-text[hidden] { display: none }
+.posting-text p { margin: 0 }
+.posting-text .li { padding-left: var(--s-5); position: relative }
+.posting-text .li::before { content: "•"; position: absolute; left: var(--s-2) }
+.steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4); font-size: var(--fs-small) }
+.steps li { display: flex; gap: var(--s-4); align-items: center }
+.steps .ic { width: 22px; height: 22px; display: inline-grid; place-items: center; flex: none; border-radius: 50% }
+.steps .ic svg { width: var(--s-4); height: var(--s-4) }
+.steps .done .ic { background: var(--met-soft); color: var(--met) }
+.steps .now .ic { color: var(--action) }
+.steps .now { font-weight: 600 }
+.steps .next { color: var(--ink-3) }
+.steps .next .ic { border: 1.5px dashed var(--border-control) }
+.skel.w30 { width: 30% } .skel.w40 { width: 40% } .skel.w60 { width: 60% } .skel.w80 { width: 80% } .skel.w90 { width: 90% }
+.postings { display: grid }
+.posting { display: grid; gap: var(--s-1); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small); min-width: 0 }
+.posting:first-child { border-top: 0; padding-top: 0 }
+.posting .name { font-weight: 600; color: var(--ink); overflow-wrap: anywhere }
+.posting.target { border-left: 3px solid var(--action); padding-left: var(--s-4); padding-top: var(--s-4); background: color-mix(in srgb, var(--met-soft) 45%, transparent); border-radius: 0 var(--r-small) var(--r-small) 0 }
+.posting .note { color: var(--ink-2); font-size: inherit; margin-top: 0; max-width: none }
+.posting .row { gap: var(--s-2) }
+.posting .acts { margin-top: var(--s-2); margin-left: calc(-1 * var(--s-4)) }
+.posting.target .acts { margin-left: calc(-1 * var(--s-3)) }
+.ask-panel { border-left: 4px solid var(--bloom) }
+.ask-panel fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+.ask-panel legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
+.opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-body) }
+.opt input { accent-color: var(--action); width: var(--s-5); height: var(--s-5); margin: 3px 0 0; flex: none }
+.opt .meta { display: block }
+.needs b { font-weight: 600 }
+.mini { font-size: var(--fs-small) }
+.jobs .narrow .chips { margin: var(--s-2) 0 var(--s-1) }
+
+/* Fit and ranking (from the Feed and Job hi-fi). Tokens only. */
+.toolbar .sep { width: 1px; height: 22px; background: var(--rule) }
+.hint { align-items: center }
+.pop-wrap { position: relative }
+.pop { position: absolute; z-index: 20; top: calc(100% + var(--s-2)); left: 0; min-width: 190px; max-width: calc(100vw - 2 * var(--s-5)); display: grid; gap: var(--s-1); padding: var(--s-2); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-control); box-shadow: var(--shadow-overlay) }
+.pop[hidden] { display: none }
+.pop.end-align { left: auto; right: 0 }
+.pop button { font: inherit; font-size: var(--fs-small); text-align: left; padding: var(--s-3) var(--s-4); border: 0; background: transparent; color: var(--ink); border-radius: var(--r-small); cursor: pointer; display: flex; gap: var(--s-3); align-items: center }
+.pop button:hover { background: var(--surface-sunken) }
+.pop button svg { width: var(--s-4); height: var(--s-4); visibility: hidden; color: var(--action) }
+.pop button[aria-pressed="true"] { font-weight: 600 }
+.pop button[aria-pressed="true"] svg { visibility: visible }
+.why-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4) }
+@media (hover: hover) and (min-width: 761px) {
+  .why-row { flex-wrap: nowrap; align-items: flex-start }
+  .why-row .why { flex: 1 1 auto; min-width: 0 }
+  .why-row .row-acts { flex: none; margin-top: 0 }
+}
+.fit-h { text-align: right }
+.fit-h .fit-hw { display: inline-flex; align-items: center; gap: var(--s-2); position: relative }
+.fit-h .info { font: inherit; font-size: 11px; font-weight: 700; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--border-control); background: var(--surface); color: var(--ink-2); cursor: help; display: inline-grid; place-items: center; padding: 0 }
+.tip { display: none; position: absolute; right: 0; top: calc(100% + var(--s-3)); z-index: 5; width: 240px; max-width: 70vw; white-space: normal; text-align: left; font-size: var(--fs-caption); font-weight: 400; line-height: var(--lh-snug); color: var(--ink); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-small); padding: var(--s-3) var(--s-4); box-shadow: var(--shadow-overlay) }
+.fit-h .info:hover + .tip, .fit-h .info:focus-visible + .tip, .tip.open { display: block }
+.table .fit.provisional { color: var(--ink-3) }
+.job-head h1 .orig { display: block; margin-top: var(--s-2); font-family: var(--font-text); font-size: var(--fs-title); font-weight: 500; letter-spacing: 0; color: var(--ink-3) }
+.decide .lang { display: grid; gap: var(--s-3); padding-top: var(--s-4); border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.fit-why { display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.fit-why[hidden] { display: none }
+.fit-why .kv { padding: 0; border: 0 }
+.fitcheck .kv { grid-column: 1 / -1; padding-top: var(--s-5); border-top: 1px solid var(--rule) }
+@media (max-width: 520px) { .fitcheck .kv { grid-template-columns: minmax(0, 1fr) } .fitcheck .kv dd { margin-bottom: var(--s-3) } }
+.jobs tr.group th { background: var(--surface-sunken); color: var(--ink-2); font-weight: 600; text-align: left }
+
+/* Add company and Remove (from the Sources hi-fi states "Add company", "Add · detecting", "Add · not found", "Remove company"). Tokens only. */
+.narrow-panel { max-width: 520px }
+.panel-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4) }
+.list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); min-width: 0 }
+.detect li { padding: var(--s-2) 0; flex-wrap: nowrap; align-items: flex-start }
+.detect li .grow { min-width: 0; overflow-wrap: anywhere }
+.detect .st { width: 112px; flex: none }
+.detect .note { display: block; max-width: none }
+.chip.outline { background: transparent; border: 1px dashed var(--border-control); color: var(--ink-3) }
+.spin.sm { width: 10px; height: 10px; border-width: 1.5px }
+.alt { display: grid; gap: var(--s-3); padding: var(--s-5); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.alt h3 { font-size: var(--fs-body) }
+.alt details summary { cursor: pointer; font-size: var(--fs-small); color: var(--ink-2); font-weight: 500 }
+.steps { margin: var(--s-3) 0 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.remove-dialog { width: min(620px, calc(100vw - var(--s-8))) }
+.impact { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-3); font-size: var(--fs-small); color: var(--ink-2) }
+.impact b { color: var(--ink) }
+.remove-dialog .err { color: var(--gap); font-size: var(--fs-small) }
+.table .act .btn + .btn { margin-left: var(--s-2) }
+h1[tabindex="-1"]:focus { outline: none }
+
+/* dealbreakers: hidden pile, filtered-to-nothing, search settings */
+.hidden-reasons { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2) }
+.hidden-reasons li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.hidden-reasons .chip { white-space: normal }
+.hidden-reasons .linkish { font-size: var(--fs-small) }
+.settings-form { display: grid; gap: var(--s-7); max-width: 640px }
+.settings-form fieldset { border: 1px solid var(--rule); border-radius: var(--r-card); padding: var(--s-5) var(--s-6); margin: 0; display: grid; gap: var(--s-5); background: var(--surface) }
+.settings-form legend { font-weight: 600; padding: 0 var(--s-2) }
+.settings-form .check { display: flex; gap: var(--s-3); align-items: flex-start }
+.settings-form .check input { margin-top: var(--s-2) }
+.settings-form .err { color: var(--gap); font-size: var(--fs-small) }
+.rule-changes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }
+.rule-changes li { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: baseline }
+/* Paste a job link (first run and the toolbar's Add job) */
+.paste-first { width: min(460px, 100%) }
+.paste-link .field .err { font-size: var(--fs-small) }
+.paste-text textarea.input { min-height: calc(var(--s-10) * 3); resize: vertical; line-height: var(--lh-body) }
+.paste-pair { flex-wrap: wrap; gap: var(--s-4) }
+.paste-pair .field { flex: 1 1 180px }
+.add-job-pop { width: min(520px, calc(100vw - 2 * var(--s-5))); padding: var(--s-5); gap: var(--s-4) }
+.add-job-pop .paste-first { width: 100% }
+/* Coverage check (from the Sources hi-fi state "Coverage check" and the Normal state's panel). Tokens only. */
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: var(--s-6); align-items: start }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: var(--s-5) }
+.field-label { font-weight: 600; font-size: var(--fs-small) }
+.field label .meta { font-weight: 400 }
+.segmented.wrap { justify-self: start; flex-wrap: wrap; max-width: 100% }
+textarea.input.cv-list { resize: vertical; font-size: var(--fs-small); line-height: var(--lh-body) }
+.err-line { color: var(--gap); font-size: var(--fs-small); font-weight: 500 }
+.miss { display: grid; gap: var(--s-3); padding: var(--s-5) 0; border-top: 1px solid var(--rule) }
+.miss .why { color: var(--ink-2); font-size: var(--fs-small); max-width: none }
+.miss .src-name a { color: inherit }
+.sub-h { font-size: var(--fs-body); margin-bottom: var(--s-2) }
+.panel-pad { padding: var(--s-5) var(--s-5) var(--s-3) }
+.table.static tbody tr { cursor: default }
+.link-btn { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; text-align: left; cursor: pointer; text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px }
+.link-btn:hover { color: var(--action); text-decoration-color: currentColor }
+.found-list { margin-top: var(--s-3) }
+h2[tabindex="-1"]:focus { outline: none }
+
+/* Chrome extension pairing code: large and spaced so it is easy to type across. */
+.pair-code { font-family: var(--font-display); font-size: var(--fs-h2); letter-spacing: .12em; font-variant-numeric: tabular-nums; font-weight: 600 }
