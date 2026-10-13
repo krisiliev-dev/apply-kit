@@ -28,9 +28,9 @@ export interface ApplicationEvent {
   at: string;
   /**
    * created: the Application was added. status: its Status changed. note: the user wrote a note.
-   * undo: an earlier Event was undone.
+   * cv: the user attached the CV they sent. undo: an earlier Event was undone.
    */
-  kind: "created" | "status" | "note" | "undo";
+  kind: "created" | "status" | "note" | "cv" | "undo";
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -119,8 +119,31 @@ export interface TargetPosting {
   closed: { at: string; how: string } | null;
 }
 
+/** The CV attached to an Application added by hand ("What you sent"). */
+export interface AttachedCv {
+  label: string;
+  fileName: string;
+  /** Size in bytes. */
+  bytes: number;
+  attachedAt: string;
+}
+
+/** A CV to attach: a PDF, and the label it counts under as the CV version (the file name when empty). */
+export interface AttachCvInput {
+  fileName: string;
+  label?: string | null;
+  bytes: Uint8Array;
+}
+
+/** The largest CV PDF taken: 10 MB. */
+export const maxCvBytes = 10 * 1024 * 1024;
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
+  /** The CV version it counts under in What's working: the attached CV's label (or, later, the Package's). */
+  cvVersion: string | null;
+  /** The CV attached by hand, or null. */
+  cv: AttachedCv | null;
   /** Null when added by hand without a link. */
   posting: TargetPosting | null;
   /** Oldest first. */
@@ -240,6 +263,13 @@ export interface Tracker {
   addNote(applicationId: string, text: string): Promise<{ event: ApplicationEvent }>;
   /** Adds an address or domain whose mail belongs here. Throws a TrackerError when refused. */
   addContact(applicationId: string, value: string): Promise<{ contacts: Contact[] }>;
+  /**
+   * Attaches the CV sent with an Application added by hand: stored locally, its label used as the CV
+   * version. A new one replaces the old. Throws a TrackerError when refused.
+   */
+  attachCv(applicationId: string, cv: AttachCvInput): Promise<{ cv: AttachedCv; event: ApplicationEvent }>;
+  /** The attached CV file, or null. */
+  cvFile(applicationId: string): Promise<{ fileName: string; bytes: Uint8Array } | null>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
 }
@@ -526,6 +556,42 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return app.postingUrl ? { jobId: null, title: app.title, company: app.company, url: app.postingUrl, closed: null } : null;
   }
 
+  function cvOf(applicationId: string): AttachedCv | null {
+    const r = db.prepare("SELECT label, file_name, length(bytes) AS size, attached_at FROM application_cv WHERE application_id = ?").get(applicationId);
+    return r ? { label: String(r.label), fileName: String(r.file_name), bytes: Number(r.size), attachedAt: String(r.attached_at) } : null;
+  }
+
+  async function attachCv(applicationId: string, cv: AttachCvInput) {
+    const r = row(applicationId);
+    if (!r) throw new TrackerError("not-found", "There's no such Application.");
+    if (r.package_id) throw new TrackerError("invalid", "This Application has its Package as sent; its CV is that one.", applicationId);
+    const invalid = (message: string) => new TrackerError("invalid", message, applicationId);
+    const head = new TextDecoder().decode(cv.bytes.subarray(0, 5));
+    if (head !== "%PDF-") throw invalid("That file isn't a PDF. Export your CV as PDF and attach that.");
+    if (cv.bytes.length > maxCvBytes) throw invalid("That PDF is over 10 MB. Attach a smaller export of your CV.");
+    const fileName = cv.fileName.trim().replace(/^.*[\\/]/, "") || "cv.pdf";
+    const label = (cv.label?.trim() || fileName.replace(/\.pdf$/i, "")).slice(0, 80);
+    db.exec("BEGIN");
+    try {
+      db.prepare(
+        `INSERT INTO application_cv (application_id, file_name, label, bytes, attached_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (application_id) DO UPDATE SET file_name = excluded.file_name, label = excluded.label, bytes = excluded.bytes, attached_at = excluded.attached_at`,
+      ).run(applicationId, fileName, label, cv.bytes, now());
+      db.prepare("UPDATE application SET cv_version = ? WHERE id = ?").run(label, applicationId);
+      const event = addEvent({ applicationId, kind: "cv", cause: "you", from: null, to: null, text: `CV attached: ${label}`, undoes: null });
+      db.exec("COMMIT");
+      return { cv: cvOf(applicationId)!, event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  async function cvFile(applicationId: string) {
+    const r = db.prepare("SELECT file_name, bytes FROM application_cv WHERE application_id = ?").get(applicationId);
+    return r ? { fileName: String(r.file_name), bytes: r.bytes as Uint8Array } : null;
+  }
+
   const contactsOf = (applicationId: string): Contact[] =>
     db.prepare("SELECT value, kind FROM application_contact WHERE application_id = ? ORDER BY added_at, rowid").all(applicationId)
       .map((r) => ({ value: String(r.value), kind: r.kind as Contact["kind"] }));
@@ -583,7 +649,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     }
     timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
     return {
-      ...app, posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+      ...app, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
     };
   }
 
@@ -621,6 +687,8 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     undoEvent,
     addNote,
     addContact,
+    attachCv,
+    cvFile,
     findJobs,
   };
 }

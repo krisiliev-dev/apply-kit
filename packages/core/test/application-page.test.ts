@@ -180,3 +180,44 @@ describe("the target posting", () => {
     expect((await tracker.get(await add(tracker)))!.posting).toBeNull();
   });
 });
+
+/** A tiny made-up PDF (only its first bytes matter here). */
+const pdf = (text = "Mira Petrova CV") => new TextEncoder().encode(`%PDF-1.7\n% ${text}\n%%EOF\n`);
+
+describe("what you sent, for one added by hand", () => {
+  it("stores the attached CV and uses its label as the CV version", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+    expect((await tracker.get(id))!).toMatchObject({ cv: null, cvVersion: null });
+
+    const { event } = await tracker.attachCv(id, { fileName: "cv-design-2026.pdf", label: " Design v2 ", bytes: pdf() });
+
+    const app = (await tracker.get(id))!;
+    expect(app).toMatchObject({ cvVersion: "Design v2", cv: { label: "Design v2", fileName: "cv-design-2026.pdf", bytes: pdf().length } });
+    expect(event).toMatchObject({ kind: "cv", cause: "you", text: "CV attached: Design v2" });
+    expect(app.timeline[0]).toMatchObject({ kind: "cv", text: "CV attached: Design v2" });
+    const file = await tracker.cvFile(id);
+    expect(file?.fileName).toBe("cv-design-2026.pdf");
+    expect(new TextDecoder().decode(file!.bytes)).toContain("Mira Petrova CV");
+  });
+
+  it("names the version after the file when no label is given, and a new CV replaces the old", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+    await tracker.attachCv(id, { fileName: "first.pdf", label: "", bytes: pdf("first") });
+
+    await tracker.attachCv(id, { fileName: "Security CV v3.pdf", label: null, bytes: pdf("second") });
+
+    expect((await tracker.get(id))!.cvVersion).toBe("Security CV v3");
+    expect(new TextDecoder().decode((await tracker.cvFile(id))!.bytes)).toContain("second");
+  });
+
+  it("takes PDFs only", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+
+    await expect(tracker.attachCv(id, { fileName: "cv.docx", label: "Design", bytes: new TextEncoder().encode("PK\u0003\u0004") }))
+      .rejects.toMatchObject({ problem: "invalid", message: "That file isn't a PDF. Export your CV as PDF and attach that." });
+    expect(await tracker.cvFile(id)).toBeNull();
+  });
+});
