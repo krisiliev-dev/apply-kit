@@ -10,3 +10,4 @@ Source of truth: docs/design/DESIGN.md, docs/design/tokens.json, app/ui/src/styl
 - Signature: the ascent chart (cumulative applications as a climb).
 - States never by colour alone (chips have icons, statuses differ in fill/outline).
 - Documents (CV, letter) always on white, single column, one pine accent, fixed template, ligatures off.
+- Track: no Send buttons anywhere (Copy text, Open in Mail, Mark sent); every Event carries a cause tag (by email / by you / by apply-kit); automatic changes show their reason and Undo; no opacity fading for done or closed items; partial data marks are hatched; weekly chart is one pine series, pink only when the current week beats the pace.
