@@ -2,13 +2,20 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
+import type {
+  CapturedPage, CoverageInput, DiscoveryEngine, DocumentKind, DocumentLanguage, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting,
+  PreparationEngine, Scheduler,
+} from "@apply-kit/core";
 
+const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
+const documentLanguages: DocumentLanguage[] = ["en", "bg"];
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
 
-export function createServer({ engine, scheduler, pairing, uiDir, port }: {
+export function createServer({ engine, preparation, scheduler, pairing, uiDir, port }: {
   engine: DiscoveryEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string;
+  /** Prepare's engine; its routes answer 404 without it. */
+  preparation?: PreparationEngine;
   /** The port the service listens on: only requests addressed to this machine on it are answered. */
   port: number;
 }) {
@@ -306,6 +313,29 @@ export function createServer({ engine, scheduler, pairing, uiDir, port }: {
   app.get("/api/coverage/:id", async (c) => {
     const check = await engine.getCoverageCheck(c.req.param("id"));
     return check ? c.json(check) : c.json({ error: "No such coverage check" }, 404);
+  });
+
+  // Developer route: the fictional demo profile printed by the real template, for checking it by eye
+  // (?language=en|bg&photo=1). /check shows what the parse check read back from the same PDF.
+  const demo = async (c: Context) => {
+    const kind = c.req.param("kind");
+    const language = c.req.query("language") ?? "en";
+    if (!preparation || !documentKinds.includes(kind as DocumentKind)) return c.json({ error: "No such document: cv or cover-letter" }, 404);
+    if (!documentLanguages.includes(language as DocumentLanguage)) return c.json({ error: "language must be en or bg" }, 400);
+    return preparation.demoDocument({ kind: kind as DocumentKind, language: language as DocumentLanguage, photo: c.req.query("photo") === "1" });
+  };
+  app.get("/api/dev/documents/:kind", async (c) => {
+    const draft = await demo(c);
+    if (draft instanceof Response) return draft;
+    return c.body(Buffer.from(draft.pdf), 200, {
+      "content-type": "application/pdf",
+      "content-disposition": `inline; filename="${draft.fileName}"`,
+    });
+  });
+  app.get("/api/dev/documents/:kind/check", async (c) => {
+    const draft = await demo(c);
+    if (draft instanceof Response) return draft;
+    return c.json({ ...draft, pdf: undefined });
   });
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
