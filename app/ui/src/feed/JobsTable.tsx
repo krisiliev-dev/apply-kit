@@ -1,6 +1,7 @@
-import type { FeedJob, FeedResult, FeedSort, FeedView, LearnedAdjustment, PassInput } from "@apply-kit/core";
+import type { FeedJob, FeedSort, FeedView, JobMarker, LearnedAdjustment, PassInput } from "@apply-kit/core";
 import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { passJobs, saveJobs, undoDecision } from "../api.ts";
+import { passJobs, saveJobs, undoDecision, type TrackedFeed } from "../api.ts";
+import { FeedMarker } from "../applications/markers.tsx";
 import { PassDialog } from "./PassDialog.tsx";
 import { useShortcutsSetting } from "./shortcuts.ts";
 import type { Toaster } from "./toast.tsx";
@@ -22,8 +23,8 @@ const leavesView = (view: FeedView, action: "save" | "pass") => action === "pass
  * the table and can be turned off.
  */
 export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShowQueued, checking, onShowRelocation, onShowHidden }: {
-  /** The Feed, with `jobs` set to the rows on screen. */
-  feed: FeedResult;
+  /** The Feed, with `jobs` set to the rows on screen, and Track's markers for them. */
+  feed: TrackedFeed;
   view: FeedView;
   sort: FeedSort;
   toaster: Toaster;
@@ -259,6 +260,7 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
                 )}
                 <JobRow
                   job={j}
+                  marker={feed.markers[j.id]}
                   asOf={feed.asOf}
                   active={j.id === current}
                   checked={selected.has(j.id)}
@@ -300,8 +302,10 @@ export function learnedText(learned: LearnedAdjustment[] | undefined): string {
   return ` ${learned.map((a) => `${a.applies} will rank ${a.effect}`).join("; ")}.`;
 }
 
-function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, onCheck, onSave, onPass }: {
+function JobRow({ job, marker, asOf, active, checked, showSavedChip, rowRef, onFocus, onCheck, onSave, onPass }: {
   job: FeedJob;
+  /** What Track knows: this Job's Application, or a recent one at the same company. */
+  marker: JobMarker | undefined;
   asOf: string;
   active: boolean;
   checked: boolean;
@@ -351,6 +355,7 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
             <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onPass}>Pass…<span className="sr-only"> {named(job)}</span></button>
           </div>
         </div>
+        <FeedMarker marker={marker} tabIndex={tab} jobName={named(job)} />
       </td>
       <td className="wide">{where}</td>
       <td className="wide"><RowChips job={job} /></td>

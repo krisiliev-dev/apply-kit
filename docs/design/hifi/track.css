@@ -197,9 +197,8 @@ textarea.input { min-height: 180px; resize: vertical; line-height: var(--lh-body
 .wd textarea.input { min-height: 112px; font-size: var(--fs-small) }
 .wd > li.is-sent { background: var(--surface-sunken) }
 
-/* feed and job markers (Track inside Discover screens) */
+/* feed and job markers (Track inside Discover screens); .chip.applied moved to components.css (#28) */
 .marker-demo { display: grid; gap: var(--s-6) }
-.chip.applied { background: transparent; color: var(--ink-2); border: 1px solid var(--border-control) }
 @media (min-width: 761px) {
   .apps { table-layout: fixed }
   .apps .c-status { width: 168px } .apps .c-date { width: 88px } .apps .c-last { width: 22% } .apps .c-next { width: 19% } .apps .c-angle { width: 96px }

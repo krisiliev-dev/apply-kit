@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationEvent, ApplicationList, ApplicationSummary, GroupKey, JobChoice, Status,
+  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationEvent, ApplicationList, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -10,11 +10,14 @@ export interface FeedOptions {
   relocation: boolean;
 }
 
-export async function fetchFeed(view: FeedView, options: FeedOptions, signal?: AbortSignal): Promise<FeedResult> {
+/** The Feed with what Track knows about each listed Job (keyed by Job id). */
+export type TrackedFeed = FeedResult & { markers: Record<string, JobMarker> };
+
+export async function fetchFeed(view: FeedView, options: FeedOptions, signal?: AbortSignal): Promise<TrackedFeed> {
   const q = new URLSearchParams({ view, sort: options.sort, ...(options.relocation && { relocation: "1" }) });
   const res = await fetch(`/api/feed?${q}`, { signal });
   if (!res.ok) throw new Error(`The service answered ${res.status}`);
-  return (await res.json()) as FeedResult;
+  return (await res.json()) as TrackedFeed;
 }
 
 /** Whether a check is running (progress, time estimate) and how the last one went. */
@@ -82,7 +85,10 @@ async function json<T>(res: Response): Promise<T> {
 const postJson = (url: string, body: unknown = {}) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export async function fetchJob(id: string, signal?: AbortSignal): Promise<JobDetail> {
+/** A Job with what Track knows: its Application and the History with its company. */
+export type TrackedJob = JobDetail & { track: JobMarker | null };
+
+export async function fetchJob(id: string, signal?: AbortSignal): Promise<TrackedJob> {
   return json(await fetch(jobPath(id), { signal }));
 }
 
