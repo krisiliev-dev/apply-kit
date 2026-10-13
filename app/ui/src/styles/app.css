@@ -264,3 +264,38 @@ h2[tabindex="-1"]:focus { outline: none }
 
 /* Chrome extension pairing code: large and spaced so it is easy to type across. */
 .pair-code { font-family: var(--font-display); font-size: var(--fs-h2); letter-spacing: .12em; font-variant-numeric: tabular-nums; font-weight: 600 }
+
+/* Applications (from the Track hi-fi): the list grouped by Status, each group a disclosure. Tokens only. */
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4) }
+.panel.flush .sec-head { padding: var(--s-5) var(--s-6) var(--s-4) }
+.sec-head h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.groups { display: grid }
+.group + .group { border-top: 1px solid var(--rule) }
+.group-h { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-4) var(--s-6) }
+.group-h .disclose { width: auto; display: inline-flex; font-family: var(--font-display); font-size: var(--fs-title) }
+.group-h .count { font-family: var(--font-text); font-weight: 500; color: var(--ink-3); font-size: var(--fs-small) }
+.group-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-6) var(--s-5); font-size: var(--fs-small); color: var(--ink-2) }
+.apps td { vertical-align: middle }
+.apps tbody tr { cursor: default }
+.apps .t { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 46ch }
+.apps a.t:hover { text-decoration: underline }
+.apps .co { color: var(--ink-2); font-size: var(--fs-small) }
+.apps { table-layout: fixed }
+.apps select.input { width: 100%; min-width: 0; min-height: 32px; padding: var(--s-1) var(--s-3); font-size: var(--fs-small); border-radius: var(--r-control) }
+.apps .last { color: var(--ink-2); font-size: var(--fs-small); max-width: 32ch }
+.apps .closed td { color: var(--ink-3) }
+.apps .closed .t { color: var(--ink-2) }
+.apps tr.is-focused td { background: var(--met-soft) }
+@media (min-width: 761px) {
+  .apps .c-status { width: 168px } .apps .c-date { width: 88px } .apps .c-last { width: 26% } .apps .c-angle { width: 96px }
+}
+@media (max-width: 760px) {
+  .apps .wide, .apps col.wide { display: none }
+  .apps .c-status { width: 150px }
+  .apps .narrow { display: block; font-size: var(--fs-caption); color: var(--ink-3); margin-top: var(--s-1) }
+  .group-h, .group-foot, .panel.flush .sec-head { padding-inline: var(--s-5) }
+}
+.dlg .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
+.dlg .results { max-height: 240px; overflow-y: auto }
+.dlg .results label:has(input:checked) { background: var(--met-soft) }
+.decide .applied-note { font-size: var(--fs-small); color: var(--ink-2) }

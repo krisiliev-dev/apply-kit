@@ -4,12 +4,14 @@
 // Bulgarian postings shown in English with the original one click away, and a closed Job: how it
 // closed, Prepare disabled with the reason, reopen (with Undo) and similar open Jobs.
 import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
-import { useEffect, useId, useState, type FormEvent } from "react";
-import { boostJob, confirmFact, fetchJob, fetchSources, readJob, reopenJobs, undoAdjustment, undoDecision } from "../api.ts";
-import { useToaster } from "../feed/toast.tsx";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import { boostJob, confirmFact, fetchJob, fetchSources, readJob, reopenJobs, undoAdjustment, undoApplicationEvent, undoDecision } from "../api.ts";
+import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { Chevron, Icon } from "../icons.tsx";
 import { AskChip, StatusChip } from "../requirements.tsx";
 import { PostingsPanel } from "./PostingsPanel.tsx";
+import { AddApplicationDialog, type Added } from "../applications/AddApplicationDialog.tsx";
+import { shortDay, statusLabel } from "../applications/words.ts";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; job: JobDetail };
 
@@ -167,7 +169,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
           {state !== "read" && <FitCheck job={job} />}
         </div>
         <div className="col side">
-          <Decide job={job} onReopen={reopen} />
+          <Decide job={job} onReopen={reopen} toaster={toaster} />
           <Boost job={job} onChanged={answered} />
           <PostingsPanel job={job} onChanged={answered} />
         </div>
@@ -540,8 +542,33 @@ function SimilarJobs({ jobs }: { jobs: FeedJob[] }) {
   );
 }
 
-function Decide({ job, onReopen }: { job: JobDetail; onReopen: () => void }) {
+function Decide({ job, onReopen, toaster }: { job: JobDetail; onReopen: () => void; toaster: Toaster }) {
   const [language, setLanguage] = useState(job.packageLanguage);
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState<Added | null>(null);
+  const appliedRef = useRef<HTMLButtonElement>(null);
+  const noteRef = useRef<HTMLParagraphElement>(null);
+  const undone = useRef(false);
+  // Once added, focus moves to the line saying so (the button that opened the dialog is gone);
+  // after Undo, back to the button.
+  useEffect(() => {
+    if (added) noteRef.current?.focus();
+    else if (undone.current) { undone.current = false; appliedRef.current?.focus(); }
+  }, [added]);
+  const applied = (result: Added) => {
+    setAdding(false);
+    setAdded(result);
+    const a = result.application;
+    toaster.show({
+      message: `Added to Applications · ${statusLabel[a.status]} ${shortDay(a.appliedOn)}.`,
+      returnFocus: () => (noteRef.current ?? appliedRef.current)?.focus(),
+      undo: () => {
+        undoApplicationEvent(result.event.id)
+          .then(() => { undone.current = true; setAdded(null); toaster.announce("Removed from Applications again."); })
+          .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+      },
+    });
+  };
   const why = job.closed
     ? `Can't prepare a package: this job is closed (${job.closed.how.charAt(0).toLowerCase()}${job.closed.how.slice(1)}), so the posting may no longer accept applications. If it's still open, reopen it first.`
     : job.reading.state === "read"
@@ -549,26 +576,45 @@ function Decide({ job, onReopen }: { job: JobDetail; onReopen: () => void }) {
     : "A package needs the requirements first, and packages arrive with a later part of the rebuild.";
   const inOriginal = job.packageLanguage !== "en";
   return (
-    <div className="panel decide o2" role="group" aria-label="Decide">
-      <button className="btn primary" type="button" disabled aria-describedby="prep-why">
-        Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}
-      </button>
-      <p className="why-off" id="prep-why">{why}</p>
-      {job.closed && <button className="btn ghost" type="button" onClick={onReopen}>It's still open: reopen</button>}
-      <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
-      {inOriginal && (
-        <div className="lang">
-          <span aria-live="polite">
-            {language === "bg"
-              ? <>The posting is in Bulgarian, so your CV, cover letter and screening answers will be in <b>Bulgarian</b>.</>
-              : <>Your package will be in <b>English</b>.</>}
-          </span>
-          <button className="btn sm" type="button" onClick={() => setLanguage(language === "bg" ? "en" : "bg")}>
-            {language === "bg" ? "Switch to English" : "Switch back to Bulgarian"}
-          </button>
-        </div>
+    <>
+      <div className="panel decide o2" role="group" aria-label="Decide">
+        <button className="btn primary" type="button" disabled aria-describedby="prep-why">
+          Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}
+        </button>
+        <p className="why-off" id="prep-why">{why}</p>
+        {job.closed && <button className="btn ghost" type="button" onClick={onReopen}>It's still open: reopen</button>}
+        <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
+        {added ? (
+          <p className="applied-note" id="applied-note" ref={noteRef} tabIndex={-1}>
+            Added to <a href={`/applications#app-${encodeURIComponent(added.application.id)}`}>Applications</a>: {statusLabel[added.application.status]}, applied {shortDay(added.application.appliedOn)}.
+          </p>
+        ) : (
+          <>
+            <button className="btn ghost sm" type="button" ref={appliedRef} style={{ justifySelf: "start" }} onClick={() => setAdding(true)}>I applied without apply-kit…</button>
+            <p className="meta">For a job you applied to on the company's site directly. Opens Add application with this Job chosen.</p>
+          </>
+        )}
+        {inOriginal && (
+          <div className="lang">
+            <span aria-live="polite">
+              {language === "bg"
+                ? <>The posting is in Bulgarian, so your CV, cover letter and screening answers will be in <b>Bulgarian</b>.</>
+                : <>Your package will be in <b>English</b>.</>}
+            </span>
+            <button className="btn sm" type="button" onClick={() => setLanguage(language === "bg" ? "en" : "bg")}>
+              {language === "bg" ? "Switch to English" : "Switch back to Bulgarian"}
+            </button>
+          </div>
+        )}
+      </div>
+      {adding && (
+        <AddApplicationDialog
+          chosen={{ id: job.id, title: titleOf(job), company: job.company }}
+          onAdded={applied}
+          onCancel={() => { setAdding(false); appliedRef.current?.focus(); }}
+        />
       )}
-    </div>
+    </>
   );
 }
 

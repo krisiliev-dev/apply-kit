@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createEngine, createPairing, type Scheduler } from "@apply-kit/core";
+import { createEngine, createPairing, createTracker, type Scheduler } from "@apply-kit/core";
 import { createServer } from "./server.ts";
 
 const port = 4310;
@@ -19,8 +19,9 @@ function service(uiDir = "/nonexistent/") {
     mailReader: { fetchSince: async () => [] },
   });
   const pairing = createPairing({ db, clock });
+  const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const app = createServer({ engine, scheduler, pairing, uiDir, port });
+  const app = createServer({ engine, tracker, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
@@ -207,5 +208,40 @@ describe("the app's routes", () => {
     expect(missing.status).toBe(404);
     expect(form.status).toBe(415);
     expect(noIds.status).toBe(400);
+  });
+});
+
+describe("the Applications routes", () => {
+  it("adds an application by hand, lists it grouped, changes its Status and undoes that", async () => {
+    const s = service();
+
+    const added = await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+    expect(added.status).toBe(201);
+    const { application } = (await added.json()) as { application: { id: string } };
+
+    const changed = await s.request(`/api/applications/${encodeURIComponent(application.id)}/status`, s.json({ status: "screening" }));
+    const { event } = (await changed.json()) as { event: { id: string } };
+    expect((await (await s.request("/api/applications")).json()) as unknown).toMatchObject({ total: 1, groups: [{ key: "screening", count: 1 }] });
+
+    const undone = await s.request(`/api/applications/events/${encodeURIComponent(event.id)}/undo`, s.json({}));
+    expect(await undone.json()).toMatchObject({ application: { status: "applied" } });
+  });
+
+  it("explains a refused add or change in words, and shows more of a group when asked", async () => {
+    const s = service();
+    const invalid = await s.request("/api/applications", s.json({ job: { company: "", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+    expect(invalid.status).toBe(422);
+    expect(await invalid.json()).toMatchObject({ outcome: "invalid", field: "company", error: "Enter the company, so replies can be matched to it." });
+
+    for (let i = 0; i < 7; i++) {
+      await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: `Job ${i}` }, appliedOn: "2026-10-09", status: "applied" }));
+    }
+    const five = (await (await s.request("/api/applications")).json()) as { groups: { applications: { id: string }[] }[] };
+    const all = (await (await s.request("/api/applications?all=applied")).json()) as { groups: { applications: unknown[] }[] };
+    expect([five.groups[0]!.applications.length, all.groups[0]!.applications.length]).toEqual([5, 7]);
+
+    const accepted = await s.request(`/api/applications/${encodeURIComponent(five.groups[0]!.applications[0]!.id)}/status`, s.json({ status: "accepted" }));
+    expect(accepted.status).toBe(409);
+    expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
 });

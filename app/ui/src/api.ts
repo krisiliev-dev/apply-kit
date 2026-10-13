@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed,
+  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationEvent, ApplicationList, ApplicationSummary, GroupKey, JobChoice, Status,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -242,4 +242,32 @@ export async function fetchPairedDevices(signal?: AbortSignal): Promise<PairedDe
 
 export async function unpairDevice(id: string): Promise<void> {
   await json(await postJson(`/api/pairing/devices/${encodeURIComponent(id)}/unpair`));
+}
+
+// ---------- Applications (Track) ----------
+
+/** Every Application grouped by Status. `all` lists the groups to show in full (Applied and Closed show 5 otherwise). */
+export async function fetchApplications(all: GroupKey[] = [], signal?: AbortSignal): Promise<ApplicationList> {
+  const q = all.length ? `?all=${all.join(",")}` : "";
+  return json(await fetch(`/api/applications${q}`, { signal }));
+}
+
+/** Jobs to pick from in Add application (passed and closed too). */
+export async function findJobsToApply(q: string, signal?: AbortSignal): Promise<JobChoice[]> {
+  return json(await fetch(`/api/applications/jobs?q=${encodeURIComponent(q)}`, { signal }));
+}
+
+/** "Add application": added (201), already open for that Job (200), or invalid with the field named (422). */
+export async function addApplication(input: AddApplicationInput): Promise<AddApplicationResult> {
+  const res = await postJson("/api/applications", input);
+  if (res.status === 422) return (await res.json()) as AddApplicationResult;
+  return json(res);
+}
+
+export async function setApplicationStatus(id: string, status: Status): Promise<{ application: ApplicationSummary; event: ApplicationEvent }> {
+  return json(await postJson(`/api/applications/${encodeURIComponent(id)}/status`, { status }));
+}
+
+export async function undoApplicationEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }> {
+  return json(await postJson(`/api/applications/events/${encodeURIComponent(eventId)}/undo`));
 }

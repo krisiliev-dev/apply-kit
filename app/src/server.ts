@@ -2,13 +2,17 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import type { CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting, Scheduler } from "@apply-kit/core";
+import { TrackerError } from "@apply-kit/core";
+import type {
+  AddApplicationInput, CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, GroupKey, Pairing, PassReason,
+  PastedPosting, Scheduler, Status, Tracker,
+} from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
 
-export function createServer({ engine, scheduler, pairing, uiDir, port }: {
-  engine: DiscoveryEngine; scheduler: Scheduler; pairing: Pairing; uiDir: string;
+export function createServer({ engine, tracker, scheduler, pairing, uiDir, port }: {
+  engine: DiscoveryEngine; tracker: Tracker; scheduler: Scheduler; pairing: Pairing; uiDir: string;
   /** The port the service listens on: only requests addressed to this machine on it are answered. */
   port: number;
 }) {
@@ -308,6 +312,46 @@ export function createServer({ engine, scheduler, pairing, uiDir, port }: {
     return check ? c.json(check) : c.json({ error: "No such coverage check" }, 404);
   });
 
+  // Applications (Track). The list grouped by Status (?all=applied,closed shows every row of those
+  // groups), Jobs to pick when adding (?q=), one Application, and its Events.
+  app.get("/api/applications", async (c) => {
+    const all = (c.req.query("all") ?? "").split(",").filter(Boolean) as GroupKey[];
+    return c.json(await tracker.list({ limits: Object.fromEntries(all.map((k) => [k, Number.MAX_SAFE_INTEGER])) }));
+  });
+  app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));
+  app.get("/api/applications/:id", async (c) => {
+    const a = await tracker.get(c.req.param("id"));
+    return a ? c.json({ ...a, events: await tracker.events(a.id) }) : c.json({ error: "No such application" }, 404);
+  });
+
+  // "Add application" and "I applied": { job: { jobId } | { company, title, link? }, appliedOn, status, contact?, how? }.
+  // Added: 201. Already open for that Job: 200 with the existing one. Invalid: 422 naming the field.
+  app.post("/api/applications", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const j = (body.job && typeof body.job === "object" ? body.job : {}) as Record<string, unknown>;
+    const text = (v: unknown) => (typeof v === "string" ? v : "");
+    const input: AddApplicationInput = {
+      job: typeof j.jobId === "string" ? { jobId: j.jobId } : { company: text(j.company), title: text(j.title), link: text(j.link) || null },
+      appliedOn: text(body.appliedOn), status: text(body.status) as Status,
+      contact: text(body.contact) || null, how: body.how === "i-applied" ? "i-applied" : "by-hand",
+    };
+    const result = await tracker.addByHand(input);
+    if (result.outcome === "invalid") return c.json({ ...result, error: result.message }, 422);
+    return c.json(result, result.outcome === "added" ? 201 : 200);
+  });
+
+  // Quick Status change: { status }. An Event "by you", undone with POST /api/applications/events/:id/undo.
+  app.post("/api/applications/:id/status", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.setStatus(c.req.param("id"), String(body.status) as Status));
+  });
+  app.post("/api/applications/events/:id/undo", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.undoEvent(c.req.param("id")));
+  });
+
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
   // The built UI (pnpm start). In dev, Vite serves the UI and proxies /api here.
@@ -324,6 +368,16 @@ export function createServer({ engine, scheduler, pairing, uiDir, port }: {
 }
 
 type Body = Record<string, unknown>;
+
+/** Runs a tracker change; a refusal answers 404 (not found) or 409 with its problem and words. */
+async function trackerCall(c: Context, act: () => Promise<unknown>) {
+  try {
+    return c.json(await act());
+  } catch (err) {
+    if (!(err instanceof TrackerError)) throw err;
+    return c.json({ problem: err.problem, error: err.message, applicationId: err.applicationId }, err.problem === "not-found" ? 404 : 409);
+  }
+}
 
 const pairProblems = {
   "no-code": "There's no pairing code waiting. In apply-kit, choose Pair the extension to get one.",

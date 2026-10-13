@@ -255,6 +255,48 @@ const migrations: string[] = [
    );
    CREATE INDEX mail_message_received ON mail_message(received_at);
    ALTER TABLE mailbox_read ADD COLUMN since TEXT;`,
+  // Track #26: Applications (owned by the tracker), their append-only Events (each with its cause;
+  // undo marks an Event undone and records the reversal as its own Event), and the addresses or
+  // domains whose mail belongs to each. `job_id` is null only for one added by hand without a Job.
+  `CREATE TABLE application (
+     id TEXT PRIMARY KEY,
+     job_id TEXT REFERENCES job(id),
+     company TEXT NOT NULL,
+     title TEXT NOT NULL,
+     status TEXT NOT NULL,
+     applied_on TEXT NOT NULL,
+     created_how TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     posting_url TEXT,
+     portal_url TEXT,
+     package_id TEXT,
+     angle TEXT,
+     source TEXT NOT NULL,
+     cv_version TEXT,
+     language TEXT,
+     removed_at TEXT
+   );
+   CREATE INDEX application_job ON application(job_id);
+   CREATE TABLE application_event (
+     id TEXT PRIMARY KEY,
+     application_id TEXT NOT NULL REFERENCES application(id),
+     at TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     cause TEXT NOT NULL,
+     from_status TEXT,
+     to_status TEXT,
+     text TEXT NOT NULL,
+     undoes TEXT REFERENCES application_event(id),
+     undone_at TEXT
+   );
+   CREATE INDEX application_event_app ON application_event(application_id);
+   CREATE TABLE application_contact (
+     application_id TEXT NOT NULL REFERENCES application(id),
+     value TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     added_at TEXT NOT NULL,
+     PRIMARY KEY (application_id, value)
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
