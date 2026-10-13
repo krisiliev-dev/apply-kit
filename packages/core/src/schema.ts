@@ -235,6 +235,26 @@ const migrations: string[] = [
   // by lookup instead of re-reading every Posting's link. Filled for older Postings on start (backfillLinkKeys).
   `ALTER TABLE posting ADD COLUMN link_key TEXT;
    CREATE INDEX posting_link_key ON posting(link_key);`,
+  // #25: the mail store (ADR 0004). Every email in the job mailbox once, by Message-ID, read once per
+  // check and shared by Discover's alert Sources and Track. Recipients, thread headers and attachment
+  // names (never contents) are kept as JSON lists. A read records the time it looked back to, so the
+  // next one starts from the last good read that filled the store, minus a day.
+  `CREATE TABLE mail_message (
+     id TEXT PRIMARY KEY,
+     from_header TEXT NOT NULL,
+     to_list TEXT NOT NULL,
+     cc_list TEXT NOT NULL,
+     subject TEXT NOT NULL,
+     received_at TEXT NOT NULL,
+     html TEXT NOT NULL,
+     text TEXT NOT NULL,
+     in_reply_to TEXT,
+     reference_list TEXT NOT NULL,
+     attachments TEXT NOT NULL,
+     stored_at TEXT NOT NULL
+   );
+   CREATE INDEX mail_message_received ON mail_message(received_at);
+   ALTER TABLE mailbox_read ADD COLUMN since TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

@@ -77,13 +77,17 @@ export function fixtureFetch(routes: Record<string, string> = {}): typeof fetch 
 
 export type AlertEmail = Awaited<ReturnType<MailReader["fetchSince"]>>[number];
 
+/** An email as a test delivers it: the fields alert tests need, the rest optional. */
+export type Delivered = Pick<AlertEmail, "id" | "from" | "subject" | "receivedAt" | "html" | "text"> & Partial<AlertEmail>;
+
 /**
  * A job mailbox held in memory. `deliver` puts an email in it; `fail` makes every read throw
  * (an expired app password, say) until `recover`. Reads return the emails received since the asked time;
  * with a clock, emails dated in its future haven't arrived yet, so they can be delivered up front.
  */
 export interface FakeMailbox extends MailReader {
-  deliver(email: AlertEmail): void;
+  /** An email; recipients, thread headers and attachments left out are empty. */
+  deliver(email: Delivered): void;
   fail(err: Error): void;
   recover(): void;
   reads: Date[];
@@ -95,7 +99,7 @@ export function fakeMailbox(clock?: Clock): FakeMailbox {
   const reads: Date[] = [];
   return {
     reads,
-    deliver: (email) => { emails.push(email); },
+    deliver: (email) => { emails.push({ to: [], cc: [], inReplyTo: null, references: [], attachments: [], ...email }); },
     fail: (err) => { failure = err; },
     recover: () => { failure = null; },
     async fetchSince(since) {
@@ -151,7 +155,16 @@ export function fakeExtractor(
 
 /** An alert email whose HTML body is a fixture in test/fixtures (synthetic, no personal data). */
 export function alertEmail(fixture: string, fields: { id: string; from: string; subject: string; receivedAt: string }): AlertEmail {
-  return { ...fields, receivedAt: new Date(fields.receivedAt), html: loadFixture(fixture), text: "" };
+  return mailMessage({ ...fields, html: loadFixture(fixture) });
+}
+
+/** Any email in the job mailbox (synthetic, no personal data); fields not given are empty. */
+export function mailMessage(fields: Partial<Omit<AlertEmail, "receivedAt">> & { id: string; from: string; subject: string; receivedAt: string }): AlertEmail {
+  return {
+    to: [], cc: [], html: "", text: "", inReplyTo: null, references: [], attachments: [],
+    ...fields,
+    receivedAt: new Date(fields.receivedAt),
+  };
 }
 
 export function createTestEngine(overrides: Partial<EngineDeps> = {}) {
