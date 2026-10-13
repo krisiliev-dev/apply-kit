@@ -564,7 +564,7 @@ function MovedBanner({ moved, refresh, toaster, onDone }: { moved: MovedByEmail;
   return (
     <div className="banner success">
       <span className="text">
-        <b>Moved {statusLabel[moved.from]} → {statusLabel[moved.to]} by an email {when(moved.at).replace(/^today /, "today at ")}.</b>{" "}
+        <b>Moved {statusLabel[moved.from]} → {statusLabel[moved.to]} by an email {when(moved.email.receivedAt).replace(/^today /, "today at ")}.</b>{" "}
         {n ? `It matched on ${n === 1 ? "1 signal" : `${n} signals`}, listed below.` : ""}
       </span>
       <button className="btn sm" type="button" disabled={busy} onClick={() => act(() => confirmEmailMove(moved.eventId), "Thanks. The banner is gone; the email stays on the timeline.")}>Looks right</button>
