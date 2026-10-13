@@ -994,8 +994,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const active = activeAdjustments();
     if (active.length === 0) return counts;
     const money = budget();
+    const pieces = profilePieces();
     for (const r of db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved')`).all()) {
-      for (const reason of toFeedJob(r, money, active).fit.reasons) {
+      for (const reason of toFeedJob(r, money, active, pieces).fit.reasons) {
         if (reason.adjustmentId) counts.set(reason.adjustmentId, (counts.get(reason.adjustmentId) ?? 0) + 1);
       }
     }
@@ -1416,11 +1417,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          FROM job j
          JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
 
-  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments()): FeedJob {
+  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments(), pieces = profilePieces()): FeedJob {
     const links = linksOf(String(r.id));
     const readId = readingPostingId(String(r.id));
     const reading = readingOf(readId, money.reached);
-    const read = readOf(readId, reading);
+    const read = readOf(readId, reading, pieces);
     const base = { title: String(r.title), company: String(r.company), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
     const fit = fitOf(base, read, reading.facts, active);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
@@ -2030,7 +2031,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all();
       const active = activeAdjustments();
-      const all = rows.map((r) => ({ job: toFeedJob(r, money, active), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const pieces = profilePieces();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money, active, pieces), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
       const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");

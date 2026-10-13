@@ -128,11 +128,15 @@ function requirementsReason(input: FitInput): Omit<FitReason, "points"> {
   return { ...base, score, text: coverage(input.requirements) };
 }
 
-/** "4 of 6 met, 1 partly, 1 gap". Unknown items are counted in the total but never as gaps. */
+/**
+ * "4 of 6 met, 1 partly, 1 gap, 1 preferred not held". Unknown items are counted in the total but
+ * never as gaps; preferred items not held are named as such, never as gaps.
+ */
 function coverage(reqs: FitInput["requirements"]): string {
   const n = (s: RequirementStatus) => reqs.filter((r) => r.status === s).length;
   const gaps = reqs.filter((r) => r.status === "gap" && r.kind === "required").length;
-  return `${n("met")} of ${reqs.length} met${n("partly") ? `, ${n("partly")} partly` : ""}${gaps ? `, ${plural(gaps, "gap")}` : ""}`;
+  const notHeld = n("not-held");
+  return `${n("met")} of ${reqs.length} met${n("partly") ? `, ${n("partly")} partly` : ""}${gaps ? `, ${plural(gaps, "gap")}` : ""}${notHeld ? `, ${notHeld} preferred not held` : ""}`;
 }
 
 function angleOf(input: FitInput): { best: Angle | null; reason: Omit<FitReason, "points"> } {
