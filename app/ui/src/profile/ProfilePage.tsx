@@ -1,5 +1,5 @@
 // Profile (hi-fi: docs/design/hifi/profile.html): the master profile with contact details, Add and
-// Edit piece, and section links to Profile's areas. Angles, the answer bank and voice arrive with
+// Edit piece, section links to Profile's areas, and Angles (#58). The answer bank and voice arrive with
 // later tickets; Search and dealbreakers is the existing search settings page.
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
 import { angles, pieceKinds } from "@apply-kit/core/profile";
@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileExportUrl } from "../api.ts";
 import { Icon } from "../icons.tsx";
 import { SearchSettingsPage } from "../settings/SearchSettingsPage.tsx";
+import { AnglesPage } from "./AnglesPage.tsx";
 import { ContactPanel } from "./ContactPanel.tsx";
 import { PieceEditor } from "./PieceEditor.tsx";
 import {
@@ -84,10 +85,15 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
           {head}
           <SearchSettingsPage onHealth={onHealth} />
         </section>
-      ) : path === "/profile/angles" || path === "/profile/answers" || path === "/profile/voice" ? (
+      ) : path === "/profile/angles" ? (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
-          <NotYet area={path === "/profile/angles" ? "Angles" : path === "/profile/answers" ? "The answer bank" : "Voice"} />
+          <AnglesPage announce={announce} />
+        </section>
+      ) : path === "/profile/answers" || path === "/profile/voice" ? (
+        <section className="stack" style={{ gap: "var(--s-6)" }}>
+          {head}
+          <NotYet area={path === "/profile/answers" ? "The answer bank" : "Voice"} />
         </section>
       ) : (
         <section className="stack" style={{ gap: "var(--s-6)" }}>

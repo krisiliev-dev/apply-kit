@@ -264,6 +264,14 @@ const migrations: string[] = [
      photo_size INTEGER,
      updated_at TEXT NOT NULL
    );`,
+  // #58: angles. Kris's summary line per angle and the pieces that lead it, in order (a JSON list of
+  // piece ids; NULL until he orders them, which means the default order). No row means neither is set.
+  `CREATE TABLE angle (
+     angle TEXT PRIMARY KEY,
+     summary TEXT NOT NULL,
+     leads TEXT,
+     updated_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
