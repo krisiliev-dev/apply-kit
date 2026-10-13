@@ -24,9 +24,18 @@ export interface FactSource extends SourceQuote {
   line: number | null;
 }
 
+/** What backs a requirement's status: the pieces used as evidence (fit/evidence.ts). */
+export interface RequirementEvidence {
+  pieces: { id: string; label: string }[];
+  /** What was found, in plain words, e.g. "3 years 8 months from your role dates", "No evidence in your master profile". */
+  note: string;
+}
+
 export interface JobRequirement extends FeedRequirement {
   /** Stable within one read of the posting, e.g. "requirements:2". */
   key: string;
+  /** What backs the status; only once there is a master profile to check against. */
+  evidence?: RequirementEvidence;
   /** How the posting asks for it; "Unclear" while a low-confidence reading waits for Kris. */
   askedAs: "Required" | "Preferred" | "Unclear";
   confidence: number;

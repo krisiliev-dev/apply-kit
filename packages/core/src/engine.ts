@@ -9,6 +9,8 @@ import {
 import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
 import type { Angle } from "./fit/angles.ts";
+import { withEvidence } from "./fit/evidence.ts";
+import { createProfileStore } from "./preparation/profile.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations, NOT_STATED } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
@@ -874,6 +876,10 @@ const viewStates: Record<FeedView, JobState[]> = {
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
+  // The master profile, read here only: the preparation engine owns it. Its confirmed pieces are
+  // the evidence for requirement statuses and Fit.
+  const profile = createProfileStore({ db, clock });
+  const profilePieces = () => profile.all().filter((p) => p.status === "confirmed");
   backfillMatchKeys(db);
   backfillLinkKeys(db);
 
@@ -1187,9 +1193,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         .map((r) => [String(r.fact_key), String(r.choice) as FactAnswer]),
     );
 
-  /** The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is read. */
-  function readOf(postingId: string, reading: ReturnType<typeof readingOf>) {
-    return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
+  /**
+   * The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is
+   * read. Requirement statuses come from the master profile as it is now, so editing a piece changes
+   * them (and the Fit) on the next query, with no model call.
+   */
+  function readOf(postingId: string, reading: ReturnType<typeof readingOf>, pieces = profilePieces()) {
+    return reading.facts ? withEvidence(jobReading(reading.facts, reading.text, answersFor(postingId)), reading.facts, pieces, clock.now()) : null;
   }
 
   /**

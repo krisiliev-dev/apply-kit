@@ -9,12 +9,13 @@
 //   title, with a small synonym table. Never substrings.
 // - Only confirmed pieces count. A preferred item with no evidence is "not held", never a gap.
 // - Location and work authorisation aren't in the profile: the dealbreakers check those.
-import type { RequirementStatus } from "../extraction/reading.ts";
+import type { PostingFacts } from "../extraction/facts.ts";
+import type { JobReading, RequirementStatus } from "../extraction/reading.ts";
 import type { PieceEntry, ProfilePiece } from "../preparation/profile.ts";
 import { phrasesIn, words } from "../words.ts";
 import { angleKeywords, angles, type Angle } from "./angles.ts";
 
-export type RequirementCategory = "skill" | "experience" | "language" | "certificate" | "education" | "location" | "work-authorisation" | "other";
+export type RequirementCategory = PostingFacts["requirements"][number]["category"];
 
 export interface RequirementToMatch {
   /** Short English label, e.g. "3+ years in security operations". */
@@ -292,4 +293,20 @@ export function matchEvidence(requirement: RequirementToMatch, profile: readonly
     : termsEvidence(text, pieces, { partial: category !== "certificate" });
   if (found.status === "gap" && preferred) return { status: "not-held", pieces: [], note: notHeld };
   return found;
+}
+
+/**
+ * A Job's reading with each requirement's status and evidence from the master profile. Without a
+ * confirmed piece there is no master profile yet: the reading is returned as it is ("unknown").
+ */
+export function withEvidence(reading: JobReading, facts: PostingFacts, profile: readonly ProfilePiece[], now: Date): JobReading {
+  if (!profile.some((p) => p.status === "confirmed")) return reading;
+  return {
+    ...reading,
+    requirements: reading.requirements.map((r, i) => {
+      const category = facts.requirements[i]?.category ?? "other";
+      const { status, pieces, note } = matchEvidence({ text: r.text, kind: r.kind, category }, profile, now);
+      return { ...r, status, evidence: { pieces, note } };
+    }),
+  };
 }
