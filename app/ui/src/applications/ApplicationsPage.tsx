@@ -2,14 +2,15 @@
 // applications and Add application): the page head with Add application, the first-run empty state,
 // and every Application grouped by Status. Interviewing, Screening, Offer and Applied start open;
 // Closed starts collapsed and is never deleted. Each row has a labelled Status select: a change is an
-// Event "by you" with a 10-second (or longer) undo toast. Stats, Needs you, search and filters come
-// with later Track tickets.
+// Event "by you" with a 10-second (or longer) undo toast. The Stats strip sits above (StatsStrip.tsx);
+// Needs you, search and filters come with later Track tickets.
 import type { ApplicationGroup, ApplicationList, ApplicationSummary, GroupKey, HealthSummary, Status } from "@apply-kit/core";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { fetchApplications, fetchSources, setApplicationStatus, undoApplicationEvent } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Chevron } from "../icons.tsx";
 import { AddApplicationDialog, type Added } from "./AddApplicationDialog.tsx";
+import { StatsStrip } from "./StatsStrip.tsx";
 import { angleLabel, eventTime, shortDay, statusLabel, statusOrder } from "./words.ts";
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; list: ApplicationList };
@@ -231,6 +232,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
           <button className="btn sm" type="button" onClick={() => { setLinkProblem(null); addRef.current?.focus(); }}>Dismiss</button>
         </div>
       )}
+
+      <StatsStrip version={list} />
 
       {list.total === 1 && (
         <div className="calm">

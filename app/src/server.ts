@@ -318,6 +318,8 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
     const all = (c.req.query("all") ?? "").split(",").filter(Boolean) as GroupKey[];
     return c.json(await tracker.list({ limits: Object.fromEntries(all.map((k) => [k, Number.MAX_SAFE_INTEGER])) }));
   });
+  // The Stats strip: applications per week with the pace, response rate, interviews, what's working.
+  app.get("/api/applications/stats", async (c) => c.json(await tracker.stats()));
   app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));
   app.get("/api/applications/:id", async (c) => {
     const a = await tracker.get(c.req.param("id"));

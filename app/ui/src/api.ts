@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationEvent, ApplicationList, ApplicationSummary, GroupKey, JobChoice, Status,
+  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationEvent, ApplicationList, ApplicationSummary, GroupKey, JobChoice, Status, TrackStats,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -270,4 +270,9 @@ export async function setApplicationStatus(id: string, status: Status): Promise<
 
 export async function undoApplicationEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }> {
   return json(await postJson(`/api/applications/events/${encodeURIComponent(eventId)}/undo`));
+}
+
+/** The Stats strip's numbers. */
+export async function fetchApplicationStats(signal?: AbortSignal): Promise<TrackStats> {
+  return json(await fetch("/api/applications/stats", { signal }));
 }

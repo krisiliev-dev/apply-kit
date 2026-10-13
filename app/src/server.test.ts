@@ -244,4 +244,14 @@ describe("the Applications routes", () => {
     expect(accepted.status).toBe(409);
     expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
+
+  it("gives the Stats strip its numbers", async () => {
+    const s = service();
+    await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+
+    const stats = await s.request("/api/applications/stats");
+
+    expect(stats.status).toBe(200);
+    expect(await stats.json()).toMatchObject({ total: 1, weeks: expect.any(Array), responseRate: { excluded: 1, rate: null } });
+  });
 });

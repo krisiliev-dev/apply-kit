@@ -299,3 +299,43 @@ h2[tabindex="-1"]:focus { outline: none }
 .dlg .results { max-height: 240px; overflow-y: auto }
 .dlg .results label:has(input:checked) { background: var(--met-soft) }
 .decide .applied-note { font-size: var(--fs-small); color: var(--ink-2) }
+
+/* Stats strip on Applications (from the Track hi-fi). Scoped under .strip: Settings has its own .tile. Tokens only. */
+.strip { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr); gap: var(--s-4) }
+@media (max-width: 1080px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 560px) { .strip { grid-template-columns: minmax(0, 1fr) } }
+.strip .tile { border-radius: var(--r-card); box-shadow: var(--shadow-raised) }
+.strip .label { font-size: var(--fs-small); color: var(--ink-2); font-weight: 500 }
+.strip .value { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-h2); line-height: 1.1; letter-spacing: var(--track-display); color: var(--ink); font-variant-numeric: tabular-nums }
+.strip .value small { font-family: var(--font-text); font-size: var(--fs-small); font-weight: 500; letter-spacing: 0; color: var(--ink-2); margin-left: var(--s-2) }
+.strip .sub { font-size: var(--fs-caption); color: var(--ink-3) }
+.strip .head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-1) var(--s-3); justify-content: space-between }
+.strip .segmented button { padding: var(--s-1) var(--s-3); font-size: var(--fs-caption) }
+.chart-wrap { position: relative }
+.chart { display: block; width: 100%; height: auto; overflow: visible }
+.chart .grid { stroke: var(--rule); stroke-width: 1 }
+.chart .pace { stroke: var(--ink-3); stroke-width: 1 }
+.chart .bar { fill: var(--action) }
+.chart .bar.partial { fill: var(--met-soft) }
+.chart .hatch-bg { fill: var(--met-soft) }
+.chart .hatch-line { fill: var(--action) }
+.chart .bar.win { fill: var(--bloom) }
+.chart .hit { fill: transparent; cursor: default }
+.chart .hit:focus { outline: none }
+.chart .hit:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
+.chart g:has(.hit:hover) .bar, .chart g:has(.hit:focus-visible) .bar { opacity: .8 }
+.pace-label { position: absolute; left: 0; transform: translateY(-100%); padding-bottom: var(--s-1); font-size: var(--fs-caption); color: var(--ink-3); pointer-events: none; text-shadow: 0 0 var(--s-2) var(--surface), 0 0 var(--s-2) var(--surface) }
+.chart-axis { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--s-1) var(--s-3); font-size: var(--fs-caption); color: var(--ink-3) }
+.chart-axis b { color: var(--ink); font-weight: 600 }
+.chart-tip { position: absolute; z-index: 5; pointer-events: none; transform: translate(-50%, calc(-100% - var(--s-2))); background: var(--surface); color: var(--ink); border: 1px solid var(--rule); box-shadow: var(--shadow-overlay); border-radius: var(--r-small); padding: var(--s-2) var(--s-3); font-size: var(--fs-caption); white-space: nowrap }
+.parts { display: grid; gap: var(--s-3); margin: var(--s-2) 0 0; padding: 0; list-style: none }
+.parts li { display: grid; grid-template-columns: minmax(64px, 88px) minmax(0, 1fr) auto; gap: var(--s-3); align-items: center; font-size: var(--fs-caption) }
+.parts .name { color: var(--ink-2); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.parts .track { height: 8px; border-radius: var(--r-pill); background: var(--met-soft); overflow: hidden; display: flex }
+.parts .track span { display: block; height: 100%; background: var(--action); border-radius: var(--r-pill) }
+.parts .nums { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap }
+.parts .few { color: var(--ink-3); font-weight: 400 }
+.table-toggle { justify-self: start }
+.data-table { font-size: var(--fs-caption); border-collapse: collapse; width: 100% }
+.data-table th, .data-table td { text-align: left; padding: var(--s-1) var(--s-3) var(--s-1) 0; border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums }
+.data-table th, .data-table tfoot td:first-child { color: var(--ink-3); font-weight: 600 }
