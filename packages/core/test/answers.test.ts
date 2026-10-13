@@ -71,3 +71,81 @@ describe("finding an answer for a portal's question", () => {
     expect(t.preparation.findAnswer("Years of experience with Splunk", "bg")?.fill).toEqual({ action: "no-version", languages: ["en"] });
   });
 });
+
+describe("an answer changed in a portal", () => {
+  const kubernetes = { question: "Kubernetes experience", versions: { en: "I haven't used Kubernetes in production." }, category: "screening" } as const;
+  const typed = "No production experience; one personal k3s project in 2025.";
+
+  it("waits in Profile with both versions, and counts in the answer bank's section and the nav badge", () => {
+    const t = createTestPreparation();
+    const saved = add(t, kubernetes);
+
+    t.preparation.recordPortalEdit(saved.id, { language: "en", text: typed, portal: "Halden Systems Workday form", jobId: "job:1" });
+
+    expect(t.preparation.answer(saved.id)?.portalEdit).toMatchObject({ language: "en", before: "I haven't used Kubernetes in production.", text: typed, portal: "Halden Systems Workday form", jobId: "job:1" });
+    expect(t.preparation.profileSummary()).toMatchObject({ needsYou: { answerBank: 1 }, needsYouTotal: 1 });
+  });
+
+  it("Keep new uses the portal's version and keeps the old one in the answer's history", async () => {
+    const t = createTestPreparation();
+    const saved = add(t, kubernetes);
+    await t.clock.advance(24 * 3600_000);
+    t.preparation.recordPortalEdit(saved.id, { language: "en", text: typed, portal: "Halden Systems Workday form" });
+
+    t.preparation.resolvePortalEdit(saved.id, "keep-new");
+
+    const after = t.preparation.answer(saved.id);
+    expect(after?.versions.en).toBe(typed);
+    expect(after?.portalEdit).toBeNull();
+    expect(t.preparation.answerHistory(saved.id)).toEqual([
+      { at: "2026-10-13T07:30:00.000Z", event: "changed", where: "Halden Systems Workday form", language: "en", before: "I haven't used Kubernetes in production.", after: typed },
+      { at: "2026-10-12T07:30:00.000Z", event: "created", where: "Added in Profile", language: null, before: null, after: null },
+    ]);
+    expect(t.preparation.profileSummary().needsYou.answerBank).toBe(0);
+  });
+
+  it("Keep old leaves the answer as it was and notes the version it turned down", () => {
+    const t = createTestPreparation();
+    const saved = add(t, kubernetes);
+    t.preparation.recordPortalEdit(saved.id, { language: "en", text: typed, portal: "Halden Systems Workday form" });
+
+    t.preparation.resolvePortalEdit(saved.id, "keep-old");
+
+    expect(t.preparation.answer(saved.id)).toMatchObject({ versions: kubernetes.versions, portalEdit: null });
+    expect(t.preparation.answerHistory(saved.id)[0]).toMatchObject({ event: "kept-old", where: "Halden Systems Workday form", before: kubernetes.versions.en, after: typed });
+  });
+
+  it("isn't a question when Kris typed what the bank already has", () => {
+    const t = createTestPreparation();
+    const saved = add(t, kubernetes);
+
+    const recorded = t.preparation.recordPortalEdit(saved.id, { language: "en", text: ` ${kubernetes.versions.en} `, portal: "Halden Systems Workday form" });
+
+    expect(recorded).toBe(false);
+    expect(t.preparation.answer(saved.id)?.portalEdit).toBeNull();
+  });
+});
+
+describe("using an answer", () => {
+  it("counts each use and remembers the last", async () => {
+    const t = createTestPreparation();
+    const saved = add(t, noticePeriod);
+    t.preparation.recordAnswerUse(saved.id);
+    await t.clock.advance(3600_000);
+
+    t.preparation.recordAnswerUse(saved.id);
+
+    expect(t.preparation.answer(saved.id)).toMatchObject({ useCount: 2, lastUsedAt: "2026-10-12T08:30:00.000Z" });
+  });
+
+  it("keeps a new answer Apply adds with the job and portal it came from", () => {
+    const t = createTestPreparation();
+
+    const r = t.preparation.saveAnswer(
+      { question: "Do you hold a security clearance?", versions: { en: "No" }, category: "screening", kind: "yes-no" },
+      { from: "Halden Systems Workday form", jobId: "job:1", portal: "Halden Systems Workday form" },
+    );
+
+    expect(r).toMatchObject({ saved: true, answer: { source: { from: "Halden Systems Workday form", jobId: "job:1", portal: "Halden Systems Workday form" } } });
+  });
+});

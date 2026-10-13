@@ -139,6 +139,27 @@ export interface AnswerMatch {
   fill: AnswerFill;
 }
 
+/** One change in an answer's life, newest first in the history. */
+export interface AnswerChange {
+  at: string;
+  /** "created"; "changed" (a version's text, in Profile or kept from a portal); "kept-old" (a portal's version turned down). */
+  event: "created" | "changed" | "kept-old";
+  /** Where it happened: "Added in Profile", "Profile", "Halden Systems Workday form". */
+  where: string;
+  language: AnswerLanguage | null;
+  /** The version before, and after (or the one turned down). */
+  before: string | null;
+  after: string | null;
+}
+
+/** What Apply reports when Kris changes a filled answer in a portal. */
+export interface PortalEditInput {
+  language: AnswerLanguage;
+  text: string;
+  portal: string;
+  jobId?: string | null;
+}
+
 const handSource: AnswerSource = { from: "Added in Profile", jobId: null, portal: null };
 const CYRILLIC = /\p{Script=Cyrillic}/u;
 export const languageOf = (text: string): AnswerLanguage => (CYRILLIC.test(text) ? "bg" : "en");
@@ -150,6 +171,12 @@ export interface AnswerStore {
   save(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
   get(id: string): Answer | null;
   find(question: string, language: AnswerLanguage): AnswerMatch | null;
+  history(id: string): AnswerChange[];
+  recordUse(id: string): void;
+  recordPortalEdit(id: string, edit: PortalEditInput): boolean;
+  resolvePortalEdit(id: string, keep: "keep-new" | "keep-old"): Answer | null;
+  /** Portal edits waiting for Kris. */
+  needsYou(): number;
 }
 
 export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock }): AnswerStore {
@@ -191,6 +218,15 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     );
   }
 
+  function note(answerId: string, change: Omit<AnswerChange, "at">) {
+    db.prepare("INSERT INTO answer_history (answer_id, at, detail) VALUES (?, ?, ?)").run(answerId, clock.now().toISOString(), JSON.stringify(change));
+  }
+
+  function history(id: string): AnswerChange[] {
+    return db.prepare("SELECT at, detail FROM answer_history WHERE answer_id = ? ORDER BY id DESC").all(id)
+      .map((r) => ({ at: String(r.at), ...(JSON.parse(String(r.detail)) as Omit<AnswerChange, "at">) }));
+  }
+
   function save(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult {
     const before = input.id ? get(input.id) : null;
     const now = clock.now().toISOString();
@@ -211,8 +247,48 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
       updatedAt: now,
     };
     write(answer);
+    if (!before) note(answer.id, { event: "created", where: answer.source.from, language: null, before: null, after: null });
+    else {
+      for (const l of answerLanguages) {
+        const [was, now] = [before.versions[l] ?? null, answer.versions[l] ?? null];
+        if (was !== now) note(answer.id, { event: "changed", where: "Profile", language: l, before: was, after: now });
+      }
+    }
     return { saved: true, answer };
   }
+
+  function recordUse(id: string) {
+    db.prepare("UPDATE answer SET use_count = use_count + 1, last_used_at = ? WHERE id = ?").run(clock.now().toISOString(), id);
+  }
+
+  function recordPortalEdit(id: string, edit: PortalEditInput): boolean {
+    const a = get(id);
+    const text = edit.text.trim();
+    const before = a?.versions[edit.language] ?? "";
+    if (!a || !text || text === before) return false;
+    // A newer edit replaces one still waiting: Kris compares the bank with what he typed last.
+    const portalEdit: PortalEdit = { language: edit.language, text, before, portal: edit.portal.trim(), jobId: edit.jobId ?? null, at: clock.now().toISOString() };
+    db.prepare("UPDATE answer SET portal_edit = ? WHERE id = ?").run(JSON.stringify(portalEdit), id);
+    return true;
+  }
+
+  function resolvePortalEdit(id: string, keep: "keep-new" | "keep-old"): Answer | null {
+    const a = get(id);
+    if (!a?.portalEdit) return a;
+    const e = a.portalEdit;
+    const now = clock.now().toISOString();
+    const current = a.versions[e.language] ?? null;
+    if (keep === "keep-new") {
+      write({ ...a, versions: { ...a.versions, [e.language]: e.text }, portalEdit: null, updatedAt: now });
+      note(id, { event: "changed", where: e.portal, language: e.language, before: current, after: e.text });
+    } else {
+      write({ ...a, portalEdit: null });
+      note(id, { event: "kept-old", where: e.portal, language: e.language, before: current, after: e.text });
+    }
+    return get(id);
+  }
+
+  const needsYou = () => Number(db.prepare("SELECT COUNT(*) AS n FROM answer WHERE portal_edit IS NOT NULL").get()?.n ?? 0);
 
   function find(question: string, language: AnswerLanguage): AnswerMatch | null {
     const asked = words(question);
@@ -228,7 +304,7 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     return { answerId: answer.id, question: answer.question, matched, confidence, fill: fillFor(answer, language) };
   }
 
-  return { save, get, find };
+  return { save, get, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou };
 }
 
 function fillFor(a: Answer, language: AnswerLanguage): AnswerFill {

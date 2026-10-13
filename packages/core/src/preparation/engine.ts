@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
-import { createAnswerStore, type Answer, type AnswerInput, type AnswerLanguage, type AnswerMatch, type AnswerOrigin, type SaveAnswerResult } from "./answers.ts";
+import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, type AnswerLanguage, type AnswerMatch, type AnswerOrigin, type PortalEditInput, type SaveAnswerResult } from "./answers.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
@@ -97,6 +97,17 @@ export interface PreparationEngine {
    * "fill" answer carries a value; "ask each time", "leave blank" and a missing language never do.
    */
   findAnswer(question: string, language: AnswerLanguage): AnswerMatch | null;
+  /** Counts a use of an answer (Apply filled it, or a package used it) and remembers when. */
+  recordAnswerUse(id: string): void;
+  /**
+   * Kris changed a filled answer in a portal: it waits in Profile as "keep new or old" with both
+   * versions shown. False when there's nothing to ask (no such answer, or the same text).
+   */
+  recordPortalEdit(id: string, edit: PortalEditInput): boolean;
+  /** Keep new: the portal's version replaces the bank's, which stays in the history. Keep old: nothing changes. */
+  resolvePortalEdit(id: string, keep: "keep-new" | "keep-old"): Answer | null;
+  /** What changed in an answer and where, newest first. */
+  answerHistory(id: string): AnswerChange[];
 
   /**
    * Prints a document from its fixed template, keeps it as the package's draft of that document,
@@ -141,10 +152,18 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     deletePiece: (id) => profile.remove(id),
     piece: (id) => profile.get(id),
     listPieces: (query) => profile.list(query),
-    profileSummary: () => profile.summary(),
+    profileSummary() {
+      const s = profile.summary();
+      const needsYou = { ...s.needsYou, answerBank: answers.needsYou() };
+      return { ...s, needsYou, needsYouTotal: Object.values(needsYou).reduce((a, b) => a + b, 0) };
+    },
     saveAnswer: (input, origin) => answers.save(input, origin),
     answer: (id) => answers.get(id),
     findAnswer: (question, language) => answers.find(question, language),
+    recordAnswerUse: (id) => answers.recordUse(id),
+    recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
+    resolvePortalEdit: (id, keep) => answers.resolvePortalEdit(id, keep),
+    answerHistory: (id) => answers.history(id),
     contact: () => contact.get(),
     saveContact: (details) => contact.save(details),
     setPhoto: (photo) => contact.setPhoto(photo),
