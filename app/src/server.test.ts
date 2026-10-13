@@ -20,12 +20,17 @@ function service(uiDir = "/nonexistent/") {
   });
   const noAi = () => { throw new Error("no AI in tests"); };
   const noFiles = () => { throw new Error("no files in these tests"); };
+  const stored = new Map<string, Uint8Array>();
   const preparation = createPreparationEngine({
     db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
     writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi() },
     renderer: { render: async () => noAi() },
     pdfReader: { read: async () => noAi() },
-    files: { put: async () => noFiles(), get: async () => null, remove: async () => {} },
+    files: {
+      put: async (bytes) => { const sha256 = String(stored.size).padStart(64, "0"); stored.set(sha256, bytes); return { sha256, size: bytes.byteLength }; },
+      get: async (sha256) => stored.get(sha256) ?? null,
+      remove: async (sha256) => { stored.delete(sha256); },
+    },
     packages: { saveDraft: async () => noFiles() },
   });
   const pairing = createPairing({ db, clock });
@@ -328,5 +333,42 @@ describe("developer route: the demo documents", () => {
 
     expect((await s.request("/api/dev/documents/resume")).status).toBe(404);
     expect((await s.request("/api/dev/documents/cv?language=de")).status).toBe(400);
+  });
+});
+
+describe("Import's API", () => {
+  it("starts an import from base64 files, and reports a file the model failed on with a retry", async () => {
+    const s = service();
+    const cv = { fileName: "mira-petrova-cv.txt", base64: Buffer.from("Mira Petrova\nSecurity Analyst, Northwind Bank").toString("base64") };
+
+    const started = await s.request("/api/import", s.json({ files: [cv] }));
+    expect(started.status).toBe(202);
+    const { id } = (await started.json()) as { id: string };
+    await new Promise((r) => setTimeout(r, 10));
+    const status = await (await s.request("/api/import")).json();
+
+    expect(status).toMatchObject({ id, state: "finished", items: [{ name: "mira-petrova-cv.txt", state: "unreadable", problem: { reason: "failed", options: ["retry", "skip"] } }] });
+    expect((await s.request(`/api/import/${id}/cancel`, s.json({}))).status).toBe(200);
+  });
+
+  it("refuses an import with nothing in it, and a choice a file doesn't offer", async () => {
+    const s = service();
+
+    const empty = await s.request("/api/import", s.json({ files: [] }));
+    const choice = await s.request("/api/import/items/import-item:gone", s.json({ action: "skip" }));
+
+    expect(empty.status).toBe(422);
+    expect(choice.status).toBe(422);
+  });
+
+  it("confirms a piece, or says what it still needs", async () => {
+    const s = service();
+    const piece = s.preparation.savePiece({ kind: "achievement", text: "Triaged 25 alerts a day." }, { from: "CV.pdf", quote: "Triaged 25 alerts a day.", status: "unconfirmed" });
+    if (!piece.saved) throw new Error("not saved");
+
+    const res = await s.request(`/api/profile/pieces/${encodeURIComponent(piece.piece.id)}/confirm`, s.json({}));
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ saved: false, problems: [{ field: "numberSource" }] });
   });
 });
