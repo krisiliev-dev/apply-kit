@@ -258,7 +258,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
 
   const alreadyOpen = (application: ApplicationSummary) => ({
     outcome: "already-open" as const, application,
-    message: `You already have an open Application for ${application.title} at ${application.company} (${statusName(application.status)}, applied ${application.appliedOn}).`,
+    message: `You already have an open Application for ${application.title} at ${application.company} (${statusName(application.status)}, applied ${dayName(application.appliedOn)}).`,
   });
 
   async function addByHand(input: AddApplicationInput): Promise<AddApplicationResult> {
@@ -460,6 +460,13 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
 /** The calendar day in Sofia (YYYY-MM-DD). */
 function sofiaDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Sofia", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "9 Oct 2026" for 2026-10-09. */
+function dayName(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return `${d} ${months[m! - 1]} ${y}`;
 }
 
 /** A contact address or domain, normalised; "invalid" when it is neither; null when empty. */

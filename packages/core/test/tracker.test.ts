@@ -81,7 +81,9 @@ describe("adding an application for a Job in apply-kit", () => {
     const second = await tracker.addByHand({ job: { jobId: apm }, ...applied("2026-10-11") });
 
     expect(second).toMatchObject({ outcome: "already-open", application: { id: first.application.id } });
-    if (second.outcome === "already-open") expect(second.message).toContain("already have an open Application");
+    if (second.outcome === "already-open") {
+      expect(second.message).toBe("You already have an open Application for Associate Product Manager at Payhawk (Applied, applied 9 Oct 2026).");
+    }
     expect((await tracker.list()).total).toBe(1);
   });
 
