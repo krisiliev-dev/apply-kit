@@ -7,6 +7,10 @@
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
+import {
+  addDays, daysBetween, defaultFollowUpSettings, outlineOf, parseFollowUpSettings,
+  type FollowUp, type FollowUpKind, type FollowUpSettings,
+} from "./follow-ups.ts";
 import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
 import type { Clock, SqlDatabase } from "./ports.ts";
@@ -30,9 +34,10 @@ export interface ApplicationEvent {
   at: string;
   /**
    * created: the Application was added. status: its Status changed. note: the user wrote a note.
-   * cv: the user attached the CV they sent. undo: an earlier Event was undone.
+   * cv: the user attached the CV they sent. undo: an earlier Event was undone. follow-up-sent,
+   * follow-up-skipped, follow-up-snoozed: what the user did with a follow-up (`followUpId`).
    */
-  kind: "created" | "status" | "note" | "cv" | "undo";
+  kind: "created" | "status" | "note" | "cv" | "undo" | FollowUpEventKind;
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -43,7 +48,21 @@ export interface ApplicationEvent {
   undoes: string | null;
   /** When this Event was undone, or null. */
   undoneAt: string | null;
+  /** For what was done with a follow-up: which one. */
+  followUpId: string | null;
 }
+
+export type FollowUpEventKind = "follow-up-sent" | "follow-up-skipped" | "follow-up-snoozed";
+const followUpEventKinds: readonly string[] = ["follow-up-sent", "follow-up-skipped", "follow-up-snoozed"];
+
+/**
+ * What comes next for an Application, for the list's Next column: its follow-up (due now or on a
+ * day), or, once its nudge was sent or skipped, how long it has been quiet. Null when nothing is.
+ */
+export type NextUp =
+  | { kind: "follow-up"; followUpKind: FollowUpKind; dueOn: string; due: boolean }
+  | { kind: "no-reply"; days: number }
+  | null;
 
 /** One Application as the list shows it. */
 export interface ApplicationSummary {
@@ -61,8 +80,9 @@ export interface ApplicationSummary {
   source: string;
   /** The posting link given when adding by hand (kept even when it couldn't be read). */
   postingUrl: string | null;
-  /** The latest Event still standing (undone Events and undo records are skipped). */
+  /** The latest Event still standing (undone Events, undo records and snoozes are skipped). */
   lastEvent: ApplicationEvent;
+  next: NextUp;
 }
 
 /** The happy path, as the stepper shows it. Rejected and withdrawn sit after "or" as a branch. */
@@ -82,6 +102,7 @@ export interface StatusStep {
  * Application has nothing left to do. (Follow-ups and interviews take this over in later tickets.)
  */
 export type NextStep =
+  | { kind: "follow-up"; text: string; followUp: FollowUp }
   | { kind: "wait"; text: string }
   | { kind: "note"; text: string; at: string }
   | { kind: "closed"; text: string };
@@ -154,6 +175,8 @@ export interface ApplicationDetail extends ApplicationSummary {
   contacts: Contact[];
   steps: StatusStep[];
   nextStep: NextStep;
+  /** The follow-up of its current stage (pending, sent or skipped), or null when the stage has none. */
+  followUp: FollowUp | null;
   /** Newest first. */
   timeline: TimelineEntry[];
 }
@@ -259,6 +282,47 @@ export interface JobMarker {
   history: ApplicationMarker[];
 }
 
+/** One item in Needs you: a follow-up due (or done today, kept in place and shown as done). */
+export interface NeedsYouEntry {
+  followUp: FollowUp;
+  application: Pick<ApplicationSummary, "id" | "title" | "company" | "status" | "appliedOn">;
+  done: boolean;
+}
+
+/** Something only coming up: one quiet "Coming up" line. */
+export interface ComingUp {
+  applicationId: string;
+  title: string;
+  company: string;
+  kind: FollowUpKind;
+  dueOn: string;
+}
+
+/** Needs you: what only the user can do now, most urgent first, and what is coming up soon. */
+export interface NeedsYou {
+  /** How many items need the user now (the top bar's Applications badge). Done ones aren't counted. */
+  count: number;
+  items: NeedsYouEntry[];
+  /** Due in the next 3 days, soonest first. */
+  comingUp: ComingUp[];
+  /** How many days "Snooze" moves one on (a setting). */
+  snoozeDays: number;
+}
+
+/** A follow-up opened to write: the outline (no model call), and how to send it from the user's own mail. */
+export interface FollowUpDraft {
+  followUp: FollowUp;
+  application: ApplicationSummary;
+  /** The points to cover, from the Application, its posting and the user's notes. */
+  outline: string[];
+  /** For "Open in Mail": the recipient (null when only a domain is known) and the subject. Null for a note to self. */
+  mail: { to: string | null; subject: string } | null;
+  /** The length that works well, in words; null for a note to self. */
+  words: { min: number; max: number } | null;
+  /** How many days "Snooze" moves it on (a setting). */
+  snoozeDays: number;
+}
+
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
   constructor(
@@ -284,7 +348,11 @@ export interface Tracker {
    * Sets the Status by hand: an Event "by you", undoable. Anywhere but Accepted, which only the
    * accept flow sets. Throws a TrackerError when refused.
    */
-  setStatus(applicationId: string, status: Status): Promise<{ application: ApplicationSummary; event: ApplicationEvent }>;
+  setStatus(applicationId: string, status: Status): Promise<{
+    application: ApplicationSummary; event: ApplicationEvent;
+    /** The pending follow-up the change cancelled (undoing the change brings it back), or null. */
+    cancelled: FollowUp | null;
+  }>;
   /**
    * Undoes an Event: a Status change goes back to the Status before (only while nothing has moved it
    * since); undoing an Application's creation takes it off the list. The Event is kept, marked undone,
@@ -308,6 +376,22 @@ export interface Tracker {
   jobMarkers(jobIds: string[]): Promise<Record<string, JobMarker>>;
   /** Stats: applications per week with the pace, response rate, interviews and what's working. */
   stats(): Promise<TrackStats>;
+  /** Needs you: follow-ups due (most urgent first), the count for the badge, and what is coming up. */
+  needsYou(): Promise<NeedsYou>;
+  /** A follow-up to write: its outline, text as typed and Open in Mail's recipient and subject; null when there's none. */
+  followUp(followUpId: string): Promise<FollowUpDraft | null>;
+  /** Keeps the follow-up's text as the user types it. Throws a TrackerError when refused. */
+  saveFollowUpText(followUpId: string, text: string): Promise<{ followUp: FollowUp }>;
+  /** The user sent it from their own mail (or, for a note to self, did it): an Event by you, undoable. */
+  markFollowUpSent(followUpId: string): Promise<{ followUp: FollowUp; event: ApplicationEvent }>;
+  /** "No note this time": closes it without sending. An Event by you, undoable. */
+  skipFollowUp(followUpId: string): Promise<{ followUp: FollowUp; event: ApplicationEvent }>;
+  /** Moves it to the snooze delay after today. An Event by you, undoable. */
+  snoozeFollowUp(followUpId: string): Promise<{ followUp: FollowUp; event: ApplicationEvent }>;
+  /** The follow-up delays (settings): as saved, else the defaults. */
+  followUpSettings(): Promise<FollowUpSettings>;
+  /** Saves the follow-up delays. Pending follow-ups follow the new delays. Throws with a plain message when invalid. */
+  saveFollowUpSettings(settings: unknown): Promise<FollowUpSettings>;
 }
 
 export interface TrackerDeps {
@@ -332,6 +416,11 @@ const groupOrder: { key: GroupKey; label: string; statuses: Status[] }[] = [
   { key: "closed", label: "Closed", statuses: ["rejected", "withdrawn"] },
 ];
 const defaultLimits: Partial<Record<GroupKey, number>> = { applied: 5, closed: 5 };
+/** The stages with a follow-up, and which. */
+const stageKinds: Partial<Record<Status, FollowUpKind>> = { applied: "nudge", screening: "nudge", offer: "offer-note" };
+/** Follow-ups due within this many days are "Coming up". */
+const comingUpDays = 3;
+const isFollowUpEvent = (e: ApplicationEvent) => followUpEventKinds.includes(e.kind);
 
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
@@ -346,13 +435,13 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       id: String(r.id), applicationId: String(r.application_id), at: String(r.at),
       kind: r.kind as ApplicationEvent["kind"], cause: r.cause as EventCause,
       from: str(r.from_status) as Status | null, to: str(r.to_status) as Status | null,
-      text: String(r.text), undoes: str(r.undoes), undoneAt: str(r.undone_at),
+      text: String(r.text), undoes: str(r.undoes), undoneAt: str(r.undone_at), followUpId: str(r.follow_up_id),
     };
   }
 
   function lastEventOf(applicationId: string): ApplicationEvent {
     const r = db.prepare(
-      `SELECT * FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind != 'undo'
+      `SELECT * FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind NOT IN ('undo', 'follow-up-snoozed')
        ORDER BY at DESC, rowid DESC LIMIT 1`,
     ).get(applicationId);
     return eventOf(r!);
@@ -366,6 +455,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       appliedOn: String(r.applied_on), createdHow: r.created_how as CreatedHow,
       angle: str(r.angle) as Angle | null, source: String(r.source), postingUrl: str(r.posting_url),
       lastEvent: lastEventOf(String(r.id)),
+      next: nextOf(r),
     };
   }
 
@@ -388,12 +478,12 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return r ? summaryOf(r) : null;
   }
 
-  function addEvent(e: Omit<ApplicationEvent, "id" | "at" | "undoneAt">): ApplicationEvent {
+  function addEvent(e: Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "followUpId"> & { followUpId?: string; dueOn?: string }): ApplicationEvent {
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes);
+      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null);
     return eventOf(db.prepare("SELECT * FROM application_event WHERE id = ?").get(id)!);
   }
 
@@ -517,12 +607,15 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       const open = openOnJob(app.jobId);
       if (open) throw new TrackerError("already-open", `${open.title} at ${open.company} already has an open Application.`, open.id);
     }
+    // The follow-up of the stage it leaves stays behind with that stage: a pending one is cancelled.
+    const before = currentFollowUp(row(applicationId)!);
+    const cancelled = before && before.state === "pending" ? before : null;
     db.exec("BEGIN");
     try {
       db.prepare("UPDATE application SET status = ? WHERE id = ?").run(status, applicationId);
       const event = addEvent({ applicationId, kind: "status", cause: "you", from: app.status, to: status, text: `Moved to ${statusName(status)}`, undoes: null });
       db.exec("COMMIT");
-      return { application: summary(applicationId)!, event };
+      return { application: summary(applicationId)!, event, cancelled };
     } catch (err) {
       db.exec("ROLLBACK");
       throw err;
@@ -546,6 +639,10 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       let event: ApplicationEvent;
       if (ev.kind === "note") {
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Note removed", undoes: eventId });
+      } else if (isFollowUpEvent(ev)) {
+        // The follow-up's state comes from its Events still standing, so it is as it was before.
+        const text = ev.kind === "follow-up-snoozed" ? "Snooze undone" : ev.kind === "follow-up-sent" ? "Undone: not sent after all" : "Undone: not skipped after all";
+        event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text, undoes: eventId, followUpId: ev.followUpId ?? undefined });
       } else if (ev.kind === "created") {
         db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), ev.applicationId);
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Adding undone: removed", undoes: eventId });
@@ -646,8 +743,14 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return { contacts: contactsOf(applicationId) };
   }
 
-  function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[]): NextStep {
+  function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[], followUp: FollowUp | null): NextStep {
     if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
+    if (followUp?.state === "pending" && followUp.dueOn <= today()) {
+      const text = followUp.kind === "nudge"
+        ? `No reply in ${daysBetween(followUp.anchorOn, today())} days. Write a short nudge to send from your own mail.`
+        : "Write yourself a note about the offer before you decide.";
+      return { kind: "follow-up", text, followUp };
+    }
     const note = standing.filter((e) => e.kind === "note").at(-1);
     return note ? { kind: "note", text: note.text, at: note.at } : { kind: "wait", text: "Wait for a reply." };
   }
@@ -672,7 +775,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     const posting = await postingOf(app);
     const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
       id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
-      undoable: !e.undoneAt && (e.kind === "note" || (e.kind === "status" && !movedSince(e, app.status))),
+      undoable: !e.undoneAt && (e.kind === "note" || ((e.kind === "status" || isFollowUpEvent(e)) && !movedSince(e, app.status))),
     }));
     if (posting?.jobId && posting.closed) {
       // Discover's closing, as a neutral fact: it says nothing about the Application's Status.
@@ -684,8 +787,9 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       });
     }
     timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
+    const followUp = currentFollowUp(row(applicationId)!);
     return {
-      ...app, statusSince: standing.filter((e) => e.kind === "created" || e.kind === "status").at(-1)?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+      ...app, statusSince: standing.filter((e) => e.kind === "created" || e.kind === "status").at(-1)?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing, followUp), followUp, timeline,
     };
   }
 
@@ -753,7 +857,166 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return out;
   }
 
+
+  // ---------- follow-ups ----------
+
+  function followUpSettings(): FollowUpSettings {
+    const r = db.prepare("SELECT value FROM track_settings WHERE id = 1").get();
+    return r ? parseFollowUpSettings(JSON.parse(String(r.value))) : defaultFollowUpSettings;
+  }
+
+  /** The Event still standing that began the current stage: the latest adding or Status change. */
+  function stageStart(applicationId: string): ApplicationEvent | null {
+    const r = db.prepare(
+      `SELECT * FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind IN ('created', 'status')
+       ORDER BY at DESC, rowid DESC LIMIT 1`,
+    ).get(applicationId);
+    return r ? eventOf(r) : null;
+  }
+
+  /** A follow-up's state, from the Events still standing that name it. */
+  function followUpOf(r: Row): FollowUp {
+    const events = db.prepare("SELECT * FROM application_event WHERE follow_up_id = ? AND undone_at IS NULL AND kind != 'undo' ORDER BY at, rowid")
+      .all(String(r.id));
+    const done = events.filter((e) => e.kind === "follow-up-sent" || e.kind === "follow-up-skipped").at(-1);
+    const snoozedTo = str(events.filter((e) => e.kind === "follow-up-snoozed").at(-1)?.due_on);
+    const kind = r.kind as FollowUpKind;
+    const s = followUpSettings();
+    const anchorOn = String(r.anchor_on);
+    return {
+      id: String(r.id), applicationId: String(r.application_id), kind, anchorOn,
+      dueOn: snoozedTo ?? addDays(anchorOn, kind === "nudge" ? s.nudgeAfterDays : s.offerNoteAfterDays),
+      snoozedTo,
+      state: done ? (done.kind === "follow-up-sent" ? "sent" : "skipped") : "pending",
+      doneAt: done ? String(done.at) : null,
+      text: String(r.text),
+    };
+  }
+
+  /**
+   * The follow-up of an Application's current stage, made the first time it is asked for: a nudge
+   * after Applied or Screening, a note to self after an Offer. One per stage: a stage whose follow-up
+   * was sent or skipped before (it was left and entered again) gets that one back, not a new one.
+   * Null for a stage with none (Interviewing, Accepted, closed) and for a removed Application.
+   */
+  function currentFollowUp(app: Row): FollowUp | null {
+    const status = app.status as Status;
+    const kind = stageKinds[status];
+    if (!kind || app.removed_at) return null;
+    const id = String(app.id);
+    const start = stageStart(id);
+    if (!start) return null;
+    const existing = db.prepare("SELECT * FROM follow_up WHERE started_by = ? AND kind = ?").get(start.id, kind);
+    if (existing) return followUpOf(existing);
+    const earlier = db.prepare("SELECT * FROM follow_up WHERE application_id = ? AND stage = ? AND kind = ? ORDER BY created_at DESC, rowid DESC")
+      .all(id, status, kind).map(followUpOf).find((f) => f.state !== "pending");
+    if (earlier) return earlier;
+    // A nudge after applying counts from the date applied; any other stage from the day it began.
+    const anchorOn = status === "applied" && start.kind === "created" ? String(app.applied_on) : sofiaDay(new Date(start.at));
+    const fid = randomUUID();
+    db.prepare("INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(fid, id, kind, status, start.id, anchorOn, now());
+    return followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(fid)!);
+  }
+
+  function nextOf(app: Row): NextUp {
+    const f = currentFollowUp(app);
+    if (!f) return null;
+    if (f.state === "pending") return { kind: "follow-up", followUpKind: f.kind, dueOn: f.dueOn, due: f.dueOn <= today() };
+    return f.kind === "nudge" ? { kind: "no-reply", days: daysBetween(f.anchorOn, today()) } : null;
+  }
+
+  async function needsYou(): Promise<NeedsYou> {
+    const day = today();
+    const soon = addDays(day, comingUpDays);
+    const items: NeedsYouEntry[] = [];
+    const comingUp: ComingUp[] = [];
+    const apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL AND status NOT IN ('rejected', 'withdrawn')").all();
+    for (const r of apps) {
+      const f = currentFollowUp(r);
+      if (!f) continue;
+      const application = { id: String(r.id), title: String(r.title), company: String(r.company), status: r.status as Status, appliedOn: String(r.applied_on) };
+      if (f.state === "pending" && f.dueOn <= day) items.push({ followUp: f, application, done: false });
+      else if (f.state !== "pending" && f.doneAt && sofiaDay(new Date(f.doneAt)) === day) items.push({ followUp: f, application, done: true });
+      else if (f.state === "pending" && f.dueOn <= soon) {
+        comingUp.push({ applicationId: application.id, title: application.title, company: application.company, kind: f.kind, dueOn: f.dueOn });
+      }
+    }
+    // Most urgent first: due the longest; done ones keep their place.
+    items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
+    comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
+    return { count: items.filter((i) => !i.done).length, items, comingUp, snoozeDays: followUpSettings().snoozeDays };
+  }
+
+  /** A follow-up the user acts on: it must exist and still be its Application's current one. */
+  function actionable(followUpId: string): { f: FollowUp; app: Row } {
+    const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
+    const app = r ? row(String(r.application_id)) : undefined;
+    if (!r || !app) throw new TrackerError("not-found", "There's no such follow-up.");
+    const f = currentFollowUp(app);
+    if (f?.id !== followUpId) {
+      throw new TrackerError("changed-since", "Its Status has changed since, so this follow-up no longer applies.", String(app.id));
+    }
+    return { f, app };
+  }
+
+  function followUpEvent(followUpId: string, kind: FollowUpEventKind, words: (f: FollowUp) => string, dueOn?: string) {
+    const { f, app } = actionable(followUpId);
+    if (f.state !== "pending") {
+      throw new TrackerError("unchanged", f.state === "sent" ? "It's marked sent already." : "It was skipped already.", String(app.id));
+    }
+    const event = addEvent({ applicationId: f.applicationId, kind, cause: "you", from: null, to: null, text: words(f), undoes: null, followUpId, dueOn });
+    return { followUp: actionable(followUpId).f, event };
+  }
+
+  async function followUpDraft(followUpId: string): Promise<FollowUpDraft | null> {
+    const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
+    const application = r ? summary(String(r.application_id)) : null;
+    if (!r || !application) return null;
+    const f = followUpOf(r);
+    const job = application.jobId ? await discovery.getJob(application.jobId) : null;
+    const requirement = job?.requirements.find((q) => q.kind === "required") ?? job?.requirements[0];
+    const note = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).at(-1)?.text ?? null;
+    const outline = outlineOf({
+      kind: f.kind, title: application.title, company: application.company, since: dayWords(f.anchorOn),
+      stage: r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied",
+      postingDetail: requirement?.text ?? null, note,
+    });
+    const to = contactsOf(application.id).find((c) => c.kind === "address")?.value ?? null;
+    return {
+      followUp: f, application, outline,
+      mail: f.kind === "nudge" ? { to, subject: `Following up on my application: ${application.title}` } : null,
+      words: f.kind === "nudge" ? { min: 70, max: 110 } : null,
+      snoozeDays: followUpSettings().snoozeDays,
+    };
+  }
+
+  async function saveFollowUpText(followUpId: string, text: string) {
+    const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
+    if (!r || !row(String(r.application_id))) throw new TrackerError("not-found", "There's no such follow-up.");
+    db.prepare("UPDATE follow_up SET text = ?, text_saved_at = ? WHERE id = ?").run(text, now(), followUpId);
+    return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!) };
+  }
+
   return {
+    needsYou,
+    followUp: followUpDraft,
+    saveFollowUpText,
+    markFollowUpSent: async (id) => followUpEvent(id, "follow-up-sent", (f) => (f.kind === "nudge" ? "Follow-up sent" : "Note to self done")),
+    skipFollowUp: async (id) => followUpEvent(id, "follow-up-skipped", (f) => (f.kind === "nudge" ? "No follow-up this time" : "No note this time")),
+    snoozeFollowUp: async (id) => {
+      const to = addDays(today(), followUpSettings().snoozeDays);
+      return followUpEvent(id, "follow-up-snoozed", (f) => `${f.kind === "nudge" ? "Follow-up" : "Note to self"} snoozed to ${dayWords(to)}`, to);
+    },
+    followUpSettings: async () => followUpSettings(),
+    saveFollowUpSettings: async (input) => {
+      const settings = parseFollowUpSettings(input);
+      db.prepare(
+        `INSERT INTO track_settings (id, value, updated_at) VALUES (1, ?, ?)
+         ON CONFLICT (id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+      ).run(JSON.stringify(settings), now());
+      return settings;
+    },
     jobMarkers,
     addByHand,
     list,
@@ -782,6 +1045,13 @@ function sixMonthsBefore(day: string): string {
   const last = new Date(Date.UTC(back.getUTCFullYear(), back.getUTCMonth() + 1, 0)).getUTCDate();
   back.setUTCDate(Math.min(d, last));
   return back.toISOString().slice(0, 10);
+}
+
+const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+/** "Tue 6 Oct" for 2026-10-06. */
+function dayWords(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  return `${weekdays[d.getUTCDay()]} ${d.getUTCDate()} ${months[d.getUTCMonth()]}`;
 }
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

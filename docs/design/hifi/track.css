@@ -56,24 +56,16 @@
 .data-table th, .data-table td { text-align: left; padding: var(--s-1) var(--s-3) var(--s-1) 0; border-bottom: 1px solid var(--rule); font-variant-numeric: tabular-nums }
 .data-table th { color: var(--ink-3); font-weight: 600 }
 
-/* ---------- needs you ---------- */
+/* ---------- needs you (kind, what, why, done, coming: components.css) ---------- */
 .queue { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3) }
 .queue .needs { grid-template-columns: 4px minmax(0, 1fr) auto }
 .queue .needs .acts { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: flex-end }
 @media (max-width: 720px) { .queue .needs { grid-template-columns: 4px minmax(0, 1fr) } .queue .needs .acts { grid-column: 2; justify-content: flex-start } }
-.needs .kind { font-size: var(--fs-caption); font-weight: 700; color: var(--bloom); letter-spacing: .02em }
-.needs .what { font-weight: 600; color: var(--ink) }
-.needs .what a { color: inherit; text-decoration: none }
-.needs .what a:hover { color: var(--action); text-decoration: underline }
-.needs .why { font-size: var(--fs-small); color: var(--ink-2) }
-.needs.done { background: var(--surface-sunken) }
-.needs.done::before { background: var(--border-control) }
 .needs.done .kind::after { content: " · DONE" }
 .needs.wide { grid-template-columns: 4px minmax(0, 1fr) }
 .quote { border-left: 3px solid var(--rule); background: var(--surface-sunken); padding: var(--s-3) var(--s-4); border-radius: 0 var(--r-small) var(--r-small) 0; font-size: var(--fs-small); color: var(--ink); display: grid; gap: var(--s-1) }
 .quote .where { font-size: var(--fs-caption); color: var(--ink-3) }
 .quote .tr { color: var(--ink-2) }
-.coming { font-size: var(--fs-small); color: var(--ink-2); display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center }
 fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
 legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
 .opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-body) }
@@ -174,12 +166,8 @@ textarea.input { min-height: 180px; resize: vertical; line-height: var(--lh-body
 .doc-thumb i.h { background: var(--doc-accent); width: 60% }
 .doc-thumb i.s { width: 70% }
 
-/* drafts */
+/* drafts (draft-acts, never, outline: components.css) */
 .draft-meta { font-size: var(--fs-caption); color: var(--ink-3) }
-.draft-acts { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center }
-.draft-acts .grow { flex: 1 1 auto }
-.never { font-size: var(--fs-caption); color: var(--ink-3) }
-.outline { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
 
 /* prep sheet */
 .prep .table td:first-child { font-weight: 600; color: var(--ink); min-width: 14ch }

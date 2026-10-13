@@ -1,5 +1,5 @@
 // Words and dates shared by the Applications screens (the service owns the rules; these only say them).
-import type { Status } from "@apply-kit/core";
+import type { FollowUpKind, NextUp, Status } from "@apply-kit/core";
 
 export const statusOrder: Status[] = ["applied", "screening", "interviewing", "offer", "accepted", "rejected", "withdrawn"];
 
@@ -37,3 +37,35 @@ export function eventTime(iso: string): string {
 }
 
 export const angleLabel = { developer: "Developer", security: "Security", design: "Design" } as const;
+
+/** "Wed 14 Oct" for a YYYY-MM-DD day. */
+export function weekDay(day: string): string {
+  return sep(asDate(day).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })).replace(",", "");
+}
+
+/** Whole days from one YYYY-MM-DD day to another. */
+export function daysFrom(from: string, to: string): number {
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
+}
+
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
+export const daysWord = (n: number) => plural(n, "day");
+export const wordsWord = (n: number) => plural(n, "word");
+
+/** "Follow-up" or "Note to self". */
+export const followUpName = (kind: FollowUpKind) => (kind === "nudge" ? "Follow-up" : "Note to self");
+
+/** When a follow-up is due, in words: "due today", "due since Fri 9 Oct", or "Wed 14 Oct". */
+export function dueWords(dueOn: string): string {
+  const today = todaySofia();
+  if (dueOn === today) return "due today";
+  if (dueOn < today) return `due since ${weekDay(dueOn)}`;
+  return weekDay(dueOn);
+}
+
+/** The list's Next column: the follow-up and when, or how long it has been quiet; null when nothing comes next. */
+export function nextWords(next: NextUp): { text: string; due: boolean } | null {
+  if (!next) return null;
+  if (next.kind === "no-reply") return { text: `No reply for ${daysWord(next.days)}`, due: false };
+  return { text: `${followUpName(next.followUpKind)} ${dueWords(next.dueOn)}`, due: next.due };
+}
