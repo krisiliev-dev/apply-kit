@@ -25,6 +25,11 @@ export interface WorkingRow {
 }
 
 export interface TrackStats {
+  /** Every Application, and the earliest date applied (null when there are none). */
+  total: number;
+  since: string | null;
+  /** Last week's count; `best` when it beats every earlier week (there being one with Applications). */
+  lastWeek: { count: number; best: boolean };
   /** The last 9 weeks, oldest first; the last one is this week. */
   weeks: WeekCount[];
   /** The median of the last 8 complete weeks (may be a half); 0 when there is none to go by. */
@@ -41,6 +46,11 @@ export interface TrackStats {
    * without an angle or CV version are left out of that grouping), most sent first.
    */
   working: { angle: WorkingRow[]; source: WorkingRow[]; cvVersion: WorkingRow[] };
+  /**
+   * Interviews upcoming and so far. Interview records come with their own ticket (#33); until then
+   * an interview so far is an Application that reached Interviewing (or beyond) and none is upcoming.
+   */
+  interviews: { upcoming: number; soFar: number; companies: number };
 }
 
 type Row = Record<string, unknown>;
@@ -56,7 +66,7 @@ const replyWindowDays = 14;
 const replyStatuses = ["screening", "interviewing", "offer", "accepted", "rejected"];
 
 export function computeStats(db: SqlDatabase, today: string): TrackStats {
-  const apps = db.prepare("SELECT id, applied_on, angle, source, cv_version FROM application WHERE removed_at IS NULL").all();
+  const apps = db.prepare("SELECT id, company, applied_on, angle, source, cv_version FROM application WHERE removed_at IS NULL").all();
   const thisMonday = mondayOf(today);
   const perWeek = new Map<string, number>();
   for (const a of apps) {
@@ -101,7 +111,23 @@ export function computeStats(db: SqlDatabase, today: string): TrackStats {
     return [...by.values()].sort((x, y) => y.sent - x.sent || x.name.localeCompare(y.name));
   };
 
+  const interviewed = new Set(db.prepare(
+    `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND kind IN ('created', 'status')
+     AND to_status IN ('interviewing', 'offer', 'accepted')`,
+  ).all().map((r) => String(r.application_id)));
+  const interviewedApps = apps.filter((a) => interviewed.has(String(a.id)));
+  const interviews = {
+    upcoming: 0, soFar: interviewedApps.length,
+    companies: new Set(interviewedApps.map((a) => String(a.company).trim().toLowerCase())).size,
+  };
+
+  const lastMonday = addDays(thisMonday, -7);
+  const lastCount = perWeek.get(lastMonday) ?? 0;
+  const earlier = [...perWeek.entries()].filter(([w]) => w < lastMonday).map(([, n]) => n);
+  const lastWeek = { count: lastCount, best: earlier.length > 0 && lastCount > Math.max(...earlier) };
+
   return {
+    total: apps.length, since: apps.map((a) => String(a.applied_on)).sort()[0] ?? null, lastWeek, interviews,
     weeks, pace, thisWeek: { count, win: pace > 0 && count > pace }, responseRate,
     working: {
       angle: working((a) => (a.angle ? angleLabel[a.angle as Angle] : null)),

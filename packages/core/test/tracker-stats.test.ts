@@ -177,3 +177,43 @@ describe("what's working", () => {
     expect(working.source.map((r) => [r.name, r.sent])).toEqual([["Added by hand", 1], ["Pasted link", 1]]);
   });
 });
+
+describe("interviews", () => {
+  // Interview records come with #33; until then an interview is an Application that reached Interviewing.
+  it("counts Applications that reached Interviewing so far, and at how many companies", async () => {
+    const { tracker } = tracked();
+    const a = await add(tracker, "2026-09-01", "applied", "Fennel Studio");
+    await tracker.setStatus(a, "interviewing");
+    await tracker.setStatus(a, "rejected");
+    await add(tracker, "2026-09-02", "offer", "Fennel Studio");
+    await add(tracker, "2026-09-03", "interviewing", "Orbitly");
+    await add(tracker, "2026-09-04", "screening", "Tidewater Pay");
+    const slip = await add(tracker, "2026-09-05", "applied", "Ardent Labs");
+    const { event } = await tracker.setStatus(slip, "interviewing");
+    await tracker.undoEvent(event.id);
+
+    expect((await tracker.stats()).interviews).toEqual({ upcoming: 0, soFar: 3, companies: 2 });
+  });
+});
+
+describe("the strip's headline", () => {
+  it("names the total, the first date applied, and last week when it was the best week yet", async () => {
+    const { tracker } = tracked();
+    await addMany(tracker, 2, "2026-08-20");
+    await addMany(tracker, 3, "2026-10-06");
+    await add(tracker, "2026-10-12");
+
+    expect(await tracker.stats()).toMatchObject({ total: 6, since: "2026-08-20", lastWeek: { count: 3, best: true } });
+  });
+
+  it("isn't the best week yet when an earlier week matched it, nor when it is the first", async () => {
+    const { tracker } = tracked();
+    await addMany(tracker, 3, "2026-06-01"); // before the chart's 9 weeks: still counts
+    await addMany(tracker, 3, "2026-10-06");
+    expect((await tracker.stats()).lastWeek).toEqual({ count: 3, best: false });
+
+    const fresh = tracked();
+    await add(fresh.tracker, "2026-10-06");
+    expect((await fresh.tracker.stats()).lastWeek).toEqual({ count: 1, best: false });
+  });
+});
