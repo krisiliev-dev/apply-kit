@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import {
   createAiBudget, createEngine, createPreparationEngine, draftedPiecesSchema,
   type AiBudget, type DiscoveryEngine, type DocumentRenderer, type DraftedPieces, type EngineDeps, type FileStore,
-  type ImportedText, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type Writer, type WriterRequest,
+  type ImportedText, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type Writer, type WriterRequest,
 } from "../src/index.ts";
 import { fakeClock, fakeExtractor, fixtureFetch, loadFixture, memoryDb, type FakeClock, type FakeExtractor } from "./harness.ts";
 
@@ -62,6 +62,23 @@ export function memoryFileStore(): FileStore & { files: Map<string, Uint8Array> 
   };
 }
 
+/** The packages folder in memory, keyed by the path the real one would write. */
+export function memoryPackageFolder(): PackageFolder & { files: Map<string, Uint8Array> } {
+  const files = new Map<string, Uint8Array>();
+  const drafts = new Map<string, string>();
+  return {
+    files,
+    async saveDraft(packageId, kind, fileName, bytes) {
+      const folder = `packages/${packageId}/`;
+      // A draft render replaces the previous draft of that document (ADR 0003).
+      for (const [path] of files) if (path.startsWith(folder) && drafts.get(path) === kind) files.delete(path);
+      const path = folder + fileName;
+      files.set(path, new Uint8Array(bytes));
+      drafts.set(path, kind);
+      return { path };
+    },
+  };
+}
 const fakePdfMagic = "%PDF-fake\n";
 
 /**
@@ -120,6 +137,7 @@ export function createTestPreparation(options: TestPreparationOptions = {}): Tes
     renderer: fakeRenderer(),
     pdfReader: fakePdfReader(),
     files: memoryFileStore(),
+    packages: memoryPackageFolder(),
     ...overrides,
   };
   const discoveryDeps: EngineDeps = {

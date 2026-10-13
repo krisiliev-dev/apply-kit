@@ -80,6 +80,8 @@ Styles in `components.css` under "Prepare components"; hi-fi in `hifi/package.ht
 - **Overflow:** a CV that runs onto page 2 is reported with ways to tighten it, each an undoable change; type and margins never shrink.
 - **Rendering and storage:** [ADR 0003](../adr/0003-profile-files-and-pdf-rendering.md).
 - **To validate when built:** run the generated PDFs through text extraction (e.g. `pdftotext`) and at least one ATS parser to confirm every field reads correctly, in both languages.
+  - Text extraction (2026-10-13, #61): the rendering smoke test prints the demo CV in English, Bulgarian and with the photo, and pdf.js reads every field back in order on one page; `pdftotext`/`pdffonts` agree (fonts embedded, tagged, A4). It caught the letterhead's title sitting in the photo column without a photo and the phone number breaking across lines; both fixed in `.doc`.
+  - External ATS parser: **not yet run.** Upload the demo PDFs from `/api/dev/documents/cv` (`?language=bg`) to one parser by hand and note the result here.
 
 ## Rules from the Discover review (2026-10-11)
 

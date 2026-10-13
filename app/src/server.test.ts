@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createAiBudget, createEngine, createPairing, createPreparationEngine, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createPairing, createPreparationEngine, type DocumentToRender, type Scheduler } from "@apply-kit/core";
 import { createServer } from "./server.ts";
 
 const port = 4310;
@@ -26,6 +26,7 @@ function service(uiDir = "/nonexistent/") {
     renderer: { render: async () => noAi() },
     pdfReader: { read: async () => noAi() },
     files: { put: async () => noFiles(), get: async () => null, remove: async () => {} },
+    packages: { saveDraft: async () => noFiles() },
   });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
@@ -254,5 +255,62 @@ describe("Profile's API", () => {
 
     expect(res.headers.get("content-disposition")).toBe('attachment; filename="apply-kit-profile-2026-10-12.json"');
     expect(await res.json()).toMatchObject({ format: "apply-kit master profile", pieces: [expect.objectContaining({ text: "Python" })] });
+  });
+});
+
+describe("developer route: the demo documents", () => {
+  /** The service with a preparation engine whose renderer prints the document's title as its only line. */
+  function withPreparation() {
+    const db = new DatabaseSync(":memory:");
+    const clock = { now: () => new Date("2026-10-12T07:30:00Z") };
+    const engine = createEngine({
+      db, clock,
+      fetch: async () => { throw new Error("no network in tests"); },
+      extractor: { estimateCostUsd: () => 0, extract: async () => { throw new Error("no AI in tests"); } },
+      mailReader: { fetchSince: async () => [] },
+    });
+    const rendered: DocumentToRender[] = [];
+    const preparation = createPreparationEngine({
+      db, clock, budget: createAiBudget({ db, clock, capUsd: 10 }),
+      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); } },
+      renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
+      pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
+      files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
+      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }) },
+    });
+    const scheduler = { status: () => ({}) } as unknown as Scheduler;
+    const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });
+    return { request: (path: string) => app.request(`http://127.0.0.1:${port}${path}`), rendered };
+  }
+
+  it("serves the demo CV as the PDF itself, named as it would be uploaded", async () => {
+    const s = withPreparation();
+
+    const res = await s.request("/api/dev/documents/cv?language=bg&photo=1");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-disposition")).toBe('inline; filename="Nia_Koleva_CV_Kestrel_Payments_Security_Engineer.pdf"');
+    expect(await res.text()).toBe("%PDF Ния Колева · CV · Кестрел Плащания");
+    expect(s.rendered[0]).toMatchObject({ kind: "cv", language: "bg", content: { photo: { mediaType: "image/svg+xml" } } });
+  });
+
+  it("shows what the parse check read back from it", async () => {
+    const s = withPreparation();
+
+    const res = await s.request("/api/dev/documents/cover-letter/check");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      fileName: "Nia_Koleva_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", pages: 1, overflow: null, ats: null,
+      text: { pages: [{ lines: ["Nia Koleva · Cover letter · Kestrel Payments"] }] },
+    });
+  });
+
+  it("refuses a document or language the template doesn't have", async () => {
+    const s = withPreparation();
+
+    expect((await s.request("/api/dev/documents/resume")).status).toBe(404);
+    expect((await s.request("/api/dev/documents/cv?language=de")).status).toBe(400);
   });
 });
