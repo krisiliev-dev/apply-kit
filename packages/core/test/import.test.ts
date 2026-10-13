@@ -83,3 +83,58 @@ describe("importing old CVs", () => {
     expect(await t.files.get(t.status.items[1]!.sha256!)).toEqual(cv2023.bytes);
   });
 });
+
+describe("near-duplicates across files", () => {
+  it("gives one piece citing both CV versions when they state the same achievement", async () => {
+    const t = await imported({ files: [cv2025, cv2023] });
+
+    const achievements = t.preparation.listPieces({ kind: "achievement" }).groups.flatMap((g) => g.pieces);
+    const falsePositives = achievements.filter((p) => /false positives/.test(p.text));
+    expect(falsePositives).toHaveLength(1);
+    expect(falsePositives[0]).toMatchObject({
+      text: "Cut false positives by about a third by tuning Splunk detection rules.",
+      source: { from: "CV-2025.pdf", quote: "Cut false positives by about a third by tuning Splunk detection rules." },
+      alsoFrom: [{ from: "CV-2023.docx", quote: "Reduced false positives by about a third through Splunk rule tuning" }],
+    });
+    // The 2023 CV's new achievement sits under the role both CVs share.
+    const role = t.preparation.listPieces({ kind: "role" }).groups.flatMap((g) => g.pieces);
+    expect(role).toHaveLength(1);
+    expect(achievements.find((p) => p.text.startsWith("Trained 12"))?.belongsTo).toBe(role[0]!.id);
+    expect(t.status.items.map((i) => [i.name, i.pieces, i.merged])).toEqual([["CV-2025.pdf", 5, 0], ["CV-2023.docx", 1, 3]]);
+  });
+
+  it("lists every merge with both wordings, for See merges", async () => {
+    const t = await imported({ files: [cv2025, cv2023] });
+
+    expect(t.preparation.importMerges(t.id)).toEqual([
+      {
+        pieceId: expect.any(String),
+        piece: "Security Analyst, Northwind Bank",
+        kept: { from: "CV-2025.pdf", quote: "Security Analyst, Northwind Bank, Sofia, Mar 2022 – present" },
+        merged: { from: "CV-2023.docx", quote: "Northwind Bank, Security Analyst (Mar 2022 – now)", text: "Security Analyst, Northwind Bank" },
+      },
+      {
+        pieceId: expect.any(String),
+        piece: "Cut false positives by about a third by tuning Splunk detection rules.",
+        kept: { from: "CV-2025.pdf", quote: "Cut false positives by about a third by tuning Splunk detection rules." },
+        merged: { from: "CV-2023.docx", quote: "Reduced false positives by about a third through Splunk rule tuning", text: "Reduced false positives by about a third through Splunk rule tuning." },
+      },
+      {
+        pieceId: expect.any(String),
+        piece: "Splunk",
+        kept: { from: "CV-2025.pdf", quote: "Splunk, Python, incident response" },
+        merged: { from: "CV-2023.docx", quote: "Skills: Splunk, Python", text: "Splunk" },
+      },
+    ]);
+  });
+
+  it("keeps achievements with different numbers apart, however alike their words", async () => {
+    const half: DraftedPieces = { pieces: [{ kind: "achievement", text: "Cut false positives by half by tuning Splunk detection rules.", quote: "Cut false positives by half by tuning Splunk detection rules.", entry: null, role: null }] };
+    const writer = fakeWriter({ draftPieces: (input: ImportedText) => (input.fileName === "old.txt" ? half : mira2025) });
+    const old = { fileName: "old.txt", bytes: new TextEncoder().encode("Cut false positives by half by tuning Splunk detection rules.") };
+
+    const t = await imported({ files: [cv2025, old] }, { writer });
+
+    expect(t.preparation.listPieces({ kind: "achievement", search: "false positives" }).groups.flatMap((g) => g.pieces)).toHaveLength(2);
+  });
+});
