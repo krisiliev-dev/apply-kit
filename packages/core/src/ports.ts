@@ -51,23 +51,42 @@ export interface Extractor {
 }
 
 /** One email from the job mailbox. `id` is its Message-ID, so a re-delivered copy keeps it. */
-export interface AlertEmail {
+export interface MailMessage {
   id: string;
   /** The From header as sent: "LinkedIn Job Alerts <jobalerts-noreply@linkedin.com>". */
   from: string;
+  /** Recipients, each as "Name <address>" (or just the address), the way `from` is given. */
+  to: string[];
+  cc: string[];
   subject: string;
   receivedAt: Date;
   html: string;
   text: string;
+  /** The Message-ID this email replies to, if any. */
+  inReplyTo: string | null;
+  /** The thread's earlier Message-IDs, oldest first (the References header). */
+  references: string[];
+  /** Attachments by name and media type only; their contents are never read or kept. */
+  attachments: MailAttachment[];
 }
 
+export interface MailAttachment {
+  /** The file name, or null when the email gives none. */
+  name: string | null;
+  /** The media type, such as "application/pdf". */
+  type: string;
+}
+
+/** An email as the email-alert Sources read it: any email from the job mailbox. */
+export type AlertEmail = MailMessage;
+
 /**
- * Reads alert emails from the dedicated job mailbox, read-only and only from the configured
- * mailbox folder. Throws a MailboxError when the mailbox can't be read (see mailbox.ts).
+ * Reads every email in the dedicated job mailbox, read-only and only from the configured mailbox
+ * folder. Throws a MailboxError when the mailbox can't be read (see mailbox.ts).
  */
 export interface MailReader {
   /** Emails received at or after `since` (a reader may return a few earlier ones; IMAP SINCE is by day). */
-  fetchSince(since: Date): Promise<AlertEmail[]>;
+  fetchSince(since: Date): Promise<MailMessage[]>;
 }
 
 /** Named settings (the service reads them from .env). Values are secrets: never log them. */
@@ -81,6 +100,12 @@ export interface EngineDeps {
   fetch: typeof fetch;
   extractor: Extractor;
   mailReader: MailReader;
+  /**
+   * Called after each good read of the job mailbox with the emails it stored for the first time
+   * (oldest first; none is passed twice). When set, every check reads the mailbox once, even with no
+   * email-alert Source; without it, the mailbox is read only for email-alert Sources. Track uses it.
+   */
+  onMailStored?: (emails: MailMessage[]) => void | Promise<void>;
   /** Settings some Sources need, such as API keys. Missing means every setting is unset. */
   settings?: Settings;
   /**

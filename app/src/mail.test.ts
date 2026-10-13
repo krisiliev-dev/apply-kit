@@ -72,7 +72,58 @@ describe("IMAP mail reader", () => {
       receivedAt: new Date("2026-10-12T06:12:05Z"),
       html: expect.stringContaining('href="https://www.linkedin.com/comm/jobs/view/4100000001/"'),
       text: expect.any(String),
+      to: ["sample.jobs@example.com"],
+      cc: [],
+      inReplyTo: null,
+      references: [],
+      attachments: [],
     }]);
+  });
+
+  it("reads recipients, thread headers and attachment names and types of any email, never changing it", async () => {
+    // A synthetic recruiter reply in an existing thread with an offer letter attached.
+    const rawReply = [
+      "Message-ID: <reply-2@contoso-cloud.example>",
+      "Date: Tue, 13 Oct 2026 09:05:00 +0000",
+      "From: Dana Recruiter <dana@contoso-cloud.example>",
+      "To: Sample Person <sample.person@example.org>, sample.jobs@example.com",
+      "Cc: Hiring Team <hiring@contoso-cloud.example>",
+      "Subject: Re: Your application",
+      "In-Reply-To: <reply-1@example.org>",
+      "References: <conf-0@contoso-cloud.example> <reply-1@example.org>",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/mixed; boundary="b1"',
+      "",
+      "--b1",
+      'Content-Type: text/plain; charset="utf-8"',
+      "",
+      "Please find the offer attached.",
+      "--b1",
+      'Content-Type: application/pdf; name="offer-letter.pdf"',
+      'Content-Disposition: attachment; filename="offer-letter.pdf"',
+      "Content-Transfer-Encoding: base64",
+      "",
+      "JVBERi0xLjQK",
+      "--b1--",
+      "",
+    ].join("\r\n");
+    const imap = fakeImap({ messages: [{ uid: 7, source: rawReply, internalDate: new Date("2026-10-13T09:05:10Z") }] });
+
+    const [email] = await createImapMailReader(settings, () => imap.client).fetchSince(new Date("2026-10-12T00:00:00Z"));
+
+    expect(imap.locks).toEqual([{ path: "Job alerts", options: { readOnly: true } }]);
+    expect(imap.calls).toEqual(["connect", "lock", "search since 2026-10-12 uid=true", "fetch 7 source=true uid=true", "release", "logout"]);
+    expect(email).toMatchObject({
+      id: "<reply-2@contoso-cloud.example>",
+      from: "Dana Recruiter <dana@contoso-cloud.example>",
+      to: ["Sample Person <sample.person@example.org>", "sample.jobs@example.com"],
+      cc: ["Hiring Team <hiring@contoso-cloud.example>"],
+      subject: "Re: Your application",
+      inReplyTo: "<reply-1@example.org>",
+      references: ["<conf-0@contoso-cloud.example>", "<reply-1@example.org>"],
+      attachments: [{ name: "offer-letter.pdf", type: "application/pdf" }],
+      text: expect.stringContaining("Please find the offer attached."),
+    });
   });
 
   it("reports a refused app password as an auth problem and still logs out", async () => {
