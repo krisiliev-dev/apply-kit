@@ -49,7 +49,7 @@ export { runEvaluation } from "./evaluation/run.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
 export { createTracker, statuses, statusName, isClosed, TrackerError } from "./tracker.ts";
 export type {
-  Tracker, TrackerDeps, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
+  Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice,
 } from "./tracker.ts";
 export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";

@@ -79,7 +79,9 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
     const sort = c.req.query("sort") ?? "fit";
     if (!sorts.includes(sort as FeedSort)) return c.json({ error: `Unknown sort "${sort}"` }, 400);
     const relocation = c.req.query("relocation") === "1";
-    return c.json(await engine.queryFeed({ view: v as FeedView, sort: sort as FeedSort, relocation }));
+    const feed = await engine.queryFeed({ view: v as FeedView, sort: sort as FeedSort, relocation });
+    // Track's markers for the listed Jobs: "Applied <date> · <Status>", or the same company recently.
+    return c.json({ ...feed, markers: await tracker.jobMarkers(feed.jobs.map((j) => j.id)) });
   });
 
   // Requiring a JSON body type means a web page can't trigger a POST without a CORS preflight,
@@ -171,7 +173,9 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   // Job it lives in now (check the returned id).
   app.get("/api/jobs/:id", async (c) => {
     const job = await engine.getJob(c.req.param("id"));
-    return job ? c.json(job) : c.json({ error: "No such job" }, 404);
+    if (!job) return c.json({ error: "No such job" }, 404);
+    // With what Track knows: this Job's Application and the History with its company.
+    return c.json({ ...job, track: (await tracker.jobMarkers([job.id]))[job.id] ?? null });
   });
 
   // Reads one Job's posting now (the Job page asks when it opens an unread Job).

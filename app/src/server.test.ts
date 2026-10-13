@@ -245,6 +245,20 @@ describe("the Applications routes", () => {
     expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
 
+  it("carries Track's markers on the Feed and the Job: All open keeps an applied Job with its Application", async () => {
+    const s = service();
+    const pasted = { title: "Security Engineer", company: "Kestrel Payments", location: "Sofia", text: "Protect payments.\n3+ years in security." };
+    const { jobId } = (await (await s.request("/api/jobs/link", s.json({ link: "https://www.linkedin.com/jobs/view/4100000001/", pasted }))).json()) as { jobId: string };
+    await s.request("/api/applications", s.json({ job: { jobId }, appliedOn: "2026-10-07", status: "applied", how: "i-applied" }));
+
+    const open = (await (await s.request("/api/feed?view=open")).json()) as { jobs: { id: string }[]; markers: Record<string, unknown> };
+    const job = await (await s.request(`/api/jobs/${encodeURIComponent(jobId)}`)).json();
+
+    expect(open.jobs.map((j) => j.id)).toEqual([jobId]);
+    expect(open.markers[jobId]).toMatchObject({ application: { appliedOn: "2026-10-07", status: "applied" } });
+    expect(job).toMatchObject({ id: jobId, track: { application: { status: "applied" }, history: [{ title: "Security Engineer" }] } });
+  });
+
   it("gives the Stats strip its numbers", async () => {
     const s = service();
     await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));

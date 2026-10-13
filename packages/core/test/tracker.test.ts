@@ -276,3 +276,76 @@ describe("the grouped list", () => {
     expect(more.groups.find((g) => g.key === "closed")!.applications).toHaveLength(7);
   });
 });
+
+describe("job markers for the Feed and the Job page", () => {
+  it("names this Job's Application: the date applied and its Status", async () => {
+    const { tracker, apm, support } = await withFeed();
+    const added = await tracker.addByHand({ job: { jobId: apm }, ...applied("2026-10-07") });
+    if (added.outcome !== "added") throw new Error("not added");
+
+    const markers = await tracker.jobMarkers([apm, support]);
+
+    expect(markers[apm]!.application).toMatchObject({ id: added.application.id, appliedOn: "2026-10-07", status: "applied", onThisJob: true });
+    expect(markers[support]!.application).toBeNull();
+  });
+
+  it("names another Application at the same company less than 6 months old, matching names as Discover does", async () => {
+    const { tracker, clock, apm } = await withFeed();
+    // The fake clock stands at 12 Oct 2026: 6 months back is 12 Apr.
+    await tracker.addByHand({ job: { company: "PAYHAWK EOOD", title: "Data Analyst" }, ...applied("2026-04-13") });
+    await tracker.addByHand({ job: { company: "Payhawk", title: "Finance Associate" }, ...applied("2026-04-12") });
+    await tracker.addByHand({ job: { company: "Fennel Studio", title: "Product Manager" }, ...applied("2026-10-01") });
+
+    expect((await tracker.jobMarkers([apm]))[apm]!.sameCompany).toMatchObject({ title: "Data Analyst", appliedOn: "2026-04-13", status: "applied", onThisJob: false });
+
+    await clock.advance(24 * 60 * 60_000);
+    expect((await tracker.jobMarkers([apm]))[apm]!.sameCompany).toBeNull();
+  });
+
+  it("says when a closed one closed, and History lists every Application at the company, this Job's too", async () => {
+    const { tracker, clock, apm, support } = await withFeed();
+    const old = await tracker.addByHand({ job: { company: "Payhawk", title: "Data Analyst" }, ...applied("2026-03-02") });
+    const soc = await tracker.addByHand({ job: { company: "Payhawk", title: "SOC Analyst" }, ...applied("2026-10-01") });
+    if (old.outcome !== "added" || soc.outcome !== "added") throw new Error("not added");
+    await clock.advance(24 * 60 * 60_000);
+    await tracker.setStatus(soc.application.id, "rejected");
+    await tracker.addByHand({ job: { jobId: support }, ...applied("2026-09-20") });
+
+    const marker = (await tracker.jobMarkers([apm]))[apm]!;
+
+    expect(marker.sameCompany).toMatchObject({ title: "SOC Analyst", status: "rejected", closedOn: "2026-10-13" });
+    expect(marker.history.map((m) => [m.title, m.status, m.onThisJob])).toEqual([
+      ["SOC Analyst", "rejected", false], ["Customer Support Specialist", "applied", false], ["Data Analyst", "applied", false],
+    ]);
+    expect(marker.history[2]!.closedOn).toBeNull();
+
+    const added = await tracker.addByHand({ job: { jobId: apm }, ...applied("2026-10-13") });
+    if (added.outcome !== "added") throw new Error("not added");
+    expect((await tracker.jobMarkers([apm]))[apm]!.history[0]).toMatchObject({ title: "Associate Product Manager", onThisJob: true });
+  });
+});
+
+describe("the Feed with Applications", () => {
+  it("leaves Jobs with an open Application out of New and Saved; All open keeps them", async () => {
+    const { engine, tracker, apm, support, ae } = await withFeed();
+    await engine.save([support]);
+    await tracker.addByHand({ job: { jobId: apm }, ...applied() });
+    await tracker.addByHand({ job: { jobId: support }, ...applied() });
+
+    const ids = async (view: "new" | "saved" | "open") => (await engine.queryFeed({ view })).jobs.map((j) => j.id).sort();
+    expect(await ids("new")).toEqual([ae]);
+    expect(await ids("saved")).toEqual([]);
+    expect(await ids("open")).toEqual([apm, support, ae].sort());
+    expect((await engine.queryFeed({ view: "new" })).counts).toMatchObject({ new: 1, saved: 0, open: 3 });
+  });
+
+  it("brings a Job back to New once its Application is closed", async () => {
+    const { engine, tracker, apm } = await withFeed();
+    const added = await tracker.addByHand({ job: { jobId: apm }, ...applied() });
+    if (added.outcome !== "added") throw new Error("not added");
+
+    await tracker.setStatus(added.application.id, "rejected");
+
+    expect((await engine.queryFeed({ view: "new" })).jobs.map((j) => j.id)).toContain(apm);
+  });
+});

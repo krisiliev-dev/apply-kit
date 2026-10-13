@@ -7,6 +7,7 @@
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
+import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
 import type { Clock, SqlDatabase } from "./ports.ts";
 import { migrate } from "./schema.ts";
@@ -134,6 +135,34 @@ export interface JobChoice {
   application: { id: string; status: Status } | null;
 }
 
+/** An Application as a Discover screen mentions it (a Feed row's chip, the Job page's banner and history). */
+export interface ApplicationMarker {
+  id: string;
+  /** The Job it was made for (its live id), or null when added by hand without one. */
+  jobId: string | null;
+  title: string;
+  company: string;
+  status: Status;
+  appliedOn: string;
+  /** For a closed one: the day (in Sofia) the Event that closed it happened; null when it was added closed. */
+  closedOn: string | null;
+  /** True when it is an Application on the Job asked about. */
+  onThisJob: boolean;
+}
+
+/** What Track knows about one Job, for the Feed and the Job page. */
+export interface JobMarker {
+  /** This Job's Application: the open one, else the latest closed one; null when never applied. */
+  application: ApplicationMarker | null;
+  /**
+   * The latest Application on another Job at the same company (names matched with Discover's company
+   * normalisation) applied less than 6 months ago, or null.
+   */
+  sameCompany: ApplicationMarker | null;
+  /** Every Application at the Job's company, this Job's included, newest applied first ("History with …"). */
+  history: ApplicationMarker[];
+}
+
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
   constructor(
@@ -168,6 +197,8 @@ export interface Tracker {
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
+  /** What Track knows about each of these Jobs, keyed by the id asked with (unknown ids are left out). */
+  jobMarkers(jobIds: string[]): Promise<Record<string, JobMarker>>;
   /** Stats: applications per week with the pace, response rate, interviews and what's working. */
   stats(): Promise<TrackStats>;
 }
@@ -449,7 +480,47 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return out;
   }
 
+  /** The day the standing Status Event that closed it happened, or null (open, or added closed). */
+  function closedOn(r: Row): string | null {
+    if (!isClosed(r.status as Status)) return null;
+    const e = db.prepare(
+      `SELECT at FROM application_event WHERE application_id = ? AND kind = 'status' AND undone_at IS NULL AND to_status = ?
+       ORDER BY at DESC, rowid DESC LIMIT 1`,
+    ).get(String(r.id), String(r.status));
+    return e ? sofiaDay(new Date(String(e.at))) : null;
+  }
+
+  async function jobMarkers(jobIds: string[]): Promise<Record<string, JobMarker>> {
+    // Every Application once, newest applied first, with its company as Discover normalises it.
+    const apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL").all().map((r) => ({
+      companyKey: normaliseCompany(String(r.company)),
+      marker: {
+        id: String(r.id), jobId: r.job_id == null ? null : (liveJobId(db, String(r.job_id)) ?? String(r.job_id)),
+        title: String(r.title), company: String(r.company), status: r.status as Status,
+        appliedOn: String(r.applied_on), closedOn: closedOn(r), onThisJob: false,
+      } satisfies ApplicationMarker,
+    })).sort((a, b) => b.marker.appliedOn.localeCompare(a.marker.appliedOn) || a.marker.title.localeCompare(b.marker.title));
+    const recentFrom = sixMonthsBefore(today());
+    const out: Record<string, JobMarker> = {};
+    for (const asked of new Set(jobIds)) {
+      const live = liveJobId(db, asked);
+      if (!live) continue;
+      const company = normaliseCompany(String(db.prepare("SELECT company FROM job WHERE id = ?").get(live)!.company));
+      const history = apps
+        .filter((a) => a.marker.jobId === live || (company !== null && a.companyKey === company))
+        .map((a) => ({ ...a.marker, onThisJob: a.marker.jobId === live }));
+      const mine = history.filter((m) => m.onThisJob);
+      out[asked] = {
+        application: mine.find((m) => !isClosed(m.status)) ?? mine[0] ?? null,
+        sameCompany: history.find((m) => !m.onThisJob && m.appliedOn > recentFrom) ?? null,
+        history,
+      };
+    }
+    return out;
+  }
+
   return {
+    jobMarkers,
     addByHand,
     list,
     get: async (id) => summary(id),
@@ -464,6 +535,15 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
 /** The calendar day in Sofia (YYYY-MM-DD). */
 function sofiaDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Sofia", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
+/** The same day 6 calendar months earlier (the last day of that month when it is shorter). */
+function sixMonthsBefore(day: string): string {
+  const [y, m, d] = day.split("-").map(Number) as [number, number, number];
+  const back = new Date(Date.UTC(y, m - 1 - 6, 1));
+  const last = new Date(Date.UTC(back.getUTCFullYear(), back.getUTCMonth() + 1, 0)).getUTCDate();
+  back.setUTCDate(Math.min(d, last));
+  return back.toISOString().slice(0, 10);
 }
 
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

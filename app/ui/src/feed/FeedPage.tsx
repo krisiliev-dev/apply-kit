@@ -1,6 +1,6 @@
 import type { CheckProgress, FeedResult, FeedSort, FeedView, SchedulerStatus } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { checkNow, fetchCheckStatus, fetchFeed, type FeedOptions } from "../api.ts";
+import { checkNow, fetchCheckStatus, fetchFeed, type FeedOptions, type TrackedFeed } from "../api.ts";
 import { JobsTable } from "./JobsTable.tsx";
 import { PassedClosed } from "./PassedClosed.tsx";
 import { HiddenPile } from "./HiddenPile.tsx";
@@ -19,7 +19,7 @@ const views: [FeedView, string][] = [
 type Load =
   | { state: "loading" }
   | { state: "error"; message: string }
-  | { state: "ready"; feed: FeedResult; rows: ShownFeed };
+  | { state: "ready"; feed: TrackedFeed; rows: ShownFeed };
 
 export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => void }) {
   // "/?view=hidden" opens the hidden pile (the link from the search settings).
