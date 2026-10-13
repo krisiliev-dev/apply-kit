@@ -4,7 +4,7 @@
 // and "Done" in its kind line (never faded). Kind lines are sentence case in the source and set in
 // capitals by CSS (TA-12).
 import type { FollowUpDraft, NeedsYou, NeedsYouEntry } from "@apply-kit/core";
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
 import { daysFrom, daysWord, dueWords, eventTime, followUpName, todaySofia, weekDay } from "./words.ts";
 
@@ -23,17 +23,20 @@ function why(e: NeedsYouEntry): string {
   return `${since}, no reply you've recorded. Points to cover are ready; you write it and send it from your own mail.`;
 }
 
-export function NeedsYouSection({ needs, onWrite, onSnooze }: {
+export function NeedsYouSection({ needs, onWrite, onSnooze, emails }: {
   needs: NeedsYou;
   onWrite: (e: NeedsYouEntry, opener: HTMLElement) => void;
   onSnooze: (e: NeedsYouEntry) => void;
+  /** Emails to match (EmailsToMatch.tsx), first in the queue: nothing changes until the user answers. */
+  emails?: ReactNode;
 }) {
   const coming = needs.comingUp.map((c) => `${c.company} ${followUpName(c.kind).toLowerCase()} ${weekDay(c.dueOn)}`);
   return (
     <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
-      <div className="sec-head"><h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>{needs.items.length > 1 && <span className="meta">Most urgent first</span>}</div>
-      {needs.items.length ? (
+      <div className="sec-head"><h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>{needs.items.length + needs.emailsToMatch > 1 && <span className="meta">Most urgent first</span>}</div>
+      {needs.items.length || (emails && needs.emailsToMatch) ? (
         <ul className="needs-queue">
+          {emails}
           {needs.items.map((e) => {
             const name = followUpName(e.followUp.kind);
             return (

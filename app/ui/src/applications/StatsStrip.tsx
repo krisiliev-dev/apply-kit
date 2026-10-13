@@ -7,9 +7,10 @@
 // and then labelled so; every bar has a tooltip on hover and on keyboard focus, arrow keys move
 // between bars, and "Show as table" holds every value. Labels are HTML in text tokens, not SVG text,
 // so they stay at the caption size however wide the chart is drawn.
-import type { TrackStats, WeekCount, WorkingRow } from "@apply-kit/core";
+import type { TrackMailbox, TrackStats, WeekCount, WorkingRow } from "@apply-kit/core";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { fetchApplicationStats } from "../api.ts";
+import { dayTime } from "./words.ts";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const sep = (s: string) => s.replace("Sept", "Sep");
@@ -20,8 +21,11 @@ const weekdayDay = (day: string) => sep(new Date(`${day}T12:00:00Z`).toLocaleDat
 /** 4, or 3.5 for a half. */
 const paceText = (pace: number) => (Number.isInteger(pace) ? String(pace) : pace.toFixed(1));
 
-/** Loads the Stats again whenever `version` changes (the list it sits above was reloaded). */
-export function StatsStrip({ version }: { version: unknown }) {
+/**
+ * Loads the Stats again whenever `version` changes. While the job mailbox can't be read, the response
+ * rate says it may be low or missing replies since then.
+ */
+export function StatsStrip({ version, mailbox }: { version: unknown; mailbox?: TrackMailbox | null }) {
   const [stats, setStats] = useState<TrackStats | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -47,7 +51,11 @@ export function StatsStrip({ version }: { version: unknown }) {
         <div className="head"><span className="label">Applications per week</span><span className="sub">{headline}</span></div>
         <WeeklyChart stats={stats} />
       </div>
-      <ResponseRate rate={stats.responseRate} />
+      <ResponseRate
+        rate={stats.responseRate}
+        stale={mailbox?.state === "not-connected" ? "Replies aren't being read, so this may be low"
+          : stats.mayBeMissingRepliesSince ? `May be missing replies since ${dayTime(stats.mayBeMissingRepliesSince)}` : null}
+      />
       <div className="tile">
         <span className="label">Interviews</span>
         <span className="value">{stats.interviews.upcoming}<small>upcoming</small></span>
@@ -62,23 +70,25 @@ export function StatsStrip({ version }: { version: unknown }) {
   );
 }
 
-function ResponseRate({ rate: r }: { rate: TrackStats["responseRate"] }) {
+function ResponseRate({ rate: r, stale }: { rate: TrackStats["responseRate"]; stale: string | null }) {
   if (r.rate === null) {
     return (
-      <div className="tile">
+      <div className={stale ? "tile stale" : "tile"}>
         <span className="label">Response rate</span>
         <span className="value">—<small>{r.countsFrom ? `Counts from ${weekdayDay(r.countsFrom)}` : "Nothing to count yet"}</small></span>
         <span className="sub">
+          {stale && <><b>{stale}.</b>{" "}</>}
           Applications under 14 days old aren't counted, so {r.excluded === 1 ? "1 new one" : `${r.excluded} new ones`} can't drag the rate down
         </span>
       </div>
     );
   }
   return (
-    <div className="tile">
+    <div className={stale ? "tile stale" : "tile"}>
       <span className="label">Response rate</span>
       <span className="value">{Math.round(r.rate * 100)}%<small>{r.replied} of {r.counted} replied</small></span>
       <span className="sub">
+        {stale && <><b>{stale}.</b>{" "}</>}
         Rejections count as replies
         {r.excluded > 0 && ` · ${r.excluded} sent in the last 14 days ${r.excluded === 1 ? "isn't" : "aren't"} counted yet`}
       </span>

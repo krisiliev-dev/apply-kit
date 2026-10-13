@@ -105,7 +105,7 @@ export interface EngineDeps {
    * (oldest first; none is passed twice). When set, every check reads the mailbox once, even with no
    * email-alert Source; without it, the mailbox is read only for email-alert Sources. Track uses it.
    */
-  onMailStored?: (emails: MailMessage[]) => void | Promise<void>;
+  onMailStored?: (emails: MailMessage[]) => void | Promise<unknown>;
   /** Settings some Sources need, such as API keys. Missing means every setting is unset. */
   settings?: Settings;
   /**

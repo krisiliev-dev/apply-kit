@@ -51,6 +51,8 @@ export interface TrackStats {
    * an interview so far is an Application that reached Interviewing (or beyond) and none is upcoming.
    */
   interviews: { upcoming: number; soFar: number; companies: number };
+  /** While the job mailbox can't be read: since when replies may be missing (the numbers may be incomplete). */
+  mayBeMissingRepliesSince: string | null;
 }
 
 type Row = Record<string, unknown>;
@@ -60,12 +62,14 @@ const tooFewUnder = 5;
 /** How old (in days) an Application must be to count in the response rate and What's working. */
 const replyWindowDays = 14;
 /**
- * A Status that only a reply moves an Application to. Until email matching exists, replies are these
- * manual moves (and an Application added by hand already at one of them); a withdrawal alone is none.
+ * A Status that only a reply moves an Application to: a manual move there (or an Application added by
+ * hand already at one) counts as a reply; a withdrawal alone is none.
  */
 const replyStatuses = ["screening", "interviewing", "offer", "accepted", "rejected"];
+/** Matched emails that are replies (GLOSSARY "Reply"); a confirmation never is. */
+const replyEmailKinds = ["rejection", "interview-invitation", "offer", "info-request"];
 
-export function computeStats(db: SqlDatabase, today: string): TrackStats {
+export function computeStats(db: SqlDatabase, today: string, mayBeMissingRepliesSince: string | null = null): TrackStats {
   const apps = db.prepare("SELECT id, company, applied_on, angle, source, cv_version FROM application WHERE removed_at IS NULL").all();
   const thisMonday = mondayOf(today);
   const perWeek = new Map<string, number>();
@@ -81,11 +85,13 @@ export function computeStats(db: SqlDatabase, today: string): TrackStats {
   const pace = median(completeWeeks(perWeek, thisMonday));
   const count = weeks.at(-1)!.count;
 
-  // An Application has a reply when any standing Event (not undone) moved it to a reply Status.
+  // An Application has a reply when any standing Event (not undone) moved it to a reply Status, or
+  // filed a reply email on it (an email whose move was undone is not a Status change, nor a reply).
   const repliedIds = new Set((db.prepare(
-    `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND kind IN ('created', 'status')
-     AND to_status IN (${replyStatuses.map(() => "?").join(", ")})`,
-  ).all(...replyStatuses)).map((r) => String(r.application_id)));
+    `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND (
+       (kind IN ('created', 'status') AND to_status IN (${replyStatuses.map(() => "?").join(", ")}))
+       OR (kind = 'email' AND email_kind IN (${replyEmailKinds.map(() => "?").join(", ")})))`,
+  ).all(...replyStatuses, ...replyEmailKinds)).map((r) => String(r.application_id)));
   const cutoff = addDays(today, -replyWindowDays);
   const old = apps.filter((a) => String(a.applied_on) <= cutoff);
   const young = apps.filter((a) => String(a.applied_on) > cutoff);
@@ -112,7 +118,7 @@ export function computeStats(db: SqlDatabase, today: string): TrackStats {
   };
 
   const interviewed = new Set(db.prepare(
-    `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND kind IN ('created', 'status')
+    `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND kind IN ('created', 'status', 'email')
      AND to_status IN ('interviewing', 'offer', 'accepted')`,
   ).all().map((r) => String(r.application_id)));
   const interviewedApps = apps.filter((a) => interviewed.has(String(a.id)));
@@ -127,7 +133,7 @@ export function computeStats(db: SqlDatabase, today: string): TrackStats {
   const lastWeek = { count: lastCount, best: earlier.length > 0 && lastCount > Math.max(...earlier) };
 
   return {
-    total: apps.length, since: apps.map((a) => String(a.applied_on)).sort()[0] ?? null, lastWeek, interviews,
+    total: apps.length, since: apps.map((a) => String(a.applied_on)).sort()[0] ?? null, lastWeek, interviews, mayBeMissingRepliesSince,
     weeks, pace, thisWeek: { count, win: pace > 0 && count > pace }, responseRate,
     working: {
       angle: working((a) => (a.angle ? angleLabel[a.angle as Angle] : null)),
