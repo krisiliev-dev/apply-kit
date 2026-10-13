@@ -5,7 +5,7 @@ import type { ApplicationMarker, JobMarker } from "@apply-kit/core";
 import { shortDay, statusLabel, todaySofia } from "./words.ts";
 
 /** Where one Application opens. */
-export const applicationHref = (id: string) => `/applications#app-${encodeURIComponent(id)}`;
+export const applicationHref = (id: string) => `/applications/${encodeURIComponent(id)}`;
 
 /** The Status pill for this Job's Application: "Applied 7 Oct", or "Applied 7 Oct · Screening". */
 export function AppliedPill({ application }: { application: ApplicationMarker }) {

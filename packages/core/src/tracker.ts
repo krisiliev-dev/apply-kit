@@ -28,8 +28,11 @@ export interface ApplicationEvent {
   id: string;
   applicationId: string;
   at: string;
-  /** created: the Application was added. status: its Status changed. undo: an earlier Event was undone. */
-  kind: "created" | "status" | "undo";
+  /**
+   * created: the Application was added. status: its Status changed. note: the user wrote a note.
+   * cv: the user attached the CV they sent. undo: an earlier Event was undone.
+   */
+  kind: "created" | "status" | "note" | "cv" | "undo";
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -60,6 +63,99 @@ export interface ApplicationSummary {
   postingUrl: string | null;
   /** The latest Event still standing (undone Events and undo records are skipped). */
   lastEvent: ApplicationEvent;
+}
+
+/** The happy path, as the stepper shows it. Rejected and withdrawn sit after "or" as a branch. */
+export const happyPath: readonly Status[] = ["applied", "screening", "interviewing", "offer", "accepted"];
+
+/**
+ * One step of the stepper: done (it happened), current, skipped (a later step happened without it),
+ * or still to come. Derived from the Events still standing, so the history shown is what happened.
+ */
+export interface StatusStep {
+  status: Status;
+  state: "done" | "current" | "skipped" | "todo";
+}
+
+/**
+ * What now, at the top of the page. For now: wait for a reply, or the latest note; a closed
+ * Application has nothing left to do. (Follow-ups and interviews take this over in later tickets.)
+ */
+export type NextStep =
+  | { kind: "wait"; text: string }
+  | { kind: "note"; text: string; at: string }
+  | { kind: "closed"; text: string };
+
+/** One entry on the timeline: an Event, or something apply-kit saw (the posting closing). */
+export interface TimelineEntry {
+  id: string;
+  at: string;
+  kind: ApplicationEvent["kind"] | "posting-closed";
+  cause: EventCause;
+  from: Status | null;
+  to: Status | null;
+  /** What happened, in plain words. */
+  text: string;
+  /** More about it, when there is more to say. */
+  detail: string | null;
+  /** When it was undone, or null. */
+  undoneAt: string | null;
+  /** Whether Undo applies to it now. */
+  undoable: boolean;
+}
+
+/** An address or a domain whose mail is matched to an Application. */
+export interface Contact {
+  value: string;
+  kind: "address" | "domain";
+}
+
+/** The posting applied to: its Job in apply-kit (whose page keeps the saved copy), or only the link given. */
+export interface TargetPosting {
+  /** Null when added by hand with a link that couldn't be read. */
+  jobId: string | null;
+  title: string;
+  company: string;
+  url: string;
+  /** When Discover closed the Job, and how in plain words; null while open. */
+  closed: { at: string; how: string } | null;
+}
+
+/** The CV attached to an Application added by hand ("What you sent"). */
+export interface AttachedCv {
+  label: string;
+  fileName: string;
+  /** Size in bytes. */
+  bytes: number;
+  attachedAt: string;
+}
+
+/** A CV to attach: a PDF, and the label it counts under as the CV version (the file name when empty). */
+export interface AttachCvInput {
+  fileName: string;
+  label?: string | null;
+  bytes: Uint8Array;
+}
+
+/** The largest CV PDF taken: 10 MB. */
+export const maxCvBytes = 10 * 1024 * 1024;
+
+/** One Application in full, as its page shows it. */
+export interface ApplicationDetail extends ApplicationSummary {
+  /** When it got its current Status (the Event still standing that set it). */
+  statusSince: string;
+  /** The CV version it counts under in What's working: the attached CV's label (or, later, the Package's). */
+  cvVersion: string | null;
+  /** The CV attached by hand, or null. */
+  cv: AttachedCv | null;
+  /** Null when added by hand without a link. */
+  posting: TargetPosting | null;
+  /** Oldest first. */
+  contacts: Contact[];
+  steps: StatusStep[];
+  nextStep: NextStep;
+  /** Newest first. */
+  timeline: TimelineEntry[];
 }
 
 /** What the user gives "Add application". */
@@ -166,7 +262,7 @@ export interface JobMarker {
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
   constructor(
-    readonly problem: "not-found" | "accepted" | "unchanged" | "already-open" | "changed-since" | "not-undoable",
+    readonly problem: "not-found" | "accepted" | "unchanged" | "already-open" | "changed-since" | "not-undoable" | "invalid",
     message: string,
     readonly applicationId: string | null = null,
   ) {
@@ -180,8 +276,8 @@ export interface Tracker {
   addByHand(input: AddApplicationInput): Promise<AddApplicationResult>;
   /** Every Application, grouped by Status, with counts. */
   list(query?: ListQuery): Promise<ApplicationList>;
-  /** One Application, or null. */
-  get(applicationId: string): Promise<ApplicationSummary | null>;
+  /** One Application in full (stepper steps, next step, timeline, contacts, posting, CV), or null. */
+  get(applicationId: string): Promise<ApplicationDetail | null>;
   /** The Application's Events, oldest first (undone ones included, marked). */
   events(applicationId: string): Promise<ApplicationEvent[]>;
   /**
@@ -195,6 +291,17 @@ export interface Tracker {
    * and the reversal is recorded. Throws a TrackerError when refused.
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
+  /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
+  addNote(applicationId: string, text: string): Promise<{ event: ApplicationEvent }>;
+  /** Adds an address or domain whose mail belongs here. Throws a TrackerError when refused. */
+  addContact(applicationId: string, value: string): Promise<{ contacts: Contact[] }>;
+  /**
+   * Attaches the CV sent with an Application added by hand: stored locally, its label used as the CV
+   * version. A new one replaces the old. Throws a TrackerError when refused.
+   */
+  attachCv(applicationId: string, cv: AttachCvInput): Promise<{ cv: AttachedCv; event: ApplicationEvent }>;
+  /** The attached CV file, or null. */
+  cvFile(applicationId: string): Promise<{ fileName: string; bytes: Uint8Array } | null>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
   /** What Track knows about each of these Jobs, keyed by the id asked with (unknown ids are left out). */
@@ -430,17 +537,16 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     if (ev.kind === "undo") throw new TrackerError("not-undoable", "An undo can't itself be undone; change the Status instead.", ev.applicationId);
     const app = db.prepare("SELECT * FROM application WHERE id = ?").get(ev.applicationId)!;
     if (app.removed_at) throw new TrackerError("not-found", "That Application was removed.", ev.applicationId);
-    const later = db.prepare(
-      `SELECT COUNT(*) AS n FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind != 'undo' AND rowid > (SELECT rowid FROM application_event WHERE id = ?)`,
-    ).get(ev.applicationId, eventId);
-    if (Number(later?.n ?? 0) > 0 || (ev.kind === "status" && app.status !== ev.to)) {
+    if (ev.kind !== "note" && movedSince(ev, String(app.status))) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this can't be undone. Set the Status you want instead.", ev.applicationId);
     }
     db.exec("BEGIN");
     try {
       db.prepare("UPDATE application_event SET undone_at = ? WHERE id = ?").run(now(), eventId);
       let event: ApplicationEvent;
-      if (ev.kind === "created") {
+      if (ev.kind === "note") {
+        event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Note removed", undoes: eventId });
+      } else if (ev.kind === "created") {
         db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), ev.applicationId);
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Adding undone: removed", undoes: eventId });
       } else {
@@ -457,6 +563,134 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       throw err;
     }
   }
+
+  /** Whether the Status has moved since this Event (a later Status change or adding stands), so undo would rewrite history. */
+  function movedSince(ev: ApplicationEvent, status: string): boolean {
+    const later = db.prepare(
+      `SELECT COUNT(*) AS n FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind IN ('created', 'status')
+       AND rowid > (SELECT rowid FROM application_event WHERE id = ?)`,
+    ).get(ev.applicationId, ev.id);
+    return Number(later?.n ?? 0) > 0 || (ev.kind === "status" && status !== ev.to);
+  }
+
+  async function addNote(applicationId: string, text: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    const note = text.trim();
+    if (!note) throw new TrackerError("invalid", "Write the note first.", applicationId);
+    return { event: addEvent({ applicationId, kind: "note", cause: "you", from: null, to: null, text: note, undoes: null }) };
+  }
+
+  async function postingOf(app: ApplicationSummary): Promise<TargetPosting | null> {
+    const job = app.jobId ? await discovery.getJob(app.jobId) : null;
+    if (job) {
+      return {
+        jobId: job.id, title: job.title, company: job.company, url: job.url,
+        closed: job.closed ? { at: job.closed.at, how: job.closed.how } : null,
+      };
+    }
+    return app.postingUrl ? { jobId: null, title: app.title, company: app.company, url: app.postingUrl, closed: null } : null;
+  }
+
+  function cvOf(applicationId: string): AttachedCv | null {
+    const r = db.prepare("SELECT label, file_name, length(bytes) AS size, attached_at FROM application_cv WHERE application_id = ?").get(applicationId);
+    return r ? { label: String(r.label), fileName: String(r.file_name), bytes: Number(r.size), attachedAt: String(r.attached_at) } : null;
+  }
+
+  async function attachCv(applicationId: string, cv: AttachCvInput) {
+    const r = row(applicationId);
+    if (!r) throw new TrackerError("not-found", "There's no such Application.");
+    if (r.package_id) throw new TrackerError("invalid", "This Application has its Package as sent; its CV is that one.", applicationId);
+    const invalid = (message: string) => new TrackerError("invalid", message, applicationId);
+    const head = new TextDecoder().decode(cv.bytes.subarray(0, 5));
+    if (head !== "%PDF-") throw invalid("That file isn't a PDF. Export your CV as PDF and attach that.");
+    if (cv.bytes.length > maxCvBytes) throw invalid("That PDF is over 10 MB. Attach a smaller export of your CV.");
+    const fileName = cv.fileName.trim().replace(/^.*[\\/]/, "") || "cv.pdf";
+    const label = (cv.label?.trim() || fileName.replace(/\.pdf$/i, "")).slice(0, 80);
+    db.exec("BEGIN");
+    try {
+      db.prepare(
+        `INSERT INTO application_cv (application_id, file_name, label, bytes, attached_at) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (application_id) DO UPDATE SET file_name = excluded.file_name, label = excluded.label, bytes = excluded.bytes, attached_at = excluded.attached_at`,
+      ).run(applicationId, fileName, label, cv.bytes, now());
+      db.prepare("UPDATE application SET cv_version = ? WHERE id = ?").run(label, applicationId);
+      const event = addEvent({ applicationId, kind: "cv", cause: "you", from: null, to: null, text: `CV attached: ${label}`, undoes: null });
+      db.exec("COMMIT");
+      return { cv: cvOf(applicationId)!, event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  async function cvFile(applicationId: string) {
+    const r = db.prepare("SELECT file_name, bytes FROM application_cv WHERE application_id = ?").get(applicationId);
+    return r ? { fileName: String(r.file_name), bytes: r.bytes as Uint8Array } : null;
+  }
+
+  const contactsOf = (applicationId: string): Contact[] =>
+    db.prepare("SELECT value, kind FROM application_contact WHERE application_id = ? ORDER BY added_at, rowid").all(applicationId)
+      .map((r) => ({ value: String(r.value), kind: r.kind as Contact["kind"] }));
+
+  async function addContact(applicationId: string, value: string) {
+    if (!summary(applicationId)) throw new TrackerError("not-found", "There's no such Application.");
+    const contact = contactOf(value);
+    if (!contact || contact === "invalid") {
+      throw new TrackerError("invalid", "Enter an email address (jobs@company.com) or a domain (company.com).", applicationId);
+    }
+    if (contactsOf(applicationId).some((c) => c.value === contact.value)) {
+      throw new TrackerError("unchanged", `${contact.value} is already a contact here.`, applicationId);
+    }
+    db.prepare("INSERT INTO application_contact (application_id, value, kind, added_at) VALUES (?, ?, ?, ?)")
+      .run(applicationId, contact.value, contact.kind, now());
+    return { contacts: contactsOf(applicationId) };
+  }
+
+  function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[]): NextStep {
+    if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
+    const note = standing.filter((e) => e.kind === "note").at(-1);
+    return note ? { kind: "note", text: note.text, at: note.at } : { kind: "wait", text: "Wait for a reply." };
+  }
+
+  /** The stepper: the furthest happy-path step reached; steps before it never reached are skipped. */
+  function stepsOf(app: ApplicationSummary, standing: ApplicationEvent[]): StatusStep[] {
+    // Every Application was applied for; the rest are reached only through an Event still standing.
+    const reached = new Set<Status>(["applied", ...standing.flatMap((e) => (e.to ? [e.to] : []))]);
+    const current = happyPath.indexOf(app.status);
+    const furthest = Math.max(current, ...happyPath.map((s, i) => (reached.has(s) ? i : -1)));
+    return happyPath.map((status, i) => ({
+      status,
+      state: i === current ? "current" : i > furthest ? "todo" : reached.has(status) ? "done" : "skipped",
+    }));
+  }
+
+  async function detail(applicationId: string): Promise<ApplicationDetail | null> {
+    const app = summary(applicationId);
+    if (!app) return null;
+    const all = allEvents(applicationId);
+    const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
+    const posting = await postingOf(app);
+    const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
+      id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
+      undoable: !e.undoneAt && (e.kind === "note" || (e.kind === "status" && !movedSince(e, app.status))),
+    }));
+    if (posting?.jobId && posting.closed) {
+      // Discover's closing, as a neutral fact: it says nothing about the Application's Status.
+      timeline.unshift({
+        id: `posting-closed:${posting.jobId}`, at: posting.closed.at, kind: "posting-closed", cause: "apply-kit", from: null, to: null,
+        text: "Posting closed",
+        detail: `${posting.closed.how}. That's normal once a job stops taking applications, and says nothing about you. The saved copy stays on the Job page.`,
+        undoneAt: null, undoable: false,
+      });
+    }
+    timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
+    return {
+      ...app, statusSince: standing.filter((e) => e.kind === "created" || e.kind === "status").at(-1)?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+    };
+  }
+
+  const allEvents = (applicationId: string) =>
+    db.prepare("SELECT * FROM application_event WHERE application_id = ? ORDER BY at, rowid").all(applicationId).map(eventOf);
 
   async function findJobs(query: string, limit = 8): Promise<JobChoice[]> {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
@@ -523,10 +757,14 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     jobMarkers,
     addByHand,
     list,
-    get: async (id) => summary(id),
-    events: async (id) => db.prepare("SELECT * FROM application_event WHERE application_id = ? ORDER BY at, rowid").all(id).map(eventOf),
+    get: detail,
+    events: async (id) => allEvents(id),
     setStatus,
     undoEvent,
+    addNote,
+    addContact,
+    attachCv,
+    cvFile,
     findJobs,
     stats: async () => computeStats(db, today()),
   };

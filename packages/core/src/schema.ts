@@ -297,6 +297,15 @@ const migrations: string[] = [
      added_at TEXT NOT NULL,
      PRIMARY KEY (application_id, value)
    );`,
+  // Track #27: the CV attached to an Application added by hand (no Package), kept locally as sent.
+  // Its label is the Application's CV version (application.cv_version).
+  `CREATE TABLE application_cv (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     file_name TEXT NOT NULL,
+     label TEXT NOT NULL,
+     bytes BLOB NOT NULL,
+     attached_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

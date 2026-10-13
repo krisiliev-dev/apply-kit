@@ -7,6 +7,7 @@ import { SourcesPage } from "./sources/SourcesPage.tsx";
 import { JobPage } from "./job/JobPage.tsx";
 import { SearchSettingsPage } from "./settings/SearchSettingsPage.tsx";
 import { ApplicationsPage } from "./applications/ApplicationsPage.tsx";
+import { ApplicationPage } from "./applications/ApplicationPage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -32,7 +33,7 @@ export function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && path.startsWith("/profile")) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>{n.label}</a>
+              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && path.startsWith("/profile")) || (n.href === "/" && path.startsWith("/jobs/")) || (n.href === "/applications" && path.startsWith("/applications/")) ? "page" : undefined}>{n.label}</a>
             ))}
           </nav>
           <span className="grow" />
@@ -46,6 +47,7 @@ export function App() {
           {path === "/" ? <FeedPage onHealth={setHealth} />
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
             : path === "/applications" ? <ApplicationsPage onHealth={setHealth} />
+            : path.startsWith("/applications/") ? <ApplicationPage id={decodeURIComponent(path.slice("/applications/".length))} onHealth={setHealth} />
             : path === "/profile" || path === "/profile/search" ? <SearchSettingsPage onHealth={setHealth} />
             : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings/sources/coverage" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}

@@ -245,6 +245,36 @@ describe("the Applications routes", () => {
     expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
 
+  it("shows one Application in full, takes notes, contacts and the CV sent, and says when there's no such one", async () => {
+    const s = service();
+    const added = await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+    const { application } = (await added.json()) as { application: { id: string } };
+    const at = `/api/applications/${encodeURIComponent(application.id)}`;
+
+    expect((await s.request(`${at}/notes`, s.json({ text: "Recruiter called." }))).status).toBe(201);
+    expect((await s.request(`${at}/contacts`, s.json({ value: "mira@example.com" }))).status).toBe(201);
+    const badContact = await s.request(`${at}/contacts`, s.json({ value: "Mira" }));
+    expect(badContact.status).toBe(422);
+    expect(await badContact.json()).toMatchObject({ problem: "invalid" });
+
+    const pdf = new TextEncoder().encode("%PDF-1.7\n% Mira Petrova\n%%EOF\n");
+    const put = (type: string) => s.request(`${at}/cv?name=${encodeURIComponent("cv-design.pdf")}&label=Design%20v2`, { method: "PUT", headers: { "content-type": type }, body: pdf });
+    expect((await put("text/plain")).status).toBe(415);
+    expect((await put("application/pdf")).status).toBe(201);
+
+    const detail = await (await s.request(at)).json();
+    expect(detail).toMatchObject({
+      id: application.id, cvVersion: "Design v2", contacts: [{ value: "mira@example.com" }],
+      nextStep: { kind: "note", text: "Recruiter called." }, steps: [{ status: "applied", state: "current" }, {}, {}, {}, {}],
+    });
+    const file = await s.request(`${at}/cv`);
+    expect(file.headers.get("content-type")).toBe("application/pdf");
+    expect(new TextDecoder().decode(await file.arrayBuffer())).toContain("Mira Petrova");
+
+    expect((await s.request("/api/applications/no-such-id")).status).toBe(404);
+    expect((await s.request("/api/applications/no-such-id/cv")).status).toBe(404);
+  });
+
   it("carries Track's markers on the Feed and the Job: All open keeps an applied Job with its Application", async () => {
     const s = service();
     const pasted = { title: "Security Engineer", company: "Kestrel Payments", location: "Sofia", text: "Protect payments.\n3+ years in security." };

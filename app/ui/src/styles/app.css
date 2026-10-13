@@ -300,6 +300,74 @@ h2[tabindex="-1"]:focus { outline: none }
 .dlg .results label:has(input:checked) { background: var(--met-soft) }
 .jobs .marker { margin-block: var(--s-2); align-items: center }
 
+/* Application page (from the Track hi-fi, application.html): header, stepper, next step, timeline and
+   side panels. Tokens only; mirrors docs/design/hifi/track.css "application page". */
+.app-page .app-head { display: grid; gap: var(--s-3) }
+.app-page .app-head h1 { overflow-wrap: anywhere }
+.app-page .app-meta { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-5); color: var(--ink-2); align-items: center }
+.app-page .app-meta b { color: var(--ink); font-weight: 600 }
+.app-page .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(280px, 336px); gap: var(--s-6); align-items: start }
+.app-page .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 900px) { .app-page .cols { grid-template-columns: minmax(0, 1fr) } }
+.app-page .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.app-page .sec-head .grow { flex: 1 1 auto }
+.next-step { border: 1.5px solid var(--ink) }
+.next-step .kicker { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-3); letter-spacing: .02em; text-transform: uppercase }
+.next-step.ask { border-color: var(--bloom); border-left-width: 4px }
+.next-step.ask .kicker { color: var(--bloom) }
+
+/* status stepper: happy path as steps, closed outcomes as a branch after "or" */
+.stepper { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3) }
+.stepper ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center }
+.stepper li { display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-3) }
+.stepper li + li::before { content: ""; width: 18px; height: 1px; background: var(--rule) }
+.stepper .dot { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; border: 1.5px dashed var(--border-control) }
+.stepper .dot svg { width: 10px; height: 10px }
+.stepper .done { color: var(--ink-2) }
+.stepper .done .dot { border: 0; background: var(--met-soft); color: var(--met) }
+.stepper .now { color: var(--ink); font-weight: 600 }
+.stepper .skipped { color: var(--ink-3); text-decoration: line-through; text-decoration-color: var(--border-control) }
+.stepper .now .dot { border: 0; background: var(--action); color: var(--on-action) }
+.stepper .now.win .dot { background: var(--bloom) }
+.stepper .or { font-size: var(--fs-caption); color: var(--ink-3) }
+.stepper .branch { display: inline-flex; gap: var(--s-2); flex-wrap: wrap }
+.stepper .branch .status { border-style: dashed }
+.stepper .branch .status.is-current { border-style: solid; color: var(--ink); font-weight: 700 }
+.stepper .set { margin-left: auto; display: flex; align-items: center; gap: var(--s-3) }
+.stepper .set label { font-size: var(--fs-small); font-weight: 600; color: var(--ink-2) }
+.stepper .set select.input { width: auto; min-height: 36px; padding: var(--s-2) var(--s-4); font-size: var(--fs-small) }
+
+/* timeline */
+.timeline { list-style: none; margin: 0; padding: 0; display: grid }
+.timeline li { display: grid; grid-template-columns: minmax(96px, 120px) minmax(0, 1fr); gap: var(--s-1) var(--s-5); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.timeline li:first-child { border-top: 0; padding-top: 0 }
+.timeline time { color: var(--ink-3); font-variant-numeric: tabular-nums }
+.timeline .ev { display: grid; gap: var(--s-2); min-width: 0 }
+.timeline .ev .line { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: baseline }
+.timeline .ev b { font-weight: 600 }
+.timeline .ev .muted { overflow-wrap: anywhere; white-space: pre-line }
+.timeline li.undone .ev b { text-decoration: line-through; text-decoration-color: var(--border-control) }
+@media (max-width: 520px) { .timeline li { grid-template-columns: minmax(0, 1fr) } }
+.note-form textarea.input { min-height: 96px; resize: vertical; line-height: var(--lh-body) }
+
+/* side panels */
+.pkg { display: grid; gap: var(--s-3) }
+.pkg .item { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.pkg .item:first-child { border-top: 0; padding-top: 0 }
+.pkg .item b { font-weight: 600; overflow-wrap: anywhere }
+.pkg .cv-row { flex-wrap: nowrap; align-items: flex-start; min-width: 0 }
+.doc-thumb { aspect-ratio: 210 / 297; width: 72px; background: var(--doc-paper); border: 1px solid var(--rule); border-radius: var(--r-sheet); padding: var(--s-2); display: grid; gap: 3px; align-content: start; flex: none }
+.doc-thumb i { display: block; height: 3px; background: var(--doc-rule); border-radius: 2px }
+.doc-thumb i.h { background: var(--doc-accent); width: 60% }
+.doc-thumb i.s { width: 70% }
+.facts-list { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); overflow-wrap: anywhere }
+.app-page .add-contact { justify-self: start }
+.app-page .empty.solid { border-style: solid }
+.skel.w20 { width: 20% }
+.skel.tall { height: 64px; border-radius: var(--r-small) }
+.skel.h-title { height: var(--s-8) }
+.skel.h-step { height: var(--s-7) }
+
 /* Stats strip on Applications (from the Track hi-fi). Scoped under .strip: Settings has its own .tile. Tokens only. */
 .strip { display: grid; grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(0, 1fr)) minmax(0, 1.5fr); gap: var(--s-4) }
 @media (max-width: 1080px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
