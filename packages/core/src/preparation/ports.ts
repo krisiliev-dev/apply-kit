@@ -4,19 +4,9 @@
 import type { AiBudget } from "../budget.ts";
 import type { Clock, Settings, SqlDatabase } from "../ports.ts";
 import type { Writer } from "../writing/writer.ts";
+import type { DocumentToRender } from "../documents/content.ts";
 
-export type DocumentKind = "cv" | "cover-letter";
-export type DocumentLanguage = "en" | "bg";
-
-/** One document to print from its fixed HTML template (ADR 0003). The model never writes markup. */
-export interface DocumentToRender {
-  kind: DocumentKind;
-  language: DocumentLanguage;
-  /** The PDF's title metadata. */
-  title: string;
-  /** The structured content the template is filled from; typed by the template ticket (#61). */
-  content: unknown;
-}
+export type { DocumentKind, DocumentLanguage, DocumentToRender } from "../documents/content.ts";
 
 export interface RenderedDocument {
   pdf: Uint8Array;

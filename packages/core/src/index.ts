@@ -57,3 +57,8 @@ export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
   PdfTextReader, PdfText, FileStore, StoredFile,
 } from "./preparation/ports.ts";
+export type {
+  CvContent, CvRole, CvEducation, LetterContent, Letterhead, DocumentDate, MonthYear, DocumentPhoto,
+} from "./documents/content.ts";
+export { checkAts } from "./documents/ats.ts";
+export type { AtsCheck, AtsCheckId, AtsCheckResult, AtsInput, AtsKeyword } from "./documents/ats.ts";
