@@ -82,3 +82,16 @@ export function recognisePortal(address: string | undefined): PortalPage {
 
   return unknown;
 }
+
+/** The six portals in words, with the hosts Kris is asked to allow for them (optional host permissions). */
+export const portals: { name: PortalName; label: string; hosts: string[] }[] = [
+  { name: "workday", label: "Workday", hosts: ["myworkdayjobs.com", "myworkdaysite.com"] },
+  { name: "greenhouse", label: "Greenhouse", hosts: ["greenhouse.io"] },
+  { name: "lever", label: "Lever", hosts: ["lever.co"] },
+  { name: "smartrecruiters", label: "SmartRecruiters", hosts: ["smartrecruiters.com"] },
+  { name: "workable", label: "Workable", hosts: ["workable.com"] },
+  { name: "ashby", label: "Ashby", hosts: ["ashbyhq.com"] },
+];
+
+/** The match patterns for "Allow the 6 portals": the manifest's optional_host_permissions, exactly. */
+export const portalOrigins: string[] = portals.flatMap((p) => p.hosts.map((h) => `https://*.${h}/*`));
