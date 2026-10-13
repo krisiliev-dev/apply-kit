@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed,
+  WatchlistSeed, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -243,3 +243,56 @@ export async function fetchPairedDevices(signal?: AbortSignal): Promise<PairedDe
 export async function unpairDevice(id: string): Promise<void> {
   await json(await postJson(`/api/pairing/devices/${encodeURIComponent(id)}/unpair`));
 }
+
+// ---------- Profile (#53) ----------
+
+/** What Profile holds and what waits for Kris per section; the counts add up to the nav badge. */
+export async function fetchProfileSummary(signal?: AbortSignal): Promise<ProfileSummary> {
+  return json(await fetch("/api/profile/summary", { signal }));
+}
+
+export async function fetchPieces(query: PieceQuery, signal?: AbortSignal): Promise<PieceList> {
+  const q = new URLSearchParams({ ...(query.kind && { kind: query.kind }), ...(query.angle && { angle: query.angle }), ...(query.search?.trim() && { q: query.search.trim() }) });
+  return json(await fetch(`/api/profile/pieces?${q}`, { signal }));
+}
+
+export async function fetchPiece(id: string, signal?: AbortSignal): Promise<ProfilePiece> {
+  return json(await fetch(`/api/profile/pieces/${encodeURIComponent(id)}`, { signal }));
+}
+
+/** Saves a piece; a refused one resolves with its problems and fixes (it doesn't throw). */
+export async function savePiece(input: PieceInput): Promise<SavePieceResult> {
+  const res = await postJson("/api/profile/pieces", input);
+  return res.status === 422 ? ((await res.json()) as SavePieceResult) : json(res);
+}
+
+export async function deletePiece(id: string): Promise<DeletedPiece> {
+  return json(await postJson(`/api/profile/pieces/${encodeURIComponent(id)}/delete`));
+}
+
+export async function fetchContact(signal?: AbortSignal): Promise<Contact> {
+  return json(await fetch("/api/profile/contact", { signal }));
+}
+
+/** Saves contact details; refused ones resolve with their problems. */
+export async function saveContact(details: ContactDetails): Promise<SaveContactResult> {
+  const res = await fetch("/api/profile/contact", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(details) });
+  return res.status === 422 ? ((await res.json()) as SaveContactResult) : json(res);
+}
+
+export async function uploadPhoto(file: File): Promise<SaveContactResult> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  const res = await fetch("/api/profile/photo", {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ fileName: file.name, base64: btoa(binary) }),
+  });
+  return res.status === 422 ? ((await res.json()) as SaveContactResult) : json(res);
+}
+
+export async function removePhoto(): Promise<Contact> {
+  return json(await postJson("/api/profile/photo/remove"));
+}
+
+/** The one-click export downloads from here. */
+export const profileExportUrl = "/api/profile/export";

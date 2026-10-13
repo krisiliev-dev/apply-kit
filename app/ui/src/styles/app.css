@@ -264,3 +264,36 @@ h2[tabindex="-1"]:focus { outline: none }
 
 /* Chrome extension pairing code: large and spaced so it is easy to type across. */
 .pair-code { font-family: var(--font-display); font-size: var(--fs-h2); letter-spacing: .12em; font-variant-numeric: tabular-nums; font-weight: 600 }
+
+/* Profile (from the Profile hi-fi): master profile, Edit piece, contact. Tokens only. */
+.local { display: inline-flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; font-size: var(--fs-small); color: var(--ink-2) }
+.local svg { width: 14px; height: 14px; color: var(--action); flex: none }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--s-6); align-items: start }
+.col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 960px) { .cols { grid-template-columns: minmax(0, 1fr) } }
+.form { max-width: 640px; display: grid; gap: var(--s-6); min-width: 0 }
+.form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+.form fieldset:focus { outline: none }
+.form legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+.form .opt { font-size: var(--fs-small) }
+.form .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
+.form .help { font-size: var(--fs-caption); color: var(--ink-3) }
+.field .label { font-weight: 600; font-size: var(--fs-small) }
+.textarea { font: inherit; width: 100%; min-height: 88px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); resize: vertical; line-height: var(--lh-body) }
+.textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+.textarea[aria-invalid="true"], .input[aria-invalid="true"] { border-color: var(--gap); box-shadow: 0 0 0 3px var(--gap-soft) }
+.errsum { display: grid; gap: var(--s-2) }
+.errsum:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.errsum ul { margin: 0; padding-left: var(--s-6) }
+.errsum a { color: inherit }
+.chips-edit { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; padding: var(--s-2) var(--s-3); border: 1px solid var(--border-control); border-radius: var(--r-control); background: var(--surface); min-height: 40px }
+.chips-edit .chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 var(--s-1); min-width: 24px; min-height: 24px }
+.chips-edit input { border: 0; outline: 0; font: inherit; flex: 1 1 120px; min-width: 80px; background: transparent; color: var(--ink) }
+.chips-edit:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4) }
+@media (max-width: 640px) { .pair { grid-template-columns: 1fr } }
+.pieces-search { flex: 1 1 220px; max-width: 320px }
+.angle-select { width: auto }
+.group .show-more { justify-self: start }
+.piece:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.kv .links { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); overflow-wrap: anywhere }
