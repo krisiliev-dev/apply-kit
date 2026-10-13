@@ -338,6 +338,7 @@ function JobRow({ job, marker, asOf, active, checked, showSavedChip, rowRef, onF
           : job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
         <span className="narrow meta">{where} · {salary} · {posted}</span>
         <div className="narrow"><RowChips job={job} /></div>
+        <FeedMarker marker={marker} company={job.company} tabIndex={tab} jobName={named(job)} />
         <div className="why-row">
           <div className="why">
             {job.fit.why}
@@ -355,7 +356,6 @@ function JobRow({ job, marker, asOf, active, checked, showSavedChip, rowRef, onF
             <button className="btn ghost sm" type="button" tabIndex={tab} onClick={onPass}>Pass…<span className="sr-only"> {named(job)}</span></button>
           </div>
         </div>
-        <FeedMarker marker={marker} tabIndex={tab} jobName={named(job)} />
       </td>
       <td className="wide">{where}</td>
       <td className="wide"><RowChips job={job} /></td>

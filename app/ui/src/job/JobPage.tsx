@@ -175,9 +175,11 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         </div>
         <div className="col side">
           <Decide job={job} track={track} onReopen={reopen} onTracked={refresh} toaster={toaster} />
+          {/* With Applications at this company, their history comes right after the decision. */}
+          {track?.history.length ? <History job={job} track={track} /> : null}
           <Boost job={job} onChanged={answered} />
           <PostingsPanel job={job} onChanged={answered} />
-          <History job={job} track={track} />
+          {!track?.history.length && <History job={job} track={track} />}
         </div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">{said}</p>
@@ -667,7 +669,7 @@ function TrackBanner({ job, track }: { job: JobDetail; track: JobMarker | null }
   return (
     <div className={`banner ${before.status === "rejected" ? "warning" : "info"}`}>
       <span className="text">
-        <b>You applied to {before.company} {agoWords(before.appliedOn)}.</b> {before.title}, applied {shortDay(before.appliedOn)}{outcome}.
+        <b>You applied to {job.company} {agoWords(before.appliedOn)}.</b> {before.title}, applied {shortDay(before.appliedOn)}{outcome}.
         {" "}{before.title === job.title || before.title === titleOf(job) ? "Applying again is allowed." : "This is a different role, so applying again is normal."}
       </span>
       <a className="btn sm" href={applicationHref(before.id)}>Open that application<span className="sr-only">: {before.title}</span></a>

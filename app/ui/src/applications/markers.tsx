@@ -17,15 +17,25 @@ export function AppliedPill({ application }: { application: ApplicationMarker })
   );
 }
 
-/** Another Application at the same company, in words: "Kestrel rejected you 18 Jun · SOC Analyst". */
-export function sameCompanyText(m: ApplicationMarker): string {
-  if (m.status === "rejected") return `${m.company} rejected you ${m.closedOn ? shortDay(m.closedOn) : `(applied ${shortDay(m.appliedOn)})`} · ${m.title}`;
-  if (m.status === "withdrawn") return `You withdrew from ${m.company} ${m.closedOn ? shortDay(m.closedOn) : `(applied ${shortDay(m.appliedOn)})`} · ${m.title}`;
-  return `Applied to ${m.company} ${shortDay(m.appliedOn)} · ${m.title} · ${statusLabel[m.status]}`;
+/**
+ * Another Application at the same company, in words: "Kestrel rejected you 18 Jun · SOC Analyst".
+ * `company` is the name as the Job shows it (the Application may spell it with its legal form).
+ */
+export function sameCompanyText(m: ApplicationMarker, company = m.company): string {
+  if (m.status === "rejected") return `${company} rejected you ${m.closedOn ? shortDay(m.closedOn) : `(applied ${shortDay(m.appliedOn)})`} · ${m.title}`;
+  if (m.status === "withdrawn") return `You withdrew from ${company} ${m.closedOn ? shortDay(m.closedOn) : `(applied ${shortDay(m.appliedOn)})`} · ${m.title}`;
+  return `Applied to ${company} ${shortDay(m.appliedOn)} · ${m.title} · ${statusLabel[m.status]}`;
 }
 
 /** A Feed row's line: this Job's Application with a link to it, else a recent one at the same company. */
-export function FeedMarker({ marker, tabIndex, jobName }: { marker: JobMarker | undefined; tabIndex: number; jobName: string }) {
+export function FeedMarker({ marker, company, tabIndex, jobName }: {
+  marker: JobMarker | undefined;
+  /** The Job's company, as the row shows it. */
+  company: string;
+  tabIndex: number;
+  /** "<title> at <company>", for the link's accessible name. */
+  jobName: string;
+}) {
   if (!marker) return null;
   const { application, sameCompany } = marker;
   if (application) {
@@ -39,7 +49,7 @@ export function FeedMarker({ marker, tabIndex, jobName }: { marker: JobMarker | 
     );
   }
   if (!sameCompany) return null;
-  return <div className="chips marker"><span className="chip applied">{sameCompanyText(sameCompany)}</span></div>;
+  return <div className="chips marker"><span className="chip applied">{sameCompanyText(sameCompany, company)}</span></div>;
 }
 
 /** "4 months ago", "2 weeks ago", "3 days ago", "today": how long ago a day was. */
