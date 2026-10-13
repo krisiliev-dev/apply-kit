@@ -27,8 +27,24 @@ const pattern = new RegExp(
   "giu",
 );
 
-export function quantities(text: string): Quantity[] {
+// Small counts written as words. "One" (and "един") is read only in a source: in a piece it's too
+// often not a number at all ("one of the first"), and a piece with a number should show it as a digit.
+const countWords: Record<string, number> = {
+  two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
+  два: 2, две: 2, три: 3, четири: 4, пет: 5, шест: 6, седем: 7, осем: 8, девет: 9, десет: 10,
+};
+const oneWords: Record<string, number> = { one: 1, един: 1, една: 1, едно: 1 };
+const wordPattern = (words: string[]) => new RegExp(String.raw`(?<![\p{L}\p{N}])${hedge}(${words.join("|")})(?![\p{L}\p{N}])`, "giu");
+const claimWords = wordPattern(Object.keys(countWords));
+const sourceWords = wordPattern([...Object.keys(countWords), ...Object.keys(oneWords)]);
+
+/** The numbers in a piece's text, or (with `source`) in the words a piece came from, which also reads "one". */
+export function quantities(text: string, { source = false }: { source?: boolean } = {}): Quantity[] {
   const found: Quantity[] = [];
+  for (const m of text.matchAll(source ? sourceWords : claimWords)) {
+    const word = m[1]!.toLowerCase();
+    found.push({ kind: "count", value: countWords[word] ?? oneWords[word]!, raw: m[0].trim(), index: m.index });
+  }
   for (const m of text.matchAll(pattern)) {
     const [raw, digits, thousands, percent, words] = m;
     if (words) {
@@ -39,7 +55,7 @@ export function quantities(text: string): Quantity[] {
     if (!percent && !thousands && /^\d{4}$/.test(digits!) && n >= 1950 && n <= 2099) continue;
     found.push({ kind: percent ? "proportion" : "count", value: percent ? n / 100 : n, raw: raw.trim(), index: m.index });
   }
-  return found;
+  return found.sort((a, b) => a.index - b.index);
 }
 
 /** Favourable but plausible rounding: within a tenth of the source's number ("about a third" → 30% or 35%, not 50%). */

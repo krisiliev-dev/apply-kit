@@ -119,6 +119,17 @@ describe("the honesty checks on saving a piece", () => {
     expect(t.preparation.piece(drafted.piece.id)).toMatchObject({ text: "Built 40 Splunk detections that cut false positives by about a third.", source: imported });
   });
 
+  it("reads numbers written as words in the source", () => {
+    const t = createTestPreparation();
+    const coach = { from: "Coach interview", quote: "I led one phishing incident and helped with two more" };
+
+    const digits = t.preparation.savePiece({ kind: "achievement", text: "Led the response to 1 phishing incident and supported 2 more.", numberSource: "measured" }, coach);
+    const inflated = t.preparation.savePiece({ kind: "achievement", text: "Led the response to three phishing incidents.", numberSource: "measured" }, coach);
+
+    expect(digits.saved).toBe(true);
+    expect(inflated).toMatchObject({ saved: false, problems: [{ field: "text", message: expect.stringContaining("three") }] });
+  });
+
   it("won't save a piece with a number until it says where the number comes from", () => {
     const t = createTestPreparation();
     const input = { kind: "achievement" as const, text: "Triaged about 25 alerts a day in a 6-person SOC.", angles: ["security" as const] };

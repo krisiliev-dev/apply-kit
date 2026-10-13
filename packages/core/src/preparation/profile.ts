@@ -295,7 +295,7 @@ function check(piece: ProfilePiece): PieceProblem[] {
   const problems: PieceProblem[] = [];
   const quote = piece.source.quote;
   if (quote) {
-    const source = quantities(quote);
+    const source = quantities(quote, { source: true });
     for (const claim of quantities(piece.text)) {
       if (source.some((q) => within(claim, q))) continue;
       const near = closest(claim, source);
