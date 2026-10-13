@@ -26,10 +26,12 @@ function when(iso: string): string {
   const d = new Date(iso);
   const time = d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Sofia" });
   if (todaySofia(d) === todaySofia()) return `today ${time}`;
-  return `${sep(d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Sofia" }))} ${time}`;
+  return `${sep(d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Sofia" })).replace(",", "")} ${time}`;
 }
+/** "Fri 9 Oct" for a YYYY-MM-DD day. */
+const shortLong = (day: string) => longDay(day).replace(",", "").replace(/ \d{4}$/, "");
 /** "Fri 9 Oct" for an ISO time, in Sofia. */
-const dayOf = (iso: string) => longDay(todaySofia(new Date(iso))).replace(/ \d{4}$/, "");
+const dayOf = (iso: string) => shortLong(todaySofia(new Date(iso)));
 
 export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: HealthSummary) => void }) {
   const [load, setLoad] = useState<Load>({ state: "loading" });
@@ -135,7 +137,7 @@ function Head({ app, onStatus }: { app: ApplicationDetail; onStatus: (a: Applica
         <h1 lang={lang}>{app.title}</h1>
         <div className="app-meta">
           <b>{app.company}</b>
-          <span>Applied {longDay(app.appliedOn).replace(/ \d{4}$/, "")}</span>
+          <span>Applied {shortLong(app.appliedOn)}</span>
           {app.status !== "applied" && <span>{statusLabel[app.status]} {dayOf(app.statusSince)}</span>}
           {app.createdHow === "by-hand" && <span>added by hand</span>}
           {app.createdHow === "i-applied" && <span>applied without apply-kit</span>}

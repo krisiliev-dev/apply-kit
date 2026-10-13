@@ -298,7 +298,7 @@ h2[tabindex="-1"]:focus { outline: none }
 .dlg .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
 .dlg .results { max-height: 240px; overflow-y: auto }
 .dlg .results label:has(input:checked) { background: var(--met-soft) }
-.decide .applied-note { font-size: var(--fs-small); color: var(--ink-2) }
+.jobs .marker { margin-block: var(--s-2); align-items: center }
 
 /* Application page (from the Track hi-fi, application.html): header, stepper, next step, timeline and
    side panels. Tokens only; mirrors docs/design/hifi/track.css "application page". */

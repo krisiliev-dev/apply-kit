@@ -3,7 +3,7 @@
 // couldn't-read and unscreened states, the Postings merged into the Job (target, split), and
 // Bulgarian postings shown in English with the original one click away, and a closed Job: how it
 // closed, Prepare disabled with the reason, reopen (with Undo) and similar open Jobs.
-import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
+import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, JobMarker, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { boostJob, confirmFact, fetchJob, fetchSources, readJob, reopenJobs, undoAdjustment, undoApplicationEvent, undoDecision } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
@@ -12,6 +12,7 @@ import { AskChip, StatusChip } from "../requirements.tsx";
 import { PostingsPanel } from "./PostingsPanel.tsx";
 import { AddApplicationDialog, type Added } from "../applications/AddApplicationDialog.tsx";
 import { shortDay, statusLabel } from "../applications/words.ts";
+import { agoWords, AppliedPill, applicationHref, weekdayDay } from "../applications/markers.tsx";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; job: JobDetail };
 
@@ -21,6 +22,8 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [said, say] = useState("");
+  // What Track knows about this Job (its Application, the History with its company).
+  const [track, setTrack] = useState<JobMarker | null>(null);
   const toaster = useToaster();
 
   // The top bar shows source health on every screen.
@@ -35,6 +38,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
     fetchJob(id, ctrl.signal)
       .then((job) => {
         setLoad({ state: "ready", job });
+        setTrack(job.track);
         // A Job merged into another lives on under that Job's id.
         if (job.id !== id) window.history.replaceState(null, "", `/jobs/${encodeURIComponent(job.id)}`);
       })
@@ -92,7 +96,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
     readJob(id).then((j) => { setLoad({ state: "ready", job: j }); say(doneText(j)); }).catch((err: unknown) => say(`Couldn't read the posting: ${message(err)}`));
   };
   const answered = (j: JobDetail, text: string) => { setLoad({ state: "ready", job: j }); say(text); };
-  const refresh = () => fetchJob(job.id).then((j) => setLoad({ state: "ready", job: j }));
+  const refresh = () => fetchJob(job.id).then((j) => { setLoad({ state: "ready", job: j }); setTrack(j.track); });
   const reopen = () => {
     reopenJobs([job.id])
       .then(async (decision) => {
@@ -119,6 +123,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         </div>
       )}
       <PastedLinkNote />
+      <TrackBanner job={job} track={track} />
       {job.unverified && (
         <div className="banner warning">
           <span className="text">
@@ -146,7 +151,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
         </div>
       )}
 
-      <JobHead job={job} />
+      <JobHead job={job} track={track} />
 
       <div className="cols">
         <div className="col">
@@ -169,9 +174,12 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
           {state !== "read" && <FitCheck job={job} />}
         </div>
         <div className="col side">
-          <Decide job={job} onReopen={reopen} toaster={toaster} />
+          <Decide job={job} track={track} onReopen={reopen} onTracked={refresh} toaster={toaster} />
+          {/* With Applications at this company, their history comes right after the decision. */}
+          {track?.history.length ? <History job={job} track={track} /> : null}
           <Boost job={job} onChanged={answered} />
           <PostingsPanel job={job} onChanged={answered} />
+          {!track?.history.length && <History job={job} track={track} />}
         </div>
       </div>
       <p className="sr-only" role="status" aria-live="polite">{said}</p>
@@ -200,7 +208,7 @@ const languageName = (code: string | null) => (code && languageNames[code]) || "
 const bandLabel: Record<FitBand, string> = { strong: "Strong fit", good: "Good fit", stretch: "Stretch" };
 const bandChip: Record<FitBand, "met" | "partly" | "neutral"> = { strong: "met", good: "met", stretch: "neutral" };
 
-function JobHead({ job }: { job: JobDetail }) {
+function JobHead({ job, track }: { job: JobDetail; track: JobMarker | null }) {
   const salary = job.keyFacts.find((f) => f.key === "salary");
   const salaryText = job.salary ?? (salary ? salary.value : job.reading.state === "read" ? "Salary not stated" : null);
   const { fit } = job;
@@ -226,6 +234,7 @@ function JobHead({ job }: { job: JobDetail }) {
         {job.reading.state === "unscreened" && <span className="chip neutral">Unscreened</span>}
         {job.language && job.language !== "en" && <span className="chip neutral">{languageName(job.language)} original</span>}
         <span className="chip neutral">Seen in {job.postings.length} {job.postings.length === 1 ? "posting" : "postings"}</span>
+        {track?.application ? <AppliedPill application={track.application} /> : track?.sameCompany && <span className="chip applied">Applied before</span>}
       </div>
     </div>
   );
@@ -542,29 +551,43 @@ function SimilarJobs({ jobs }: { jobs: FeedJob[] }) {
   );
 }
 
-function Decide({ job, onReopen, toaster }: { job: JobDetail; onReopen: () => void; toaster: Toaster }) {
+/** An open Application on this Job (the main action becomes Open application), or null. */
+const openApplication = (track: JobMarker | null) =>
+  track?.application && !isClosed(track.application.status) ? track.application : null;
+const isClosed = (s: string) => s === "rejected" || s === "withdrawn";
+
+function Decide({ job, track, onReopen, onTracked, toaster }: {
+  job: JobDetail;
+  track: JobMarker | null;
+  onReopen: () => void;
+  /** Fetch what Track knows again (after "I applied" and its undo). */
+  onTracked: () => Promise<void>;
+  toaster: Toaster;
+}) {
   const [language, setLanguage] = useState(job.packageLanguage);
   const [adding, setAdding] = useState(false);
-  const [added, setAdded] = useState<Added | null>(null);
   const appliedRef = useRef<HTMLButtonElement>(null);
-  const noteRef = useRef<HTMLParagraphElement>(null);
-  const undone = useRef(false);
-  // Once added, focus moves to the line saying so (the button that opened the dialog is gone);
+  const openRef = useRef<HTMLAnchorElement>(null);
+  const open = openApplication(track);
+  // Once added, focus moves to Open application (the button that opened the dialog is gone);
   // after Undo, back to the button.
+  const focusNext = useRef<"open" | "applied" | null>(null);
   useEffect(() => {
-    if (added) noteRef.current?.focus();
-    else if (undone.current) { undone.current = false; appliedRef.current?.focus(); }
-  }, [added]);
+    if (focusNext.current === "open" && open) { focusNext.current = null; openRef.current?.focus(); }
+    if (focusNext.current === "applied" && !open) { focusNext.current = null; appliedRef.current?.focus(); }
+  }, [open]);
   const applied = (result: Added) => {
     setAdding(false);
-    setAdded(result);
+    focusNext.current = "open";
+    onTracked().catch((err: unknown) => toaster.show({ message: `Added, but couldn't refresh the page: ${message(err)}` }));
     const a = result.application;
     toaster.show({
       message: `Added to Applications · ${statusLabel[a.status]} ${shortDay(a.appliedOn)}.`,
-      returnFocus: () => (noteRef.current ?? appliedRef.current)?.focus(),
+      returnFocus: () => (openRef.current ?? appliedRef.current)?.focus(),
       undo: () => {
         undoApplicationEvent(result.event.id)
-          .then(() => { undone.current = true; setAdded(null); toaster.announce("Removed from Applications again."); })
+          .then(() => { focusNext.current = "applied"; return onTracked(); })
+          .then(() => toaster.announce("Removed from Applications again."))
           .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
       },
     });
@@ -578,17 +601,19 @@ function Decide({ job, onReopen, toaster }: { job: JobDetail; onReopen: () => vo
   return (
     <>
       <div className="panel decide o2" role="group" aria-label="Decide">
-        <button className="btn primary" type="button" disabled aria-describedby="prep-why">
+        {open && (
+          <a className="btn primary" href={applicationHref(open.id)} ref={openRef}>
+            Open application<span className="sr-only">: {statusLabel[open.status]}, applied {shortDay(open.appliedOn)}</span>
+          </a>
+        )}
+        {/* With an open Application, Prepare package stays as a secondary action (for reapplying later). */}
+        <button className={open ? "btn" : "btn primary"} type="button" disabled aria-describedby="prep-why">
           Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}
         </button>
         <p className="why-off" id="prep-why">{why}</p>
         {job.closed && <button className="btn ghost" type="button" onClick={onReopen}>It's still open: reopen</button>}
         <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
-        {added ? (
-          <p className="applied-note" id="applied-note" ref={noteRef} tabIndex={-1}>
-            Added to <a href={`/applications#app-${encodeURIComponent(added.application.id)}`}>Applications</a>: {statusLabel[added.application.status]}, applied {shortDay(added.application.appliedOn)}.
-          </p>
-        ) : (
+        {!open && (
           <>
             <button className="btn ghost sm" type="button" ref={appliedRef} style={{ justifySelf: "start" }} onClick={() => setAdding(true)}>I applied without apply-kit…</button>
             <p className="meta">For a job you applied to on the company's site directly. Opens Add application with this Job chosen.</p>
@@ -615,6 +640,72 @@ function Decide({ job, onReopen, toaster }: { job: JobDetail; onReopen: () => vo
         />
       )}
     </>
+  );
+}
+
+/**
+ * The Job page leads with what Track knows: "You applied to this job on …" with Open application,
+ * else a recent Application at the same company ("You applied to Kestrel Payments 4 months ago").
+ */
+function TrackBanner({ job, track }: { job: JobDetail; track: JobMarker | null }) {
+  const mine = track?.application;
+  if (mine) {
+    return (
+      <div className="banner info">
+        <span className="text">
+          <b>You applied to this job on {weekdayDay(mine.appliedOn)}.</b> Status: {statusLabel[mine.status]}
+          {mine.closedOn && `, since ${shortDay(mine.closedOn)}`}.
+          {isClosed(mine.status) && " Applying again is allowed."}
+        </span>
+        <a className="btn sm" href={applicationHref(mine.id)}>Open application</a>
+      </div>
+    );
+  }
+  const before = track?.sameCompany;
+  if (!before) return null;
+  const outcome = before.status === "rejected"
+    ? `, rejected${before.closedOn ? ` ${shortDay(before.closedOn)}` : ""}`
+    : before.status === "withdrawn" ? `, withdrawn${before.closedOn ? ` ${shortDay(before.closedOn)}` : ""}` : `, ${statusLabel[before.status]} now`;
+  return (
+    <div className={`banner ${before.status === "rejected" ? "warning" : "info"}`}>
+      <span className="text">
+        <b>You applied to {job.company} {agoWords(before.appliedOn)}.</b> {before.title}, applied {shortDay(before.appliedOn)}{outcome}.
+        {" "}{before.title === job.title || before.title === titleOf(job) ? "Applying again is allowed." : "This is a different role, so applying again is normal."}
+      </span>
+      <a className="btn sm" href={applicationHref(before.id)}>Open that application<span className="sr-only">: {before.title}</span></a>
+    </div>
+  );
+}
+
+/** "History with <company>": every Application at this company, this Job's marked, newest first. */
+function History({ job, track }: { job: JobDetail; track: JobMarker | null }) {
+  const history = track?.history ?? [];
+  const id = useId();
+  return (
+    <section className="panel o4" aria-labelledby={id}>
+      <h2 id={id}>History with {job.company}</h2>
+      {history.length === 0 ? (
+        <p className="meta">No applications at {job.company} yet.</p>
+      ) : (
+        <ul className="hist">
+          {history.map((m) => (
+            <li key={m.id}>
+              <span>
+                <b><a href={applicationHref(m.id)}>{m.title}</a></b><br />
+                <span className="meta">Applied {shortDay(m.appliedOn)}{m.onThisJob && " · this job"}</span>
+              </span>
+              <span className={`status ${m.status}`}><i aria-hidden="true" />{statusLabel[m.status]}</span>
+            </li>
+          ))}
+          {!track?.application && (
+            <li>
+              <span><b>{titleOf(job)}</b><br /><span className="meta">This job</span></span>
+              <span className="chip neutral">Not applied</span>
+            </li>
+          )}
+        </ul>
+      )}
+    </section>
   );
 }
 
