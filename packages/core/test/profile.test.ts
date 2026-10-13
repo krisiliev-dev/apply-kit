@@ -74,6 +74,22 @@ describe("the honesty checks on saving a piece", () => {
     expect(t.preparation.listPieces().total).toBe(1);
   });
 
+  it.each([
+    ["an achievement with no text", { kind: "achievement", text: "  " }, "text", "Say what you did, in one sentence."],
+    ["a role with no title", { kind: "role", text: "", entry: { title: "", organisation: "Northwind Bank", city: null, start: "2022-03", end: null } }, "title", "Give the role's title."],
+    ["a role with no employer", { kind: "role", text: "", entry: { title: "Analyst", organisation: "", city: null, start: "2022-03", end: null } }, "organisation", "Give the employer."],
+    ["a role without its start month", { kind: "role", text: "", entry: { title: "Analyst", organisation: "Northwind Bank", city: null, start: "2022", end: null } }, "start", "Give the start as a month and year."],
+    ["a role that ends before it starts", { kind: "role", text: "", entry: { title: "Analyst", organisation: "Northwind Bank", city: null, start: "2022-03", end: "2021-12" } }, "end", "The end can't be before the start."],
+    ["an education with no school", { kind: "education", text: "", entry: { title: "BSc Computer Science", organisation: "", city: null, start: "2018-09", end: "2022-06" } }, "organisation", "Give the school."],
+    ["a piece under a role that doesn't exist", { kind: "skill", text: "Python", belongsTo: "piece:gone" }, "belongsTo", "That role is no longer in your profile. Pick another, or none."],
+  ] as const)("refuses %s", (_, input, field, message) => {
+    const t = createTestPreparation();
+
+    const saved = t.preparation.savePiece(input);
+
+    expect(saved).toEqual({ saved: false, problems: [{ field, message, fixes: [] }] });
+  });
+
   it("doesn't ask where a number comes from when the only numbers are years", () => {
     const t = createTestPreparation();
 

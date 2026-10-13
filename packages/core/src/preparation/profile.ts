@@ -74,7 +74,8 @@ export interface PieceOrigin {
   status?: PieceStatus;
 }
 
-export type PieceField = "kind" | "text" | "entry" | "belongsTo" | "numberSource" | "angles";
+/** The form field a problem belongs to; title, organisation, start and end are a role's or education's. */
+export type PieceField = "kind" | "text" | "title" | "organisation" | "start" | "end" | "belongsTo" | "numberSource";
 
 /** One way to put a refused piece right, in one click: the whole new text. */
 export interface PieceFix {
@@ -171,7 +172,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
       kind: input.kind,
       text: input.text.trim(),
       entry: hasEntry && input.entry ? cleanEntry(input.entry) : null,
-      belongsTo: hasEntry ? null : (input.belongsTo ?? null),
+      belongsTo: hasEntry || !input.belongsTo || !get(input.belongsTo)?.entry ? null : input.belongsTo,
       tags: uniqueTags(input.tags ?? []),
       angles: allAngles.filter((a) => (input.angles ?? []).includes(a)),
       numberSource: quantities(input.text).length > 0 ? (input.numberSource ?? null) : null,
@@ -180,7 +181,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
       createdAt: before?.createdAt ?? clock.now().toISOString(),
       updatedAt: clock.now().toISOString(),
     };
-    const problems = check(piece);
+    const problems = [...required(piece, input), ...check(piece)];
     if (problems.length > 0) return { saved: false, problems };
     db.prepare(
       `INSERT INTO profile_piece (id, kind, text, entry, belongs_to, tags, angles, number_source, status, source_from, source_quote, created_at, updated_at)
@@ -216,6 +217,26 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
   }
 
   return { save, get, all, list, remove: () => false };
+}
+
+/** What every piece needs before it can be saved: its text, or a role's or education's facts. */
+function required(piece: ProfilePiece, input: PieceInput): PieceProblem[] {
+  const problems: PieceProblem[] = [];
+  const say = (field: PieceField, message: string) => problems.push({ field, message, fixes: [] });
+  if (piece.kind === "achievement" && !piece.text) say("text", "Say what you did, in one sentence.");
+  if (piece.kind === "skill" && !piece.text) say("text", "Name the skill.");
+  if (piece.kind === "role" || piece.kind === "education") {
+    const role = piece.kind === "role";
+    const e = piece.entry ?? cleanEntry({ title: "", organisation: "", city: null, start: "", end: null });
+    if (!e.title) say("title", role ? "Give the role's title." : "Give the degree or course.");
+    if (!e.organisation) say("organisation", role ? "Give the employer." : "Give the school.");
+    if (!MONTH.test(e.start)) say("start", "Give the start as a month and year.");
+    if (e.end && !MONTH.test(e.end)) say("end", "Give the end as a month and year, or leave it empty if it's current.");
+    else if (e.end && MONTH.test(e.start) && e.end < e.start) say("end", "The end can't be before the start.");
+  } else if (input.belongsTo && !piece.belongsTo) {
+    say("belongsTo", "That role is no longer in your profile. Pick another, or none.");
+  }
+  return problems;
 }
 
 /** The honesty checks: every number in the text is one its source gives (within favourable rounding). */
