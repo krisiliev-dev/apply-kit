@@ -1,9 +1,10 @@
 // The real mail reader: the dedicated Gmail job mailbox over IMAP, read-only. It opens one folder
 // (GMAIL_MAILBOX, default INBOX) with EXAMINE, so the server can't mark anything read, move or delete
 // it, and it only ever searches and fetches. Message bodies are fetched with BODY.PEEK by imapflow.
-import { MailboxError, type AlertEmail, type MailboxProblem, type MailReader } from "@apply-kit/core";
+// It reads every email (alerts and application mail alike) for the mail store (ADR 0003).
+import { MailboxError, type MailboxProblem, type MailMessage, type MailReader } from "@apply-kit/core";
 import { ImapFlow } from "imapflow";
-import { simpleParser } from "mailparser";
+import { simpleParser, type AddressObject } from "mailparser";
 
 export interface MailSettings {
   address: string;
@@ -23,8 +24,11 @@ export interface ImapClient {
 
 export type ImapConnect = (settings: MailSettings) => ImapClient;
 
-/** Newest emails read per check at most; a dedicated alert mailbox gets a handful a day. */
-const maxEmails = 300;
+/**
+ * Newest emails read per check at most. The job mailbox gets alerts and application mail, a few dozen
+ * a day at most; this covers the first read's 30 days and catching up after a long mailbox failure.
+ */
+const maxEmails = 1000;
 
 /** GMAIL_ADDRESS, GMAIL_APP_PASSWORD (Google shows it with spaces; they're dropped) and optional GMAIL_MAILBOX. */
 export function readMailSettings(env: Record<string, string | undefined>): MailSettings | null {
@@ -55,9 +59,9 @@ export function createImapMailReader(settings: MailSettings | null, connect: Ima
           const found = await client.search({ since }, { uid: true });
           const uids = Array.isArray(found) ? found.slice(-maxEmails) : [];
           if (uids.length === 0) return [];
-          const emails: AlertEmail[] = [];
+          const emails: MailMessage[] = [];
           for await (const msg of client.fetch(uids.join(","), { uid: true, source: true, internalDate: true }, { uid: true })) {
-            if (msg.source) emails.push(await toAlertEmail(msg.uid, msg.source, msg.internalDate));
+            if (msg.source) emails.push(await toMailMessage(msg.uid, msg.source, msg.internalDate));
           }
           return emails;
         } finally {
@@ -72,16 +76,30 @@ export function createImapMailReader(settings: MailSettings | null, connect: Ima
   };
 }
 
-async function toAlertEmail(uid: number, source: Buffer, internalDate: Date | string | undefined): Promise<AlertEmail> {
+async function toMailMessage(uid: number, source: Buffer, internalDate: Date | string | undefined): Promise<MailMessage> {
+  // Of attachments, only their names and types are kept; their contents never leave this function.
   const mail = await simpleParser(source);
   return {
     id: mail.messageId ?? `uid:${uid}`,
     from: fromHeader(mail.from?.value[0]),
+    to: addresses(mail.to),
+    cc: addresses(mail.cc),
     subject: mail.subject ?? "",
     receivedAt: internalDate ? new Date(internalDate) : (mail.date ?? new Date(0)),
     html: typeof mail.html === "string" ? mail.html : (mail.textAsHtml ?? ""),
     text: mail.text ?? "",
+    inReplyTo: mail.inReplyTo?.trim() || null,
+    references: (Array.isArray(mail.references) ? mail.references : (mail.references ?? "").split(/\s+/)).map((r) => r.trim()).filter(Boolean),
+    attachments: mail.attachments.map((a) => ({ name: a.filename ?? null, type: a.contentType })),
   };
+}
+
+/** Every address in a To or Cc header, groups flattened, each as fromHeader writes it. */
+function addresses(header: AddressObject | AddressObject[] | undefined): string[] {
+  type Entry = { name?: string; address?: string; group?: Entry[] };
+  const flat = (e: Entry): Entry[] => (e.group ? e.group.flatMap(flat) : [e]);
+  const objects = header == null ? [] : Array.isArray(header) ? header : [header];
+  return objects.flatMap((o) => (o.value as Entry[]).flatMap(flat)).map(fromHeader).filter(Boolean);
 }
 
 /** "Name <address>", unquoted, as the core's sender matching reads it. */

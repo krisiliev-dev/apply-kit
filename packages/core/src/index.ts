@@ -26,7 +26,7 @@ export type {
   ExtractedWorkAuthorisation, ExtractedRemote, ExtractedSalary, ExtractionInput, ExtractionResult,
 } from "./extraction/facts.ts";
 export type { FeedRequirement, RequirementStatus, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening, FactAnswer } from "./extraction/reading.ts";
-export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, AlertEmail, Settings } from "./ports.ts";
+export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, MailMessage, MailAttachment, AlertEmail, Settings } from "./ports.ts";
 export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext, EmailAlertAdapter } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";
 export { jobPostingsFromLd } from "./capture/jsonld.ts";
