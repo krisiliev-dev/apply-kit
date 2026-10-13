@@ -1,7 +1,7 @@
 // Shared parts of Profile (hi-fi: docs/design/hifi/profile.html): the section links with their
 // counts, the words for piece types and number sources, and in-page navigation between Profile's views.
 import type { Angle, NumberSource, PieceKind, ProfilePiece, ProfileSummary } from "@apply-kit/core";
-import { entryLabel } from "@apply-kit/core";
+import { entryLabel } from "@apply-kit/core/profile";
 import type { MouseEvent } from "react";
 
 export const kindLabel: Record<PieceKind, string> = { role: "Role", achievement: "Achievement", skill: "Skill", education: "Education" };

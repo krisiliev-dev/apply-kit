@@ -1,7 +1,7 @@
 // Contact and links (hi-fi: profile.html, Master profile): the name in Latin and Cyrillic, the job
 // address, phone, city, links and an optional photo, shown as a list with Edit opening the form in place.
 import type { Contact, ContactDetails, ContactField, ContactProblem } from "@apply-kit/core";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { removePhoto, saveContact, uploadPhoto } from "../api.ts";
 import { message } from "./common.tsx";
 
@@ -22,11 +22,16 @@ export function ContactPanel({ contact, onChange, announce }: {
   const [saving, setSaving] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const editRef = useRef<HTMLButtonElement>(null);
-  const firstRef = useRef<HTMLInputElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+  // Each refused save moves focus to the error summary once it's on screen.
+  const [refused, setRefused] = useState(0);
+  useEffect(() => { if (refused) summaryRef.current?.focus(); }, [refused]);
   const empty = !contact.nameLatin;
 
-  const close = () => { setDraft(null); setProblems([]); window.setTimeout(() => editRef.current?.focus(), 0); };
+  // Closing the form puts focus back on Edit; opening it puts focus on the first field.
+  const [closed, setClosed] = useState(0);
+  useEffect(() => { if (closed) editRef.current?.focus(); }, [closed]);
+  const close = () => { setDraft(null); setProblems([]); setClosed((n) => n + 1); };
   const problem = (f: ContactField) => problems.find((p) => p.field === f);
   const set = (patch: Partial<Draft>) => draft && setDraft({ ...draft, ...patch });
 
@@ -38,7 +43,7 @@ export function ContactPanel({ contact, onChange, announce }: {
       const result = await saveContact({ ...draft, links: draft.links.split("\n") });
       if (!result.saved) {
         setProblems(result.problems);
-        window.setTimeout(() => summaryRef.current?.focus(), 0);
+        setRefused((n) => n + 1);
         return;
       }
       onChange(result.contact);
@@ -83,7 +88,7 @@ export function ContactPanel({ contact, onChange, announce }: {
         <input
           className="input" id={`ct-${f}`} type={opts.type ?? "text"} lang={opts.lang} autoComplete={opts.autoComplete ?? "off"}
           value={draft?.[f] ?? ""} onChange={(e) => set({ [f]: e.target.value })}
-          aria-invalid={p ? true : undefined} aria-describedby={ids} ref={f === "nameLatin" ? firstRef : undefined}
+          aria-invalid={p ? true : undefined} aria-describedby={ids} autoFocus={f === "nameLatin"}
         />
         {p && <span className="err" id={`ct-${f}-err`}>{p.message}</span>}
       </div>
@@ -95,7 +100,7 @@ export function ContactPanel({ contact, onChange, announce }: {
       <div className="sec-head">
         <h2 className="grow" id="contact-h">Contact and links</h2>
         {!draft && (
-          <button className="btn sm" type="button" ref={editRef} onClick={() => { setDraft(draftOf(contact)); window.setTimeout(() => firstRef.current?.focus(), 0); }}>
+          <button className="btn sm" type="button" ref={editRef} onClick={() => setDraft(draftOf(contact))}>
             {empty ? "Add" : "Edit"}<span className="sr-only"> contact and links</span>
           </button>
         )}

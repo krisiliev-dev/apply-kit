@@ -2,7 +2,7 @@
 // help under labels, errors under fields with an error summary that links to each one. A number beyond
 // its source is refused with one-click honest fixes; a piece with a number says where it comes from.
 import type { Angle, NumberSource, PieceField, PieceGroup, PieceKind, PieceProblem, ProfilePiece } from "@apply-kit/core";
-import { angles, maxAchievementLength, numberSources, pieceKinds } from "@apply-kit/core";
+import { angles, maxAchievementLength, numberSources, pieceKinds } from "@apply-kit/core/profile";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { deletePiece, fetchPiece, fetchPieces, savePiece } from "../api.ts";
 import { angleLabel, kindLabel, message, navLink, pieceName, type Go } from "./common.tsx";
@@ -64,6 +64,12 @@ export function PieceEditor({ id, go, announce, onSaved }: {
   const [tagText, setTagText] = useState("");
   const [confirming, setConfirming] = useState(false);
   const summaryRef = useRef<HTMLDivElement>(null);
+  // Each refused save moves focus to the error summary once it's on screen.
+  const [refused, setRefused] = useState(0);
+  useEffect(() => { if (refused) summaryRef.current?.focus(); }, [refused]);
+  // Focus starts on the heading once the form is there.
+  const ready = load.state === "ready";
+  useEffect(() => { if (ready) headingRef.current?.focus(); }, [ready]);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => {
@@ -74,7 +80,6 @@ export function PieceEditor({ id, go, announce, onSaved }: {
         // A new piece starts under the most recent role.
         setDraft((d) => (piece ? draftOf(piece) : { ...d, belongsTo: heads[0]?.id ?? "" }));
         setLoad({ state: "ready", piece, heads });
-        window.setTimeout(() => headingRef.current?.focus(), 0);
       })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setLoad({ state: "error", message: message(err) }); });
     return () => ctrl.abort();
@@ -118,7 +123,7 @@ export function PieceEditor({ id, go, announce, onSaved }: {
       });
       if (!result.saved) {
         setProblems(result.problems);
-        window.setTimeout(() => summaryRef.current?.focus(), 0);
+        setRefused((n) => n + 1);
         return;
       }
       onSaved(piece ? `Saved. Future packages use the new wording; approved and submitted ones keep their files.` : `Added to your master profile.`);
@@ -343,9 +348,11 @@ function kindFromUrl(): PieceKind {
 /** "Delete piece…": says what goes and what stays; focus starts on Cancel, the safe choice. */
 function DeleteDialog({ piece, under, onDelete, onCancel }: { piece: ProfilePiece; under: number; onDelete: () => void; onCancel: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
+    cancelRef.current?.focus();
   }, []);
   const done = (fn: () => void) => { ref.current?.close(); fn(); };
   return (
@@ -359,7 +366,7 @@ function DeleteDialog({ piece, under, onDelete, onCancel }: { piece: ProfilePiec
         </p>
         <div className="row">
           <button className="btn danger" type="button" onClick={() => done(onDelete)}>Delete piece</button>
-          <button className="btn ghost" type="button" autoFocus onClick={() => done(onCancel)}>Cancel</button>
+          <button className="btn ghost" type="button" ref={cancelRef} onClick={() => done(onCancel)}>Cancel</button>
         </div>
       </div>
     </dialog>

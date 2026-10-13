@@ -1,8 +1,11 @@
 // The master profile: profile pieces (roles, achievements, skills, education) with their tags,
 // angles, source and status, grouped by the role they belong to. Everything tailoring draws from;
 // nothing goes into a CV, letter or answer that isn't here. Stored in SQLite (ADR 0003).
+// Free of Node-only imports: the UI imports its constants and labels as "@apply-kit/core/profile".
 import type { Angle } from "../fit/angles.ts";
 import { angles as allAngles } from "../fit/angles.ts";
+
+export { angles } from "../fit/angles.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import { asPercent, closest, quantities, within } from "./numbers.ts";
 

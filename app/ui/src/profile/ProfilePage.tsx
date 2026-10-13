@@ -2,7 +2,7 @@
 // Edit piece, and section links to Profile's areas. Angles, the answer bank and voice arrive with
 // later tickets; Search and dealbreakers is the existing search settings page.
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
-import { angles, pieceKinds } from "@apply-kit/core";
+import { angles, pieceKinds } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileExportUrl } from "../api.ts";
 import { Icon } from "../icons.tsx";
