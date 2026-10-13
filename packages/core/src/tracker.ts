@@ -11,6 +11,7 @@ import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
 import type { Clock, SqlDatabase } from "./ports.ts";
 import { migrate } from "./schema.ts";
+import { computeStats, type TrackStats } from "./track-stats.ts";
 
 export const statuses = ["applied", "screening", "interviewing", "offer", "accepted", "rejected", "withdrawn"] as const;
 /** Where an Application stands. Rejected and withdrawn are closed. */
@@ -198,6 +199,8 @@ export interface Tracker {
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
   /** What Track knows about each of these Jobs, keyed by the id asked with (unknown ids are left out). */
   jobMarkers(jobIds: string[]): Promise<Record<string, JobMarker>>;
+  /** Stats: applications per week with the pace, response rate, interviews and what's working. */
+  stats(): Promise<TrackStats>;
 }
 
 export interface TrackerDeps {
@@ -525,6 +528,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     setStatus,
     undoEvent,
     findJobs,
+    stats: async () => computeStats(db, today()),
   };
 }
 

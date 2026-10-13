@@ -258,4 +258,14 @@ describe("the Applications routes", () => {
     expect(open.markers[jobId]).toMatchObject({ application: { appliedOn: "2026-10-07", status: "applied" } });
     expect(job).toMatchObject({ id: jobId, track: { application: { status: "applied" }, history: [{ title: "Security Engineer" }] } });
   });
+
+  it("gives the Stats strip its numbers", async () => {
+    const s = service();
+    await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+
+    const stats = await s.request("/api/applications/stats");
+
+    expect(stats.status).toBe(200);
+    expect(await stats.json()).toMatchObject({ total: 1, weeks: expect.any(Array), responseRate: { excluded: 1, rate: null } });
+  });
 });
