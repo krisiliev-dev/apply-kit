@@ -298,6 +298,27 @@ h2[tabindex="-1"]:focus { outline: none }
 .piece:focus { outline: 2px solid var(--focus); outline-offset: 2px }
 .kv .links { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); overflow-wrap: anywhere }
 
+/* Answer bank and Edit answer (from the Profile hi-fi). Tokens only. */
+.answers-head { padding: var(--s-5) var(--s-6) var(--s-4) }
+.answers-toolbar { padding: 0 var(--s-6) var(--s-4) }
+.answers-search { flex: 1 1 220px; max-width: 320px }
+.answers-none, .answers-pages { padding: var(--s-4) var(--s-6) }
+.answers-head h2:focus { outline: none }
+.answers-table .ans { max-width: 46ch; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.answers-table tbody tr { cursor: default }
+.answers-table .q { font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px }
+.answers-table .q:hover { text-decoration-color: var(--action) }
+.needs-acts { flex-wrap: wrap; gap: var(--s-2) }
+@media (max-width: 640px) { .needs { grid-template-columns: 4px minmax(0, 1fr) } .needs-acts { grid-column: 2 } }
+.textarea.short { min-height: var(--s-10) }
+.answer-type { width: auto; max-width: 100% }
+.answer-floor { max-width: 12ch }
+.wordings { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--rule); border-radius: var(--r-control) }
+.wordings li { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; padding: var(--s-2) var(--s-3); border-top: 1px solid var(--rule); font-size: var(--fs-small); overflow-wrap: anywhere }
+.wordings li:first-child { border-top: 0 }
+.wordings li > span:first-child { flex: 1 1 200px }
+.form .row .input.grow { flex: 1 1 200px; width: auto }
+
 /* Angles (from the Profile hi-fi, state Angles). Tokens only. */
 .measure { max-width: 68ch }
 .angles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s-5); align-items: start }

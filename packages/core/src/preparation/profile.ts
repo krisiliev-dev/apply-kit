@@ -123,7 +123,7 @@ export interface PieceList {
 
 /**
  * What Profile holds and what waits for Kris, per section. The section counts add up to the nav
- * badge. Angles, the answer bank and voice count nothing until their tickets build them.
+ * badge. Angles and voice count nothing until their tickets build them; the answer bank counts portal edits waiting for "keep new or old".
  */
 export interface ProfileSummary {
   pieces: number;

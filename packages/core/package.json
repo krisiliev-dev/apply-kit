@@ -5,7 +5,8 @@
   "description": "Discovery and preparation engines and domain rules. Dependencies (fetch, clock, db, AI budget, extractor, writer, mail reader, renderer, PDF reader, file store) are injected.",
   "exports": {
     ".": "./src/index.ts",
-    "./profile": "./src/preparation/profile.ts"
+    "./profile": "./src/preparation/profile.ts",
+    "./answers": "./src/preparation/answers.ts"
   },
   "dependencies": {
     "fast-xml-parser": "5.11.1",

@@ -272,6 +272,40 @@ const migrations: string[] = [
      leads TEXT,
      updated_at TEXT NOT NULL
    );`,
+  // #56: the answer bank. Each answer with its wordings and per-language versions (JSON), its
+  // category (standard or screening), kind, fill mode, rule (JSON), source (JSON), use count and last
+  // use, and a portal edit waiting for "keep new or old" (JSON). Its history is one row per change (JSON:
+  // what happened, where, and the text before and after).
+  // `answer_seed` remembers which default answers were added (and the value they were added with),
+  // so a deleted default isn't added again and an unedited one follows the contact details.
+  `CREATE TABLE answer (
+     id TEXT PRIMARY KEY,
+     question TEXT NOT NULL,
+     wordings TEXT NOT NULL,
+     versions TEXT NOT NULL,
+     category TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     mode TEXT NOT NULL,
+     rule TEXT,
+     source TEXT NOT NULL,
+     use_count INTEGER NOT NULL DEFAULT 0,
+     last_used_at TEXT,
+     portal_edit TEXT,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE answer_history (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     answer_id TEXT NOT NULL,
+     at TEXT NOT NULL,
+     detail TEXT NOT NULL
+   );
+   CREATE INDEX answer_history_answer ON answer_history(answer_id);
+   CREATE TABLE answer_seed (
+     key TEXT PRIMARY KEY,
+     answer_id TEXT NOT NULL,
+     value TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

@@ -1,6 +1,6 @@
 // Profile (hi-fi: docs/design/hifi/profile.html): the master profile with contact details, Add and
-// Edit piece, section links to Profile's areas, and Angles (#58). The answer bank and voice arrive with
-// later tickets; Search and dealbreakers is the existing search settings page.
+// Edit piece, section links to Profile's areas, Angles (#58), and the answer bank (#56) with Add and
+// Edit answer. Voice arrives with a later ticket; Search and dealbreakers is the existing search settings page.
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
 import { angles, pieceKinds } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -8,6 +8,8 @@ import { fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileEx
 import { Icon } from "../icons.tsx";
 import { SearchSettingsPage } from "../settings/SearchSettingsPage.tsx";
 import { AnglesPage } from "./AnglesPage.tsx";
+import { AnswerBank } from "./AnswerBank.tsx";
+import { AnswerEditor } from "./AnswerEditor.tsx";
 import { ContactPanel } from "./ContactPanel.tsx";
 import { PieceEditor } from "./PieceEditor.tsx";
 import {
@@ -59,8 +61,14 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
     refreshSummary();
     go("/profile");
   };
+  const savedAnswer = (said: string) => {
+    setFlash(said);
+    refreshSummary();
+    go("/profile/answers");
+  };
 
   const piece = /^\/profile\/pieces\/(.+)$/.exec(path)?.[1];
+  const answer = /^\/profile\/answers\/(.+)$/.exec(path)?.[1];
   const head = (
     <>
       <div className="page-head">
@@ -80,6 +88,13 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{live}</div>
       {piece !== undefined ? (
         <PieceEditor key={piece} id={piece === "new" ? null : decodeURIComponent(piece)} go={go} announce={announce} onSaved={saved} />
+      ) : answer !== undefined ? (
+        <AnswerEditor key={answer} id={answer === "new" ? null : decodeURIComponent(answer)} go={go} announce={announce} onSaved={savedAnswer} />
+      ) : path === "/profile/answers" ? (
+        <section className="stack" style={{ gap: "var(--s-6)" }}>
+          {head}
+          <AnswerBank go={go} announce={announce} flash={flash} clearFlash={() => setFlash(null)} onChanged={refreshSummary} />
+        </section>
       ) : path === "/profile/search" ? (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
@@ -90,10 +105,10 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
           {head}
           <AnglesPage announce={announce} />
         </section>
-      ) : path === "/profile/answers" || path === "/profile/voice" ? (
+      ) : path === "/profile/voice" ? (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
-          <NotYet area={path === "/profile/answers" ? "The answer bank" : "Voice"} />
+          <NotYet area="Voice" />
         </section>
       ) : (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
