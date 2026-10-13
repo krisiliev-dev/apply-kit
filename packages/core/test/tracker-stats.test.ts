@@ -89,3 +89,56 @@ describe("applications per week", () => {
     expect(await tracker.stats()).toMatchObject({ pace: 0, thisWeek: { count: 1, win: false } });
   });
 });
+
+describe("response rate", () => {
+  // Today is Mon 12 Oct 2026: Applications from 28 Sep or earlier are at least 14 days old.
+  it("is replies over Applications at least 14 days old, saying how many newer ones are left out", async () => {
+    const { tracker } = tracked();
+    const replied = await add(tracker, "2026-09-20");
+    await add(tracker, "2026-09-21");
+    await add(tracker, "2026-09-28"); // exactly 14 days: counted
+    await add(tracker, "2026-09-29"); // 13 days: left out
+    const young = await add(tracker, "2026-10-05"); // left out, even with a reply
+    await tracker.setStatus(replied, "screening");
+    await tracker.setStatus(young, "interviewing");
+
+    expect((await tracker.stats()).responseRate).toEqual({ replied: 1, counted: 3, excluded: 2, rate: 1 / 3, countsFrom: null });
+  });
+
+  it("counts a rejection as a reply, and a withdrawal alone as none", async () => {
+    const { tracker } = tracked();
+    const rejected = await add(tracker, "2026-09-01");
+    const withdrawn = await add(tracker, "2026-09-01");
+    await tracker.setStatus(rejected, "rejected");
+    await tracker.setStatus(withdrawn, "withdrawn");
+
+    expect((await tracker.stats()).responseRate).toMatchObject({ replied: 1, counted: 2 });
+  });
+
+  it("keeps a reply once the Status moves on, and drops one that was undone", async () => {
+    const { tracker } = tracked();
+    const movedOn = await add(tracker, "2026-09-01");
+    await tracker.setStatus(movedOn, "screening");
+    await tracker.setStatus(movedOn, "withdrawn");
+    const slip = await add(tracker, "2026-09-01");
+    const { event } = await tracker.setStatus(slip, "rejected");
+    await tracker.undoEvent(event.id);
+
+    expect((await tracker.stats()).responseRate).toMatchObject({ replied: 1, counted: 2 });
+  });
+
+  it("counts one added by hand already past Applied as replied", async () => {
+    const { tracker } = tracked();
+    await add(tracker, "2026-09-01", "rejected");
+    await add(tracker, "2026-09-01", "applied");
+
+    expect((await tracker.stats()).responseRate).toMatchObject({ replied: 1, counted: 2, rate: 0.5 });
+  });
+
+  it("has no rate yet while every Application is under 14 days old, and says when it starts counting", async () => {
+    const { tracker } = tracked();
+    await add(tracker, "2026-10-12");
+
+    expect((await tracker.stats()).responseRate).toEqual({ replied: 0, counted: 0, excluded: 1, rate: null, countsFrom: "2026-10-26" });
+  });
+});

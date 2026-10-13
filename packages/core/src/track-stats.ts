@@ -21,12 +21,25 @@ export interface TrackStats {
   pace: number;
   /** This week so far; a win only when it is above the pace. */
   thisWeek: { count: number; win: boolean };
+  /**
+   * Replies over Applications applied at least 14 days ago. `excluded` are the newer ones left out;
+   * `rate` is null while none are old enough, and `countsFrom` then says the day the first one is.
+   */
+  responseRate: { replied: number; counted: number; excluded: number; rate: number | null; countsFrom: string | null };
 }
 
 type Row = Record<string, unknown>;
 
+/** How old (in days) an Application must be to count in the response rate and What's working. */
+const replyWindowDays = 14;
+/**
+ * A Status that only a reply moves an Application to. Until email matching exists, replies are these
+ * manual moves (and an Application added by hand already at one of them); a withdrawal alone is none.
+ */
+const replyStatuses = ["screening", "interviewing", "offer", "accepted", "rejected"];
+
 export function computeStats(db: SqlDatabase, today: string): TrackStats {
-  const apps = db.prepare("SELECT id, applied_on FROM application WHERE removed_at IS NULL").all() as Row[];
+  const apps = db.prepare("SELECT id, applied_on FROM application WHERE removed_at IS NULL").all();
   const thisMonday = mondayOf(today);
   const perWeek = new Map<string, number>();
   for (const a of apps) {
@@ -40,7 +53,24 @@ export function computeStats(db: SqlDatabase, today: string): TrackStats {
   }
   const pace = median(completeWeeks(perWeek, thisMonday));
   const count = weeks.at(-1)!.count;
-  return { weeks, pace, thisWeek: { count, win: pace > 0 && count > pace } };
+
+  // An Application has a reply when any standing Event (not undone) moved it to a reply Status.
+  const repliedIds = new Set((db.prepare(
+    `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND kind IN ('created', 'status')
+     AND to_status IN (${replyStatuses.map(() => "?").join(", ")})`,
+  ).all(...replyStatuses)).map((r) => String(r.application_id)));
+  const cutoff = addDays(today, -replyWindowDays);
+  const old = apps.filter((a) => String(a.applied_on) <= cutoff);
+  const young = apps.filter((a) => String(a.applied_on) > cutoff);
+  const replied = old.filter((a) => repliedIds.has(String(a.id))).length;
+  const firstYoung = young.map((a) => String(a.applied_on)).sort()[0];
+  const responseRate = {
+    replied, counted: old.length, excluded: young.length,
+    rate: old.length ? replied / old.length : null,
+    countsFrom: !old.length && firstYoung ? addDays(firstYoung, replyWindowDays) : null,
+  };
+
+  return { weeks, pace, thisWeek: { count, win: pace > 0 && count > pace }, responseRate };
 }
 
 /** How many complete weeks the pace is the median of. */
