@@ -2,8 +2,8 @@
 // applications and Add application): the page head with Add application, the first-run empty state,
 // and every Application grouped by Status. Interviewing, Screening, Offer and Applied start open;
 // Closed starts collapsed and is never deleted. Each row has a labelled Status select: a change is an
-// Event "by you" with a 10-second (or longer) undo toast. Stats, Needs you, search and filters come
-// with later Track tickets.
+// Event "by you" with a 10-second (or longer) undo toast. A row's title opens its Application page.
+// Stats, Needs you, search and filters come with later Track tickets.
 import type { ApplicationGroup, ApplicationList, ApplicationSummary, GroupKey, HealthSummary, Status } from "@apply-kit/core";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { fetchApplications, fetchSources, setApplicationStatus, undoApplicationEvent } from "../api.ts";
@@ -315,9 +315,7 @@ function Row({ app: a, highlighted, onStatus }: { app: ApplicationSummary; highl
   return (
     <tr id={rowId(a.id)} className={[closed && "closed", highlighted && "is-focused"].filter(Boolean).join(" ") || undefined}>
       <td>
-        {a.jobId
-          ? <a className="t" href={`/jobs/${encodeURIComponent(a.jobId)}`} lang={lang}>{a.title}</a>
-          : <span className="t" lang={lang}>{a.title}</span>}
+        <a className="t" href={`/applications/${encodeURIComponent(a.id)}`} lang={lang}>{a.title}</a>
         <span className="co">{a.company}</span>
         <span className="narrow">Applied {shortDay(a.appliedOn)} · {last}</span>
       </td>
@@ -336,9 +334,14 @@ const pickKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Ho
  * Arrowing through the closed select (which fires `change` on some platforms) only moves the choice;
  * it applies on Enter or when focus leaves, so passing through Statuses never logs each one (TA-09).
  * Accepted is offered but disabled: accepting an offer is its own step, built later. Keyed by the
- * Status, so a new Status from the service starts it afresh.
+ * Status, so a new Status from the service starts it afresh. Its label is visually hidden unless
+ * `label` is given (the Application page shows "Status" beside its stepper).
  */
-function StatusSelect({ app, onStatus }: { app: ApplicationSummary; onStatus: (a: ApplicationSummary, to: Status) => Promise<boolean> }) {
+export function StatusSelect({ app, onStatus, label }: {
+  app: ApplicationSummary;
+  onStatus: (a: ApplicationSummary, to: Status) => Promise<boolean>;
+  label?: string;
+}) {
   const [value, setValue] = useState<Status>(app.status);
   const keyed = useRef(false);
   const sent = useRef<Status | null>(null);
@@ -360,7 +363,7 @@ function StatusSelect({ app, onStatus }: { app: ApplicationSummary; onStatus: (a
 
   return (
     <>
-      <label className="sr-only" htmlFor={selectId(app.id)}>Status of {app.title} at {app.company}</label>
+      <label className={label ? undefined : "sr-only"} htmlFor={selectId(app.id)}>{label ?? `Status of ${app.title} at ${app.company}`}</label>
       <select
         className="input" id={selectId(app.id)} value={value} onKeyDown={onKeyDown}
         onChange={(e) => { const to = e.target.value as Status; setValue(to); if (!keyed.current) commit(to); }}

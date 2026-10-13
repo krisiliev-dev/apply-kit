@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationEvent, ApplicationList, ApplicationSummary, GroupKey, JobChoice, Status,
+  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, Status,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -271,3 +271,27 @@ export async function setApplicationStatus(id: string, status: Status): Promise<
 export async function undoApplicationEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }> {
   return json(await postJson(`/api/applications/events/${encodeURIComponent(eventId)}/undo`));
 }
+
+const applicationPath = (id: string) => `/api/applications/${encodeURIComponent(id)}`;
+
+/** One Application in full (its page). Rejects with "No such application" when there isn't one. */
+export async function fetchApplication(id: string, signal?: AbortSignal): Promise<ApplicationDetail> {
+  return json(await fetch(applicationPath(id), { signal }));
+}
+
+export async function addApplicationNote(id: string, text: string): Promise<{ event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(id)}/notes`, { text }));
+}
+
+export async function addApplicationContact(id: string, value: string): Promise<{ contacts: Contact[] }> {
+  return json(await postJson(`${applicationPath(id)}/contacts`, { value }));
+}
+
+/** Attaches the CV sent (a PDF file) with the label it counts under as the CV version. */
+export async function attachApplicationCv(id: string, file: File, label: string): Promise<{ cv: AttachedCv; event: ApplicationEvent }> {
+  const q = new URLSearchParams({ name: file.name, label });
+  return json(await fetch(`${applicationPath(id)}/cv?${q}`, { method: "PUT", headers: { "content-type": "application/pdf" }, body: file }));
+}
+
+/** Where the attached CV opens. */
+export const applicationCvUrl = (id: string) => `${applicationPath(id)}/cv`;
