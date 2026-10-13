@@ -4,15 +4,28 @@
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
 import type { PreparationDeps } from "./ports.ts";
+import { createProfileStore, type PieceInput, type PieceList, type PieceOrigin, type PieceQuery, type SavePieceResult } from "./profile.ts";
 
 export interface PreparationEngine {
   /** This month's AI spending against the cap, shared with Discover, so Prepare can say when a part must wait. */
   budget(): BudgetInfo;
+
+  /**
+   * Adds a piece (no id) or saves an edit to one, after the honesty checks. A refused piece comes back
+   * with every problem, each tied to its field, and one-click honest fixes where there are any.
+   * Kris's own pieces are confirmed; import, the coach and packages pass where theirs came from.
+   */
+  savePiece(input: PieceInput, origin?: PieceOrigin): SavePieceResult;
+  /** The master profile grouped by role (roles, then education, then pieces tied to neither), filtered. */
+  listPieces(query?: PieceQuery): PieceList;
 }
 
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
   migrate(deps.db);
+  const profile = createProfileStore(deps);
   return {
     budget: () => deps.budget.info(),
+    savePiece: (input, origin) => profile.save(input, origin),
+    listPieces: (query) => profile.list(query),
   };
 }
