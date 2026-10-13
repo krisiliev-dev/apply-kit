@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, Status,
+  WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, Status, TrackStats,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -295,3 +295,8 @@ export async function attachApplicationCv(id: string, file: File, label: string)
 
 /** Where the attached CV opens. */
 export const applicationCvUrl = (id: string) => `${applicationPath(id)}/cv`;
+
+/** The Stats strip's numbers. */
+export async function fetchApplicationStats(signal?: AbortSignal): Promise<TrackStats> {
+  return json(await fetch("/api/applications/stats", { signal }));
+}
