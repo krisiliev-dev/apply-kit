@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fill this application · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../../../app/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../app/ui/src/styles/components.css">
+<style>
+/* page-local layout for the extension's side panel over a mock portal: tokens only */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.intro { display: grid; gap: var(--s-3); max-width: 72ch }
+/* the panel's sticky footer must never cover the focused control (WCAG 2.4.11) */
+html { scroll-padding-bottom: calc(var(--s-10) * 3) }
+
+/* browser window */
+.frame { border: 1px solid var(--rule); border-radius: var(--r-card); overflow: hidden; background: var(--surface); box-shadow: var(--shadow-raised); min-width: 0 }
+.bar { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-3) var(--s-4); background: var(--surface-sunken); border-bottom: 1px solid var(--rule); min-width: 0 }
+.bar .dots { display: flex; gap: var(--s-2) } .bar .dots i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule) }
+.url { flex: 1; min-width: 0; font-size: var(--fs-caption); color: var(--ink-2); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-pill); padding: var(--s-1) var(--s-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.ext-ico { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: var(--r-small); background: var(--action); flex: none }
+.ext-ico svg { width: 16px; height: 16px }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 360px); min-height: 680px }
+@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr) } .sp { border-left: 0; border-top: 1px solid var(--rule) } }
+
+/* the company's page: faint, dashed, clearly not apply-kit */
+.portal { background: var(--ground); padding: var(--s-6); display: grid; gap: var(--s-5); align-content: start; min-width: 0; color: var(--ink-2) }
+.p-tag { justify-self: start; font-size: var(--fs-caption); color: var(--ink-3); border: 1px dashed var(--border-control); border-radius: var(--r-small); padding: 0 var(--s-3) }
+.p-top { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) }
+.p-logo { width: 28px; height: 28px; border-radius: var(--r-small); background: var(--surface-sunken); border: 1px dashed var(--border-control) }
+.p-co { font-weight: 600; color: var(--ink-2) }
+.p-title { font-size: var(--fs-title); font-weight: 700; color: var(--ink-2) }
+.p-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); font-size: var(--fs-caption); color: var(--ink-3) }
+.p-steps li::before { content: "○ " } .p-steps .done::before { content: "● " } .p-steps .now { color: var(--ink); font-weight: 700 } .p-steps .now::before { content: "◉ " }
+.p-card { background: var(--surface); border: 1px dashed var(--border-control); border-radius: var(--r-small); padding: var(--s-5); display: grid; gap: var(--s-4); max-width: 560px; min-width: 0 }
+.p-card h3 { font-family: var(--font-text); font-size: var(--fs-body); color: var(--ink-2) }
+.pf { display: grid; gap: var(--s-2); font-size: var(--fs-small); min-width: 0 }
+.pin { position: relative; min-height: 36px; border: 1px dashed var(--border-control); border-radius: var(--r-small); padding: var(--s-3) var(--s-8) var(--s-3) var(--s-4); background: var(--surface); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pin.tall { min-height: 72px; white-space: normal }
+.pin .mk { position: absolute; right: var(--s-3); top: var(--s-3); width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center }
+.pin .mk svg { width: 11px; height: 11px }
+.pin.f { border-style: solid; border-color: var(--rule); color: var(--ink); box-shadow: inset 3px 0 0 var(--met) }
+.pin.f .mk { background: var(--met-soft); color: var(--met) }
+.pin.n { border: 1px solid var(--bloom); box-shadow: inset 3px 0 0 var(--bloom); color: var(--bloom) }
+.pin.n .mk { background: var(--bloom-soft); color: var(--bloom) }
+.pin.x { border: 1px solid var(--gap); box-shadow: inset 3px 0 0 var(--gap); color: var(--gap) }
+.pin.x .mk { background: var(--gap-soft); color: var(--gap) }
+.pin.k { border-style: solid; border-color: var(--partly); box-shadow: inset 3px 0 0 var(--partly); color: var(--ink) }
+.pin.k .mk { background: var(--partly-soft); color: var(--partly) }
+.pin.p { border: 2px solid var(--focus); color: var(--ink-3) }
+.pin.s { color: var(--ink-3); font-style: italic }
+.pbtns { display: flex; flex-wrap: wrap; gap: var(--s-3) }
+.pbtn { display: inline-block; border: 1px dashed var(--border-control); border-radius: var(--r-small); padding: var(--s-2) var(--s-5); font-size: var(--fs-small); color: var(--ink-2) }
+.pbtn.main { border-style: solid; color: var(--ink); font-weight: 600 }
+.pbtn.ring { outline: 2px dashed var(--bloom); outline-offset: 3px }
+.p-pop { border: 1px solid var(--rule); background: var(--surface); border-radius: var(--r-small); padding: var(--s-3) var(--s-4); font-size: var(--fs-small); color: var(--ink); max-width: 300px; box-shadow: var(--shadow-overlay) }
+.p-legend { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-5); font-size: var(--fs-caption); color: var(--ink-3) }
+.p-legend span { display: inline-flex; align-items: center; gap: var(--s-2) }
+.p-legend i { width: 12px; height: 12px; border-radius: var(--r-sheet); border: 1px solid var(--rule); background: var(--surface) }
+.p-legend .lf { box-shadow: inset 3px 0 0 var(--met) } .p-legend .ln { box-shadow: inset 3px 0 0 var(--bloom); border-color: var(--bloom) } .p-legend .lx { box-shadow: inset 3px 0 0 var(--gap); border-color: var(--gap) } .p-legend .lk { box-shadow: inset 3px 0 0 var(--partly); border-color: var(--partly) }
+.p-thanks { display: grid; gap: var(--s-3); max-width: 560px }
+.p-thanks b { color: var(--ink); font-size: var(--fs-title) }
+.p-text { font-size: var(--fs-small); color: var(--ink-3); max-width: 60ch }
+
+/* the side panel: apply-kit's own UI */
+.sp { background: var(--surface); border-left: 1px solid var(--rule); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-width: 0 }
+.sp-head { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--rule) }
+.sp-head .brand { font-size: var(--fs-body) }
+.conn { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-caption); color: var(--ink-3) }
+.conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--met) }
+.conn.off { color: var(--gap) } .conn.off i { background: transparent; border: 1.5px solid var(--gap) }
+.sp-body { padding: var(--s-5); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
+.sp-body h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.sp-body h3 { font-size: var(--fs-small) }
+.sp-foot { position: sticky; bottom: 0; padding: var(--s-4) var(--s-5); border-top: 1px solid var(--rule); background: var(--surface); display: grid; gap: var(--s-3) }
+.sp-foot .btn.primary { min-height: 44px; font-size: var(--fs-body) }
+.sp-foot .row { gap: var(--s-2) }
+.bound { font-size: var(--fs-caption); color: var(--ink-3) }
+.ctx { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); min-width: 0 }
+.ctx .where { font-size: var(--fs-caption); color: var(--ink-3); font-weight: 600; letter-spacing: .02em; text-transform: uppercase }
+.sp-modes { padding: var(--s-3) var(--s-5) 0 }
+.sp-modes .segmented { display: flex } .sp-modes .segmented button { flex: 1 }
+.ctx .job { font-weight: 600; overflow-wrap: anywhere }
+.ctx .why { display: flex; gap: var(--s-2); align-items: flex-start; font-size: var(--fs-small); color: var(--ink-2) }
+.ctx .why svg { width: 14px; height: 14px; flex: none; margin-top: 3px; color: var(--met) }
+.pkg { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s-2) var(--s-4); font-size: var(--fs-small); margin: 0 }
+.pkg dt { color: var(--ink-3) } .pkg dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
+.pagehead { display: grid; gap: var(--s-2) }
+.pagehead .meta b { color: var(--ink-2); font-weight: 600 }
+.counts { display: flex; flex-wrap: wrap; gap: var(--s-2) }
+.flist { list-style: none; margin: 0; padding: 0; display: grid }
+.frow { font: inherit; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-3); align-items: center; padding: var(--s-3) var(--s-2); border: 0; border-top: 1px solid var(--rule); background: none; color: var(--ink); text-align: left; cursor: pointer; border-radius: 0; min-height: 44px }
+.frow:hover { background: color-mix(in srgb, var(--surface-sunken) 55%, var(--surface)) }
+.frow .l { font-size: var(--fs-small); font-weight: 500; min-width: 0; overflow-wrap: anywhere }
+.frow .v { grid-column: 1; font-size: var(--fs-caption); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
+.frow .l { grid-column: 1; grid-row: 1 }
+.frow .chip { grid-column: 2; grid-row: 1 / span 2 }
+.frow .why2 { grid-column: 1 / -1; font-size: var(--fs-caption); color: var(--ink-3) }
+.ask { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 0 var(--s-4); padding: var(--s-4) var(--s-4) var(--s-4) var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.ask::before { content: ""; border-radius: 2px; background: var(--bloom) }
+.ask > div { display: grid; gap: var(--s-3); min-width: 0 }
+.ask .q { font-weight: 600; font-size: var(--fs-small); overflow-wrap: anywhere }
+.basis { font-size: var(--fs-caption); color: var(--ink-2); border-left: 2px solid var(--rule); padding-left: var(--s-3) }
+.ask textarea.input { min-height: 132px; resize: vertical; font-size: var(--fs-small); line-height: var(--lh-body) }
+.cnt { font-size: var(--fs-caption); color: var(--ink-3); justify-self: end; font-variant-numeric: tabular-nums }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-2); min-width: 0 }
+legend { padding: 0; font-weight: 600; font-size: var(--fs-small); margin-bottom: var(--s-2) }
+.opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-small); min-height: 24px }
+.opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 2px 0 0; flex: none }
+.callout { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); font-size: var(--fs-small); color: var(--ink-2) }
+.callout b { color: var(--ink); font-weight: 600 }
+.remind { display: grid; gap: var(--s-3); padding: var(--s-5); border: 2px solid var(--ink); border-radius: var(--r-control) }
+.remind b { font-family: var(--font-display); font-size: var(--fs-title); font-weight: 600 }
+.ticks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.ticks li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--s-3); align-items: start }
+.ticks svg { width: 14px; height: 14px; margin-top: 3px }
+.ticks .ok svg { color: var(--met) } .ticks .nb svg { color: var(--partly) } .ticks .dim svg { color: var(--ink-3) }
+.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-4); counter-reset: st; font-size: var(--fs-small) }
+.steps li { counter-increment: st; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--s-3); align-items: start }
+.steps li::before { content: counter(st); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-caption); font-weight: 700; background: var(--surface-sunken); color: var(--ink-2) }
+.steps li.done::before { content: "✓"; background: var(--met-soft); color: var(--met) }
+.steps li > div { display: grid; gap: var(--s-2); min-width: 0 }
+.copyrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-3); align-items: center; padding: var(--s-3) 0; border-top: 1px solid var(--rule) }
+.copyrow .k { font-size: var(--fs-caption); color: var(--ink-3) }
+.copyrow .v { font-size: var(--fs-small); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
+.earlier summary { cursor: pointer; font-size: var(--fs-small); font-weight: 600; color: var(--ink-2); padding: var(--s-2) 0 }
+.earlier ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.pick { display: grid; gap: var(--s-2) }
+.pick .opt { padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control) }
+.filechip { display: flex; gap: var(--s-3); align-items: center; padding: var(--s-3) var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); font-size: var(--fs-small); min-width: 0 }
+.filechip svg { width: 18px; height: 18px; color: var(--ink-3); flex: none }
+.filechip span { min-width: 0; overflow-wrap: anywhere }
+.notes { display: grid; gap: var(--s-3); max-width: 80ch; padding: var(--s-5) var(--s-2) 0; font-size: var(--fs-small); color: var(--ink-2) }
+.notes h3 { color: var(--ink) }
+.notes ul { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2) }
+.lead-h { display: grid; gap: var(--s-2) }
+#toast-host .toast { position: fixed }
+.toast .cd { font-variant-numeric: tabular-nums; opacity: .85 }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · Extension: Fill this application</span>
+  <a href="index.html">All hi-fi screens</a>
+  <div class="states" role="tablist" aria-label="State"></div>
+</div>
+
+<main id="main" class="main" style="max-width:1280px">
+  <div class="intro">
+    <p class="meta">Design step 6 · feature 3 of 4 · Apply</p>
+    <h1>Fill this application</h1>
+    <p class="muted">The Chrome side panel next to a company's portal. Left: the portal (a faint, dashed mock: the company's page, not ours). Right: apply-kit. It fills the page in front of you when you click, from your approved Package, master profile and answer bank, marks what it filled on the page, and asks about the rest. You check the page and press the portal's buttons yourself. All data is made up; the persona is Kris Marinov.</p>
+  </div>
+
+  <!-- ============ NOT PAIRED ============ -->
+  <section data-state="unpaired" data-state-name="Not paired">
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="empty1"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span></div>
+          <div class="sp-body">
+            <form class="stack" style="gap:var(--s-5)" data-noop>
+              <div class="lead-h"><h2>Pair with apply-kit</h2><p class="muted" style="font-size:var(--fs-small)">The extension gets your package from the apply-kit app on this laptop. Pair it once and it can fill portals and capture jobs.</p></div>
+              <div class="field">
+                <label for="code-1">Pairing code</label>
+                <span id="code-1-help" class="help">In apply-kit, open Settings and choose Pair the extension. Type the 6-digit code it shows.</span>
+                <input id="code-1" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="7" aria-describedby="code-1-help" placeholder="123 456">
+              </div>
+              <details><summary class="meta">Service address</summary><div class="field" style="margin-top:var(--s-3)"><label for="addr-1">apply-kit runs at</label><input id="addr-1" class="input" value="http://127.0.0.1:4310" spellcheck="false"></div></details>
+              <button class="btn primary" type="submit">Pair</button>
+            </form>
+          </div>
+          <div class="sp-foot"><p class="bound">Nothing on this page has been read. The extension keeps only the pairing token, never your profile or package.</p></div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Same pairing as Capture (spec #1, ticket #19): the side panel now hosts both. The code field explains where the code comes from, above the field, so it's read before typing.</li>
+      <li>The footer states what hasn't happened: nothing read, nothing stored.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ ALLOW PORTALS (one-time) ============ -->
+  <section data-state="setup" data-state-name="Allow portals" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="empty1"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="lead-h"><h2>Let apply-kit fill the portals it knows</h2><p class="muted" style="font-size:var(--fs-small)">A one-time step. Chrome will ask you to allow apply-kit on these six job systems, so it can fill every page of an application and forms embedded in company sites.</p></div>
+            <ul class="ticks">
+              <li class="dim"><span data-i="dot"></span><span>Workday · <span class="meta">myworkdayjobs.com, myworkdaysite.com</span></span></li>
+              <li class="dim"><span data-i="dot"></span><span>Greenhouse · <span class="meta">greenhouse.io</span></span></li>
+              <li class="dim"><span data-i="dot"></span><span>Lever · <span class="meta">lever.co</span></span></li>
+              <li class="dim"><span data-i="dot"></span><span>SmartRecruiters · <span class="meta">smartrecruiters.com</span></span></li>
+              <li class="dim"><span data-i="dot"></span><span>Workable · <span class="meta">workable.com</span></span></li>
+              <li class="dim"><span data-i="dot"></span><span>Ashby · <span class="meta">ashbyhq.com</span></span></li>
+            </ul>
+            <div class="callout"><b>What this allows, and what it doesn't</b><span>apply-kit still does nothing on these sites until you click Fill. It never presses Next or Submit, never opens pages, and never sees your passwords. You can remove the permission in Chrome's extension settings at any time.</span></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button">Allow the 6 portals</button>
+            <button class="btn ghost" type="button" aria-describedby="notnow-1">Not now</button>
+            <p id="notnow-1" class="bound">Without it, click the apply-kit icon in the toolbar on each new page before filling. Forms embedded in company sites can't be filled.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Asked once, on the first Fill, not at install: the request arrives when its reason is on screen (ADR 0005). Chrome's own prompt follows the button.</li>
+      <li>The list names each site in words. "Not now" works but is honest about the cost (a click on the toolbar icon per page; embedded forms out of reach).</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ PORTAL DETECTED ============ -->
+  <section data-state="detected" data-state-name="Portal detected" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="empty1"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <dl class="pkg" data-pkg="kestrel"></dl>
+            <div class="callout"><b>Each page: click Fill, check, then continue on Workday</b><span>apply-kit fills the page you're looking at and marks every field it touched. It never presses Workday's buttons. When the next page shows, click Fill this page again.</span></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>First line says what it recognised and why it's sure: the job ID in the address equals the package's target posting. If that's wrong, Kris stops here.</li>
+      <li>The package is summarised in words (file name, version, ATS check) so the right CV is confirmed before anything is attached.</li>
+      <li>One primary action. The loop (fill, check, continue yourself) is explained once, here, in one sentence each.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ NO PACKAGE ============ -->
+  <section data-state="no-package" data-state-name="No package" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">job-boards.eu.greenhouse.io/vireohealth/jobs/4471029</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Vireo Health on Greenhouse">
+          <span class="p-tag">Company's page · Greenhouse</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Vireo Health</span></div>
+          <div class="p-title">Platform Security Engineer</div>
+          <p class="p-text">Sofia, Bulgaria (Hybrid)</p>
+          <div class="p-card" data-pf="vireo"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx"><span class="where">Greenhouse · Vireo Health</span><span class="job">Platform Security Engineer</span><span class="why"><span data-i="info"></span>This job isn't in your Feed yet, so there's no package to fill from.</span></div>
+            <p style="font-size:var(--fs-small)">A package gives this form a tailored CV, a cover letter and an answer to "Why do you want to work at Vireo Health?" in your voice. Capture the job, prepare the package in apply-kit (about 5 minutes), then come back to this tab.</p>
+            <div class="callout"><b>If the job were already in your Feed</b><span>With a package waiting for approval: "Your package isn't approved yet · Open it to approve". With none: "Prepare a package" opens the Job.</span></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button">Capture and prepare</button>
+            <button class="btn" type="button">Capture only</button>
+            <p class="bound">"Capture and prepare" adds the job to your Feed and opens its package in apply-kit. This tab stays as it is.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>No package, no filling: a generic CV would break "quality held". The wireframe's "Fill name and email only" escape hatch is dropped (it would also create an application apply-kit can't track).</li>
+      <li>The route back is one click: capture and prepare, return to the same tab, click Fill.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ FILLING ============ -->
+  <section data-state="filling" data-state-name="Filling" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information, being filled">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="filling1"></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="pagehead" role="status" aria-live="polite"><h2><span class="row" style="gap:var(--s-3)"><span class="spin" aria-hidden="true"></span>Filling My Information</span></h2><p class="meta"><b>4 of 7</b> fields done · "City" is waiting for Workday's suggestions</p></div>
+            <ul class="flist" data-fl="filling1"></ul>
+          </div>
+          <div class="sp-foot">
+            <button class="btn" type="button">Stop filling</button>
+            <p class="bound">Stop keeps what's filled so far; Undo this page appears when it stops.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Usually under 2 seconds; typeahead fields (City) take longest, so the line names what it's waiting for.</li>
+      <li>Rows appear in the portal's order, so the list and the page line up. Progress is announced politely once, at the start and the end, not per field.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ FILLED, N TO REVIEW ============ -->
+  <section data-state="filled" data-state-name="Filled · 1 to review" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information, filled">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="filled1"></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="pagehead"><h2>My Information</h2><div class="counts"><span class="chip met" data-chip="check">6 filled</span><span class="chip ask" data-chip="ask">1 needs you</span></div><p class="meta">Page 1 of 5, as Workday's step list shows it. Filled 14:02.</p></div>
+            <div class="ask"><div>
+              <fieldset><legend class="q">City: Workday offers two matches for "Sofia"</legend>
+                <div class="pick">
+                  <label class="opt"><input type="radio" name="city-1" checked><span>Sofia, Sofia City, Bulgaria<span class="meta" style="display:block">The capital: your profile says Sofia, Bulgaria</span></span></label>
+                  <label class="opt"><input type="radio" name="city-1"><span>Sofia, Sofia Province, Bulgaria<span class="meta" style="display:block">The province around it</span></span></label>
+                </div>
+              </fieldset>
+              <div class="row"><button class="btn primary sm" type="button">Fill City</button><button class="btn ghost sm" type="button" data-show="City">Show on page</button></div>
+            </div></div>
+            <ul class="flist" data-fl="filled1"></ul>
+            <p class="meta">On the page: a tick marks each field apply-kit filled, a "?" each field that needs you. Select a row to see its field.</p>
+            <button class="btn ghost sm" type="button" style="justify-self:start" data-undo-page>Undo this page</button>
+            <div class="callout"><b>Next: check the page, then press Save and Continue on Workday.</b><span>When My Experience shows, click Fill this page. The package stays with this tab until you mark it submitted or close the tab.</span></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>What needs Kris comes first, as a ready answer to accept; the filled list follows. Each row names its source in text (Profile, Answer bank, Package), never colour alone.</li>
+      <li>Every row is a button that scrolls the portal to that field and outlines it, so panel and page cross-reference. On the page, filled fields have a pine edge and a tick; needs-you fields a pink edge and a "?".</li>
+      <li>"Page 1 of 5" is shown only because Workday prints its steps; apply-kit never claims a total it can't see. "Fill this page" stays the one primary action on every page, so the loop is predictable.</li>
+      <li>A field that already had a value is never overwritten: it's marked "Kept the portal's value" with a one-click replace.</li>
+      <li>The panel can't see the page change by itself. When the tab's address or title changes, this list moves under "Earlier pages" and the panel says "New page? Click Fill this page", so a stale list never looks current.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ DIFFERENT JOB IN THIS TAB ============ -->
+  <section data-state="switched" data-state-name="Different job" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Cloud-Security-Analyst_R-10511/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, a different job">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Cloud Security Analyst · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="empty1"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="banner warning" role="alert"><div class="text"><b>This is a different job.</b> The tab moved from Security Engineer (R-10482) to Cloud Security Analyst (R-10511). Nothing was filled from the Security Engineer package.</div></div>
+            <div class="ctx"><span class="where">Workday · Kestrel Payments</span><span class="job">Cloud Security Analyst · Sofia</span><span class="why"><span data-i="check"></span>Matched: job ID R-10511 is the target posting of your Cloud Security Analyst package (approved 12 Oct).</span></div>
+            <dl class="pkg"><dt>CV</dt><dd>Kris-Marinov-CV-Cloud-Kestrel.pdf<span class="meta" style="display:block">Security angle · v1 · ATS check passed</span></dd><dt>Answers</dt><dd>4 approved screening answers, plus your answer bank</dd></dl>
+            <p class="meta">Your Security Engineer application isn't marked as submitted. If you did submit it, mark it from its Job page in apply-kit.</p>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Every Fill re-checks the job in the tab against the package before touching anything. A different job never gets the previous job's CV or answers: the panel says so, matches again, and the context card always names the job.</li>
+      <li>With no package for the new job, this becomes the No package state. On pages without a job reference (a sign-in page), the session continues only on the same portal and company.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ CV UPLOAD ============ -->
+  <section data-state="upload" data-state-name="CV attached" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Experience, filled">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">My Experience</div>
+          <ol class="p-steps"><li class="done">My Information</li><li class="now">My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="exp"></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="pagehead"><h2>My Experience</h2><div class="counts"><span class="chip met" data-chip="check">9 filled</span><span class="chip partly" data-chip="partly">2 to check</span></div><p class="meta">Page 2 of 5 · filled 14:04</p></div>
+            <div class="filechip"><span data-i="file"></span><span><b>CV attached:</b> Kris-Marinov-CV-Security-Kestrel.pdf · 148 KB<span class="meta" style="display:block">Security angle · v3 · approved 10 Oct · ATS check passed</span></span></div>
+            <div class="ask" style="--x:0"><div>
+              <p class="q">Workday added 2 job entries after reading your CV</p>
+              <p class="basis">"Junior Security Analyst, Orbital Bank, 2023–2025" and "SOC Intern, Varna Telecom, 2022" repeat entries filled from your profile, with different dates. Nothing was removed.</p>
+              <div class="row"><button class="btn primary sm" type="button">Remove the 2 duplicates</button><button class="btn ghost sm" type="button">Keep them</button><button class="btn ghost sm" type="button" data-show="Work Experience 4">Show on page</button></div>
+            </div></div>
+            <ul class="flist" data-fl="exp"></ul>
+            <button class="btn ghost sm" type="button" style="justify-self:start" data-undo-page>Undo this page</button>
+            <details class="earlier"><summary>Earlier pages · 7 filled</summary><ul><li>My Information · 6 from your profile, 1 you chose (City)</li></ul></details>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>The CV goes in first and the page settles before anything else is filled, because Workday's own CV reading adds entries. Its duplicates are reported and removed only on Kris's click (the wireframe removed them automatically; nothing changes silently now).</li>
+      <li>The exact file, version and approval date are named, so the right tailored CV is confirmed on the page that receives it.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ UPLOAD FAILED ============ -->
+  <section data-state="upload-failed" data-state-name="CV didn't attach" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">jobs.smartrecruiters.com/oneclick-ui/company/NordlichtBank/publication/9b1c…</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Nordlicht Bank on SmartRecruiters">
+          <span class="p-tag">Company's page · SmartRecruiters</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Nordlicht Bank</span></div>
+          <div class="p-title">Application Security Engineer</div>
+          <div class="p-card" data-pf="sr"></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx"><span class="where">SmartRecruiters · Nordlicht Bank</span><span class="job">Application Security Engineer</span><span class="why"><span data-i="check"></span>Matched by job ID 744000012345678, your package's target posting.</span></div>
+            <div class="pagehead"><h2>Application</h2><div class="counts"><span class="chip met" data-chip="check">5 filled</span><span class="chip gap" data-chip="x">CV not attached</span></div></div>
+            <div class="banner warning" role="alert"><div class="text"><b>Your CV didn't attach.</b> SmartRecruiters' upload box didn't accept the file from apply-kit. Attach it yourself: it's ready in your Packages folder.</div></div>
+            <div class="filechip"><span data-i="file"></span><span>Kris-Marinov-CV-AppSec-Nordlicht.pdf · 139 KB<span class="meta" style="display:block">Packages › Nordlicht Bank · Application Security Engineer</span></span></div>
+            <div class="row"><button class="btn sm" type="button">Show in Finder</button><button class="btn ghost sm" type="button" data-copy="~/Documents/apply-kit/Packages/Nordlicht Bank · Application Security Engineer/Kris-Marinov-CV-AppSec-Nordlicht.pdf">Copy file path</button></div>
+            <p class="meta">Then drag it onto "Upload CV", or click Upload CV and pick it. Click Fill this page again afterwards: once the CV is in, SmartRecruiters may have changed fields while reading it.</p>
+            <ul class="flist" data-fl="sr"></ul>
+            <div class="row"><button class="btn ghost sm" type="button" data-undo-page>Undo this page</button><button class="btn ghost sm" type="button">Report the upload box</button></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Error message pattern: what happened, what it means, what to do. The file is one click from Finder and named exactly as in the package.</li>
+      <li>"Report this field" saves the upload box's structure locally (no values) so the SmartRecruiters filler can be fixed; nothing is sent anywhere.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ UNANSWERED QUESTIONS ============ -->
+  <section data-state="questions" data-state-name="Questions need you" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, Application Questions">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Application Questions</div>
+          <ol class="p-steps"><li class="done">My Information</li><li class="done">My Experience</li><li class="now">Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="qs"></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="pagehead"><h2>Application Questions</h2><div class="counts"><span class="chip met" data-chip="check">3 filled</span><span class="chip ask" data-chip="ask">3 need you</span></div><p class="meta">Page 3 of 5 · filled 14:06</p></div>
+
+            <div class="ask"><div>
+              <label class="q" for="sal-1">Expected gross monthly salary (EUR)</label>
+              <p class="basis" id="sal-1-b">Your answer bank says: ask each time. Suggested from your rule "upper half of a stated range": the posting says €2,800–3,600, so €3,300. Your floor is €2,300.</p>
+              <input id="sal-1" class="input" inputmode="numeric" value="3300" aria-describedby="sal-1-b">
+              <div class="row"><button class="btn primary sm" type="button">Fill 3,300</button><button class="btn ghost sm" type="button" data-show="Expected gross monthly salary">Show on page</button></div>
+            </div></div>
+
+            <div class="ask"><div>
+              <label class="q" for="det-1">Describe a detection rule you wrote that reduced false positives. <span class="meta">(max 1,000 characters)</span></label>
+              <p class="basis" id="det-1-b">New question. Drafted from your master profile: Orbital Bank › "Built 40 Splunk detections that cut false positives by about a third". Nothing added that isn't there.</p>
+              <textarea id="det-1" class="input" aria-describedby="det-1-b det-1-c" maxlength="1000" data-count>At Orbital Bank I rewrote our brute-force alert in Splunk to group failed logins by source and account over 10 minutes and to ignore our VPN health checks. It was one of about 40 detections I reworked, which together cut false-positive alerts by about a third for our 6-person SOC. I documented the change and it became the template for two other noisy rules.</textarea>
+              <span class="cnt" id="det-1-c"></span>
+              <label class="opt"><input type="checkbox"><span>Save to answer bank<span class="meta" style="display:block">Off: this reads as a one-off for Kestrel</span></span></label>
+              <div class="row"><button class="btn primary sm" type="button">Fill this answer</button><button class="btn ghost sm" type="button" data-show="Detection rule">Show on page</button></div>
+            </div></div>
+
+            <div class="ask"><div>
+              <fieldset><legend class="q">Have you ever held a government security clearance?</legend>
+                <label class="opt"><input type="radio" name="clr-1" checked><span>No</span></label>
+                <label class="opt"><input type="radio" name="clr-1"><span>Yes</span></label>
+              </fieldset>
+              <p class="basis">Your profile lists no clearance, so No is suggested. The closest answer bank entry ("Do you hold any security certifications?") is a different question, so it wasn't used.</p>
+              <label class="opt"><input type="checkbox" checked><span>Save to answer bank</span></label>
+              <div class="row"><button class="btn primary sm" type="button">Fill "No"</button><button class="btn ghost sm" type="button" data-show="Government security clearance">Show on page</button></div>
+            </div></div>
+
+            <ul class="flist" data-fl="qs"></ul>
+            <button class="btn ghost sm" type="button" style="justify-self:start" data-undo-page>Undo this page</button>
+            <p class="meta">You can also type an answer straight into the portal. apply-kit notices it when you next click Fill this page or reach the review, and offers to save it.</p>
+            <details class="earlier"><summary>Earlier pages · 16 filled</summary><ul><li>My Information · 7 filled (1 you chose)</li><li>My Experience · 9 filled, CV attached, 2 Workday duplicates removed</li></ul></details>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Only what can't be answered with confidence reaches Kris, each as a ready draft with its basis. Exact answer-bank matches fill silently; near matches that are a different question are named and refused, never guessed.</li>
+      <li>Salary is "ask each time" in the answer bank, so it's suggested from the rule, never typed into the portal unasked.</li>
+      <li>Drafts stay inside the honesty line and cite the profile piece they came from. Saving to the answer bank is explicit per question: on for reusable questions, off for one-offs. Nothing is learned silently.</li>
+      <li>Voluntary diversity questions follow the answer-bank rule ("leave blank"), shown as "Skipped · your rule" so the blanks are visible.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ ACCOUNT CREATION ============ -->
+  <section data-state="account" data-state-name="Create account" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/login?redirect=…/apply</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, Create Account">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Create Account</div>
+          <div class="p-card" data-pf="acct"></div>
+          <div class="p-pop" aria-hidden="true"><b>Use strong password?</b> <span class="meta">(Chrome)</span><br>kV7q-Tr2m-9xLp-Wd4h<br><span class="meta">Saved in Google Password Manager for myworkdayjobs.com</span></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="lead-h"><h2>Kestrel Payments' portal needs an account</h2><p class="muted" style="font-size:var(--fs-small)">Workday accounts are per company, so this is a new one even if you've used Workday before.</p></div>
+            <ol class="steps">
+              <li class="done"><div><b>Email filled</b><span class="meta">jobs@krismarinov.example, your job address, so their emails reach the job mailbox and your application is tracked.</span></div></li>
+              <li><div><b>Click the Password field</b><span class="meta">Chrome offers a strong password and saves it for this portal. Accept it, and it fills Verify New Password too. If no offer appears, right-click the field and choose Suggest password.</span><button class="btn ghost sm" type="button" data-show="Password" style="justify-self:start">Show the field</button></div></li>
+              <li><div><b>Read and tick the terms yourself</b><span class="meta">apply-kit never agrees to anything for you.</span></div></li>
+              <li><div><b>Press Create Account on the page</b><span class="meta">Then click Fill this page on My Information.</span></div></li>
+            </ol>
+            <details class="callout"><summary><b>Why apply-kit doesn't make the password</b></summary><p style="margin-top:var(--s-2)">apply-kit never sees, types or stores passwords. Your browser's password manager creates a strong one, keeps it, and fills it next time you sign in to this portal.</p></details>
+            <div class="callout" role="status"><b>Verification email</b><span>If Workday sends one, its link shows here as soon as it reaches the job mailbox, for you to open. Waiting · checked 14:01</span></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>A numbered checklist, because account creation is a sequence. The one step only Kris can do (the password) gets the most words and a way to find the field.</li>
+      <li>apply-kit marks the two password fields as new passwords so Chrome's suggestion appears reliably; it never touches their values. Terms are never ticked for Kris.</li>
+      <li>Email defaults to the job address because it closes the loop: verification and later confirmation and rejection emails reach the job mailbox and are tracked.</li>
+      <li>Sign-in pages for an existing account get one line: "Sign in with your saved password (Chrome fills it), then click Fill this page."</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ NOT A PORTAL ============ -->
+  <section data-state="not-portal" data-state-name="Not a known portal" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">careers.ostravabank.example/bg/kandidatstvai/it-security-specialist</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Ostrava Bank's own form, in Bulgarian">
+          <span class="p-tag">Company's own form</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Ostrava Bank</span></div>
+          <div class="p-title" lang="bg">IT Security Specialist · Кандидатствай</div>
+          <div class="p-card" data-pf="ostrava" lang="bg"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx"><span class="where">Not a portal apply-kit knows · Ostrava Bank</span><span class="job">IT Security Specialist</span><span class="why"><span data-i="check"></span>Your package for this job (approved 9 Oct) targets this site.</span></div>
+            <p style="font-size:var(--fs-small)">Nothing was filled, so nothing on the page is wrong. Copy each value into the form; they're in the form's order where its labels could be read.</p>
+            <div data-copy-list></div>
+            <div class="callout"><b>Fill only the fields whose label is clear</b><span>Best effort: it fills a field only when it's sure what the label asks, and marks each one on the page for you to check.</span><button class="btn sm" type="button" style="justify-self:start">Fill the clear fields</button></div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn" type="button">I've submitted this</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>On a form it doesn't know, apply-kit fills nothing by default. The copy list in the form's order makes manual entry one click per value, with "Copied" feedback.</li>
+      <li>The Bulgarian CV and letter are offered because the package for a Bulgarian posting is in Bulgarian. Label matching is opt-in and marks what it touched.</li>
+      <li>With no package targeting this site, the same panel asks "Which application is this?" and lists approved packages not yet submitted, newest first.</li>
+      <li>There's no confirmation page to detect here, so "I've submitted this" is in the footer.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ ERROR: APP NOT RUNNING ============ -->
+  <section data-state="offline" data-state-name="Error · app not running" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="empty1"></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn off"><i></i>Not connected</span></div>
+          <div class="sp-body">
+            <div class="banner error" role="alert"><div class="text"><b>Can't reach apply-kit on this laptop.</b> The extension gets your package from the app, and the app isn't answering.</div></div>
+            <ol class="steps"><li><div>Start apply-kit, or check it's still running.</div></li><li><div>Press Retry. Your place on this portal is kept.</div></li></ol>
+            <p class="meta" role="status">Retrying every 10 s · last try 14:03:20</p>
+            <p class="meta">The portal hasn't been touched. Packages aren't kept in the browser, so there's nothing to fill from until the app is back.</p>
+          </div>
+          <div class="sp-foot"><button class="btn primary" type="button">Retry</button></div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Same wording and retry rhythm as Capture's "not running" state. If the app stops mid-page, fields already filled stay filled, the panel says how many, and Undo this page still works (the previous values are kept in the page, not in the app).</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ ERROR: DIDN'T STICK ============ -->
+  <section data-state="didnt-stick" data-state-name="Error · field didn't stick" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, My Information, one field empty">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Security Engineer · Sofia</div>
+          <ol class="p-steps"><li class="now">My Information</li><li>My Experience</li><li>Application Questions</li><li>Voluntary Disclosures</li><li>Review</li></ol>
+          <div class="p-card" data-pf="stick"></div>
+          <div class="p-legend" data-legend></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="pagehead"><h2>My Information</h2><div class="counts"><span class="chip met" data-chip="check">6 filled</span><span class="chip gap" data-chip="x">1 didn't stick</span></div></div>
+            <div class="ask"><div>
+              <p class="q">Phone Number didn't stick</p>
+              <p class="basis">Workday cleared it right after filling, probably because it reformats the number as it's typed. Paste it in yourself, in the format the field wants:</p>
+              <div class="copyrow" style="border-top:0;padding-top:0"><div style="min-width:0"><div class="k">Phone Number · without +359, which is in Country Phone Code</div><div class="v">87 555 0142</div></div><button class="btn sm" type="button" data-copy="87 555 0142">Copy<span class="sr-only"> phone number</span></button></div>
+              <div class="row"><button class="btn ghost sm" type="button">Try once more</button><button class="btn ghost sm" type="button" data-show="Phone Number">Show on page</button><button class="btn ghost sm" type="button">Report this field</button></div>
+              <p class="meta">"Report" saves the field's structure on this laptop (no values) so the Workday filler can be fixed. Nothing is sent anywhere.</p>
+            </div></div>
+            <ul class="flist" data-fl="stick"></ul>
+            <button class="btn ghost sm" type="button" style="justify-self:start" data-undo-page>Undo this page</button>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">Fills only when you click. Never presses Next or Submit.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>Which field, what happened, what to do, with the value ready to paste in the field's own format. Recovery takes seconds.</li>
+      <li>It retries only when asked, once, never in a loop that could fight the portal.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ REVIEW ============ -->
+  <section data-state="review" data-state-name="Review · you submit" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/job/Sofia/Security-Engineer_R-10482/apply/applyManually</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, Review">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-title">Review</div>
+          <ol class="p-steps"><li class="done">My Information</li><li class="done">My Experience</li><li class="done">Application Questions</li><li class="done">Voluntary Disclosures</li><li class="now">Review</li></ol>
+          <div class="p-card"><h3>My Information</h3><p class="p-text">Kris Marinov · jobs@krismarinov.example · Sofia, Sofia City, Bulgaria</p><h3>My Experience</h3><p class="p-text">Kris-Marinov-CV-Security-Kestrel.pdf · 3 jobs · 1 degree</p><h3>Application Questions</h3><p class="p-text">6 answered</p><div class="pbtns"><span class="pbtn">Back</span><span class="pbtn main ring">Submit</span></div></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="remind"><b>Read the review page, then press Submit yourself.</b><span style="font-size:var(--fs-small)">apply-kit never submits. It's your name on it.</span></div>
+            <div class="stack"><h3>Worth a look before you submit</h3>
+              <ul class="ticks">
+                <li class="ok"><span data-i="check"></span><span>CV attached: Kris-Marinov-CV-Security-Kestrel.pdf (v3, approved 10 Oct)</span></li>
+                <li class="ok"><span data-i="check"></span><span>22 fields filled across 4 pages</span></li>
+                <li class="nb"><span data-i="partly"></span><span>1 value you pasted yourself: Phone Number</span></li>
+                <li class="nb"><span data-i="partly"></span><span>2 Workday duplicates removed on My Experience</span></li>
+                <li class="dim"><span data-i="dash"></span><span>3 voluntary questions left blank, by your rule</span></li>
+              </ul>
+            </div>
+            <div class="stack"><h3>Answers you typed on the portal</h3>
+              <label class="opt"><input type="checkbox" checked><span>"Are you willing to travel up to 10%?" → Yes</span></label>
+              <label class="opt"><input type="checkbox" checked><span>"Preferred pronouns (optional)" → left blank</span></label>
+              <button class="btn sm" type="button" style="justify-self:start">Save 2 to the answer bank</button>
+            </div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-fill>Fill this page</button>
+            <p class="bound">After you press Submit, click Fill this page on the page that follows. On a confirmation page it asks whether you submitted instead of filling.</p>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>The reminder is the focal element: a heavy-bordered box. On the page the Submit button gets a dashed pink ring (the only pink on the page), but it's never pressed.</li>
+      <li>The summary lists anything unusual to check on the review page, and offers to save answers Kris typed on the portal, each one ticked off individually.</li>
+      <li>No "I've submitted this" here: on the review page it would be pressed before submitting. Marking happens on the confirmation page (or from the Job page in apply-kit).</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ CONFIRMATION: DID YOU SUBMIT? ============ -->
+  <section data-state="confirm" data-state-name="Submitted?" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/userHome</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, application submitted">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-thanks"><b>Application Submitted</b><p class="p-text">Thank you for applying for Security Engineer (R-10482). You can track your application in your candidate home.</p><div class="pbtns"><span class="pbtn">Go to Candidate Home</span></div></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="ctx" data-ctx="kestrel"></div>
+            <div class="lead-h"><h2>Did you submit?</h2><p class="muted" style="font-size:var(--fs-small)">Workday is showing its confirmation page, which usually means yes.</p></div>
+            <p class="meta">Marking creates the Application with this package linked, so apply-kit can match Kestrel's emails to it. If you skip it, apply-kit asks again when Workday's confirmation email reaches the job mailbox.</p>
+            <div class="stack"><h3>Answers you typed on the portal</h3>
+              <label class="opt"><input type="checkbox" checked><span>"Are you willing to travel up to 10%?" → Yes</span></label>
+              <p class="meta">Saved to your answer bank when you mark as submitted, unless you untick it.</p>
+            </div>
+          </div>
+          <div class="sp-foot">
+            <button class="btn primary" type="button" data-mark-submitted>Mark as submitted</button>
+            <button class="btn ghost" type="button">Not yet</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>The confirmation page is a hint, not proof: Kris confirms, because the Application should exist only if it was really submitted.</li>
+    </ul></div>
+  </section>
+
+  <!-- ============ MARKED ============ -->
+  <section data-state="marked" data-state-name="Marked as submitted" hidden>
+    <div class="frame">
+      <div class="bar"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="url">kestrelpayments.wd3.myworkdayjobs.com/en-US/Kestrel_Careers/userHome</span><span class="ext-ico" data-mark></span></div>
+      <div class="split">
+        <div class="portal" role="region" aria-label="Mock portal: Kestrel Payments on Workday, application submitted">
+          <span class="p-tag">Company's page · Workday</span>
+          <div class="p-top"><span class="p-logo"></span><span class="p-co">Kestrel Payments</span></div>
+          <div class="p-thanks"><b>Application Submitted</b><p class="p-text">Thank you for applying for Security Engineer (R-10482). You can track your application in your candidate home.</p><div class="pbtns"><span class="pbtn">Go to Candidate Home</span></div></div>
+        </div>
+        <aside class="sp" aria-label="apply-kit side panel">
+          <div class="sp-head"><span class="brand" data-brand></span><span class="conn"><i></i>Connected</span></div>
+          <div class="sp-body">
+            <div class="banner success" role="status"><div class="text"><b>Application created.</b> Security Engineer at Kestrel Payments is now tracked.</div></div>
+            <dl class="pkg">
+              <dt>Status</dt><dd><span class="status applied"><i></i>Applied</span></dd>
+              <dt>Submitted</dt><dd>13 Oct, 14:20, via Workday</dd>
+              <dt>Package</dt><dd>CV v3 · 9 answers · ATS check passed</dd>
+              <dt>Portal</dt><dd style="overflow-wrap:anywhere">kestrelpayments.wd3.myworkdayjobs.com</dd>
+            </dl>
+            <p class="meta">Track takes it from here: replies to the job address move its status, and a follow-up comes due if nothing arrives.</p>
+          </div>
+          <div class="sp-foot">
+            <a class="btn primary" href="#marked">Open the Application</a>
+            <button class="btn ghost" type="button" data-undo-mark>Undo</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="notes"><h3>Design notes</h3><ul>
+      <li>The Application carries the package, portal, address and time. Undo stays in the panel until it closes (not a 10-second toast), because the mistake may be noticed only after rereading the portal.</li>
+      <li>Marking the same package again says "Already marked as submitted on 13 Oct" and links to the Application; it never creates a second one.</li>
+      <li>The fill session for this tab ends here; the next portal in this tab starts fresh.</li>
+    </ul></div>
+  </section>
+</main>
+<div id="toast-host" role="status" aria-live="polite"></div>
+<div id="live" class="sr-only" role="status" aria-live="polite"></div>
+
+<script>
+(function () {
+  const $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+  const live = $("#live");
+  const announce = msg => { live.textContent = ""; setTimeout(() => live.textContent = msg, 60); };
+
+  const icon = {
+    check: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    ask: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M4.3 4.4a1.8 1.8 0 1 1 2.5 1.7c-.5.2-.8.6-.8 1.1v.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="9.8" r=".9" fill="currentColor"/></svg>',
+    x: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    partly: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>',
+    dash: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+    dot: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="2.4" fill="currentColor"/></svg>',
+    info: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 3.6v3M6 8.2v.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
+    file: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M4 2h7l4 4v10H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M11 2v4h4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
+  };
+  const mark = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--on-action)"/></svg>';
+  $$("[data-mark]").forEach(el => { el.innerHTML = mark; el.setAttribute("role", "img"); el.setAttribute("aria-label", "apply-kit extension icon"); });
+  $$("[data-brand]").forEach(el => el.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit');
+  $$("[data-i]").forEach(el => el.innerHTML = icon[el.dataset.i]);
+  $$("[data-chip]").forEach(el => el.insertAdjacentHTML("afterbegin", icon[el.dataset.chip]));
+
+  // context card and package summary for the Kestrel Payments / Workday application
+  $$('[data-ctx="kestrel"]').forEach(el => el.innerHTML = `<span class="where">Workday · Kestrel Payments</span><span class="job">Security Engineer · Sofia</span><span class="why">${icon.check}Matched: job ID R-10482 is your package's target posting.</span>`);
+  $$('[data-pkg="kestrel"]').forEach(el => el.innerHTML = `<dt>CV</dt><dd>Kris-Marinov-CV-Security-Kestrel.pdf<span class="meta" style="display:block">Security angle · v3 · ATS check passed</span></dd><dt>Answers</dt><dd>6 approved screening answers, plus your answer bank</dd><dt>Letter</dt><dd>Ready; used if the portal asks for one</dd>`);
+
+  // portal mock fields: [label, value, kind]  kinds: e empty, f filled, n needs you, x didn't stick, k kept portal value, p password (focused), s skipped
+  const PF = {
+    empty1: [["How did you hear about us?*", "Select one", "e"], ["Have you previously worked for Kestrel Payments?*", "Select one", "e"], ["Given Name*", "", "e"], ["Family Name*", "", "e"], ["Email*", "", "e"], ["Phone Number*", "", "e"], ["City*", "", "e"]],
+    filling1: [["How did you hear about us?*", "Company careers site", "f"], ["Have you previously worked for Kestrel Payments?*", "No", "f"], ["Given Name*", "Kris", "f"], ["Family Name*", "Marinov", "f"], ["Email*", "", "e"], ["Phone Number*", "", "e"], ["City*", "Sofia…", "e"]],
+    filled1: [["How did you hear about us?*", "Company careers site", "f"], ["Have you previously worked for Kestrel Payments?*", "No", "f"], ["Given Name*", "Kris", "f"], ["Family Name*", "Marinov", "f"], ["Email*", "jobs@krismarinov.example", "f"], ["Phone Number*", "87 555 0142", "f"], ["City*", "Two matches: choose one", "n"]],
+    stick: [["How did you hear about us?*", "Company careers site", "f"], ["Have you previously worked for Kestrel Payments?*", "No", "f"], ["Given Name*", "Kris", "f"], ["Family Name*", "Marinov", "f"], ["Email*", "jobs@krismarinov.example", "f"], ["Phone Number*", "Empty: the value was cleared", "x"], ["City*", "Sofia, Sofia City, Bulgaria", "f"]],
+    exp: [["Resume/CV*", "Kris-Marinov-CV-Security-Kestrel.pdf · 148 KB", "f"], ["Work Experience 1", "Junior Security Analyst · Orbital Bank · 03/2023–09/2025", "f"], ["Work Experience 2", "SOC Intern · Varna Telecom · 06/2022–09/2022", "f"], ["Work Experience 3", "IT Support Intern · Sofia Tech Park · 2020", "f"], ["Work Experience 4 (added by Workday)", "Junior Security Analyst · Orbital Bank · 2023–2024", "k"], ["Work Experience 5 (added by Workday)", "SOC Intern · Varna Telecom · 2022", "k"], ["Education", "BSc Computer Science · Technical University of Sofia · 2022", "f"], ["Languages", "English · C1 · Bulgarian · Native", "f"], ["Skills", "SIEM · Splunk · Python · Incident response · AWS · +7", "f"], ["LinkedIn", "linkedin.com/in/kris-marinov-sec", "f"]],
+    qs: [["Are you legally authorised to work in Bulgaria without sponsorship?*", "Yes", "f"], ["What is your notice period?*", "1 month", "f"], ["Are you able to work hybrid, 2 days a week in our Sofia office?*", "Yes", "f"], ["Expected gross monthly salary (EUR)*", "Needs you", "n"], ["Describe a detection rule you wrote that reduced false positives. (max 1,000 characters)*", "Needs you", "n", "tall"], ["Have you ever held a government security clearance?*", "Needs you", "n"]],
+    acct: [["Email Address*", "jobs@krismarinov.example", "f"], ["Password*", "", "p"], ["Verify New Password*", "", "e"], ["☐ I agree to the Kestrel Payments candidate privacy terms*", null, "label"]],
+    vireo: [["First Name*", "", "e"], ["Last Name*", "", "e"], ["Email*", "", "e"], ["Resume/CV*", "Attach · Dropbox · Google Drive · Enter manually", "e"], ["Cover Letter", "Attach · Enter manually", "e"], ["Why do you want to work at Vireo Health?*", "", "e", "tall"]],
+    sr: [["First name*", "Kris", "f"], ["Last name*", "Marinov", "f"], ["Email*", "jobs@krismarinov.example", "f"], ["Confirm email*", "jobs@krismarinov.example", "f"], ["Phone*", "+359 87 555 0142", "f"], ["Upload CV*", "Drop your CV here or browse", "x"]],
+    ostrava: [["Име и фамилия*", "", "e"], ["Телефон*", "", "e"], ["E-mail*", "", "e"], ["Желана позиция", "", "e"], ["Прикачи CV (PDF, до 5 MB)*", "Избери файл", "e"], ["Мотивационно писмо", "", "e", "tall"]],
+  };
+  const markFor = { f: ["check", "filled by apply-kit"], n: ["ask", "needs you"], x: ["x", "didn't stick"], k: ["partly", "added by the portal, check it"] };
+  $$("[data-pf]").forEach(card => {
+    const btns = card.dataset.pf === "acct" ? ["Create Account"] : card.dataset.pf === "vireo" || card.dataset.pf === "sr" ? ["Submit application"] : card.dataset.pf === "ostrava" ? ["Изпрати"] : ["Back", "Save and Continue"];
+    card.innerHTML = PF[card.dataset.pf].map(([l, v, k, tall]) => {
+      if (k === "label") return `<div class="pf">${l}</div>`;
+      const m = markFor[k];
+      return `<div class="pf" data-pf-label="${l}">${l}<div class="pin ${k}${tall ? " tall" : ""}">${v || "&nbsp;"}${m ? `<span class="mk">${icon[m[0]]}</span><span class="sr-only">, ${m[1]}</span>` : ""}</div></div>`;
+    }).join("") + `<div class="pbtns">${btns.map((b, i) => `<span class="pbtn${i === btns.length - 1 ? " main" : ""}">${b}</span>`).join("")}</div>`;
+  });
+  $$("[data-legend]").forEach(el => el.innerHTML = '<span><i class="lf"></i>Filled by apply-kit (tick)</span><span><i class="ln"></i>Needs you (?)</span><span><i class="lk"></i>Check it (half circle)</span><span><i class="lx"></i>Didn\'t stick (cross)</span>');
+
+  // panel field lists: [label, value, source, why]
+  const SRC = {
+    prof: ["met", "check", "Profile"], bank: ["met", "check", "Answer bank"], pkg: ["met", "check", "Package"], cv: ["met", "check", "CV version"],
+    need: ["ask", "ask", "Needs you"], skip: ["closed", "dash", "Skipped · your rule"], fail: ["gap", "x", "Didn't stick"], you: ["met", "check", "You"],
+    filling: ["neutral", null, "Filling…"], wait: ["neutral", null, "Waiting"], kept: ["partly", "partly", "Added by Workday"],
+  };
+  const FL = {
+    filling1: [["How did you hear about us?", "Company careers site", "bank"], ["Previously worked for Kestrel Payments?", "No", "bank"], ["Given Name", "Kris", "prof"], ["Family Name", "Marinov", "prof"], ["Email", "jobs@krismarinov.example", "filling"], ["Phone Number", "87 555 0142", "wait"], ["City", "Sofia, Bulgaria", "wait"]],
+    filled1: [["How did you hear about us?", "Company careers site", "bank"], ["Previously worked for Kestrel Payments?", "No", "bank"], ["Given Name", "Kris", "prof"], ["Family Name", "Marinov", "prof"], ["Email", "jobs@krismarinov.example", "prof", "Your job address"], ["Phone Number", "87 555 0142", "prof"], ["City", "Two matches", "need"]],
+    stick: [["How did you hear about us?", "Company careers site", "bank"], ["Previously worked for Kestrel Payments?", "No", "bank"], ["Given Name", "Kris", "prof"], ["Family Name", "Marinov", "prof"], ["Email", "jobs@krismarinov.example", "prof"], ["Phone Number", "87 555 0142", "fail"], ["City", "Sofia, Sofia City, Bulgaria", "you"]],
+    exp: [["Resume/CV", "Kris-Marinov-CV-Security-Kestrel.pdf", "cv"], ["Work Experience 1", "Junior Security Analyst · Orbital Bank", "prof"], ["Work Experience 2", "SOC Intern · Varna Telecom", "prof"], ["Work Experience 3", "IT Support Intern · Sofia Tech Park", "prof"], ["Work Experience 4", "Orbital Bank, 2023–2024", "kept", "Looks like a duplicate of Work Experience 1"], ["Work Experience 5", "Varna Telecom, 2022", "kept", "Looks like a duplicate of Work Experience 2"], ["Education", "BSc Computer Science · 2022", "prof"], ["Languages", "English C1 · Bulgarian native", "prof"], ["Skills", "12 from the CV version", "cv"], ["LinkedIn", "linkedin.com/in/kris-marinov-sec", "prof"]],
+    qs: [["Authorised to work in Bulgaria?", "Yes", "bank"], ["Notice period", "1 month", "bank"], ["Hybrid, 2 days in Sofia office?", "Yes", "pkg", "Approved screening answer in this package"], ["Expected gross monthly salary", "", "need"], ["Detection rule that reduced false positives", "", "need"], ["Government security clearance?", "", "need"], ["Gender (Voluntary Disclosures)", "", "skip", "Next page; your rule leaves voluntary questions blank"]],
+    sr: [["First name", "Kris", "prof"], ["Last name", "Marinov", "prof"], ["Email", "jobs@krismarinov.example", "prof"], ["Confirm email", "jobs@krismarinov.example", "prof"], ["Phone", "+359 87 555 0142", "prof"], ["Upload CV", "Kris-Marinov-CV-AppSec-Nordlicht.pdf", "fail"]],
+  };
+  $$("[data-fl]").forEach(ul => ul.innerHTML = FL[ul.dataset.fl].map(([l, v, s, why]) => {
+    const [cls, ic, word] = SRC[s];
+    const chip = `<span class="chip ${cls}">${s === "filling" ? '<span class="spin" aria-hidden="true" style="width:10px;height:10px"></span>' : ic ? icon[ic] : ""}${word}</span>`;
+    // reading order: label, value, source; the grid puts the source chip on the right
+    return `<li><button class="frow" type="button" data-show="${l}"><span class="l">${l}</span><span class="v">${v || "Not filled"}</span>${chip}${why ? `<span class="why2">${why}</span>` : ""}<span class="sr-only">. Show on page</span></button></li>`;
+  }).join(""));
+
+  // copy list for the unknown form (Bulgarian)
+  // [the form's own label (Bulgarian), its meaning in English, value]
+  const CL = [["Име и фамилия", "full name", "Kris Marinov"], ["Телефон", "phone", "+359 87 555 0142"], ["E-mail", "email", "jobs@krismarinov.example"], ["Желана позиция", "position", "IT Security Specialist"], ["Мотивационно писмо", "cover letter, Bulgarian, 1,240 characters", "Здравейте, кандидатствам за позицията IT Security Specialist…"]];
+  $$("[data-copy-list]").forEach(el => el.innerHTML = CL.map(([bg, en, v]) => `<div class="copyrow"><div style="min-width:0"><div class="k"><span lang="bg">${bg}</span> · ${en}</div><div class="v"${/[А-я]/.test(v) ? ' lang="bg"' : ""}>${v}</div></div><button class="btn sm" type="button" data-copy="${v}">Copy<span class="sr-only"> ${en}</span></button></div>`).join("")
+    + `<div class="copyrow"><div style="min-width:0"><div class="k">CV file · Bulgarian version</div><div class="v">Kris-Marinov-CV-OstravaBank-BG.pdf</div></div><button class="btn sm" type="button">Show in Finder</button></div>`);
+
+  // character count
+  // visible count always; announced only when 50 or fewer characters are left
+  $$("[data-count]").forEach(t => { const c = $("#" + t.getAttribute("aria-describedby").split(" ")[1]); const max = Number(t.getAttribute("maxlength")); let warned = false;
+    const upd = () => { c.textContent = `${t.value.length.toLocaleString("en")} / ${max.toLocaleString("en")}`; const left = max - t.value.length; if (left <= 50 && !warned) { warned = true; announce(`${left} characters left`); } if (left > 50) warned = false; };
+    t.addEventListener("input", upd); upd(); });
+
+  // paired panels get the Fill / Capture switch under the header (one panel, two jobs)
+  $$(".sp-head").forEach(h => { if (!$(".conn", h) || $(".conn.off", h)) return; h.insertAdjacentHTML("afterend", '<div class="sp-modes"><div class="segmented" role="group" aria-label="Panel"><button type="button" aria-pressed="true">Fill this application</button><button type="button" aria-pressed="false">Capture</button></div></div>'); });
+  $$(".sp").forEach(sp => { if ($(".sp-modes", sp)) sp.style.gridTemplateRows = "auto auto minmax(0, 1fr) auto"; });
+
+  // interactions: copy, show on page, fill (announce only), mark/undo
+  document.addEventListener("click", e => {
+    const t = e.target;
+    const cp = t.closest("[data-copy]"); if (cp) { const old = cp.innerHTML; cp.textContent = "Copied"; announce("Copied"); setTimeout(() => cp.innerHTML = old, 2000); return; }
+    const sh = t.closest("[data-show]"); if (sh) { announce(`Scrolled the portal to ${sh.dataset.show} and outlined it.`); return; }
+    if (t.closest("[data-fill]")) { announce("Filling this page…"); return; }
+    if (t.closest("[data-undo-page]")) { announce("Undone: every field apply-kit filled on this page is back to how it was."); return; }
+    const seg = t.closest(".segmented button"); if (seg) { seg.parentElement.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", String(x === seg))); return; }
+    if (t.closest("[data-mark-submitted]")) { location.hash = "marked"; return; }
+    if (t.closest("[data-undo-mark]")) { location.hash = "confirm"; announce("Undone. No Application was kept."); return; }
+  });
+  $$("form[data-noop]").forEach(f => f.addEventListener("submit", e => { e.preventDefault(); announce("Paired. Looking at this page…"); }));
+
+  // review state switcher
+  const states = $$("[data-state]"), bar = $(".review .states");
+  const show = id => {
+    states.forEach(s => s.hidden = s.dataset.state !== id);
+    bar.querySelectorAll("button").forEach(b => b.setAttribute("aria-selected", String(b.dataset.t === id)));
+  };
+  states.forEach(s => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.dataset.t = s.dataset.state; b.textContent = s.dataset.stateName; b.onclick = () => { history.replaceState(null, "", "#" + s.dataset.state); show(s.dataset.state); }; bar.appendChild(b); });
+  const fromHash = () => states.some(s => s.dataset.state === location.hash.slice(1)) ? location.hash.slice(1) : null;
+  window.addEventListener("hashchange", () => { const h = fromHash(); if (h) { show(h); window.scrollTo(0, 0); } });
+  show(fromHash() || "detected");
+})();
+</script>
+</body>
+</html>
