@@ -4,7 +4,7 @@
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
 import { angles, pieceKinds } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileExportUrl } from "../api.ts";
+import { confirmPiece, deletePiece, fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileExportUrl } from "../api.ts";
 import { Icon } from "../icons.tsx";
 import { SearchSettingsPage } from "../settings/SearchSettingsPage.tsx";
 import { AnglesPage } from "./AnglesPage.tsx";
@@ -98,7 +98,7 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
       ) : (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
-          <MasterProfile go={go} announce={announce} flash={flash} clearFlash={() => setFlash(null)} />
+          <MasterProfile go={go} announce={announce} flash={flash} clearFlash={() => setFlash(null)} onChanged={refreshSummary} />
         </section>
       )}
     </>
@@ -114,12 +114,20 @@ function NotYet({ area }: { area: string }) {
   );
 }
 
-function MasterProfile({ go, announce, flash, clearFlash }: {
+function MasterProfile({ go, announce, flash, clearFlash, onChanged }: {
   go: Go;
   announce: (msg: string) => void;
   flash: string | null;
   clearFlash: () => void;
+  onChanged: () => void;
 }) {
+  /** Bumped when a drafted piece is confirmed or discarded, to read the list again. */
+  const [version, setVersion] = useState(0);
+  const changed = useCallback((said: string) => {
+    setVersion((v) => v + 1);
+    onChanged();
+    announce(said);
+  }, [onChanged, announce]);
   const [kind, setKind] = useState<PieceKind | undefined>();
   const [angle, setAngle] = useState<Angle | undefined>();
   const [search, setSearch] = useState("");
@@ -156,7 +164,7 @@ function MasterProfile({ go, announce, flash, clearFlash }: {
         .catch((err: unknown) => { if (!ctrl.signal.aborted) setError(message(err)); });
     }, search ? 200 : 0);
     return () => { window.clearTimeout(t); ctrl.abort(); };
-  }, [kind, angle, search, announce]);
+  }, [kind, angle, search, announce, version]);
 
   if (error) return <div className="banner error" role="alert"><span className="text"><b>Couldn't load your profile.</b> {error}</span></div>;
   if (!list || !contact) return <p className="meta" role="status">Loading your profile…</p>;
@@ -189,6 +197,7 @@ function MasterProfile({ go, announce, flash, clearFlash }: {
       <section className="panel" aria-labelledby="pieces-h">
         <div className="sec-head">
           <h2 className="grow" id="pieces-h">Master profile <span className="meta">· {list.total} {list.total === 1 ? "piece" : "pieces"} · {list.confirmed} confirmed</span></h2>
+          <a className="btn ghost" href="/setup">Import old CVs</a>
           <a className="btn" href="/profile/pieces/new" onClick={navLink(go)}>Add piece</a>
         </div>
         <div className="toolbar">
@@ -216,7 +225,7 @@ function MasterProfile({ go, announce, flash, clearFlash }: {
             <button className="btn sm" type="button" onClick={clear}>Clear search and filters</button>
           </div>
         ) : list.groups.map((g, i) => (
-          <Group key={`${g.id}:${filtering}`} group={g} open={filtering || i === 0} go={go} />
+          <Group key={`${g.id}:${filtering}`} group={g} open={filtering || i === 0} go={go} changed={changed} />
         ))}
       </section>
     </>
@@ -225,7 +234,7 @@ function MasterProfile({ go, announce, flash, clearFlash }: {
 
 const shownCount = (l: PieceList) => l.groups.reduce((n, g) => n + g.pieces.length, 0);
 
-function Group({ group, open, go }: { group: PieceGroup; open: boolean; go: Go }) {
+function Group({ group, open, go, changed }: { group: PieceGroup; open: boolean; go: Go; changed: (said: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? group.pieces : group.pieces.slice(0, GROUP_PREVIEW);
   const more = group.pieces.length - shown.length;
@@ -245,7 +254,7 @@ function Group({ group, open, go }: { group: PieceGroup; open: boolean; go: Go }
         {group.label} <span className="meta">{group.pieces.length} {group.pieces.length === 1 ? "piece" : "pieces"}</span>
       </summary>
       <div className="pieces">
-        {shown.map((p, i) => <PieceCard key={p.id} piece={p} go={go} focusRef={expanded && i === GROUP_PREVIEW ? nextRef : undefined} />)}
+        {shown.map((p, i) => <PieceCard key={p.id} piece={p} go={go} changed={changed} focusRef={expanded && i === GROUP_PREVIEW ? nextRef : undefined} />)}
       </div>
       {more > 0 && (
         <button className="btn ghost sm show-more" type="button" onClick={showMore}>
@@ -256,8 +265,39 @@ function Group({ group, open, go }: { group: PieceGroup; open: boolean; go: Go }
   );
 }
 
-function PieceCard({ piece: p, go, focusRef }: { piece: ProfilePiece; go: Go; focusRef?: React.Ref<HTMLDivElement> }) {
+function PieceCard({ piece: p, go, changed, focusRef }: { piece: ProfilePiece; go: Go; changed: (said: string) => void; focusRef?: React.Ref<HTMLDivElement> }) {
   const status = p.status === "unconfirmed" ? "unconfirmed" : p.status === "flagged" ? "flagged" : "";
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState<string[] | null>(null);
+  const refusalRef = useRef<HTMLDivElement>(null);
+  const name = `${kindLabel[p.kind].toLowerCase()}: ${pieceName(p)}`;
+
+  const confirm = async () => {
+    setBusy(true);
+    try {
+      const result = await confirmPiece(p.id);
+      if (result.saved) return changed(`Confirmed ${name}.`);
+      // Focus follows the refusal to its reason.
+      setRefusal(result.problems.map((x) => x.message));
+      window.setTimeout(() => refusalRef.current?.focus(), 0);
+    } catch (err) {
+      setRefusal([message(err)]);
+      window.setTimeout(() => refusalRef.current?.focus(), 0);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const discard = async () => {
+    setBusy(true);
+    try {
+      await deletePiece(p.id);
+      changed(`Discarded ${name}.`);
+    } catch (err) {
+      setRefusal([message(err)]);
+      setBusy(false);
+    }
+  };
+
   return (
     <div className={`piece ${status}`} ref={focusRef} tabIndex={focusRef ? -1 : undefined}>
       <div className="stack">
@@ -265,22 +305,41 @@ function PieceCard({ piece: p, go, focusRef }: { piece: ProfilePiece; go: Go; fo
           <span className="type">{kindLabel[p.kind].toUpperCase()}</span>
           {p.status === "unconfirmed" && <span className="chip ask"><Icon name="ask" />Unconfirmed</span>}
           {p.status === "flagged" && <span className="chip partly"><Icon name="line" />Near the line</span>}
-          <span>{p.source.from}</span>
+          {p.checkThis && <span className="chip partly"><Icon name="partly" />Check this: read from a scan</span>}
+          <span>{p.source.from}{p.alsoFrom.length > 0 && ` · also in ${[...new Set(p.alsoFrom.map((s) => s.from))].join(", ")}`}</span>
           {p.numberSource && <span>{numberSourceLabel[p.numberSource]}</span>}
         </div>
         <p className="text">{pieceText(p)}</p>
         {p.entry && p.text && <p className="mini muted">{p.text}</p>}
+        {p.status === "unconfirmed" && p.source.quote && (
+          <p className="mini muted">From the source: <q>{p.source.quote}</q></p>
+        )}
         {(p.tags.length > 0 || p.angles.length > 0) && (
           <div className="chips">
             {p.tags.map((t) => <span className="chip neutral" key={t}>{t}</span>)}
             {p.angles.map((a) => <span className="chip met" key={a}>{angleLabel[a]}</span>)}
           </div>
         )}
+        {refusal && (
+          <div className="banner warning" role="alert" tabIndex={-1} ref={refusalRef}>
+            <span className="text"><b>Can't confirm yet.</b> {refusal.join(" ")} Use Edit to add it.</span>
+          </div>
+        )}
       </div>
       <div className="acts">
+        {p.status === "unconfirmed" && (
+          <button className="btn sm" type="button" disabled={busy} onClick={confirm}>
+            Confirm<span className="sr-only"> {name}</span>
+          </button>
+        )}
         <a className="btn ghost sm" href={`/profile/pieces/${encodeURIComponent(p.id)}`} onClick={navLink(go)}>
-          Edit<span className="sr-only"> {kindLabel[p.kind].toLowerCase()}: {pieceName(p)}</span>
+          Edit<span className="sr-only"> {name}</span>
         </a>
+        {p.status === "unconfirmed" && (
+          <button className="btn ghost sm" type="button" disabled={busy} onClick={discard}>
+            Discard<span className="sr-only"> {name}</span>
+          </button>
+        )}
       </div>
     </div>
   );

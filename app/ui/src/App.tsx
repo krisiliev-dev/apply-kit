@@ -6,6 +6,7 @@ import { healthPill } from "./health.tsx";
 import { SourcesPage } from "./sources/SourcesPage.tsx";
 import { JobPage } from "./job/JobPage.tsx";
 import { ProfilePage } from "./profile/ProfilePage.tsx";
+import { SetupPage } from "./setup/SetupPage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -39,7 +40,7 @@ export function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && path.startsWith("/profile")) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>
+              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && (path.startsWith("/profile") || path === "/setup")) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>
                 {n.label}
                 {n.href === "/profile" && badge > 0 && (
                   <><span className="badge" aria-hidden="true">{badge}</span><span className="sr-only">, {badge} {badge === 1 ? "needs" : "need"} you</span></>
@@ -57,6 +58,7 @@ export function App() {
         <main className="main" id="main" tabIndex={-1}>
           {path === "/" ? <FeedPage onHealth={setHealth} />
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
+            : path === "/setup" ? <SetupPage onHealth={setHealth} />
             : path === "/profile" || path.startsWith("/profile/") ? <ProfilePage onHealth={setHealth} onSummary={setProfile} />
             : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings/sources/coverage" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}
