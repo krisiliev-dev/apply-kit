@@ -128,6 +128,9 @@ export interface ProfileSummary {
   needsYouTotal: number;
 }
 
+/** An achievement is one sentence: this many characters at most. */
+export const maxAchievementLength = 200;
+
 export const unattachedGroupLabel = "Skills and languages not tied to a role";
 const handSource: PieceSource = { from: "Added in Profile", quote: null };
 
@@ -269,6 +272,9 @@ function required(piece: ProfilePiece, input: PieceInput): PieceProblem[] {
   const problems: PieceProblem[] = [];
   const say = (field: PieceField, message: string) => problems.push({ field, message, fixes: [] });
   if (piece.kind === "achievement" && !piece.text) say("text", "Say what you did, in one sentence.");
+  if (piece.kind === "achievement" && piece.text.length > maxAchievementLength) {
+    say("text", `Keep it to one sentence of ${maxAchievementLength} characters or fewer; split a longer story into pieces.`);
+  }
   if (piece.kind === "skill" && !piece.text) say("text", "Name the skill.");
   if (piece.kind === "role" || piece.kind === "education") {
     const role = piece.kind === "role";

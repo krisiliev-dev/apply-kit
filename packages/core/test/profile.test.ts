@@ -141,6 +141,7 @@ describe("the honesty checks on saving a piece", () => {
     ["a role without its start month", { kind: "role", text: "", entry: { title: "Analyst", organisation: "Northwind Bank", city: null, start: "2022", end: null } }, "start", "Give the start as a month and year."],
     ["a role that ends before it starts", { kind: "role", text: "", entry: { title: "Analyst", organisation: "Northwind Bank", city: null, start: "2022-03", end: "2021-12" } }, "end", "The end can't be before the start."],
     ["an education with no school", { kind: "education", text: "", entry: { title: "BSc Computer Science", organisation: "", city: null, start: "2018-09", end: "2022-06" } }, "organisation", "Give the school."],
+    ["an achievement longer than one sentence of 200 characters", { kind: "achievement", text: "Ran the SOC's weekly review. ".repeat(7) }, "text", "Keep it to one sentence of 200 characters or fewer; split a longer story into pieces."],
     ["a piece under a role that doesn't exist", { kind: "skill", text: "Python", belongsTo: "piece:gone" }, "belongsTo", "That role is no longer in your profile. Pick another, or none."],
   ] as const)("refuses %s", (_, input, field, message) => {
     const t = createTestPreparation();

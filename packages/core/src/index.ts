@@ -54,7 +54,7 @@ export { draftedPiecesSchema } from "./writing/writer.ts";
 export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces } from "./writing/writer.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, ProfileExport } from "./preparation/engine.ts";
-export { pieceKinds, numberSources, entryLabel, unattachedGroupLabel } from "./preparation/profile.ts";
+export { pieceKinds, numberSources, entryLabel, unattachedGroupLabel, maxAchievementLength } from "./preparation/profile.ts";
 export type {
   ProfilePiece, PieceKind, PieceStatus, NumberSource, PieceEntry, PieceSource, PieceInput, PieceOrigin, PieceField, PieceFix,
   PieceProblem, SavePieceResult, PieceQuery, PieceGroup, PieceList, DeletedPiece, ProfileSummary,
