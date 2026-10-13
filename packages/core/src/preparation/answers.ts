@@ -170,6 +170,7 @@ export const minMatchConfidence = 0.6;
 export interface AnswerStore {
   save(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
   get(id: string): Answer | null;
+  remove(id: string): boolean;
   find(question: string, language: AnswerLanguage): AnswerMatch | null;
   history(id: string): AnswerChange[];
   recordUse(id: string): void;
@@ -229,6 +230,7 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
 
   function save(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult {
     const before = input.id ? get(input.id) : null;
+    if (input.id && !before) return { saved: false, problems: [{ field: "question", message: "This answer no longer exists. It may have been deleted." }] };
     const now = clock.now().toISOString();
     const answer: Answer = {
       id: before?.id ?? `answer:${crypto.randomUUID()}`,
@@ -246,6 +248,8 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
       createdAt: before?.createdAt ?? now,
       updatedAt: now,
     };
+    const problems = [...check(answer), ...clashes(answer, all().filter((a) => a.id !== answer.id))];
+    if (problems.length > 0) return { saved: false, problems };
     write(answer);
     if (!before) note(answer.id, { event: "created", where: answer.source.from, language: null, before: null, after: null });
     else {
@@ -288,6 +292,13 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     return get(id);
   }
 
+  function remove(id: string): boolean {
+    if (!get(id)) return false;
+    db.prepare("DELETE FROM answer_history WHERE answer_id = ?").run(id);
+    db.prepare("DELETE FROM answer WHERE id = ?").run(id);
+    return true;
+  }
+
   const needsYou = () => Number(db.prepare("SELECT COUNT(*) AS n FROM answer WHERE portal_edit IS NOT NULL").get()?.n ?? 0);
 
   function find(question: string, language: AnswerLanguage): AnswerMatch | null {
@@ -304,7 +315,48 @@ export function createAnswerStore({ db, clock }: { db: SqlDatabase; clock: Clock
     return { answerId: answer.id, question: answer.question, matched, confidence, fill: fillFor(answer, language) };
   }
 
-  return { save, get, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou };
+  return { save, get, remove, find, history, recordUse, recordPortalEdit, resolvePortalEdit, needsYou };
+}
+
+/** Questions a cover letter answers: written fresh for each job, never stored. */
+const LETTER_STYLE = /^\s*(why|защо)\b.*\b(company|us|here|role|position|job|team|join|work|apply|applying|interested|this|нас|компания|компанията|фирмата|позиция|позицията|ролята|кандидатствате|работите)\b/iu;
+
+/** What every answer needs before it can be saved. */
+function check(a: Answer): AnswerProblem[] {
+  const problems: AnswerProblem[] = [];
+  const say = (field: AnswerField, message: string) => problems.push({ field, message });
+  if (!a.question) say("question", "Give the question, as you'd name it.");
+  else if (LETTER_STYLE.test(a.question)) {
+    say("question", "Questions like this are answered in the cover letter's words, written fresh for each job, so they aren't stored.");
+  }
+  if (a.mode === "fill" && answerLanguages.every((l) => !a.versions[l])) {
+    say("en", "Give the answer in English or Bulgarian, or choose \"Ask me each time\" or \"Leave it blank\".");
+  }
+  for (const l of answerLanguages) {
+    const v = a.versions[l];
+    if (!v) continue;
+    if (a.kind === "number" && !/^-?\d+([.,]\d+)?$/.test(v)) say(l, "A number answer is a number, like 3.");
+    if (a.kind === "yes-no" && !(l === "en" ? /^(yes|no)$/i : /^(да|не)$/iu).test(v)) {
+      say(l, l === "en" ? "A yes/no answer is \"Yes\" or \"No\"." : "A yes/no answer is \"Да\" or \"Не\".");
+    }
+  }
+  const floor = a.rule?.params?.floor;
+  if (floor != null && !(Number.isFinite(floor) && floor >= 0)) say("rule", "The floor is a monthly amount in euros, 0 or more.");
+  return problems;
+}
+
+/** A question or wording another answer already uses would make finding answers ambiguous. */
+function clashes(a: Answer, others: Answer[]): AnswerProblem[] {
+  const owner = new Map<string, Answer>();
+  for (const o of others) for (const p of [o.question, ...o.wordings.map((w) => w.text)]) owner.set(normalise(p), o);
+  const problems: AnswerProblem[] = [];
+  const q = owner.get(normalise(a.question));
+  if (a.question && q) problems.push({ field: "question", message: `"${q.question}" is already in your answer bank, or matches its wordings. Edit that answer instead.` });
+  for (const w of a.wordings) {
+    const o = owner.get(normalise(w.text));
+    if (o) problems.push({ field: "wordings", message: `"${w.text}" already finds your answer to "${o.question}". Add it there, or remove it here.` });
+  }
+  return problems;
 }
 
 function fillFor(a: Answer, language: AnswerLanguage): AnswerFill {

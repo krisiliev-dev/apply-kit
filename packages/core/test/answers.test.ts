@@ -149,3 +149,67 @@ describe("using an answer", () => {
     expect(r).toMatchObject({ saved: true, answer: { source: { from: "Halden Systems Workday form", jobId: "job:1", portal: "Halden Systems Workday form" } } });
   });
 });
+
+describe("adding and editing an answer", () => {
+  it("refuses an answer with no question, or no version to fill", () => {
+    const t = createTestPreparation();
+
+    const r = t.preparation.saveAnswer({ question: " ", versions: { en: " " }, category: "standard", mode: "fill" });
+
+    expect(r).toEqual({ saved: false, problems: [
+      { field: "question", message: "Give the question, as you'd name it." },
+      { field: "en", message: "Give the answer in English or Bulgarian, or choose \"Ask me each time\" or \"Leave it blank\"." },
+    ] });
+  });
+
+  it("refuses a wording another answer already matches", () => {
+    const t = createTestPreparation();
+    add(t, noticePeriod);
+
+    const r = t.preparation.saveAnswer({ question: "Start date", wordings: ["When could you start"], versions: { en: "In a month" }, category: "standard" });
+
+    expect(r).toEqual({ saved: false, problems: [{ field: "wordings", message: "\"When could you start\" already finds your answer to \"Notice period\". Add it there, or remove it here." }] });
+  });
+
+  it("refuses a letter-style question: those are written fresh for each job", () => {
+    const t = createTestPreparation();
+
+    const r = t.preparation.saveAnswer({ question: "Why do you want to work at Kestrel Payments?", versions: { en: "Because…" }, category: "screening" });
+
+    expect(r).toMatchObject({ saved: false, problems: [{ field: "question" }] });
+  });
+
+  it("checks a yes/no or number answer is one", () => {
+    const t = createTestPreparation();
+
+    const r = t.preparation.saveAnswer({ question: "Years of experience with Splunk", versions: { en: "three", bg: "3" }, category: "screening", kind: "number" });
+    const ok = t.preparation.saveAnswer({ question: "Visa sponsorship needed", versions: { en: "No", bg: "Не" }, category: "standard", kind: "yes-no" });
+
+    expect(r).toEqual({ saved: false, problems: [{ field: "en", message: "A number answer is a number, like 3." }] });
+    expect(ok.saved).toBe(true);
+  });
+
+  it("notes each changed version in the history", async () => {
+    const t = createTestPreparation();
+    const saved = add(t, { ...noticePeriod, versions: { en: "2 weeks" } });
+    await t.clock.advance(3600_000);
+
+    add(t, { ...noticePeriod, id: saved.id });
+
+    expect(t.preparation.answerHistory(saved.id).map((c) => [c.event, c.where, c.language, c.before, c.after])).toEqual([
+      ["changed", "Profile", "bg", null, "1 месец"],
+      ["changed", "Profile", "en", "2 weeks", "1 month"],
+      ["created", "Added in Profile", null, null, null],
+    ]);
+  });
+
+  it("deletes an answer: it's no longer found", () => {
+    const t = createTestPreparation();
+    const saved = add(t, noticePeriod);
+
+    expect(t.preparation.deleteAnswer(saved.id)).toBe(true);
+    expect(t.preparation.deleteAnswer(saved.id)).toBe(false);
+    expect(t.preparation.findAnswer("Notice period", "en")).toBeNull();
+    expect(t.preparation.answer(saved.id)).toBeNull();
+  });
+});

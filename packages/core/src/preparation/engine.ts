@@ -89,6 +89,8 @@ export interface PreparationEngine {
    * new answer came from (the job and the portal). A refused answer comes back with its problems.
    */
   saveAnswer(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
+  /** Deletes an answer and its history; false if it was already gone. Approved packages keep their answers. */
+  deleteAnswer(id: string): boolean;
   /** One answer, for editing; null once it's deleted. */
   answer(id: string): Answer | null;
   /**
@@ -159,6 +161,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     },
     saveAnswer: (input, origin) => answers.save(input, origin),
     answer: (id) => answers.get(id),
+    deleteAnswer: (id) => answers.remove(id),
     findAnswer: (question, language) => answers.find(question, language),
     recordAnswerUse: (id) => answers.recordUse(id),
     recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
