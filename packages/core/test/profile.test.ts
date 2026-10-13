@@ -31,6 +31,66 @@ describe("profile pieces", () => {
   });
 });
 
+/** Mira Petrova's made-up profile: two roles, a degree, and pieces under them and under none. */
+function miraProfile() {
+  const t = createTestPreparation();
+  const save = (input: Parameters<typeof t.preparation.savePiece>[0]) => {
+    const r = t.preparation.savePiece(input);
+    if (!r.saved) throw new Error(r.problems[0]!.message);
+    return r.piece.id;
+  };
+  const intern = save({ kind: "role", text: "", entry: { title: "SOC Intern", organisation: "Varna Telecom", city: "Varna", start: "2021-06", end: "2021-08" }, angles: ["security"] });
+  const degree = save({ kind: "education", text: "", entry: { title: "BSc Computer Science", organisation: "Danube Institute of Technology", city: null, start: "2017-09", end: "2021-06" } });
+  const analyst = save({ kind: "role", text: "", entry: { title: "Security Analyst", organisation: "Northwind Bank", city: "Sofia", start: "2022-03", end: null }, angles: ["security"] });
+  save({ kind: "skill", text: "Splunk", belongsTo: analyst, tags: ["SIEM"], angles: ["security"] });
+  save({ kind: "achievement", text: "Wrote the phishing runbook the SOC still uses.", belongsTo: analyst, tags: ["incident response"], angles: ["security"] });
+  save({ kind: "achievement", text: "Built a booking site in React for a dental clinic.", tags: ["React"], angles: ["developer", "design"] });
+  save({ kind: "skill", text: "Български (роден)", tags: ["езици"] });
+  save({ kind: "achievement", text: "Mapped the office network for an audit.", belongsTo: intern, angles: ["security"] });
+  void degree;
+  return t;
+}
+
+const summarise = (list: ReturnType<ReturnType<typeof createTestPreparation>["preparation"]["listPieces"]>) =>
+  list.groups.map((g) => [g.label, g.pieces.map((p) => p.text || p.kind)]);
+
+describe("browsing the master profile", () => {
+  it("groups pieces by role, newest role first, then education, then pieces tied to no role", () => {
+    const t = miraProfile();
+
+    expect(summarise(t.preparation.listPieces())).toEqual([
+      ["Security Analyst · Northwind Bank, Sofia · Mar 2022 – present", ["role", "Wrote the phishing runbook the SOC still uses.", "Splunk"]],
+      ["SOC Intern · Varna Telecom, Varna · Jun 2021 – Aug 2021", ["role", "Mapped the office network for an audit."]],
+      ["BSc Computer Science · Danube Institute of Technology · Sep 2017 – Jun 2021", ["education"]],
+      ["Skills and languages not tied to a role", ["Built a booking site in React for a dental clinic.", "Български (роден)"]],
+    ]);
+  });
+
+  it("filters by type and angle, and counts each type for the filter", () => {
+    const t = miraProfile();
+
+    const list = t.preparation.listPieces({ kind: "achievement", angle: "security" });
+
+    expect(summarise(list)).toEqual([
+      ["Security Analyst · Northwind Bank, Sofia · Mar 2022 – present", ["Wrote the phishing runbook the SOC still uses."]],
+      ["SOC Intern · Varna Telecom, Varna · Jun 2021 – Aug 2021", ["Mapped the office network for an audit."]],
+    ]);
+    expect(list.byKind).toEqual({ role: 2, achievement: 2, skill: 1, education: 0 });
+    expect({ total: list.total, confirmed: list.confirmed }).toEqual({ total: 8, confirmed: 8 });
+  });
+
+  it.each([
+    ["splunk", ["Splunk"]],
+    ["siem", ["Splunk"]],
+    ["northwind", ["role"]],
+    ["БЪЛГАРСКИ", ["Български (роден)"]],
+  ])("finds %s in text, tags and a role's facts, ignoring case", (search, texts) => {
+    const t = miraProfile();
+
+    expect(summarise(t.preparation.listPieces({ search })).flatMap(([, ts]) => ts)).toEqual(texts);
+  });
+});
+
 /** A piece drafted from a made-up CV, with the words it came from. */
 const imported = { from: "mira-petrova-cv.pdf, page 1", quote: "Built 40 Splunk detections, reducing false positives by about a third." };
 
