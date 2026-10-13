@@ -6,6 +6,7 @@ import type { Angle } from "../fit/angles.ts";
 import { angles as allAngles } from "../fit/angles.ts";
 
 export { angles } from "../fit/angles.ts";
+export { angleRules } from "./angles.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import { asPercent, closest, quantities, within } from "./numbers.ts";
 

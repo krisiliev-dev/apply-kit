@@ -264,6 +264,14 @@ const migrations: string[] = [
      photo_size INTEGER,
      updated_at TEXT NOT NULL
    );`,
+  // #58: angles. Kris's summary line per angle and the pieces that lead it, in order (a JSON list of
+  // piece ids; NULL until he orders them, which means the default order). No row means neither is set.
+  `CREATE TABLE angle (
+     angle TEXT PRIMARY KEY,
+     summary TEXT NOT NULL,
+     leads TEXT,
+     updated_at TEXT NOT NULL
+   );`,
   // #54: imports. A run holds its sources in order (files, the LinkedIn export, GitHub, a portfolio),
   // each with its state, the text extracted from it (ADR 0003: the file itself is in the file store
   // under its SHA-256), why it couldn't be read and what Kris chose, and how many pieces it gave.
