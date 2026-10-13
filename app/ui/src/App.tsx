@@ -6,6 +6,7 @@ import { healthPill } from "./health.tsx";
 import { SourcesPage } from "./sources/SourcesPage.tsx";
 import { JobPage } from "./job/JobPage.tsx";
 import { SearchSettingsPage } from "./settings/SearchSettingsPage.tsx";
+import { ApplicationsPage } from "./applications/ApplicationsPage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -44,6 +45,7 @@ export function App() {
         <main className="main" id="main" tabIndex={-1}>
           {path === "/" ? <FeedPage onHealth={setHealth} />
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
+            : path === "/applications" ? <ApplicationsPage onHealth={setHealth} />
             : path === "/profile" || path === "/profile/search" ? <SearchSettingsPage onHealth={setHealth} />
             : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings/sources/coverage" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}
