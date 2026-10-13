@@ -228,6 +228,9 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   const { db, clock } = deps;
   /** The generation running for each package, so callers (and tests) can wait for it. */
   const running = new Map<string, Promise<void>>();
+  // A part left being written when the app stopped can't finish: it shows as failed, ready for Retry.
+  db.prepare("UPDATE package_part SET state = 'failed', error = ?, updated_at = ? WHERE state = 'working'")
+    .run("apply-kit stopped while this was being written", clock.now().toISOString());
 
   // ---- reading -----------------------------------------------------------------------------
 
@@ -370,7 +373,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       cv: r.cvDraft,
       costUsd: Math.round(list.reduce((n, p) => n + p.costUsd, 0) * 1e6) / 1e6,
       estimate: {
-        costUsd: Math.round(toWrite.reduce((n, p) => n + deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) }), 0) * 1e6) / 1e6,
+        // Only the CV needs the model so far; later parts add their own task's estimate here.
+        costUsd: toWrite.length ? Math.round(deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) }) * 1e6) / 1e6 : 0,
         seconds: toWrite.reduce((n, p) => n + packageRules.seconds[p.part], 0),
       },
       chip: chipOf(r, ps),

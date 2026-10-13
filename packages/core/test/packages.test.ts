@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PackageJob, PieceInput } from "../src/index.ts";
+import { memoryDb } from "./harness.ts";
 import { createTestPreparation, fakeWriter, recordedTailoredCv } from "./preparation-harness.ts";
 
 // Packages through the preparation engine (ticket #62): the Prepare button's states, starting a
@@ -244,5 +245,99 @@ describe("the photo", () => {
     const r = await t.preparation.setPackagePhoto(pkg.id, true);
 
     expect(r).toMatchObject({ changed: true, package: { photo: true, cv: { photo: true }, chip: { label: "Continue package · step 2 of 5" } } });
+  });
+});
+
+/** A writer whose CV answer waits until the test lets it go. */
+function heldWriter() {
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => { release = r; });
+  const writer = fakeWriter({ tailorCv: async () => { await held; return recordedTailoredCv; } });
+  return { writer, release: () => release() };
+}
+
+describe("stopping, the cap and failures", () => {
+  it("Stop generating keeps the finished parts and marks the unfinished ones stopped", async () => {
+    const { writer, release } = heldWriter();
+    const t = miraProfile({ writer });
+    const r = t.preparation.startPackage(kestrelJob());
+    if (!r.started) throw new Error(r.reason);
+    await vi.waitFor(() => expect(writer.calls).toHaveLength(1));
+
+    const stopped = t.preparation.stopGenerating(r.package.id);
+    release();
+    const after = await t.preparation.packageSettled(r.package.id);
+
+    expect(stopped.parts.map((p) => [p.part, p.state])).toEqual([
+      ["target", "done"], ["cv", "stopped"], ["letter", "later"], ["answers", "later"], ["ats", "waiting"],
+    ]);
+    expect(after).toMatchObject({ generating: false, cv: null, stoppedAt: "2026-10-12T07:30:00.000Z", chip: { kind: "continue", label: "Continue package · step 1 of 5" } });
+    expect(after!.parts[1]).toMatchObject({ state: "stopped", what: "Stopped before it was written. Generate it again when you like." });
+    // The call was already made, so it's paid for and counted.
+    expect(after!.costUsd).toBe(0.002);
+  });
+
+  it("a stopped part can be written again with Retry", async () => {
+    const { writer, release } = heldWriter();
+    const t = miraProfile({ writer });
+    const r = t.preparation.startPackage(kestrelJob());
+    if (!r.started) throw new Error(r.reason);
+    t.preparation.stopGenerating(r.package.id);
+    release();
+    await t.preparation.packageSettled(r.package.id);
+
+    expect(t.preparation.retryPart(r.package.id, "cv")).toMatchObject({ changed: true, package: { generating: true, stoppedAt: null } });
+    const after = await t.preparation.packageSettled(r.package.id);
+    expect(after).toMatchObject({ chip: { label: "Package ready" } });
+    expect(after!.parts[1]).toMatchObject({ state: "done" });
+  });
+
+  it("doesn't start a part that would cross the monthly cap, and says so", async () => {
+    const writer = fakeWriter({}, { estimateUsd: 0.02 });
+    const t = miraProfile({ writer, capUsd: 0.01 });
+
+    const pkg = await started(t);
+
+    expect(writer.calls.filter((c) => c.task === "tailor-cv")).toEqual([]);
+    expect(pkg.parts[1]).toMatchObject({ part: "cv", state: "not-written", what: "Not written: this month's AI budget would be crossed.", costUsd: 0 });
+    expect(pkg.parts[0]).toMatchObject({ part: "target", state: "done" });
+    expect(pkg.steps[1]).toMatchObject({ sub: "Not written" });
+    expect(t.preparation.budget()).toMatchObject({ spentUsd: 0, reached: true });
+  });
+
+  it("retries a failed part once by itself, then shows it failed with the reason, keeping the rest", async () => {
+    const writer = fakeWriter({ tailorCv: new Error("The model didn't answer within 90 seconds") });
+    const t = miraProfile({ writer });
+
+    const pkg = await started(t);
+
+    expect(writer.calls.filter((c) => c.task === "tailor-cv")).toHaveLength(2);
+    expect(pkg.parts[1]).toMatchObject({ state: "failed", attempts: 2, error: "The model didn't answer within 90 seconds" });
+    expect(pkg.steps[1]).toMatchObject({ state: "failed", sub: "Failed" });
+    expect(pkg.parts[0]).toMatchObject({ state: "done" });
+    expect(t.preparation.approveStep(pkg.id, "target")).toMatchObject({ approved: true });
+  });
+
+  it("uses the second try when the first fails", async () => {
+    let n = 0;
+    const writer = fakeWriter({ tailorCv: () => (++n === 1 ? new Error("The model host is busy") : recordedTailoredCv) });
+    const t = miraProfile({ writer });
+
+    const pkg = await started(t);
+
+    expect(pkg.parts[1]).toMatchObject({ state: "done", attempts: 2, error: null });
+  });
+
+  it("a part left being written when the app stopped shows as failed after a restart", async () => {
+    const db = memoryDb();
+    const { writer } = heldWriter();
+    const t = miraProfile({ writer, db });
+    const r = t.preparation.startPackage(kestrelJob());
+    if (!r.started) throw new Error(r.reason);
+
+    const after = createTestPreparation({ db }).preparation.package(r.package.id);
+
+    expect(after).toMatchObject({ generating: false });
+    expect(after!.parts[1]).toMatchObject({ state: "failed", error: "apply-kit stopped while this was being written" });
   });
 });
