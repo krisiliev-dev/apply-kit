@@ -8,7 +8,10 @@ import { createServer } from "./server.ts";
 import { createOpenRouterExtractor } from "./extraction/openrouter.ts";
 import { createOpenRouterWriter } from "./writing/openrouter.ts";
 import { createFileStore } from "./files.ts";
-import type { DocumentRenderer, Extractor, PdfTextReader, Writer } from "@apply-kit/core";
+import { createChromiumRenderer } from "./documents/chromium.ts";
+import { createPdfJsReader } from "./documents/pdf-text.ts";
+import { createPackageFolder } from "./packages.ts";
+import type { Extractor, Writer } from "@apply-kit/core";
 
 loadEnv();
 const config = readConfig();
@@ -26,10 +29,9 @@ const writer: Writer = config.ai.openRouterApiKey
   ? createOpenRouterWriter({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
   : { estimateCostUsd: () => 0, draftPieces: async () => { throw noKey(); } };
 
-// PDFs come with the CV template (#61): until then nothing in Prepare renders or reads one.
-const notYet = () => new Error("PDF rendering and reading aren't built yet");
-const renderer: DocumentRenderer = { render: async () => { throw notYet(); } };
-const pdfReader: PdfTextReader = { read: async () => { throw notYet(); } };
+// PDFs: the fixed templates printed by headless Chromium (started on first use) and read back with
+// pdf.js, both on this laptop (ADR 0003).
+const renderer = createChromiumRenderer();
 
 const clock = { now: () => new Date() };
 // Named settings from .env, read by name; values are never logged.
@@ -50,15 +52,16 @@ const engine = createEngine({
 });
 
 // Prepare: shares the database, clock, settings and AI budget with Discover. Files Kris brings are
-// kept as hash-named copies in files/ beside the database (ADR 0003).
+// kept as hash-named copies in files/ beside the database, generated PDFs in packages/ (ADR 0003).
 const preparation = createPreparationEngine({
   db,
   clock,
   budget,
   writer,
   renderer,
-  pdfReader,
+  pdfReader: createPdfJsReader(),
   files: createFileStore(join(dirname(config.dbPath), "files")),
+  packages: createPackageFolder(dirname(config.dbPath)),
   settings,
 });
 
@@ -85,7 +88,7 @@ const scheduler = createScheduler({
 // The Chrome extension pairs once with a code shown in the app; only paired extensions are answered.
 const pairing = createPairing({ db, clock });
 
-const app = createServer({ engine, scheduler, pairing, uiDir: config.uiDir, port: config.port });
+const app = createServer({ engine, preparation, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 
 // localhost only: the extension and UI talk to this, nothing else should.
 const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1" }, (info) => {
@@ -100,6 +103,7 @@ const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1
 const shutdown = async () => {
   scheduler.stop();
   server.close();
+  await renderer.close();
   await scheduler.settled();
   db.close();
   process.exit(0);

@@ -23,7 +23,10 @@ Needs Node 22 (`nvm use` reads `.nvmrc`) and pnpm.
 pnpm install
 pnpm run setup:data      # creates the Application Support folder and the `data` shortcut
 cp .env.example .env     # then fill in the settings you need (names only in the example)
+pnpm --filter @apply-kit/app exec playwright install chromium-headless-shell   # prints CVs and letters to PDF (about 100 MB, once)
 ```
+
+CV and cover-letter PDFs are printed from one fixed template per document by headless Chromium and read back with pdf.js, both on this laptop (ADR 0003). To check the template by eye, open `/api/dev/documents/cv` (or `cover-letter`; add `?language=bg` and `&photo=1`) on the running service; `/api/dev/documents/cv/check` shows the text read back and the ATS check. Without Chromium the rendering smoke test is skipped with a message.
 
 Add companies on the Sources screen (**Add company**: a name or a careers link; apply-kit detects the job system). The **Sofia starter watchlist** panel there adds the 46 companies from `docs/design/watchlist-draft.md` with a verified feed in one step (repeatable; Sources you paused or removed stay that way) and lists the 29 without a feed with the LinkedIn or jobs.bg alert that still catches their jobs. Sources can also be seeded in `.env` as `APPLY_KIT_SOURCES` (comma-separated `kind:value`, e.g. `greenhouse:payhawkio`), which is the only way to add search, aggregator and email-alert Sources for now. Source types and their values:
 
