@@ -235,7 +235,7 @@ const migrations: string[] = [
   // by lookup instead of re-reading every Posting's link. Filled for older Postings on start (backfillLinkKeys).
   `ALTER TABLE posting ADD COLUMN link_key TEXT;
    CREATE INDEX posting_link_key ON posting(link_key);`,
-  // #25: the mail store (ADR 0003). Every email in the job mailbox once, by Message-ID, read once per
+  // #25: the mail store (ADR 0004). Every email in the job mailbox once, by Message-ID, read once per
   // check and shared by Discover's alert Sources and Track. Recipients, thread headers and attachment
   // names (never contents) are kept as JSON lists. A read records the time it looked back to, so the
   // next one starts from the last good read that filled the store, minus a day.

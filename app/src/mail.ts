@@ -1,7 +1,7 @@
 // The real mail reader: the dedicated Gmail job mailbox over IMAP, read-only. It opens one folder
 // (GMAIL_MAILBOX, default INBOX) with EXAMINE, so the server can't mark anything read, move or delete
 // it, and it only ever searches and fetches. Message bodies are fetched with BODY.PEEK by imapflow.
-// It reads every email (alerts and application mail alike) for the mail store (ADR 0003).
+// It reads every email (alerts and application mail alike) for the mail store (ADR 0004).
 import { MailboxError, type MailboxProblem, type MailMessage, type MailReader } from "@apply-kit/core";
 import { ImapFlow } from "imapflow";
 import { simpleParser, type AddressObject } from "mailparser";

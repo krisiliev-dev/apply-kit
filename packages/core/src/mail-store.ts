@@ -1,4 +1,4 @@
-// The mail store (ADR 0003): every email in the job mailbox kept once, by Message-ID, in the local
+// The mail store (ADR 0004): every email in the job mailbox kept once, by Message-ID, in the local
 // database. One read of the mailbox per check fills it; Discover's alert Sources and Track both read
 // from it, so the mailbox is never read twice and the two features agree about what arrived.
 import { mailboxProblemOf } from "./mailbox.ts";
