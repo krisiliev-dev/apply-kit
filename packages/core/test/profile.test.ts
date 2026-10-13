@@ -180,3 +180,27 @@ describe("deleting a piece", () => {
   // Packages arrive with a later ticket; then this asserts that an approved package's files keep their SHA-256.
   it.todo("never changes a frozen package file when a piece it used is edited or deleted");
 });
+
+describe("what Profile needs from Kris", () => {
+  it("counts unconfirmed and flagged pieces per section, adding up to the nav badge", () => {
+    const t = createTestPreparation();
+    t.preparation.savePiece({ kind: "skill", text: "Python" });
+    t.preparation.savePiece({ kind: "achievement", text: "Traced a card-testing pattern with the fraud team." }, { from: "Kestrel Payments package", quote: "once, card testing, we built a detection", status: "unconfirmed" });
+    t.preparation.savePiece({ kind: "skill", text: "Kubernetes" }, { from: "Halden Systems package", quote: "played with k3s once", status: "flagged" });
+
+    expect(t.preparation.profileSummary()).toEqual({
+      pieces: 3,
+      confirmed: 1,
+      needsYou: { masterProfile: 2, angles: 0, answerBank: 0, voice: 0 },
+      needsYouTotal: 2,
+    });
+  });
+
+  it("is empty before anything is added", () => {
+    const t = createTestPreparation();
+
+    expect(t.preparation.profileSummary()).toEqual({
+      pieces: 0, confirmed: 0, needsYou: { masterProfile: 0, angles: 0, answerBank: 0, voice: 0 }, needsYouTotal: 0,
+    });
+  });
+});

@@ -117,6 +117,17 @@ export interface PieceList {
   byKind: Record<PieceKind, number>;
 }
 
+/**
+ * What Profile holds and what waits for Kris, per section. The section counts add up to the nav
+ * badge. Angles, the answer bank and voice count nothing until their tickets build them.
+ */
+export interface ProfileSummary {
+  pieces: number;
+  confirmed: number;
+  needsYou: { masterProfile: number; angles: number; answerBank: number; voice: number };
+  needsYouTotal: number;
+}
+
 export const unattachedGroupLabel = "Skills and languages not tied to a role";
 const handSource: PieceSource = { from: "Added in Profile", quote: null };
 
@@ -139,6 +150,7 @@ export interface ProfileStore {
   all(): ProfilePiece[];
   list(query?: PieceQuery): PieceList;
   remove(id: string): DeletedPiece;
+  summary(): ProfileSummary;
 }
 
 /** Whether the piece was there to delete, and how many pieces under it (a role's) now belong to no role. */
@@ -237,7 +249,19 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     }
   }
 
-  return { save, get, all, list, remove };
+  function summary(): ProfileSummary {
+    const rows = db.prepare("SELECT status, COUNT(*) AS n FROM profile_piece GROUP BY status").all();
+    const count = (status: PieceStatus) => Number(rows.find((r) => r.status === status)?.n ?? 0);
+    const needsYou = { masterProfile: count("unconfirmed") + count("flagged"), angles: 0, answerBank: 0, voice: 0 };
+    return {
+      pieces: count("confirmed") + needsYou.masterProfile,
+      confirmed: count("confirmed"),
+      needsYou,
+      needsYouTotal: Object.values(needsYou).reduce((a, b) => a + b, 0),
+    };
+  }
+
+  return { save, get, all, list, remove, summary };
 }
 
 /** What every piece needs before it can be saved: its text, or a role's or education's facts. */
