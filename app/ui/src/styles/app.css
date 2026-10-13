@@ -286,8 +286,10 @@ h2[tabindex="-1"]:focus { outline: none }
 .apps .closed td { color: var(--ink-3) }
 .apps .closed .t { color: var(--ink-2) }
 .apps tr.is-focused td { background: var(--met-soft) }
+.apps .next { font-size: var(--fs-small); color: var(--ink-2) }
+.apps .next.due { color: var(--bloom); font-weight: 600 }
 @media (min-width: 761px) {
-  .apps .c-status { width: 168px } .apps .c-date { width: 88px } .apps .c-last { width: 26% } .apps .c-angle { width: 96px }
+  .apps .c-status { width: 168px } .apps .c-date { width: 88px } .apps .c-last { width: 22% } .apps .c-next { width: 17% } .apps .c-angle { width: 96px }
 }
 @media (max-width: 760px) {
   .apps .wide, .apps col.wide { display: none }

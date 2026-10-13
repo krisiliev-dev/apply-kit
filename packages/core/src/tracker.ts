@@ -305,6 +305,8 @@ export interface NeedsYou {
   items: NeedsYouEntry[];
   /** Due in the next 3 days, soonest first. */
   comingUp: ComingUp[];
+  /** How many days "Snooze" moves one on (a setting). */
+  snoozeDays: number;
 }
 
 /** A follow-up opened to write: the outline (no model call), and how to send it from the user's own mail. */
@@ -317,6 +319,8 @@ export interface FollowUpDraft {
   mail: { to: string | null; subject: string } | null;
   /** The length that works well, in words; null for a note to self. */
   words: { min: number; max: number } | null;
+  /** How many days "Snooze" moves it on (a setting). */
+  snoozeDays: number;
 }
 
 /** A change the tracker refuses, with why in plain words. */
@@ -941,7 +945,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     // Most urgent first: due the longest; done ones keep their place.
     items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
     comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
-    return { count: items.filter((i) => !i.done).length, items, comingUp };
+    return { count: items.filter((i) => !i.done).length, items, comingUp, snoozeDays: followUpSettings().snoozeDays };
   }
 
   /** A follow-up the user acts on: it must exist and still be its Application's current one. */
@@ -983,6 +987,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       followUp: f, application, outline,
       mail: f.kind === "nudge" ? { to, subject: `Following up on my application: ${application.title}` } : null,
       words: f.kind === "nudge" ? { min: 70, max: 110 } : null,
+      snoozeDays: followUpSettings().snoozeDays,
     };
   }
 

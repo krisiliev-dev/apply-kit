@@ -2,6 +2,7 @@ import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
+  FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -270,7 +271,7 @@ export async function addApplication(input: AddApplicationInput): Promise<AddApp
   return json(res);
 }
 
-export async function setApplicationStatus(id: string, status: Status): Promise<{ application: ApplicationSummary; event: ApplicationEvent }> {
+export async function setApplicationStatus(id: string, status: Status): Promise<{ application: ApplicationSummary; event: ApplicationEvent; cancelled: FollowUp | null }> {
   return json(await postJson(`/api/applications/${encodeURIComponent(id)}/status`, { status }));
 }
 
@@ -305,4 +306,46 @@ export const applicationCvUrl = (id: string) => `${applicationPath(id)}/cv`;
 /** The Stats strip's numbers. */
 export async function fetchApplicationStats(signal?: AbortSignal): Promise<TrackStats> {
   return json(await fetch("/api/applications/stats", { signal }));
+}
+
+// ---------- Follow-ups and Needs you (Track) ----------
+
+/** Needs you: follow-ups due, most urgent first, the count for the badge, and Coming up. */
+export async function fetchNeedsYou(signal?: AbortSignal): Promise<NeedsYou> {
+  return json(await fetch("/api/applications/needs-you", { signal }));
+}
+
+/** Tells the top bar that what needs the user changed, so its Applications badge counts again. */
+export function needsYouChanged(): void {
+  window.dispatchEvent(new Event("needs-you-changed"));
+}
+
+const followUpPath = (id: string) => `/api/follow-ups/${encodeURIComponent(id)}`;
+
+/** One follow-up to write: its outline, text as typed, and Open in Mail's recipient and subject. */
+export async function fetchFollowUp(id: string, signal?: AbortSignal): Promise<FollowUpDraft> {
+  return json(await fetch(followUpPath(id), { signal }));
+}
+
+/** Keeps the text as typed. */
+export async function saveFollowUpText(id: string, text: string): Promise<{ followUp: FollowUp }> {
+  return json(await fetch(`${followUpPath(id)}/text`, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }), keepalive: true,
+  }));
+}
+
+/** Marks it sent (from the user's own mail), skips it, or snoozes it: an Event, undone like any other. */
+export async function followUpAction(id: string, action: "sent" | "skip" | "snooze"): Promise<{ followUp: FollowUp; event: ApplicationEvent }> {
+  return json(await postJson(`${followUpPath(id)}/${action}`));
+}
+
+/** The follow-up delays. */
+export async function fetchFollowUpSettings(signal?: AbortSignal): Promise<FollowUpSettings> {
+  return json(await fetch("/api/settings/follow-ups", { signal }));
+}
+
+export async function saveFollowUpSettings(settings: FollowUpSettings): Promise<FollowUpSettings> {
+  return json(await fetch("/api/settings/follow-ups", {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(settings),
+  }));
 }

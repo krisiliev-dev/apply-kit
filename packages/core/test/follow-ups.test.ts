@@ -242,6 +242,7 @@ describe("writing a follow-up", () => {
     ]);
     expect(draft.mail).toEqual({ to: "careers@tidewaterpay.example", subject: "Following up on my application: Application Security Engineer" });
     expect(draft.words).toEqual({ min: 70, max: 110 });
+    expect(draft.snoozeDays).toBe(3);
   });
 
   it("has no recipient when only the company's domain is known, and no mail at all for a note to self", async () => {

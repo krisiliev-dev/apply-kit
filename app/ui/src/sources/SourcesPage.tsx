@@ -13,6 +13,7 @@ import { ExtensionPanel } from "./ExtensionPanel.tsx";
 import { RemoveDialog } from "./RemoveDialog.tsx";
 import { CoverageCard, CoveragePage } from "./Coverage.tsx";
 import { StarterWatchlist } from "./StarterWatchlist.tsx";
+import { SettingsRail } from "../settings/SettingsRail.tsx";
 import {
   categoryLabel, Chip, clockTime, DropBanner, FailedSourceBanner, failureShort, MailboxBanner, quietText, StatusLine, tryResultText, useConfirmDrop, useTryNow,
 } from "../health.tsx";
@@ -142,13 +143,7 @@ export function SourcesPage({ onHealth }: { onHealth: (h: HealthSummary) => void
 
   return (
     <div className="set">
-      <nav className="rail" aria-label="Settings sections">
-        <span className="rail-h">Settings</span>
-        <a href="/settings/sources" aria-current="page">Sources &amp; watchlist</a>
-        <a href="/settings/mailbox">Mailbox</a>
-        <a href="/settings/model">Model &amp; budget</a>
-        <a href="/settings/data">Data &amp; privacy</a>
-      </nav>
+      <SettingsRail current="/settings/sources" />
       <div className="stack" style={{ gap: "var(--s-6)" }}>
         <StatusLine message={said} />
         {load.state === "loading" && <p className="meta">Loading sources…</p>}
