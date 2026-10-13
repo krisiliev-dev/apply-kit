@@ -60,6 +60,11 @@ export type {
   ProfilePiece, PieceKind, PieceStatus, NumberSource, PieceEntry, PieceSource, PieceInput, PieceOrigin, PieceField, PieceFix,
   PieceProblem, SavePieceResult, PieceQuery, PieceGroup, PieceList, DeletedPiece, ProfileSummary,
 } from "./preparation/profile.ts";
+export { answerLanguages, answerCategories, answerKinds, answerModes, languageOf, minMatchConfidence } from "./preparation/answers.ts";
+export type {
+  Answer, AnswerInput, AnswerOrigin, AnswerLanguage, AnswerCategory, AnswerKind, AnswerMode, AnswerRule, SalaryRule, Wording,
+  AnswerSource, PortalEdit, AnswerField, AnswerProblem, SaveAnswerResult, AnswerFill, AnswerMatch,
+} from "./preparation/answers.ts";
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,

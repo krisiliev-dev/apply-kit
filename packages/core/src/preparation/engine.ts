@@ -4,6 +4,7 @@
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
+import { createAnswerStore, type Answer, type AnswerInput, type AnswerLanguage, type AnswerMatch, type AnswerOrigin, type SaveAnswerResult } from "./answers.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
@@ -80,6 +81,23 @@ export interface PreparationEngine {
   piece(id: string): ProfilePiece | null;
   /** The master profile grouped by role (roles, then education, then pieces tied to neither), filtered. */
   listPieces(query?: PieceQuery): PieceList;
+
+  // ---------- Answer bank (Profile, and the contract Apply #40 reads) ----------
+
+  /**
+   * Adds an answer (no id) or saves an edit to one. Profile leaves `origin` out; Apply passes where a
+   * new answer came from (the job and the portal). A refused answer comes back with its problems.
+   */
+  saveAnswer(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
+  /** One answer, for editing; null once it's deleted. */
+  answer(id: string): Answer | null;
+  /**
+   * The bank's answer to a form's question, in a language: matched on the question or any of its
+   * wordings, with how confident the match is, or null when nothing matches well enough. Only a
+   * "fill" answer carries a value; "ask each time", "leave blank" and a missing language never do.
+   */
+  findAnswer(question: string, language: AnswerLanguage): AnswerMatch | null;
+
   /**
    * Prints a document from its fixed template, keeps it as the package's draft of that document,
    * and reads it back: page count, overflow and (for a CV) the ATS check come from the PDF itself.
@@ -93,6 +111,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   migrate(deps.db);
   const profile = createProfileStore(deps);
   const contact = createContactStore(deps);
+  const answers = createAnswerStore(deps);
 
   async function draftDocument({ packageId, document, fileName: parts, keywords }: DraftRequest): Promise<DocumentDraft> {
     const fileName = documentFileName(document.kind, parts);
@@ -123,6 +142,9 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     piece: (id) => profile.get(id),
     listPieces: (query) => profile.list(query),
     profileSummary: () => profile.summary(),
+    saveAnswer: (input, origin) => answers.save(input, origin),
+    answer: (id) => answers.get(id),
+    findAnswer: (question, language) => answers.find(question, language),
     contact: () => contact.get(),
     saveContact: (details) => contact.save(details),
     setPhoto: (photo) => contact.setPhoto(photo),
