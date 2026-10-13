@@ -245,6 +245,18 @@ describe("the Applications routes", () => {
     expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
 
+  it("lists emails to match, refuses an answer with no choice in words, and gives the mailbox's state", async () => {
+    const s = service();
+
+    expect(await (await s.request("/api/applications/emails")).json()).toEqual([]);
+    const noChoice = await s.request("/api/applications/emails/%3Cinv-1%40nimbus-cloud.example%3E/answer", s.json({}));
+    expect(noChoice.status).toBe(422);
+    expect(await noChoice.json()).toMatchObject({ problem: "invalid", error: "Choose where this email belongs first." });
+    const unknown = await s.request("/api/applications/emails/%3Cnone%40example.com%3E/answer", s.json({ choice: "none" }));
+    expect(unknown.status).toBe(404);
+    expect(await (await s.request("/api/applications/mailbox")).json()).toMatchObject({ state: "not-read" });
+  });
+
   it("shows one Application in full, takes notes, contacts and the CV sent, and says when there's no such one", async () => {
     const s = service();
     const added = await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));

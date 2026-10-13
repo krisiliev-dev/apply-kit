@@ -5,7 +5,8 @@ import { openDatabase } from "./db.ts";
 import { createImapMailReader, readMailSettings } from "./mail.ts";
 import { createServer } from "./server.ts";
 import { createOpenRouterExtractor } from "./extraction/openrouter.ts";
-import type { Extractor } from "@apply-kit/core";
+import { createOpenRouterTrackAssistant } from "./extraction/track-assistant.ts";
+import type { Extractor, Tracker } from "@apply-kit/core";
 
 loadEnv();
 const config = readConfig();
@@ -19,15 +20,20 @@ const extractor: Extractor = config.ai.openRouterApiKey
     };
 
 const clock = { now: () => new Date() };
+const mailSettings = readMailSettings(process.env);
+// Track matches what each mailbox read stored (made below, beside the engine it reads Jobs through).
+let tracker: Tracker | null = null;
 const engine = createEngine({
   db,
   clock,
   fetch: globalThis.fetch,
   extractor,
   aiMonthlyCapUsd: config.ai.monthlyCapUsd,
-  // The Gmail job mailbox, read-only. Only read when an email-alert Source exists, during checks
-  // the scheduler runs; missing settings show on Sources as "not configured" with how to fix it.
-  mailReader: createImapMailReader(readMailSettings(process.env)),
+  // The Gmail job mailbox, read-only, during checks the scheduler runs. With Track, every check reads
+  // it once (alerts and application mail alike) and hands what it stored to email matching; missing
+  // settings show on Applications and Sources as "not connected" with how to fix it.
+  mailReader: createImapMailReader(mailSettings),
+  onMailStored: (emails) => tracker?.processMail(emails).catch((err: unknown) => console.error("Matching emails failed:", err)),
   // Sources read their keys (JOOBLE_API_KEY, REED_API_KEY) by name; values are never logged.
   settings: { get: (name) => process.env[name] },
 });
@@ -55,8 +61,17 @@ const scheduler = createScheduler({
 // The Chrome extension pairs once with a code shown in the app; only paired extensions are answered.
 const pairing = createPairing({ db, clock });
 
-// Track: Applications, beside the discovery engine on the same database and clock.
-const tracker = createTracker({ db, clock, discovery: engine });
+// Track: Applications, beside the discovery engine on the same database, clock and AI budget.
+// Emails are classified through the same OpenRouter setup; without a key, matching runs on rules alone.
+tracker = createTracker({
+  db, clock, discovery: engine,
+  assistant: config.ai.openRouterApiKey
+    ? createOpenRouterTrackAssistant({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
+    : undefined,
+  aiMonthlyCapUsd: config.ai.monthlyCapUsd,
+  // Mail from the job mailbox's own address is never an employer's.
+  ownAddresses: mailSettings ? [mailSettings.address] : [],
+});
 
 const app = createServer({ engine, tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 

@@ -4,7 +4,7 @@ import { stream } from "hono/streaming";
 import type { Context } from "hono";
 import { TrackerError, maxCvBytes } from "@apply-kit/core";
 import type {
-  AddApplicationInput, CapturedPage, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, GroupKey, Pairing, PassReason,
+  AddApplicationInput, CapturedPage, EmailAnswer, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, GroupKey, Pairing, PassReason,
   PastedPosting, Scheduler, Status, Tracker,
 } from "@apply-kit/core";
 
@@ -325,6 +325,9 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   // The Stats strip: applications per week with the pace, response rate, interviews, what's working.
   app.get("/api/applications/stats", async (c) => c.json(await tracker.stats()));
   app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));
+  // Emails waiting in Needs you ("Email to match"), and the job mailbox's state for Applications' banners.
+  app.get("/api/applications/emails", async (c) => c.json(await tracker.emailsToMatch()));
+  app.get("/api/applications/mailbox", async (c) => c.json(await tracker.mailbox()));
   app.get("/api/applications/:id", async (c) => {
     const a = await tracker.get(c.req.param("id"));
     return a ? c.json(a) : c.json({ error: "No such application" }, 404);
@@ -383,6 +386,25 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   app.post("/api/applications/events/:id/undo", async (c) => {
     if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     return trackerCall(c, () => tracker.undoEvent(c.req.param("id")));
+  });
+  // "Looks right" on the moved-by-email banner: the banner goes, the move and the email stay.
+  app.post("/api/applications/events/:id/looks-right", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, async () => { await tracker.confirmEmailMove(c.req.param("id")); return { ok: true }; });
+  });
+
+  // Your answer to an email to match:
+  // { choice: "application", applicationId, move } | { choice: "new", move } | { choice: "none" }.
+  // No choice: 422 "Choose where this email belongs first."
+  app.post("/api/applications/emails/:id/answer", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const answer = (body.choice === "application"
+      ? { choice: "application", applicationId: typeof body.applicationId === "string" ? body.applicationId : "", move: body.move === true }
+      : body.choice === "new" ? { choice: "new", move: body.move === true }
+      : body.choice === "none" ? { choice: "none" }
+      : {}) as EmailAnswer;
+    return trackerCall(c, () => tracker.answerEmail(c.req.param("id"), answer));
   });
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
