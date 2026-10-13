@@ -1,7 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
-  WatchlistSeed, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
+  WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -296,3 +296,15 @@ export async function removePhoto(): Promise<Contact> {
 
 /** The one-click export downloads from here. */
 export const profileExportUrl = "/api/profile/export";
+
+// ---------- Angles (#58) ----------
+
+export async function fetchAngles(signal?: AbortSignal): Promise<AngleView[]> {
+  return json(await fetch("/api/profile/angles", { signal }));
+}
+
+/** Saves a summary line, a lead order, or both; a refused save resolves with its problems. */
+export async function saveAngle({ angle, ...change }: SaveAngleInput): Promise<SaveAngleResult> {
+  const res = await fetch(`/api/profile/angles/${angle}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(change) });
+  return res.status === 422 ? ((await res.json()) as SaveAngleResult) : json(res);
+}
