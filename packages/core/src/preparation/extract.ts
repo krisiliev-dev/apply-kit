@@ -21,7 +21,7 @@ export function pdfPlainText(text: PdfText): string {
 }
 
 export function plainText(bytes: Uint8Array): string {
-  return new TextDecoder("utf-8").decode(bytes).replace(/^﻿/, "").replace(/\r\n?/g, "\n")
+  return new TextDecoder("utf-8").decode(bytes).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n")
     .split("\n").map((l) => l.trimEnd()).join("\n").trim();
 }
 

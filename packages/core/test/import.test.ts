@@ -248,7 +248,7 @@ describe("the monthly AI budget during import", () => {
 describe("the LinkedIn export and GitHub, read without the model", () => {
   const positions = [
     "Company Name,Title,Description,Location,Started On,Finished On",
-    'Northwind Bank,Security Analyst,"Monitoring, triage and detections",\"Sofia, Bulgaria\",Mar 2022,',
+    'Northwind Bank,Security Analyst,"Monitoring, triage and detections","Sofia, Bulgaria",Mar 2022,',
     "Contoso Labs,IT Support Intern,,Plovdiv,Jun 2020,Sep 2021",
   ].join("\n");
   const linkedIn = {
