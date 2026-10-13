@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
+import { createAiBudget, type BudgetInfo } from "./budget.ts";
 import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
 import {
@@ -359,15 +360,6 @@ export interface FeedResult {
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
   budget: BudgetInfo;
-}
-
-/** This month's AI spending against the cap. Once reached, unread Postings show as unscreened. */
-export interface BudgetInfo {
-  /** Calendar month the spending counts towards (UTC), e.g. "2026-10". */
-  month: string;
-  capUsd: number;
-  spentUsd: number;
-  reached: boolean;
 }
 
 export interface NewSource {
@@ -1174,19 +1166,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const inFlight = new Map<string, Promise<keyof ReadResult>>();
   let pendingRun: Promise<ReadResult> | null = null;
 
-  const month = () => clock.now().toISOString().slice(0, 7);
-  const spentThisMonth = () =>
-    Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
-  const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
-  /** Estimated cost of the reads running right now, held against the cap until each one is billed. */
-  let reservedUsd = 0;
-  /** The month in which a read was last refused because it would have crossed the cap. */
-  let refusedInMonth: string | null = null;
-  const budget = (): BudgetInfo => {
-    const spentUsd = Math.round(spentThisMonth() * 1e6) / 1e6;
-    const capUsd = cap();
-    return { month: month(), capUsd, spentUsd, reached: capUsd <= 0 || spentUsd >= capUsd || refusedInMonth === month() };
-  };
+  /** The monthly AI budget: the service shares one with the preparation engine (one cap over extraction and writing). */
+  const aiBudget = deps.budget ?? createAiBudget({ db, clock, capUsd: deps.aiMonthlyCapUsd });
+  const budget = (): BudgetInfo => aiBudget.info();
 
   function readingOf(postingId: string, budgetReached = budget().reached): { state: ReadingState; facts: PostingFacts | null; error: string | null; text: string } {
     const p = db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
@@ -1281,24 +1263,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       location: row.location == null ? null : String(row.location),
       text: text.slice(0, MAX_TEXT_CHARS),
     };
-    const estimate = deps.extractor.estimateCostUsd(input);
-    // The estimate is reserved before the first await, so reads that start together can't all fit
-    // under the cap at once: each one counts what the others are still spending.
-    if (spentThisMonth() + reservedUsd + estimate > cap()) {
-      refusedInMonth = month();
-      return "unscreened";
-    }
-    reservedUsd += estimate;
-    let reserved = true;
-    const settle = () => {
-      if (reserved) reservedUsd -= estimate;
-      reserved = false;
-    };
-
     try {
-      const out = await deps.extractor.extract(input);
-      settle();
-      recordSpend(postingId, Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      const outcome = await aiBudget.call(
+        { task: "extraction", estimateUsd: deps.extractor.estimateCostUsd(input), postingId },
+        () => deps.extractor.extract(input),
+      );
+      if (outcome.refused) return "unscreened";
+      const out = outcome.result;
       const parsed = postingFactsSchema.safeParse(out.facts);
       if (!parsed.success) {
         store("failed", null, out.model, "The model's answer didn't have the expected shape");
@@ -1307,18 +1278,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       store("read", parsed.data, out.model, null);
       return "read";
     } catch (err) {
-      settle();
-      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
-      if (typeof billed === "number" && billed > 0) recordSpend(postingId, billed);
       store("failed", null, null, err instanceof Error ? err.message : String(err));
       return "failed";
     }
-  }
-
-  function recordSpend(postingId: string, costUsd: number) {
-    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'extraction', ?, ?)").run(
-      clock.now().toISOString(), month(), postingId, costUsd,
-    );
   }
 
   /** Moves each Job currently in one of `from` to `to`, remembering its previous state. */

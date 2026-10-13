@@ -2,6 +2,7 @@
 // tests pass fakes (see test/harness.ts).
 import type { SearchSettings } from "./search-settings.ts";
 import type { ExtractionInput, ExtractionResult } from "./extraction/facts.ts";
+import type { AiBudget } from "./budget.ts";
 
 export interface Clock {
   now(): Date;
@@ -88,6 +89,11 @@ export interface EngineDeps {
    * would cross it; Postings then stay in the Feed unscreened. Unset or 0 means no AI spending.
    */
   aiMonthlyCapUsd?: number;
+  /**
+   * The monthly AI budget shared with the preparation engine (see budget.ts). When given, it is the
+   * cap and `aiMonthlyCapUsd` is ignored; the service passes one so both engines spend from one cap.
+   */
+  budget?: AiBudget;
   /** Kris's search settings until he saves his own (the engine stores those). Missing means the defaults. */
   searchSettings?: SearchSettings;
 }

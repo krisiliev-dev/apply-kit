@@ -2,7 +2,7 @@
   "name": "@apply-kit/core",
   "private": true,
   "type": "module",
-  "description": "Discovery engine and domain rules. Dependencies (fetch, clock, db, extractor, mail reader) are injected.",
+  "description": "Discovery and preparation engines and domain rules. Dependencies (fetch, clock, db, AI budget, extractor, writer, mail reader, renderer, PDF reader, file store) are injected.",
   "exports": {
     ".": "./src/index.ts"
   },
