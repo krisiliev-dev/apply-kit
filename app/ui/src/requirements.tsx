@@ -1,9 +1,15 @@
 // Requirement chips, shared by Feed rows and the Job page. Rules (DESIGN.md, Discover review):
 // every gap and partly-met requirement is shown; only met items collapse into "+N met"; preferred
-// items are never gaps. Without a master profile nothing can be met or missing, so required items
-// show as "not checked" and are never collapsed; preferred ones collapse into "+N preferred".
+// items are never gaps: one not held shows as partly, "(preferred)". Without a master profile
+// nothing can be met or missing, so required items show as "not checked" and are never collapsed;
+// preferred ones collapse into "+N preferred".
 import type { FeedJob, RequirementStatus } from "@apply-kit/core";
 import { Icon, type IconName } from "./icons.tsx";
+
+/** The status as the Job page's "You" column says it (hi-fi: job.html). */
+export const statusLabel: Record<RequirementStatus, string> = {
+  met: "Met", partly: "Partly", gap: "Gap", "not-held": "Partly: not held", unknown: "Not checked",
+};
 
 const chipFor: Record<RequirementStatus, { cls: string; icon: IconName; sr: string }> = {
   met: { cls: "met", icon: "met", sr: "met" },
@@ -43,14 +49,14 @@ export function RowChips({ job }: { job: FeedJob }) {
   const r = job.requirements;
   const shown = [
     ...r.filter((x) => x.status === "gap"),
-    ...r.filter((x) => x.status === "partly"),
+    ...r.filter((x) => x.status === "partly" || x.status === "not-held"),
     ...r.filter((x) => x.status === "unknown" && x.kind === "required"),
   ];
   const met = r.filter((x) => x.status === "met").length;
   const preferredUnknown = r.filter((x) => x.status === "unknown" && x.kind === "preferred").length;
   return (
     <div className="chips">
-      {shown.map((x, i) => <StatusChip key={i} status={x.status} label={x.text} />)}
+      {shown.map((x, i) => <StatusChip key={i} status={x.status} label={x.status === "not-held" ? `${x.text} (preferred)` : x.text} />)}
       {met > 0 && <span className="chip met"><Icon name="met" />{met === r.length ? `All ${met} met` : `+${met} met`}</span>}
       {preferredUnknown > 0 && <span className="chip neutral">+{preferredUnknown} preferred</span>}
       {job.needsYou > 0 && <AskChip label={`${job.needsYou} ${job.needsYou === 1 ? "fact needs" : "facts need"} you`} />}

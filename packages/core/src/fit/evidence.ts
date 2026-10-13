@@ -35,7 +35,7 @@ export interface Evidence {
   status: RequirementStatus;
   /** The pieces behind a met or partly-met status; empty for a gap. */
   pieces: EvidencePiece[];
-  /** What was found, in plain words, e.g. "3 years 8 months from your role dates". */
+  /** What was found, in plain words, e.g. "3 years 8 months from your role dates"; empty when the pieces say it all. */
   note: string;
 }
 
@@ -222,7 +222,7 @@ function termsEvidence(text: string, pieces: ProfilePiece[], { partial }: { part
     return { piece: p, ...best, full: best.found.length === best.terms.length, strong: best.found.some((t) => !isWeak(t)) };
   });
   const full = scored.filter((s) => s.full);
-  if (full.length > 0) return { status: "met", pieces: full.slice(0, 3).map((s) => labelOf(s.piece)), note: "In your master profile" };
+  if (full.length > 0) return { status: "met", pieces: full.slice(0, 3).map((s) => labelOf(s.piece)), note: "" };
   const some = scored.filter((s) => s.strong).sort((a, b) => b.found.length / b.terms.length - a.found.length / a.terms.length);
   if (!partial || some.length === 0) return { status: "gap", pieces: [], note: noEvidence };
   const top = some[0]!;
@@ -271,7 +271,7 @@ function languageEvidence(names: string[], text: string, pieces: ProfilePiece[])
   const asked = levelOf(text.replace(new RegExp(names.join("|"), "gi"), " "));
   const held = holding.map((p) => ({ p, level: levelOf(pieceTexts(p).join(" ")) })).sort((a, b) => (b.level?.rank ?? 0) - (a.level?.rank ?? 0))[0]!;
   const piece = [labelOf(held.p)];
-  if (!asked || (held.level && held.level.rank >= asked.rank)) return { status: "met", pieces: piece, note: held.level ? `${names[0]} ${held.level.label}` : names[0]! };
+  if (!asked || (held.level && held.level.rank >= asked.rank)) return { status: "met", pieces: piece, note: "" };
   if (!held.level) return { status: "partly", pieces: piece, note: `Your profile doesn't say your level; ${asked.label} asked` };
   return { status: "partly", pieces: piece, note: `Your profile says ${held.level.label}; ${asked.label} asked` };
 }
