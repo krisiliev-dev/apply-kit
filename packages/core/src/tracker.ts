@@ -140,6 +140,8 @@ export const maxCvBytes = 10 * 1024 * 1024;
 
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
+  /** When it got its current Status (the Event still standing that set it). */
+  statusSince: string;
   /** The CV version it counts under in What's working: the attached CV's label (or, later, the Package's). */
   cvVersion: string | null;
   /** The CV attached by hand, or null. */
@@ -649,7 +651,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     }
     timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
     return {
-      ...app, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+      ...app, statusSince: standing.filter((e) => e.kind === "created" || e.kind === "status").at(-1)?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
     };
   }
 

@@ -82,6 +82,18 @@ describe("notes and the next step", () => {
     expect(app.status).toBe("applied");
   });
 
+  it("says a closed one has nothing left to do, and since when it has its Status", async () => {
+    const { tracker, clock } = tracked();
+    const id = await add(tracker);
+    await clock.advance(3 * 24 * 3600_000);
+    await tracker.setStatus(id, "rejected");
+
+    expect((await tracker.get(id))!).toMatchObject({
+      statusSince: clock.now().toISOString(),
+      nextStep: { kind: "closed", text: "Nothing to do: it's rejected. It stays here for your records." },
+    });
+  });
+
   it("refuses an empty note", async () => {
     const { tracker } = tracked();
     const id = await add(tracker);
