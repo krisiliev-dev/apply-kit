@@ -100,7 +100,7 @@ export function AnswerBank({ go, announce, flash, clearFlash, onChanged }: {
             <button className="btn sm" type="button" onClick={() => { setShow("all"); setSearch(""); setPage(1); }}>Clear search and filters</button>
           </div>
         ) : (
-          <div className="table-wrap">
+          <div className="table-wrap" tabIndex={0} role="region" aria-label="Answer bank table, scrolls sideways on narrow screens">
             <table className="table answers-table" aria-label="Answer bank">
               <thead><tr><th scope="col">Question</th><th scope="col">Answer</th><th scope="col">Kind</th><th scope="col">Languages</th><th scope="col">Last used</th><th scope="col">Used</th></tr></thead>
               <tbody>{list.answers.map((a) => <AnswerRow key={a.id} answer={a} go={go} />)}</tbody>
