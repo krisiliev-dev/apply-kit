@@ -9,6 +9,8 @@ import {
 import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
 import type { Angle } from "./fit/angles.ts";
+import { withEvidence } from "./fit/evidence.ts";
+import { createProfileStore } from "./preparation/profile.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations, NOT_STATED } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
@@ -874,6 +876,10 @@ const viewStates: Record<FeedView, JobState[]> = {
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
+  // The master profile, read here only: the preparation engine owns it. Its confirmed pieces are
+  // the evidence for requirement statuses and Fit.
+  const profile = createProfileStore({ db, clock });
+  const profilePieces = () => profile.all().filter((p) => p.status === "confirmed");
   backfillMatchKeys(db);
   backfillLinkKeys(db);
 
@@ -988,8 +994,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const active = activeAdjustments();
     if (active.length === 0) return counts;
     const money = budget();
+    const pieces = profilePieces();
     for (const r of db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved')`).all()) {
-      for (const reason of toFeedJob(r, money, active).fit.reasons) {
+      for (const reason of toFeedJob(r, money, active, pieces).fit.reasons) {
         if (reason.adjustmentId) counts.set(reason.adjustmentId, (counts.get(reason.adjustmentId) ?? 0) + 1);
       }
     }
@@ -1187,9 +1194,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         .map((r) => [String(r.fact_key), String(r.choice) as FactAnswer]),
     );
 
-  /** The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is read. */
-  function readOf(postingId: string, reading: ReturnType<typeof readingOf>) {
-    return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
+  /**
+   * The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is
+   * read. Requirement statuses come from the master profile as it is now, so editing a piece changes
+   * them (and the Fit) on the next query, with no model call.
+   */
+  function readOf(postingId: string, reading: ReturnType<typeof readingOf>, pieces = profilePieces()) {
+    return reading.facts ? withEvidence(jobReading(reading.facts, reading.text, answersFor(postingId)), reading.facts, pieces, clock.now()) : null;
   }
 
   /**
@@ -1406,11 +1417,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          FROM job j
          JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
 
-  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments()): FeedJob {
+  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments(), pieces = profilePieces()): FeedJob {
     const links = linksOf(String(r.id));
     const readId = readingPostingId(String(r.id));
     const reading = readingOf(readId, money.reached);
-    const read = readOf(readId, reading);
+    const read = readOf(readId, reading, pieces);
     const base = { title: String(r.title), company: String(r.company), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
     const fit = fitOf(base, read, reading.facts, active);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
@@ -2020,7 +2031,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all();
       const active = activeAdjustments();
-      const all = rows.map((r) => ({ job: toFeedJob(r, money, active), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const pieces = profilePieces();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money, active, pieces), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
       const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");

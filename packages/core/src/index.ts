@@ -25,7 +25,7 @@ export type {
   PostingFacts, SourceQuote, ExtractedRequirement, ExtractedYears, ExtractedLanguage, ExtractedCertificate,
   ExtractedWorkAuthorisation, ExtractedRemote, ExtractedSalary, ExtractionInput, ExtractionResult,
 } from "./extraction/facts.ts";
-export type { FeedRequirement, RequirementStatus, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening, FactAnswer } from "./extraction/reading.ts";
+export type { FeedRequirement, RequirementStatus, RequirementEvidence, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening, FactAnswer } from "./extraction/reading.ts";
 export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, AlertEmail, Settings } from "./ports.ts";
 export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext, EmailAlertAdapter } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";
@@ -35,6 +35,8 @@ export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts"
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
 export { angles } from "./fit/angles.ts";
+export { matchEvidence, withEvidence } from "./fit/evidence.ts";
+export type { Evidence, EvidencePiece, RequirementToMatch, RequirementCategory } from "./fit/evidence.ts";
 export type { Angle } from "./fit/angles.ts";
 export type { Place, LocationTier } from "./locations.ts";
 export { defaultSearchSettings } from "./search-settings.ts";
