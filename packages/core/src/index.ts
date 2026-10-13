@@ -52,13 +52,19 @@ export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcom
 export { draftedPiecesSchema } from "./writing/writer.ts";
 export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces } from "./writing/writer.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
-export type { PreparationEngine } from "./preparation/engine.ts";
+export type { PreparationEngine, DraftRequest, DocumentDraft } from "./preparation/engine.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
-  PdfTextReader, PdfText, FileStore, StoredFile,
+  PdfTextReader, PdfText, FileStore, StoredFile, PackageFolder,
 } from "./preparation/ports.ts";
 export type {
   CvContent, CvRole, CvEducation, LetterContent, Letterhead, DocumentDate, MonthYear, DocumentPhoto,
 } from "./documents/content.ts";
 export { checkAts } from "./documents/ats.ts";
 export type { AtsCheck, AtsCheckId, AtsCheckResult, AtsInput, AtsKeyword } from "./documents/ats.ts";
+export { documentFileName } from "./documents/file-names.ts";
+export type { FileNameParts } from "./documents/file-names.ts";
+export { cvSections, sectionTitles, formatDate, formatRange, formatLetterDate, letterLabels } from "./documents/labels.ts";
+export type { CvSection } from "./documents/labels.ts";
+export { demoDocument } from "./documents/demo.ts";
+export type { DemoOptions } from "./documents/demo.ts";

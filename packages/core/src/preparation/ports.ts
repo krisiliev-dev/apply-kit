@@ -4,7 +4,7 @@
 import type { AiBudget } from "../budget.ts";
 import type { Clock, Settings, SqlDatabase } from "../ports.ts";
 import type { Writer } from "../writing/writer.ts";
-import type { DocumentToRender } from "../documents/content.ts";
+import type { DocumentKind, DocumentToRender } from "../documents/content.ts";
 
 export type { DocumentKind, DocumentLanguage, DocumentToRender } from "../documents/content.ts";
 
@@ -48,6 +48,15 @@ export interface FileStore {
   remove(sha256: string): Promise<void>;
 }
 
+/**
+ * Generated PDFs, in `packages/<package id>/` beside the database (ADR 0003). A draft render
+ * replaces the previous draft of the same document; approved files are frozen elsewhere (#67).
+ */
+export interface PackageFolder {
+  /** Writes the draft and returns where it is, relative to the data folder ("packages/<id>/<file name>"). */
+  saveDraft(packageId: string, kind: DocumentKind, fileName: string, bytes: Uint8Array): Promise<{ path: string }>;
+}
+
 export interface PreparationDeps {
   db: SqlDatabase;
   clock: Clock;
@@ -57,6 +66,7 @@ export interface PreparationDeps {
   renderer: DocumentRenderer;
   pdfReader: PdfTextReader;
   files: FileStore;
+  packages: PackageFolder;
   /** Named settings. Missing means every setting is unset. */
   settings?: Settings;
 }
