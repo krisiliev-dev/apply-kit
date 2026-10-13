@@ -60,6 +60,23 @@ export interface ApplicationSummary {
   lastEvent: ApplicationEvent;
 }
 
+/** The happy path, as the stepper shows it. Rejected and withdrawn sit after "or" as a branch. */
+export const happyPath: readonly Status[] = ["applied", "screening", "interviewing", "offer", "accepted"];
+
+/**
+ * One step of the stepper: done (it happened), current, skipped (a later step happened without it),
+ * or still to come. Derived from the Events still standing, so the history shown is what happened.
+ */
+export interface StatusStep {
+  status: Status;
+  state: "done" | "current" | "skipped" | "todo";
+}
+
+/** One Application in full, as its page shows it. */
+export interface ApplicationDetail extends ApplicationSummary {
+  steps: StatusStep[];
+}
+
 /** What the user gives "Add application". */
 export interface AddApplicationInput {
   /** A Job in apply-kit (any state, passed and closed too), or one made elsewhere. */
@@ -150,8 +167,8 @@ export interface Tracker {
   addByHand(input: AddApplicationInput): Promise<AddApplicationResult>;
   /** Every Application, grouped by Status, with counts. */
   list(query?: ListQuery): Promise<ApplicationList>;
-  /** One Application, or null. */
-  get(applicationId: string): Promise<ApplicationSummary | null>;
+  /** One Application in full (stepper steps, next step, timeline, contacts, posting, CV), or null. */
+  get(applicationId: string): Promise<ApplicationDetail | null>;
   /** The Application's Events, oldest first (undone ones included, marked). */
   events(applicationId: string): Promise<ApplicationEvent[]>;
   /**
@@ -424,6 +441,29 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     }
   }
 
+  /** The stepper: the furthest happy-path step reached; steps before it never reached are skipped. */
+  function stepsOf(app: ApplicationSummary, standing: ApplicationEvent[]): StatusStep[] {
+    // Every Application was applied for; the rest are reached only through an Event still standing.
+    const reached = new Set<Status>(["applied", ...standing.flatMap((e) => (e.to ? [e.to] : []))]);
+    const current = happyPath.indexOf(app.status);
+    const furthest = Math.max(current, ...happyPath.map((s, i) => (reached.has(s) ? i : -1)));
+    return happyPath.map((status, i) => ({
+      status,
+      state: i === current ? "current" : i > furthest ? "todo" : reached.has(status) ? "done" : "skipped",
+    }));
+  }
+
+  async function detail(applicationId: string): Promise<ApplicationDetail | null> {
+    const app = summary(applicationId);
+    if (!app) return null;
+    const all = allEvents(applicationId);
+    const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
+    return { ...app, steps: stepsOf(app, standing) };
+  }
+
+  const allEvents = (applicationId: string) =>
+    db.prepare("SELECT * FROM application_event WHERE application_id = ? ORDER BY at, rowid").all(applicationId).map(eventOf);
+
   async function findJobs(query: string, limit = 8): Promise<JobChoice[]> {
     const words = query.toLowerCase().split(/\s+/).filter(Boolean);
     if (!words.length) return [];
@@ -449,8 +489,8 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
   return {
     addByHand,
     list,
-    get: async (id) => summary(id),
-    events: async (id) => db.prepare("SELECT * FROM application_event WHERE application_id = ? ORDER BY at, rowid").all(id).map(eventOf),
+    get: detail,
+    events: async (id) => allEvents(id),
     setStatus,
     undoEvent,
     findJobs,
