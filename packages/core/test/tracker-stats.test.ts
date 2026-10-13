@@ -2,10 +2,11 @@
 // interviews and what's working. Fake clock (Mon 12 Oct 2026, 10:30 in Sofia), in-memory database.
 import { describe, expect, it } from "vitest";
 import { createTracker, type Status } from "../src/index.ts";
-import { createTestEngine } from "./harness.ts";
+import { createTestEngine, loadFixture } from "./harness.ts";
+import { routedFetch } from "./http.ts";
 
-function tracked() {
-  const t = createTestEngine();
+function tracked(overrides: Parameters<typeof createTestEngine>[0] = {}) {
+  const t = createTestEngine(overrides);
   const tracker = createTracker({ db: t.deps.db, clock: t.clock, discovery: t.engine });
   return { ...t, tracker };
 }
@@ -140,5 +141,39 @@ describe("response rate", () => {
     await add(tracker, "2026-10-12");
 
     expect((await tracker.stats()).responseRate).toEqual({ replied: 0, counted: 0, excluded: 1, rate: null, countsFrom: "2026-10-26" });
+  });
+});
+
+describe("what's working", () => {
+  it("gives replied of sent per source, over Applications 14+ days old, \"too few\" under 5", async () => {
+    const { tracker } = tracked();
+    for (let i = 0; i < 5; i++) {
+      const id = await add(tracker, "2026-09-01");
+      if (i < 2) await tracker.setStatus(id, "rejected");
+    }
+    await add(tracker, "2026-10-09"); // too new to count
+
+    expect((await tracker.stats()).working.source).toEqual([{ name: "Added by hand", replied: 2, sent: 5, tooFew: false }]);
+  });
+
+  it("says \"too few\" with 4 sent", async () => {
+    const { tracker } = tracked();
+    for (let i = 0; i < 4; i++) await add(tracker, "2026-09-01", i ? "applied" : "screening");
+
+    expect((await tracker.stats()).working.source).toEqual([{ name: "Added by hand", replied: 1, sent: 4, tooFew: true }]);
+  });
+
+  it("groups by the Job's angle, leaving out Applications without one; no CV versions yet without Packages", async () => {
+    const orbitlyJob = "https://careers.orbitly.example/jobs/4417-backend-engineer-go";
+    const http = routedFetch((r) => (r.url === orbitlyJob ? new Response(loadFixture("page-orbitly-backend.html"), { headers: { "content-type": "text/html" } }) : undefined));
+    const { tracker } = tracked({ fetch: http.fetch });
+    await tracker.addByHand({ job: { company: "Orbitly", title: "Backend Engineer", link: orbitlyJob }, appliedOn: "2026-09-01", status: "interviewing" });
+    await add(tracker, "2026-09-01");
+
+    const { working } = await tracker.stats();
+
+    expect(working.angle).toEqual([{ name: "Developer", replied: 1, sent: 1, tooFew: true }]);
+    expect(working.cvVersion).toEqual([]);
+    expect(working.source.map((r) => [r.name, r.sent])).toEqual([["Added by hand", 1], ["Pasted link", 1]]);
   });
 });
