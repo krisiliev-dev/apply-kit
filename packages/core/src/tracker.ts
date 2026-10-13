@@ -10,6 +10,7 @@ import type { Angle } from "./fit/angles.ts";
 import { liveJobId } from "./merging.ts";
 import type { Clock, SqlDatabase } from "./ports.ts";
 import { migrate } from "./schema.ts";
+import { computeStats, type TrackStats } from "./track-stats.ts";
 
 export const statuses = ["applied", "screening", "interviewing", "offer", "accepted", "rejected", "withdrawn"] as const;
 /** Where an Application stands. Rejected and withdrawn are closed. */
@@ -167,6 +168,8 @@ export interface Tracker {
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
+  /** Stats: applications per week with the pace, response rate, interviews and what's working. */
+  stats(): Promise<TrackStats>;
 }
 
 export interface TrackerDeps {
@@ -454,6 +457,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     setStatus,
     undoEvent,
     findJobs,
+    stats: async () => computeStats(db, today()),
   };
 }
 

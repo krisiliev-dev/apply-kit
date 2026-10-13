@@ -52,3 +52,4 @@ export type {
   Tracker, TrackerDeps, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice,
 } from "./tracker.ts";
+export type { TrackStats, WeekCount } from "./track-stats.ts";
