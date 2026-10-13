@@ -102,8 +102,16 @@ export interface TimelineEntry {
   undoable: boolean;
 }
 
+/** An address or a domain whose mail is matched to an Application. */
+export interface Contact {
+  value: string;
+  kind: "address" | "domain";
+}
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
+  /** Oldest first. */
+  contacts: Contact[];
   steps: StatusStep[];
   nextStep: NextStep;
   /** Newest first. */
@@ -217,6 +225,8 @@ export interface Tracker {
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
   addNote(applicationId: string, text: string): Promise<{ event: ApplicationEvent }>;
+  /** Adds an address or domain whose mail belongs here. Throws a TrackerError when refused. */
+  addContact(applicationId: string, value: string): Promise<{ contacts: Contact[] }>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
 }
@@ -492,6 +502,24 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return { event: addEvent({ applicationId, kind: "note", cause: "you", from: null, to: null, text: note, undoes: null }) };
   }
 
+  const contactsOf = (applicationId: string): Contact[] =>
+    db.prepare("SELECT value, kind FROM application_contact WHERE application_id = ? ORDER BY added_at, rowid").all(applicationId)
+      .map((r) => ({ value: String(r.value), kind: r.kind as Contact["kind"] }));
+
+  async function addContact(applicationId: string, value: string) {
+    if (!summary(applicationId)) throw new TrackerError("not-found", "There's no such Application.");
+    const contact = contactOf(value);
+    if (!contact || contact === "invalid") {
+      throw new TrackerError("invalid", "Enter an email address (jobs@company.com) or a domain (company.com).", applicationId);
+    }
+    if (contactsOf(applicationId).some((c) => c.value === contact.value)) {
+      throw new TrackerError("unchanged", `${contact.value} is already a contact here.`, applicationId);
+    }
+    db.prepare("INSERT INTO application_contact (application_id, value, kind, added_at) VALUES (?, ?, ?, ?)")
+      .run(applicationId, contact.value, contact.kind, now());
+    return { contacts: contactsOf(applicationId) };
+  }
+
   function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[]): NextStep {
     if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
     const note = standing.filter((e) => e.kind === "note").at(-1);
@@ -519,7 +547,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
       undoable: !e.undoneAt && (e.kind === "note" || (e.kind === "status" && !movedSince(e, app.status))),
     }));
-    return { ...app, steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline: timeline.reverse() };
+    return { ...app, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline: timeline.reverse() };
   }
 
   const allEvents = (applicationId: string) =>
@@ -555,6 +583,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     setStatus,
     undoEvent,
     addNote,
+    addContact,
     findJobs,
   };
 }

@@ -100,3 +100,27 @@ describe("notes and the next step", () => {
     expect((await tracker.get(id))!.status).toBe("applied");
   });
 });
+
+describe("contacts", () => {
+  it("lists the domain given when adding, and an address added later, whose mail is matched here", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker, "applied", "fennel.studio");
+
+    const { contacts } = await tracker.addContact(id, " Mira.Petrova@Example.com ");
+
+    expect(contacts).toEqual([
+      { value: "fennel.studio", kind: "domain" },
+      { value: "mira.petrova@example.com", kind: "address" },
+    ]);
+    expect((await tracker.get(id))!.contacts).toEqual(contacts);
+  });
+
+  it("refuses something that is neither an address nor a domain, and one already there", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker, "applied", "fennel.studio");
+
+    await expect(tracker.addContact(id, "Mira from Fennel")).rejects.toMatchObject({ problem: "invalid" });
+    await expect(tracker.addContact(id, "https://www.fennel.studio/careers")).rejects.toMatchObject({ problem: "unchanged" });
+    expect((await tracker.get(id))!.contacts).toHaveLength(1);
+  });
+});
