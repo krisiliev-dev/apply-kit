@@ -4,7 +4,8 @@
 // Fake clock, in-memory database, no network.
 import { describe, expect, it } from "vitest";
 import { createTracker, type Status } from "../src/index.ts";
-import { createTestEngine, fixtureFetch } from "./harness.ts";
+import { createTestEngine, loadFixture } from "./harness.ts";
+import { routedFetch } from "./http.ts";
 
 function tracked(overrides: Parameters<typeof createTestEngine>[0] = {}) {
   const t = createTestEngine(overrides);
@@ -122,5 +123,60 @@ describe("contacts", () => {
     await expect(tracker.addContact(id, "Mira from Fennel")).rejects.toMatchObject({ problem: "invalid" });
     await expect(tracker.addContact(id, "https://www.fennel.studio/careers")).rejects.toMatchObject({ problem: "unchanged" });
     expect((await tracker.get(id))!.contacts).toHaveLength(1);
+  });
+});
+
+const payhawkBoard = "https://boards-api.greenhouse.io/v1/boards/payhawkio/jobs?content=true";
+type GreenhouseJob = { title: string; absolute_url: string };
+const recorded = JSON.parse(loadFixture("greenhouse-payhawkio.json")) as { jobs: GreenhouseJob[] };
+
+/** A tracker beside a Feed holding Payhawk's recorded Greenhouse board, which the test can change. */
+async function withBoard() {
+  let listing = recorded.jobs;
+  const http = routedFetch((r) => (r.url === payhawkBoard ? { json: { jobs: listing, meta: { total: listing.length } } } : undefined));
+  const t = tracked({ fetch: http.fetch });
+  await t.engine.addSource({ kind: "greenhouse", config: "payhawkio", name: "Payhawk" });
+  await t.engine.checkAll();
+  const apm = (await t.engine.queryFeed({ view: "new" })).jobs.find((j) => j.title === "Associate Product Manager")!;
+  return { ...t, apm, unlist: (title: string) => { listing = listing.filter((j) => j.title.trim() !== title); } };
+}
+
+describe("the target posting", () => {
+  it("links the Job and its posting", async () => {
+    const { tracker, apm } = await withBoard();
+    const r = await tracker.addByHand({ job: { jobId: apm.id }, appliedOn: "2026-10-09", status: "applied", how: "i-applied" });
+    if (r.outcome !== "added") throw new Error("not added");
+
+    expect((await tracker.get(r.application.id))!.posting).toEqual({
+      jobId: apm.id, title: "Associate Product Manager", company: "Payhawk", url: apm.url, closed: null,
+    });
+  });
+
+  it("shows a closed posting on the timeline as a neutral fact by apply-kit, not as a Status change", async () => {
+    const { tracker, apm, unlist, engine, clock } = await withBoard();
+    const r = await tracker.addByHand({ job: { jobId: apm.id }, appliedOn: "2026-10-09", status: "applied", how: "i-applied" });
+    if (r.outcome !== "added") throw new Error("not added");
+
+    unlist("Associate Product Manager");
+    await clock.advance(30 * 60_000);
+    await engine.checkAll();
+
+    const app = (await tracker.get(r.application.id))!;
+    expect(app.status).toBe("applied");
+    expect(app.posting?.closed).toEqual({ at: clock.now().toISOString(), how: "No longer listed by Payhawk" });
+    expect(app.timeline[0]).toMatchObject({
+      kind: "posting-closed", cause: "apply-kit", at: clock.now().toISOString(), text: "Posting closed", undoable: false,
+      detail: "No longer listed by Payhawk. That's normal once a job stops taking applications, and says nothing about you. The saved copy stays on the Job page.",
+    });
+  });
+
+  it("keeps the link of one added by hand whose posting couldn't be read", async () => {
+    const { tracker } = tracked();
+    const link = "https://www.linkedin.com/jobs/view/4012345678/";
+    const r = await tracker.addByHand({ job: { company: "Orbitly", title: "Backend Engineer", link }, appliedOn: "2026-10-09", status: "applied" });
+    if (r.outcome !== "added") throw new Error("not added");
+
+    expect((await tracker.get(r.application.id))!.posting).toEqual({ jobId: null, title: "Backend Engineer", company: "Orbitly", url: link, closed: null });
+    expect((await tracker.get(await add(tracker)))!.posting).toBeNull();
   });
 });

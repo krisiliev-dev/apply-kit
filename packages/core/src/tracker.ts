@@ -108,8 +108,21 @@ export interface Contact {
   kind: "address" | "domain";
 }
 
+/** The posting applied to: its Job in apply-kit (whose page keeps the saved copy), or only the link given. */
+export interface TargetPosting {
+  /** Null when added by hand with a link that couldn't be read. */
+  jobId: string | null;
+  title: string;
+  company: string;
+  url: string;
+  /** When Discover closed the Job, and how in plain words; null while open. */
+  closed: { at: string; how: string } | null;
+}
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
+  /** Null when added by hand without a link. */
+  posting: TargetPosting | null;
   /** Oldest first. */
   contacts: Contact[];
   steps: StatusStep[];
@@ -502,6 +515,17 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return { event: addEvent({ applicationId, kind: "note", cause: "you", from: null, to: null, text: note, undoes: null }) };
   }
 
+  async function postingOf(app: ApplicationSummary): Promise<TargetPosting | null> {
+    const job = app.jobId ? await discovery.getJob(app.jobId) : null;
+    if (job) {
+      return {
+        jobId: job.id, title: job.title, company: job.company, url: job.url,
+        closed: job.closed ? { at: job.closed.at, how: job.closed.how } : null,
+      };
+    }
+    return app.postingUrl ? { jobId: null, title: app.title, company: app.company, url: app.postingUrl, closed: null } : null;
+  }
+
   const contactsOf = (applicationId: string): Contact[] =>
     db.prepare("SELECT value, kind FROM application_contact WHERE application_id = ? ORDER BY added_at, rowid").all(applicationId)
       .map((r) => ({ value: String(r.value), kind: r.kind as Contact["kind"] }));
@@ -543,11 +567,24 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     if (!app) return null;
     const all = allEvents(applicationId);
     const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
-    const timeline: TimelineEntry[] = all.map((e) => ({
+    const posting = await postingOf(app);
+    const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
       id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
       undoable: !e.undoneAt && (e.kind === "note" || (e.kind === "status" && !movedSince(e, app.status))),
     }));
-    return { ...app, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline: timeline.reverse() };
+    if (posting?.jobId && posting.closed) {
+      // Discover's closing, as a neutral fact: it says nothing about the Application's Status.
+      timeline.unshift({
+        id: `posting-closed:${posting.jobId}`, at: posting.closed.at, kind: "posting-closed", cause: "apply-kit", from: null, to: null,
+        text: "Posting closed",
+        detail: `${posting.closed.how}. That's normal once a job stops taking applications, and says nothing about you. The saved copy stays on the Job page.`,
+        undoneAt: null, undoable: false,
+      });
+    }
+    timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
+    return {
+      ...app, posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+    };
   }
 
   const allEvents = (applicationId: string) =>
