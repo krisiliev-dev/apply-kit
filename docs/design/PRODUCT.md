@@ -85,4 +85,4 @@ One person: the owner (Kris). Personal tool, never released publicly. No account
 
 ## Open questions for later steps
 
-- Exactly how the voice samples and master profile are stored locally.
+- ~~Exactly how the voice samples and master profile are stored locally.~~ **Settled 2026-10-13** in [ADR 0003](../adr/0003-profile-files-and-pdf-rendering.md): structured data in the SQLite database, the user's files and generated PDFs in folders beside it, all in Application Support.

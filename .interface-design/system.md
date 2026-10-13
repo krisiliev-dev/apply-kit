@@ -9,4 +9,6 @@ Source of truth: docs/design/DESIGN.md, docs/design/tokens.json, app/ui/src/styl
 - Depth: soft raised shadow in light mode, rules in dark mode.
 - Signature: the ascent chart (cumulative applications as a climb).
 - States never by colour alone (chips have icons, statuses differ in fill/outline).
-- Documents (CV, letter) always on white, single column, one pine accent, fixed template, ligatures off.
+- Documents (CV, letter) always on white, single column, one pine accent, fixed template, ligatures off. Geometry and type from the `--doc-*` print tokens (A4, 18mm margins, 9.75pt body).
+- Prepare components (DESIGN.md › Added for Prepare): package stepper, sticky action bar, blocked Approve (aria-disabled, explains itself), per-part progress, flag (near the line / gap / low confidence, never pre-selected), choice card, evidence row, change with undo, piece card, drop zone, coach transcript, word count, document frame, section links.
+- Honesty decisions are always explicit; amber (`--partly`) marks near-the-line, rose (`--gap`) marks gaps, pink (`--bloom`) marks what needs the user.

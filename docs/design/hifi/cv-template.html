@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CV template · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../../../app/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../app/ui/src/styles/components.css">
+<style>
+/* page-local layout for the document specimen: tokens only */
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: var(--s-6); align-items: start }
+@media (max-width: 1100px) { .layout { grid-template-columns: minmax(0, 1fr) } }
+.panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.rules { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.doc-frame { max-height: none }
+@media print {
+  @page { size: A4; margin: 0 }
+  .review, .notes-col, .doc-frame .bar { display: none !important }
+  .main, .layout, .doc-frame { display: block; padding: 0; margin: 0; background: none; max-width: none }
+  .doc { padding: var(--doc-margin); width: var(--doc-page-w); min-height: var(--doc-page-h) }
+}
+</style>
+</head>
+<body>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · CV template</span>
+  <a href="index.html">All screens</a>
+  <div class="states" role="tablist" aria-label="Document"></div>
+</div>
+<main class="main" id="main" style="max-width:1280px">
+  <div class="sr-only" id="live" role="status" aria-live="polite"></div>
+
+  <!-- ================= CV · ENGLISH ================= -->
+  <section data-state="cv-en" data-state-name="CV · English" class="layout">
+    <div class="doc-frame" tabindex="0" role="region" aria-label="CV page, A4">
+      <div class="bar"><h1 style="font-size:var(--fs-title)">CV · English · Standard, no photo</h1><span class="grow"></span><span class="page-chip" data-i="met">1 page</span><div class="segmented" role="group" aria-label="Zoom"><button type="button" aria-pressed="false" data-zoom="fit">Fit</button><button type="button" aria-pressed="true" data-zoom="100">100%</button></div></div>
+      <article class="doc" lang="en">
+        <header class="d-head"><p class="d-name">Nia Koleva</p><span class="d-role">Security Analyst</span><span class="d-contact">Sofia, Bulgaria · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span></header>
+        <section><h2>Summary</h2><p>Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing response in a bank SOC. Moving detection work to Elastic and comfortable scripting in Python.</p></section>
+        <section><h2>Experience</h2>
+          <div class="d-item"><div class="d-line"><b>Junior Security Analyst · Orbital Bank, Sofia</b><span class="d-when">Jan 2023 – present</span></div><ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Rewrote noisy login rules around how staff actually signed in, not vendor templates</li><li>Triaged about 25 alerts a day in a 6-person SOC</li><li>Responded to 3 phishing incidents, leading 1 from first alert to write-up</li></ul></div>
+          <div class="d-item"><div class="d-line"><b>SOC Intern · Varna Telecom, Varna</b><span class="d-when">Jun 2022 – Aug 2022</span></div><ul><li>Monitored SIEM alerts on the night shift and escalated confirmed incidents</li><li>Wrote Python scripts to enrich alerts with asset and owner data</li></ul></div>
+          <div class="d-item"><div class="d-line"><b>Freelance Full-stack Developer · Varna</b><span class="d-when">2021 – 2023</span></div><ul><li>Built a booking site with Stripe deposits and calendar sync for a dental clinic</li><li>Built and hosted web apps for small businesses (React, Node.js, Linux servers)</li></ul></div>
+        </section>
+        <section><h2>Skills</h2><p>Splunk (SPL, detection engineering) · Elastic SIEM · Incident response · Python · Linux · Bash · React · Node.js</p></section>
+        <section><h2>Education</h2><div class="d-line"><b>BSc Computer Science · Danube Institute of Technology</b><span class="d-when">2018 – 2022</span></div></section>
+        <section><h2>Languages and courses</h2><p>Bulgarian (native) · English (C1) · Elastic SIEM course (2026)</p></section>
+      </article>
+    </div>
+    <aside class="stack notes-col" style="gap:var(--s-5)">
+      <div class="panel"><h2>Anatomy</h2><ol class="rules">
+        <li><b>Letterhead</b>: name (Geologica 20pt, pine deep), current title, one contact line in body text. Contact details sit in the page body, never in a header or footer region, so parsers read them.</li>
+        <li><b>Sections</b> in a fixed order: Summary, Experience, Skills, Education, Languages and courses. Standard headings only; the AI can't rename, add or reorder them.</li>
+        <li><b>Experience</b>: reverse-chronological; title · employer, place on the left, dates on the right as real text (months and years). 1–4 bullets, each under 160 characters, starting with a verb.</li>
+        <li><b>Skills</b>: one line, separated by " · ". No bars, ratings or icons.</li>
+      </ol></div>
+      <div class="panel"><h2>Fixed rules</h2><ol class="rules">
+        <li>A4, single column, one page, margins 18mm, body 9.75pt Onest, line height 1.38.</li>
+        <li>One accent: pine deep on the name and section titles only (8.2:1 on white).</li>
+        <li>Fonts embedded, ligatures off, real selectable text; no tables, columns, text boxes or images except the optional photo.</li>
+        <li>Spill onto page 2 is reported, never fixed by shrinking type or margins.</li>
+        <li>The app theme never touches it: always white paper, also in dark mode.</li>
+      </ol></div>
+    </aside>
+  </section>
+
+  <!-- ================= CV · WITH PHOTO ================= -->
+  <section data-state="cv-photo" data-state-name="CV · with photo" class="layout">
+    <div class="doc-frame" tabindex="0" role="region" aria-label="CV page with photo, A4">
+      <div class="bar"><h1 style="font-size:var(--fs-title)">CV · English · Standard with photo</h1><span class="grow"></span><span class="page-chip" data-i="met">1 page</span></div>
+      <article class="doc" lang="en">
+        <header class="d-head"><p class="d-name">Nia Koleva</p><span class="d-role">Security Analyst</span><span class="d-contact">Sofia, Bulgaria · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span><span class="d-photo" role="img" aria-label="Photo slot">Photo<br>26 × 32.5mm</span></header>
+        <section><h2>Summary</h2><p>Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing response in a bank SOC.</p></section>
+        <section><h2>Experience</h2>
+          <div class="d-item"><div class="d-line"><b>Junior Security Analyst · Orbital Bank, Sofia</b><span class="d-when">Jan 2023 – present</span></div><ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Triaged about 25 alerts a day in a 6-person SOC</li><li>Responded to 3 phishing incidents, leading 1 from first alert to write-up</li></ul></div>
+          <div class="d-item"><div class="d-line"><b>SOC Intern · Varna Telecom, Varna</b><span class="d-when">Jun 2022 – Aug 2022</span></div><ul><li>Wrote Python scripts to enrich alerts with asset and owner data</li></ul></div>
+        </section>
+        <section><h2>Skills</h2><p>Splunk · Elastic SIEM · Incident response · Python · Linux · Bash</p></section>
+        <section><h2>Education</h2><div class="d-line"><b>BSc Computer Science · Danube Institute of Technology</b><span class="d-when">2018 – 2022</span></div></section>
+      </article>
+    </div>
+    <aside class="stack notes-col"><div class="panel"><h2>Photo slot</h2><ol class="rules">
+      <li>Off by default. Switched on per package; suggested (never switched on by itself) for local Bulgarian employers that expect one.</li>
+      <li>Top right, 26mm wide, 4:5, inside the letterhead grid. The text column narrows; nothing else moves.</li>
+      <li>One photo file in the profile, stored locally. The PDF embeds it as an image with no text, so parsers skip it.</li>
+    </ol></div></aside>
+  </section>
+
+  <!-- ================= CV · BULGARIAN ================= -->
+  <section data-state="cv-bg" data-state-name="CV · Bulgarian" class="layout">
+    <div class="doc-frame" tabindex="0" role="region" aria-label="Bulgarian CV page, A4">
+      <div class="bar"><h1 style="font-size:var(--fs-title)">CV · Bulgarian · Standard, no photo</h1><span class="grow"></span><span class="page-chip" data-i="met">1 page</span></div>
+      <article class="doc" lang="bg">
+        <header class="d-head"><p class="d-name">Ния Колева</p><span class="d-role">Анализатор по информационна сигурност</span><span class="d-contact">София, България · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span></header>
+        <section><h2>Профил</h2><p>Анализатор по сигурност с 3 години опит в операциите по сигурност: разработка на детекции в Splunk, обработка на сигнали и реакция при фишинг инциденти в SOC на банка.</p></section>
+        <section><h2>Професионален опит</h2>
+          <div class="d-item"><div class="d-line"><b>Младши анализатор по сигурност · Орбитал Банк, София</b><span class="d-when">01.2023 – досега</span></div><ul><li>Създадох 40 детекции в Splunk, с които фалшивите сигнали намаляха с около една трета</li><li>Обработвах около 25 сигнала на ден в екип от 6 души</li><li>Участвах в реакцията при 3 фишинг инцидента и ръководих един от тях до финалния доклад</li></ul></div>
+          <div class="d-item"><div class="d-line"><b>Стажант в SOC · Варна Телеком, Варна</b><span class="d-when">06.2022 – 08.2022</span></div><ul><li>Написах Python скриптове, които добавят данни за активи и собственици към сигналите</li></ul></div>
+        </section>
+        <section><h2>Умения</h2><p>Splunk (SPL) · Elastic SIEM · Реакция при инциденти · Python · Linux · Bash</p></section>
+        <section><h2>Образование</h2><div class="d-line"><b>Бакалавър, Компютърни науки · Дунавски технологичен институт</b><span class="d-when">2018 – 2022</span></div></section>
+        <section><h2>Езици и курсове</h2><p>Български (роден) · Английски (C1) · Курс Elastic SIEM (2026)</p></section>
+      </article>
+    </div>
+    <aside class="stack notes-col"><div class="panel"><h2>Bulgarian</h2><ol class="rules">
+      <li>The whole package is written in Bulgarian, not English with Bulgarian headings. Section titles are the template's own translations: Профил, Професионален опит, Умения, Образование, Езици и курсове.</li>
+      <li>Same template and fonts (Geologica and Onest both cover Cyrillic). Dates as MM.YYYY, "досега" for present.</li>
+      <li>Names of tools stay in Latin script (Splunk, Python). The name is written as the user stores it in the profile, in both scripts.</li>
+      <li>Default for Bulgarian postings; switchable per package.</li>
+    </ol></div></aside>
+  </section>
+
+  <!-- ================= COVER LETTER ================= -->
+  <section data-state="letter" data-state-name="Cover letter" class="layout">
+    <div class="doc-frame" tabindex="0" role="region" aria-label="Cover letter page, A4">
+      <div class="bar"><h1 style="font-size:var(--fs-title)">Cover letter · English</h1><span class="grow"></span><span class="page-chip" data-i="met">1 page</span></div>
+      <article class="doc" lang="en">
+        <header class="d-head"><p class="d-name">Nia Koleva</p><span class="d-role">Security Analyst</span><span class="d-contact">Sofia, Bulgaria · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span></header>
+        <div class="d-letter stack" style="gap:var(--doc-gap-section)">
+          <p class="d-muted">13 October 2026</p>
+          <p>Hiring team<br>Kestrel Payments<br>Sofia, Bulgaria</p>
+          <p><b>Re: Security Engineer (R-10482)</b></p>
+          <p>Dear Kestrel hiring team,</p>
+          <p>Kestrel moves money for 12,000 merchants, which means every false alarm in your SOC costs an analyst's time and every missed one can cost a merchant. Telling those two apart is the part of security work I have spent the last three years on, and it is why the Security Engineer role stood out to me.</p>
+          <p>At Orbital Bank I built 40 Splunk detections for a six-person SOC and cut our false positives by about a third, mostly by rewriting noisy rules around how our staff actually signed in rather than how the vendor templates assumed they did. Triaging around 25 alerts a day taught me which detections earn their place and which only create work. I also responded to three phishing incidents and led one of them from the first alert to the write-up.</p>
+          <p>Your posting mentions moving detection work onto Elastic and hardening the Kubernetes platform. Elastic would be a short step from Splunk for me. Kubernetes security I haven't done in production, and I would want to close that gap early rather than talk around it. I would like to hear where the team wants its detections to be a year from now.</p>
+          <p>Kind regards,<br>Nia Koleva</p>
+        </div>
+      </article>
+    </div>
+    <aside class="stack notes-col"><div class="panel"><h2>Letter rules</h2><ol class="rules">
+      <li>Same letterhead as the CV, so the two files read as one set.</li>
+      <li>Date, recipient block and the "Re:" line with the job ID are filled by the template from the Job, never by the model.</li>
+      <li>The model writes the body only: greeting to sign-off, one page, about 220 words by default.</li>
+      <li>File names: Nia_Koleva_CV_Kestrel_Security_Engineer.pdf and Nia_Koleva_Cover_Letter_Kestrel_Security_Engineer.pdf (ASCII only, so every portal accepts them).</li>
+    </ol></div></aside>
+  </section>
+</main>
+<script src="prepare.js"></script>
+</body>
+</html>
