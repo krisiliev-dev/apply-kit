@@ -64,12 +64,13 @@ export function createMailStore(db: SqlDatabase, clock: Clock, reader: MailReade
     since(since) {
       return db.prepare(
         "SELECT * FROM mail_message WHERE received_at >= ? ORDER BY received_at, id",
-      ).all(since ? since.toISOString() : "").map(toMessage);
+      ).all(since ? since.toISOString() : "").map(storedMessage);
     },
   };
 }
 
-function toMessage(r: Record<string, unknown>): MailMessage {
+/** A stored email (a mail_message row) as the reader gave it. */
+export function storedMessage(r: Record<string, unknown>): MailMessage {
   return {
     id: String(r.id),
     from: String(r.from_header),

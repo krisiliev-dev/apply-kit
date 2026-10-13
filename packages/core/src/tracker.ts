@@ -9,9 +9,16 @@ import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
 import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
-import type { Clock, SqlDatabase } from "./ports.ts";
+import { mailboxFix, type MailboxProblem } from "./mailbox.ts";
+import { storedMessage } from "./mail-store.ts";
+import type { Clock, MailAttachment, MailMessage, SqlDatabase } from "./ports.ts";
 import { migrate } from "./schema.ts";
 import { computeStats, type TrackStats } from "./track-stats.ts";
+import {
+  baseDomain, classifyInput, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
+  isAtsDomain, isBoardDomain, isJobAlert, isSharedProvider, namesCompany, namesTitle, quoteOf, ruleClassify, senderOf,
+  type EmailClassification, type EmailKind, type TrackAssistant,
+} from "./track-mail.ts";
 
 export const statuses = ["applied", "screening", "interviewing", "offer", "accepted", "rejected", "withdrawn"] as const;
 /** Where an Application stands. Rejected and withdrawn are closed. */
@@ -21,7 +28,7 @@ export const isClosed = (s: Status) => closedStatuses.includes(s);
 
 /** Who or what caused an Event: a matched email, the user, or apply-kit itself. */
 export type EventCause = "email" | "you" | "apply-kit";
-/** How an Application came to be. Only "by-hand" and "i-applied" exist so far. */
+/** How an Application came to be. "submission" comes with Apply. */
 export type CreatedHow = "submission" | "i-applied" | "by-hand" | "from-email";
 
 export interface ApplicationEvent {
@@ -30,9 +37,10 @@ export interface ApplicationEvent {
   at: string;
   /**
    * created: the Application was added. status: its Status changed. note: the user wrote a note.
-   * cv: the user attached the CV they sent. undo: an earlier Event was undone.
+   * cv: the user attached the CV they sent. email: an email was matched here (and, when `to` is
+   * set, moved the Status). undo: an earlier Event was undone.
    */
-  kind: "created" | "status" | "note" | "cv" | "undo";
+  kind: "created" | "status" | "note" | "cv" | "email" | "undo";
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -43,6 +51,9 @@ export interface ApplicationEvent {
   undoes: string | null;
   /** When this Event was undone, or null. */
   undoneAt: string | null;
+  /** For an email Event: the email's Message-ID and its kind (null when it couldn't be read). */
+  emailId: string | null;
+  emailKind: EmailKind | null;
 }
 
 /** One Application as the list shows it. */
@@ -102,6 +113,98 @@ export interface TimelineEntry {
   undoneAt: string | null;
   /** Whether Undo applies to it now. */
   undoable: boolean;
+  /** For a matched email: the email and the signals it matched on. Undone: it stays, as not a Status change. */
+  email: MatchedEmail | null;
+}
+
+/** An email from the job mailbox, as Track shows it. */
+export interface EmailSummary {
+  /** Its Message-ID. */
+  id: string;
+  /** The From header as sent. */
+  from: string;
+  subject: string;
+  receivedAt: string;
+  /** The start of its text, to quote. */
+  quote: string;
+  /** Its kind, or null when it couldn't be read (the AI budget was out). */
+  kind: EmailKind | null;
+  /** ISO 639-1, or null when unknown. */
+  language: string | null;
+  /** A one-line English summary of an email not in English, or null. */
+  summary: string | null;
+  attachments: MailAttachment[];
+}
+
+/** An email matched to an Application, with the signals it matched on (in plain words). */
+export interface MatchedEmail extends EmailSummary {
+  signals: string[];
+  /** "email" when apply-kit matched it, "you" when you did. */
+  matchedBy: "email" | "you";
+}
+
+/** The banner on an Application an email just moved: until "Looks right" or Undo. */
+export interface MovedByEmail {
+  eventId: string;
+  from: Status;
+  to: Status;
+  at: string;
+  email: MatchedEmail;
+  signals: string[];
+}
+
+/** One Application an email to match may be about, with why. */
+export interface EmailCandidate {
+  application: ApplicationSummary;
+  reasons: string[];
+}
+
+/** "Email to match" in Needs you: an email that would change something but didn't match confidently. */
+export interface EmailToMatch {
+  email: EmailSummary;
+  /** The Status it would move an Application to (forward only), or null when it moves nothing. */
+  moveTo: Status | null;
+  /** Why it waits, in plain words. */
+  why: string;
+  /** Likely Applications, best first. */
+  candidates: EmailCandidate[];
+  /** What "a new Application" would be. */
+  newApplication: { company: string; title: string };
+  /** What your answer is remembered for: the sender's address or domain (null for a job system's shared sender). */
+  remembers: string | null;
+}
+
+/** Your answer to an email to match. `move` applies the Status change it suggests (forward only). */
+export type EmailAnswer =
+  | { choice: "application"; applicationId: string; move?: boolean }
+  | { choice: "new"; move?: boolean }
+  | { choice: "none" };
+
+/** The job mailbox as Applications shows it (the same problem vocabulary and fixes as Sources). */
+export interface TrackMailbox {
+  /** not-read until the first read; not-connected: its settings aren't set; failing: the latest read failed. */
+  state: "not-read" | "connected" | "not-connected" | "failing";
+  problem: MailboxProblem | null;
+  /** The reader's own message for the latest failure. */
+  error: string | null;
+  /** What to do about it, naming the settings involved. */
+  fix: string | null;
+  /** The first failed read in the current run of failures. */
+  since: string | null;
+  /** The latest good read. */
+  lastReadAt: string | null;
+}
+
+/** What one run of email matching did. */
+export interface MailProcessed {
+  /** Matched and moved a Status. */
+  moved: number;
+  /** Matched without changing anything. */
+  filed: number;
+  /** Waiting as Email to match. */
+  toMatch: number;
+  /** Not application mail (alerts, sent copies, unrelated mail, senders you said aren't). */
+  left: number;
 }
 
 /** An address or a domain whose mail is matched to an Application. */
@@ -156,6 +259,8 @@ export interface ApplicationDetail extends ApplicationSummary {
   nextStep: NextStep;
   /** Newest first. */
   timeline: TimelineEntry[];
+  /** Set while the latest Status change was made by an email you haven't confirmed ("Looks right") or undone. */
+  movedByEmail: MovedByEmail | null;
 }
 
 /** What the user gives "Add application". */
@@ -308,6 +413,23 @@ export interface Tracker {
   jobMarkers(jobIds: string[]): Promise<Record<string, JobMarker>>;
   /** Stats: applications per week with the pace, response rate, interviews and what's working. */
   stats(): Promise<TrackStats>;
+  /**
+   * Classifies and matches every stored email not decided yet (run after each mailbox read; the
+   * engine passes what it just stored). A confident unique match of a Status-changing kind moves the
+   * Status forward (or to Rejected) as an Event by email; anything doubtful waits as Email to match.
+   */
+  processMail(stored?: MailMessage[]): Promise<MailProcessed>;
+  /** Emails waiting for you to say which Application they're about, newest first. */
+  emailsToMatch(): Promise<EmailToMatch[]>;
+  /**
+   * Answers an email to match: an Application (moving its Status or not), a new Application, or not
+   * about an application. The answer is remembered for the sender. Throws a TrackerError when refused.
+   */
+  answerEmail(emailId: string, answer: EmailAnswer): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }>;
+  /** "Looks right" on the moved-by-email banner: the banner goes; the email stays on the timeline. */
+  confirmEmailMove(eventId: string): Promise<void>;
+  /** The job mailbox's state, for Applications' banners. */
+  mailbox(): Promise<TrackMailbox>;
 }
 
 export interface TrackerDeps {
@@ -315,6 +437,12 @@ export interface TrackerDeps {
   clock: Clock;
   /** Discover: Jobs are read and pasted links added through it. */
   discovery: Pick<DiscoveryEngine, "addJobLink" | "getJob">;
+  /** Reads emails (classify). Without it every email is matched on rules alone. */
+  assistant?: TrackAssistant;
+  /** The monthly AI cap shared with Discover (AI_MONTHLY_CAP_USD). Unset or 0 means no AI spending. */
+  aiMonthlyCapUsd?: number;
+  /** The user's own addresses: mail from them is a sent copy, left for follow-ups. */
+  ownAddresses?: string[];
 }
 
 const statusLabel: Record<Status, string> = {
@@ -333,10 +461,13 @@ const groupOrder: { key: GroupKey; label: string; statuses: Status[] }[] = [
 ];
 const defaultLimits: Partial<Record<GroupKey, number>> = { applied: 5, closed: 5 };
 
+/** Events that set a Status: adding, a change by hand, and an email's move. */
+const movesStatus = "(kind IN ('created', 'status') OR (kind = 'email' AND to_status IS NOT NULL))";
+
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
+export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [] }: TrackerDeps): Tracker {
   migrate(db);
   const now = () => clock.now().toISOString();
   const today = () => sofiaDay(clock.now());
@@ -347,6 +478,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
       kind: r.kind as ApplicationEvent["kind"], cause: r.cause as EventCause,
       from: str(r.from_status) as Status | null, to: str(r.to_status) as Status | null,
       text: String(r.text), undoes: str(r.undoes), undoneAt: str(r.undone_at),
+      emailId: str(r.email_id), emailKind: str(r.email_kind) as EmailKind | null,
     };
   }
 
@@ -388,12 +520,13 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return r ? summaryOf(r) : null;
   }
 
-  function addEvent(e: Omit<ApplicationEvent, "id" | "at" | "undoneAt">): ApplicationEvent {
+  type NewEvent = Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "emailId" | "emailKind"> & Partial<Pick<ApplicationEvent, "emailId" | "emailKind">>;
+  function addEvent(e: NewEvent): ApplicationEvent {
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes);
+      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, email_id, email_kind)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.emailId ?? null, e.emailKind ?? null);
     return eventOf(db.prepare("SELECT * FROM application_event WHERE id = ?").get(id)!);
   }
 
@@ -535,6 +668,8 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     const ev = eventOf(r);
     if (ev.undoneAt) throw new TrackerError("not-undoable", "That was undone already.", ev.applicationId);
     if (ev.kind === "undo") throw new TrackerError("not-undoable", "An undo can't itself be undone; change the Status instead.", ev.applicationId);
+    if (ev.kind === "email" && !ev.to) throw new TrackerError("not-undoable", "This email didn't change anything, so there's nothing to undo.", ev.applicationId);
+    if (ev.kind === "cv") throw new TrackerError("not-undoable", "Attach another CV to replace this one.", ev.applicationId);
     const app = db.prepare("SELECT * FROM application WHERE id = ?").get(ev.applicationId)!;
     if (app.removed_at) throw new TrackerError("not-found", "That Application was removed.", ev.applicationId);
     if (ev.kind !== "note" && movedSince(ev, String(app.status))) {
@@ -551,9 +686,11 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Adding undone: removed", undoes: eventId });
       } else {
         db.prepare("UPDATE application SET status = ? WHERE id = ?").run(ev.from, ev.applicationId);
+        // An email's move undone: the email stays on the timeline, as not a Status change.
+        const stays = ev.kind === "email" ? ". The email stays, as not a Status change" : "";
         event = addEvent({
           applicationId: ev.applicationId, kind: "undo", cause: "you", from: ev.to, to: ev.from,
-          text: `Undone: back to ${statusName(ev.from!)}`, undoes: eventId,
+          text: `Undone: back to ${statusName(ev.from!)}${stays}`, undoes: eventId, emailId: ev.emailId,
         });
       }
       db.exec("COMMIT");
@@ -567,10 +704,10 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
   /** Whether the Status has moved since this Event (a later Status change or adding stands), so undo would rewrite history. */
   function movedSince(ev: ApplicationEvent, status: string): boolean {
     const later = db.prepare(
-      `SELECT COUNT(*) AS n FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind IN ('created', 'status')
+      `SELECT COUNT(*) AS n FROM application_event WHERE application_id = ? AND undone_at IS NULL AND ${movesStatus}
        AND rowid > (SELECT rowid FROM application_event WHERE id = ?)`,
     ).get(ev.applicationId, ev.id);
-    return Number(later?.n ?? 0) > 0 || (ev.kind === "status" && status !== ev.to);
+    return Number(later?.n ?? 0) > 0 || ((ev.kind === "status" || ev.kind === "email") && status !== ev.to);
   }
 
   async function addNote(applicationId: string, text: string) {
@@ -672,7 +809,8 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     const posting = await postingOf(app);
     const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
       id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
-      undoable: !e.undoneAt && (e.kind === "note" || (e.kind === "status" && !movedSince(e, app.status))),
+      undoable: !e.undoneAt && (e.kind === "note" || ((e.kind === "status" || (e.kind === "email" && !!e.to)) && !movedSince(e, app.status))),
+      email: e.kind === "email" && e.emailId ? matchedEmail(e.emailId) : null,
     }));
     if (posting?.jobId && posting.closed) {
       // Discover's closing, as a neutral fact: it says nothing about the Application's Status.
@@ -680,12 +818,14 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
         id: `posting-closed:${posting.jobId}`, at: posting.closed.at, kind: "posting-closed", cause: "apply-kit", from: null, to: null,
         text: "Posting closed",
         detail: `${posting.closed.how}. That's normal once a job stops taking applications, and says nothing about you. The saved copy stays on the Job page.`,
-        undoneAt: null, undoable: false,
+        undoneAt: null, undoable: false, email: null,
       });
     }
     timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
+    const setter = standing.filter((e) => e.kind === "created" || e.kind === "status" || (e.kind === "email" && !!e.to)).at(-1);
     return {
-      ...app, statusSince: standing.filter((e) => e.kind === "created" || e.kind === "status").at(-1)?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+      ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing), timeline,
+      movedByEmail: movedByEmailOf(setter, app.status),
     };
   }
 
@@ -718,7 +858,7 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
   function closedOn(r: Row): string | null {
     if (!isClosed(r.status as Status)) return null;
     const e = db.prepare(
-      `SELECT at FROM application_event WHERE application_id = ? AND kind = 'status' AND undone_at IS NULL AND to_status = ?
+      `SELECT at FROM application_event WHERE application_id = ? AND kind IN ('status', 'email') AND undone_at IS NULL AND to_status = ?
        ORDER BY at DESC, rowid DESC LIMIT 1`,
     ).get(String(r.id), String(r.status));
     return e ? sofiaDay(new Date(String(e.at))) : null;
@@ -753,7 +893,403 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     return out;
   }
 
+
+  // ---------- Email matching (spec #24 "Matching rules", ADR 0004) ----------
+
+  /** A signal tying an email to an Application. Signals in one group are one fact (the sender's domain), counted once. */
+  type Signal = { group: "thread" | "taught" | "sender" | "ats" | "title"; text: string };
+  const strongGroups: Signal["group"][] = ["thread", "taught"];
+
+  const month = () => clock.now().toISOString().slice(0, 7);
+  const spentThisMonth = () => Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
+  const own = new Set(ownAddresses.map((a) => a.trim().toLowerCase()).filter(Boolean));
+
+  /** Reads an email with the assistant within the monthly budget; otherwise by rules (or not at all). */
+  async function classify(m: MailMessage): Promise<{ c: EmailClassification | null; by: "assistant" | "rules" | "none"; model: string | null }> {
+    if (assistant) {
+      const input = classifyInput(m);
+      const estimate = assistant.estimateClassifyUsd(input);
+      if (spentThisMonth() + estimate <= Math.max(0, aiMonthlyCapUsd ?? 0)) {
+        try {
+          const out = await assistant.classify(input);
+          db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-classify', NULL, ?)")
+            .run(now(), month(), Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+          const parsed = emailClassificationSchema.safeParse(out.classification);
+          if (parsed.success) return { c: parsed.data, by: "assistant", model: out.model };
+        } catch (err) {
+          const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+          if (typeof billed === "number" && billed > 0) {
+            db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-classify', NULL, ?)").run(now(), month(), billed);
+          }
+        }
+      }
+    }
+    const rules = ruleClassify(m);
+    return rules ? { c: rules, by: "rules", model: null } : { c: null, by: "none", model: null };
+  }
+
+  /** The sender rule you taught for this sender (its address first, then its domain), if any. */
+  function ruleFor(address: string): { applicationId: string | null } | null {
+    const r = db.prepare("SELECT application_id FROM sender_rule WHERE sender = ?").get(address)
+      ?? db.prepare("SELECT application_id FROM sender_rule WHERE sender = ? AND kind = 'domain'").get(baseDomain(domainOf(address)));
+    return r ? { applicationId: str(r.application_id) } : null;
+  }
+
+  /** What an answer is remembered for: the address, or the domain when it isn't a shared provider; nothing for a job system. */
+  function ruleKey(address: string): { sender: string; kind: "address" | "domain" } | null {
+    const domain = domainOf(address);
+    if (isAtsDomain(domain)) return null;
+    return isSharedProvider(domain) ? { sender: address, kind: "address" } : { sender: baseDomain(domain), kind: "domain" };
+  }
+
+  /** Open Applications, and those closed in the last 30 days. */
+  function candidateRows(): Row[] {
+    const since = new Date(clock.now().getTime() - 30 * 24 * 60 * 60_000).toISOString();
+    return db.prepare("SELECT * FROM application WHERE removed_at IS NULL").all().filter((r) => {
+      if (!isClosed(r.status as Status)) return true;
+      const e = db.prepare(`SELECT MAX(at) AS at FROM application_event WHERE application_id = ? AND undone_at IS NULL AND ${movesStatus}`).get(String(r.id));
+      return String(e?.at ?? "") >= since;
+    });
+  }
+
+  /** The hosts of the posting applied to: the link given, and the Job's postings (boards and job systems left out). */
+  function postingDomains(r: Row): string[] {
+    const urls = [str(r.posting_url)];
+    if (r.job_id) {
+      const live = liveJobId(db, String(r.job_id)) ?? String(r.job_id);
+      urls.push(...db.prepare("SELECT url FROM posting WHERE job_id = ?").all(live).map((p) => String(p.url)));
+    }
+    return [...new Set(urls.flatMap((u) => { const h = u ? hostOf(u) : null; return h && !isBoardDomain(h) ? [baseDomain(h)] : []; }))];
+  }
+
+  /** Every Application this email may be about, with the signals for each. */
+  function signalsFor(m: MailMessage, c: EmailClassification | null): { applicationId: string; signals: Signal[] }[] {
+    const address = senderOf(m).address;
+    const domain = domainOf(address);
+    const base = baseDomain(domain);
+    const text = `${m.subject}\n${quoteOf(m, 4000)}`;
+    const refs = [m.inReplyTo, ...m.references].filter((x): x is string => !!x);
+    const threadApps = new Set(refs.length
+      ? db.prepare(`SELECT application_id FROM email_match WHERE state = 'matched' AND application_id IS NOT NULL AND email_id IN (${refs.map(() => "?").join(", ")})`)
+        .all(...refs).map((r) => String(r.application_id))
+      : []);
+    const rule = ruleFor(address);
+    const out: { applicationId: string; signals: Signal[] }[] = [];
+    for (const r of candidateRows()) {
+      const id = String(r.id);
+      const company = String(r.company);
+      const title = String(r.title);
+      const signals: Signal[] = [];
+      if (threadApps.size === 1 && threadApps.has(id)) signals.push({ group: "thread", text: "It replies in an email thread already matched to this Application." });
+      if (rule?.applicationId === id) signals.push({ group: "taught", text: `You matched mail from ${address} here before.` });
+      const contacts = contactsOf(id);
+      const posting = postingDomains(r);
+      const sender =
+        contacts.some((k) => k.kind === "address" && k.value === address) ? `The sender (${address}) is a contact of this Application.`
+        : contacts.some((k) => k.kind === "domain" && (domain === k.value || domain.endsWith(`.${k.value}`))) ? `The sender's domain (${base}) is a contact of this Application.`
+        : !isBoardDomain(domain) && posting.includes(base) ? `The sender's domain is the target posting's domain (${base}).`
+        : !isAtsDomain(domain) && !isSharedProvider(domain) && companyDomainMatches(company, domain) ? `The sender's domain (${base}) is ${company}'s.`
+        : null;
+      if (sender) signals.push({ group: "sender", text: sender });
+      if (isAtsDomain(domain) && (namesCompany(company, text) || (c?.company && normaliseCompany(c.company) === normaliseCompany(company)))) {
+        signals.push({ group: "ats", text: `A job system (${base}) writing for ${company}.` });
+      }
+      if (namesTitle(title, text) || (c?.jobTitle && namesTitle(title, c.jobTitle) && namesTitle(c.jobTitle, title))) {
+        signals.push({ group: "title", text: `It names the job: "${title}".` });
+      }
+      if (signals.length) out.push({ applicationId: id, signals });
+    }
+    const strength = (x: { signals: Signal[] }) => (x.signals.some((s) => strongGroups.includes(s.group)) ? 10 : 0) + new Set(x.signals.map((s) => s.group)).size;
+    return out.sort((a, b) => strength(b) - strength(a));
+  }
+
+  /** The one Application an email confidently belongs to: the only one with a thread or taught signal, or the only one with two independent signals. */
+  function uniqueMatch(candidates: { applicationId: string; signals: Signal[] }[]) {
+    const strong = candidates.filter((x) => x.signals.some((s) => strongGroups.includes(s.group)));
+    if (strong.length) return strong.length === 1 ? strong[0]! : null;
+    const two = candidates.filter((x) => new Set(x.signals.map((s) => s.group)).size >= 2);
+    return two.length === 1 ? two[0]! : null;
+  }
+
+  /** The Status an email of this kind moves an Application to, or null. */
+  const targetOf = (kind: EmailKind | null | undefined, stage: unknown): Status | null =>
+    kind === "rejection" ? "rejected" : kind === "offer" ? "offer"
+      : kind === "interview-invitation" ? (stage === "screening" ? "screening" : "interviewing") : null;
+
+  /** Email only moves forward along the happy path, or to Rejected; never backwards, never out of a closed Status, never to Accepted. */
+  function isForward(from: Status, to: Status): boolean {
+    if (isClosed(from) || from === "accepted" || to === "accepted") return false;
+    if (to === "rejected") return true;
+    return happyPath.indexOf(to) > happyPath.indexOf(from);
+  }
+
+  function decide(emailId: string, d: { state: "matched" | "to-match" | "not-application" | "left"; applicationId?: string | null; signals?: string[]; candidates?: { applicationId: string; signals: string[] }[]; reason?: string | null; how?: "auto" | "you" | null }) {
+    db.prepare(
+      `INSERT INTO email_match (email_id, state, application_id, signals, candidates, reason, how, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (email_id) DO UPDATE SET state = excluded.state, application_id = excluded.application_id, signals = excluded.signals,
+         candidates = excluded.candidates, reason = excluded.reason, how = excluded.how, decided_at = excluded.decided_at`,
+    ).run(emailId, d.state, d.applicationId ?? null, JSON.stringify(d.signals ?? []), JSON.stringify(d.candidates ?? []), d.reason ?? null, d.how ?? null, now());
+  }
+
+  /**
+   * Files an email on an Application as an Event, moving its Status when `move` and the kind's Status
+   * is forward from where it stands. Returns the Event and whether it moved.
+   */
+  function fileEmail(applicationId: string, m: MailMessage, kind: EmailKind | null, target: Status | null, move: boolean, cause: EventCause) {
+    const app = row(applicationId)!;
+    const from = app.status as Status;
+    const moves = move && target !== null && isForward(from, target);
+    const what = kind ? emailKindName[kind] : "Email";
+    if (moves) db.prepare("UPDATE application SET status = ? WHERE id = ?").run(target, applicationId);
+    const text = moves
+      ? `${what}: moved to ${statusName(target!)}`
+      : target && move && !isForward(from, target) ? `${what}, filed: it's ${statusName(from)} already, so the Status stays` : `${what}, filed`;
+    const event = addEvent({
+      applicationId, kind: "email", cause, from: moves ? from : null, to: moves ? target : null, text, undoes: null,
+      emailId: m.id, emailKind: kind,
+    });
+    return { event, moved: moves };
+  }
+
+  const kindWords = (k: EmailKind) => (k === "interview-invitation" ? "an interview invitation" : k === "info-request" ? "a request for information" : k === "other" ? "an email" : `a${k === "offer" ? "n" : ""} ${emailKindName[k].toLowerCase()}`);
+
+  function whyWaiting(m: MailMessage, c: EmailClassification | null, by: "assistant" | "rules" | "none", target: Status | null, candidates: number, matched: boolean): string {
+    const domain = baseDomain(domainOf(senderOf(m).address));
+    if (!c) {
+      return by === "none" && assistant
+        ? "This month's AI budget is used up, so apply-kit couldn't read what it says, and nothing it knows ties it to one Application. Nothing has changed."
+        : "apply-kit couldn't read what it says, and nothing it knows ties it to one Application. Nothing has changed.";
+    }
+    const reads = `It reads like ${kindWords(c.kind)}${target ? ` (would move an Application to ${statusName(target)})` : ""}`;
+    if (matched) return `${reads}, but apply-kit isn't sure enough of that to change a Status on its own, so nothing has changed.`;
+    if (candidates > 1) return `${reads}, but it could be about more than one Application. ${target ? "That's too important to guess, so nothing has changed." : "Nothing has changed."}`;
+    return `${reads}, but ${domain} hasn't written before and nothing ties it to one Application. ${target ? "That's too important to guess, so nothing has changed." : "Nothing has changed."}`;
+  }
+
+  /** Decides one email. Returns what happened to it. */
+  async function processOne(m: MailMessage): Promise<keyof MailProcessed> {
+    const address = senderOf(m).address;
+    if (own.has(address)) { decide(m.id, { state: "left", reason: "sent-copy" }); return "left"; }
+    if (isJobAlert(m)) { decide(m.id, { state: "left", reason: "alert" }); return "left"; }
+    const rule = ruleFor(address);
+    if (rule && rule.applicationId === null) { decide(m.id, { state: "not-application", reason: "taught", how: "auto" }); return "left"; }
+
+    const { c, by, model } = await classify(m);
+    db.prepare(
+      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(m.id, by, c?.kind ?? null, c?.confidence ?? null, c?.company ?? null, c?.jobTitle ?? null, c?.stage ?? null, c?.language ?? null, c?.summary ?? null, model, now());
+
+    const candidates = signalsFor(m, c);
+    const match = uniqueMatch(candidates);
+    const target = targetOf(c?.kind, c?.stage);
+    const strongMatch = !!match?.signals.some((s) => strongGroups.includes(s.group));
+    const texts = (x: { signals: Signal[] }) => x.signals.map((s) => s.text);
+    const wait = () => {
+      decide(m.id, {
+        state: "to-match", reason: whyWaiting(m, c, by, target, candidates.length, !!match),
+        candidates: candidates.slice(0, 4).map((x) => ({ applicationId: x.applicationId, signals: texts(x) })),
+      });
+      return "toMatch" as const;
+    };
+    const file = (move: boolean) => {
+      db.exec("BEGIN");
+      try {
+        const { moved } = fileEmail(match!.applicationId, m, c?.kind ?? null, target, move, "email");
+        decide(m.id, { state: "matched", applicationId: match!.applicationId, signals: texts(match!), how: "auto" });
+        db.exec("COMMIT");
+        return moved ? ("moved" as const) : ("filed" as const);
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+    };
+
+    // Not read (budget out): only rule-based matches apply (a thread, a taught sender, or a known job system's confirmation).
+    if (!c) return match && strongMatch ? file(false) : wait();
+    if (by === "rules") return match ? file(false) : wait();
+    if (c.kind === "other") {
+      if (match) return file(false);
+      decide(m.id, { state: "left", reason: "not-application-mail" });
+      return "left";
+    }
+    if (!target) return match ? file(false) : wait();
+    if (!match || c.confidence < highConfidence) return wait();
+    return file(true);
+  }
+
+  let running: Promise<unknown> = Promise.resolve();
+  /** Every stored email from the last 30 days not decided yet, oldest first, one run at a time. */
+  function processMail(): Promise<MailProcessed> {
+    const run = running.then(async () => {
+      const since = new Date(clock.now().getTime() - 30 * 24 * 60 * 60_000).toISOString();
+      const rows = db.prepare(
+        `SELECT m.* FROM mail_message m LEFT JOIN email_match d ON d.email_id = m.id
+         WHERE d.email_id IS NULL AND m.received_at >= ? ORDER BY m.received_at, m.id`,
+      ).all(since);
+      const done: MailProcessed = { moved: 0, filed: 0, toMatch: 0, left: 0 };
+      for (const r of rows) done[await processOne(storedMessage(r))]++;
+      return done;
+    });
+    running = run.catch(() => {});
+    return run;
+  }
+
+  function emailSummary(emailId: string): EmailSummary | null {
+    const r = db.prepare(
+      `SELECT m.*, c.kind AS c_kind, c.language AS c_language, c.summary AS c_summary
+       FROM mail_message m LEFT JOIN email_classification c ON c.email_id = m.id WHERE m.id = ?`,
+    ).get(emailId);
+    if (!r) return null;
+    const m = storedMessage(r);
+    return {
+      id: m.id, from: m.from, subject: m.subject, receivedAt: m.receivedAt.toISOString(), quote: quoteOf(m),
+      kind: str(r.c_kind) as EmailKind | null, language: str(r.c_language), summary: str(r.c_summary), attachments: m.attachments,
+    };
+  }
+
+  function matchedEmail(emailId: string): MatchedEmail | null {
+    const e = emailSummary(emailId);
+    if (!e) return null;
+    const d = db.prepare("SELECT signals, how FROM email_match WHERE email_id = ?").get(emailId);
+    return { ...e, signals: d ? (JSON.parse(String(d.signals)) as string[]) : [], matchedBy: d?.how === "you" ? "you" : "email" };
+  }
+
+  function movedByEmailOf(setter: ApplicationEvent | undefined, status: Status): MovedByEmail | null {
+    if (!setter || setter.kind !== "email" || setter.cause !== "email" || !setter.emailId || setter.to !== status || !setter.from) return null;
+    const confirmed = db.prepare("SELECT confirmed_at FROM email_match WHERE email_id = ?").get(setter.emailId)?.confirmed_at;
+    if (confirmed != null) return null;
+    const email = matchedEmail(setter.emailId);
+    return email ? { eventId: setter.id, from: setter.from, to: setter.to, at: setter.at, email, signals: email.signals } : null;
+  }
+
+  async function emailsToMatch(): Promise<EmailToMatch[]> {
+    const rows = db.prepare(
+      `SELECT d.*, m.from_header, m.received_at, c.company AS c_company, c.job_title AS c_title, c.kind AS c_kind, c.stage AS c_stage
+       FROM email_match d JOIN mail_message m ON m.id = d.email_id LEFT JOIN email_classification c ON c.email_id = d.email_id
+       WHERE d.state = 'to-match' ORDER BY m.received_at DESC, m.id`,
+    ).all();
+    return rows.map((r) => {
+      const email = emailSummary(String(r.email_id))!;
+      const address = senderOf({ from: String(r.from_header) }).address;
+      const candidates = (JSON.parse(String(r.candidates)) as { applicationId: string; signals: string[] }[]).flatMap((x) => {
+        const a = summary(x.applicationId);
+        return a ? [{ application: a, reasons: x.signals }] : [];
+      });
+      const kind = str(r.c_kind) as EmailKind | null;
+      const target = targetOf(kind, r.c_stage);
+      return {
+        email, moveTo: target, why: String(r.reason ?? ""), candidates,
+        newApplication: newApplicationFrom({ company: str(r.c_company), title: str(r.c_title), subject: email.subject, address }),
+        remembers: ruleKey(address)?.sender ?? null,
+      };
+    });
+  }
+
+  /** The company and title "a new Application" from this email would have. */
+  function newApplicationFrom(e: { company: string | null; title: string | null; subject: string; address: string }) {
+    const label = baseDomain(domainOf(e.address)).split(".")[0] ?? "";
+    const company = e.company?.trim() || (isAtsDomain(domainOf(e.address)) || isSharedProvider(domainOf(e.address))
+      ? "Unknown company"
+      : label.split(/[-_]/).filter(Boolean).map((w) => w[0]!.toUpperCase() + w.slice(1)).join(" "));
+    const title = e.title?.trim() || e.subject.replace(/^(re|fw|fwd):\s*/i, "").trim() || "Unknown job";
+    return { company, title };
+  }
+
+  async function answerEmail(emailId: string, answer: EmailAnswer) {
+    const choice = (answer as { choice?: unknown } | null)?.choice;
+    if (choice !== "application" && choice !== "new" && choice !== "none") {
+      throw new TrackerError("invalid", "Choose where this email belongs first.");
+    }
+    const d = db.prepare("SELECT state FROM email_match WHERE email_id = ?").get(emailId);
+    const r = db.prepare("SELECT * FROM mail_message WHERE id = ?").get(emailId);
+    if (!d || !r) throw new TrackerError("not-found", "There's no such email to match.");
+    if (d.state !== "to-match") throw new TrackerError("unchanged", "That email was matched already.");
+    const m = storedMessage(r);
+    const address = senderOf(m).address;
+    const cls = db.prepare("SELECT * FROM email_classification WHERE email_id = ?").get(emailId);
+    const kind = str(cls?.kind) as EmailKind | null;
+    const target = targetOf(kind, cls?.stage);
+    const teach = (applicationId: string | null) => {
+      const key = ruleKey(address);
+      if (!key) return;
+      db.prepare(
+        `INSERT INTO sender_rule (sender, kind, application_id, created_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (sender) DO UPDATE SET kind = excluded.kind, application_id = excluded.application_id, created_at = excluded.created_at`,
+      ).run(key.sender, key.kind, applicationId, now());
+    };
+
+    db.exec("BEGIN");
+    try {
+      let result: { application: ApplicationSummary | null; event: ApplicationEvent | null };
+      if (answer.choice === "none") {
+        decide(emailId, { state: "not-application", how: "you", reason: "you" });
+        teach(null);
+        result = { application: null, event: null };
+      } else {
+        let applicationId: string;
+        if (answer.choice === "application") {
+          if (!row(answer.applicationId)) throw new TrackerError("not-found", "That Application isn't there any more. Choose another.");
+          applicationId = answer.applicationId;
+        } else {
+          applicationId = createFromEmail(m, { company: str(cls?.company), title: str(cls?.job_title) });
+        }
+        const { event } = fileEmail(applicationId, m, kind, target, answer.move === true, "you");
+        decide(emailId, { state: "matched", applicationId, signals: ["You matched it."], how: "you" });
+        teach(applicationId);
+        result = { application: summary(applicationId), event };
+      }
+      db.exec("COMMIT");
+      return result;
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  /** "A new Application" from an email: applied the day it arrived, its sender kept as the contact. */
+  function createFromEmail(m: MailMessage, c: { company: string | null; title: string | null }): string {
+    const address = senderOf(m).address;
+    const { company, title } = newApplicationFrom({ ...c, subject: m.subject, address });
+    const id = randomUUID();
+    const appliedOn = sofiaDay(m.receivedAt);
+    db.prepare(
+      `INSERT INTO application (id, job_id, company, title, status, applied_on, created_how, created_at, posting_url, angle, source)
+       VALUES (?, NULL, ?, ?, 'applied', ?, 'from-email', ?, NULL, NULL, 'Added by hand')`,
+    ).run(id, company, title, appliedOn > today() ? today() : appliedOn, now());
+    const key = ruleKey(address);
+    if (key) {
+      db.prepare("INSERT INTO application_contact (application_id, value, kind, added_at) VALUES (?, ?, ?, ?)").run(id, key.sender, key.kind, now());
+    }
+    addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text: "Added from an email", undoes: null });
+    return id;
+  }
+
+  async function confirmEmailMove(eventId: string) {
+    const r = db.prepare("SELECT email_id FROM application_event WHERE id = ? AND kind = 'email'").get(eventId);
+    if (!r?.email_id) throw new TrackerError("not-found", "There's no such email move.");
+    db.prepare("UPDATE email_match SET confirmed_at = ? WHERE email_id = ?").run(now(), String(r.email_id));
+  }
+
+  function mailbox(): TrackMailbox {
+    const latest = db.prepare("SELECT read_at, outcome, reason, error FROM mailbox_read ORDER BY id DESC LIMIT 1").get();
+    const lastOk = db.prepare("SELECT MAX(read_at) AS at FROM mailbox_read WHERE outcome = 'ok'").get()?.at;
+    const lastReadAt = lastOk == null ? null : String(lastOk);
+    if (!latest) return { state: "not-read", problem: null, error: null, fix: null, since: null, lastReadAt };
+    if (latest.outcome === "ok") return { state: "connected", problem: null, error: null, fix: null, since: null, lastReadAt };
+    const problem = (String(latest.reason) in mailboxFix ? String(latest.reason) : "error") as MailboxProblem;
+    const since = String(db.prepare("SELECT MIN(read_at) AS at FROM mailbox_read WHERE outcome != 'ok' AND read_at > ?").get(lastReadAt ?? "")!.at);
+    return {
+      state: problem === "not-configured" ? "not-connected" : "failing", problem, error: str(latest.error), fix: mailboxFix[problem], since, lastReadAt,
+    };
+  }
+
   return {
+    processMail,
+    emailsToMatch,
+    answerEmail,
+    confirmEmailMove,
+    mailbox: async () => mailbox(),
     jobMarkers,
     addByHand,
     list,
@@ -766,7 +1302,10 @@ export function createTracker({ db, clock, discovery }: TrackerDeps): Tracker {
     attachCv,
     cvFile,
     findJobs,
-    stats: async () => computeStats(db, today()),
+    stats: async () => {
+      const mail = mailbox();
+      return computeStats(db, today(), mail.state === "failing" || mail.state === "not-connected" ? mail.since : null);
+    },
   };
 }
 

@@ -306,6 +306,45 @@ const migrations: string[] = [
      bytes BLOB NOT NULL,
      attached_at TEXT NOT NULL
    );`,
+  // Track #31: email matching. Each stored email is classified once (by the Track assistant, by rules
+  // when the AI budget is out, or not at all) and decided once: matched to an Application (with the
+  // signals it matched on), waiting as "Email to match" (with the candidates and why), not about an
+  // application, or left alone (job alerts, the user's own sent copies, unrelated mail). The user's
+  // answers become sender rules (an address, or a domain that isn't a shared mail provider; a null
+  // Application means "not about an application"). An Event caused by an email names it.
+  `CREATE TABLE email_classification (
+     email_id TEXT PRIMARY KEY REFERENCES mail_message(id),
+     by TEXT NOT NULL,
+     kind TEXT,
+     confidence REAL,
+     company TEXT,
+     job_title TEXT,
+     stage TEXT,
+     language TEXT,
+     summary TEXT,
+     model TEXT,
+     classified_at TEXT NOT NULL
+   );
+   CREATE TABLE email_match (
+     email_id TEXT PRIMARY KEY REFERENCES mail_message(id),
+     state TEXT NOT NULL,
+     application_id TEXT REFERENCES application(id),
+     signals TEXT NOT NULL DEFAULT '[]',
+     candidates TEXT NOT NULL DEFAULT '[]',
+     reason TEXT,
+     how TEXT,
+     decided_at TEXT NOT NULL,
+     confirmed_at TEXT
+   );
+   CREATE INDEX email_match_state ON email_match(state);
+   CREATE TABLE sender_rule (
+     sender TEXT PRIMARY KEY,
+     kind TEXT NOT NULL,
+     application_id TEXT REFERENCES application(id),
+     created_at TEXT NOT NULL
+   );
+   ALTER TABLE application_event ADD COLUMN email_id TEXT;
+   ALTER TABLE application_event ADD COLUMN email_kind TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {
