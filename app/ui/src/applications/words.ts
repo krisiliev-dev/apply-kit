@@ -37,3 +37,31 @@ export function eventTime(iso: string): string {
 }
 
 export const angleLabel = { developer: "Developer", security: "Security", design: "Design" } as const;
+
+const clockTime = (d: Date) => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Sofia" });
+
+/** "today 09:14", or "Sat 10 Oct, 21:00", in Sofia time. */
+export function dayTime(iso: string): string {
+  const d = new Date(iso);
+  if (todaySofia(d) === todaySofia()) return `today ${clockTime(d)}`;
+  return `${sep(d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Sofia" })).replace(",", "")}, ${clockTime(d)}`;
+}
+
+/** "Sat 21:00" (the short form for a page-head line), or "today 21:00". */
+export function weekdayTime(iso: string): string {
+  const d = new Date(iso);
+  if (todaySofia(d) === todaySofia()) return `today ${clockTime(d)}`;
+  return `${d.toLocaleDateString("en-GB", { weekday: "short", timeZone: "Europe/Sofia" })} ${clockTime(d)}`;
+}
+
+/** What an email is, in plain words (the service's kinds). */
+export const emailKindLabel = {
+  confirmation: "Confirmation", rejection: "Rejection", "interview-invitation": "Interview invitation", offer: "Offer",
+  "info-request": "Request for information", other: "Email",
+} as const;
+
+/** "an interview invitation", "a rejection", for sentences. */
+export const emailKindPhrase = {
+  confirmation: "a confirmation", rejection: "a rejection", "interview-invitation": "an interview invitation", offer: "an offer",
+  "info-request": "a request for information", other: "an email",
+} as const;

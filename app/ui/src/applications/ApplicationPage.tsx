@@ -3,16 +3,18 @@
 // (skipped steps struck through, derived from Events) with the Status select; the Next step box; the
 // timeline, each Event naming its cause, with Undo where it applies and Add note; and beside it
 // "What you sent" (Attach CV) for one added by hand, the target posting and the contacts.
+// When an email moved the Status (state Moved by email): a banner with Looks right and Undo, and the
+// email that moved it with the signals it matched on (and an English line for one in Bulgarian).
 // Follow-ups, interviews, offers and the Package as sent come with later Track tickets.
-import type { ApplicationDetail, ApplicationSummary, HealthSummary, Status, TimelineEntry } from "@apply-kit/core";
+import type { ApplicationDetail, ApplicationSummary, HealthSummary, MovedByEmail, Status, TimelineEntry } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
-  addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, fetchApplication, fetchSources,
+  addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchSources,
   setApplicationStatus, undoApplicationEvent,
 } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { By, StatusSelect } from "./ApplicationsPage.tsx";
-import { angleLabel, longDay, statusLabel, todaySofia } from "./words.ts";
+import { angleLabel, emailKindLabel, longDay, statusLabel, todaySofia } from "./words.ts";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; app: ApplicationDetail };
 
@@ -108,9 +110,11 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
 
   return (
     <section className="stack app-page" style={{ gap: "var(--s-6)" }}>
+      {app.movedByEmail && <MovedBanner moved={app.movedByEmail} refresh={refresh} toaster={toaster} onDone={focusStatus} />}
       <Head app={app} onStatus={changeStatus} />
       <div className="cols">
         <div className="col">
+          {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
           <NextStep app={app} onAddContact={() => contactRef.current?.click()} />
           <Timeline app={app} refresh={refresh} toaster={toaster} />
         </div>
@@ -187,7 +191,7 @@ function NextStep({ app, onAddContact }: { app: ApplicationDetail; onAddContact:
       {n.kind === "wait" && (
         <p className="muted mini">
           {matched.length
-            ? `Replies from ${matched.join(", ")} are matched to this Application once email matching arrives. Change the Status yourself when you hear back.`
+            ? `Replies from ${matched.join(", ")} are matched to this Application from the job mailbox. Change the Status yourself if you hear back another way.`
             : "Change the Status when you hear back. Add a recruiter's address or the company's domain so their replies can be matched here."}
         </p>
       )}
@@ -201,6 +205,11 @@ function NextStep({ app, onAddContact }: { app: ApplicationDetail; onAddContact:
 const causeWords = { you: "by you", email: "by email", "apply-kit": "by apply-kit" } as const;
 
 function entryTitle(e: TimelineEntry): string {
+  if (e.kind === "email") {
+    const what = e.email?.kind ? emailKindLabel[e.email.kind] : "Email";
+    if (e.undoneAt) return `${what} · not a Status change`;
+    return e.from && e.to ? `${what} · ${statusLabel[e.from]} → ${statusLabel[e.to]}` : `${what} · filed`;
+  }
   if (e.kind === "status" && e.from && e.to) return `${statusLabel[e.from]} → ${statusLabel[e.to]}`;
   if (e.kind === "note") return "Note";
   return e.text;
@@ -285,7 +294,7 @@ function Timeline({ app, refresh, toaster }: { app: ApplicationDetail; refresh: 
       )}
       <ol className="timeline">
         {app.timeline.map((e) => (
-          <li key={e.id} className={e.undoneAt ? "undone" : undefined}>
+          <li key={e.id} className={e.undoneAt ? (e.kind === "email" ? "undone not-a-change" : "undone") : undefined}>
             <time dateTime={e.at}>{when(e.at)}</time>
             <div className="ev">
               <div className="line">
@@ -299,6 +308,13 @@ function Timeline({ app, refresh, toaster }: { app: ApplicationDetail; refresh: 
                 )}
               </div>
               {e.kind === "note" && <span className="muted" lang={langOf(e.text)}>{e.text}</span>}
+              {e.email && (
+                <span className="muted">
+                  "<span lang={langOf(e.email.subject)}>{e.email.subject}</span>" from {e.email.from}
+                  {e.email.summary && <><br />In English: {e.email.summary}</>}
+                  {e.email.matchedBy === "you" && <><br />You matched it.</>}
+                </span>
+              )}
               {e.detail && <span className="muted">{e.detail}</span>}
             </div>
           </li>
@@ -531,6 +547,54 @@ function NotFound() {
         <p>It may have been removed when its adding was undone, or the link is from an old backup. Applications are never deleted by apply-kit itself.</p>
         <div className="row"><a className="btn primary" href="/applications">All applications</a></div>
       </div>
+    </section>
+  );
+}
+
+/** "Moved Applied → Screening by an email today at 08:40", with Looks right and Undo. */
+function MovedBanner({ moved, refresh, toaster, onDone }: { moved: MovedByEmail; refresh: () => Promise<ApplicationDetail>; toaster: Toaster; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const n = moved.signals.length;
+  const act = (run: () => Promise<unknown>, said: string) => {
+    setBusy(true);
+    run().then(refresh).then(() => { toaster.announce(said); onDone(); })
+      .catch((err: unknown) => toaster.show({ message: `Couldn't do that: ${message(err)}` }))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <div className="banner success">
+      <span className="text">
+        <b>Moved {statusLabel[moved.from]} → {statusLabel[moved.to]} by an email {when(moved.at).replace(/^today /, "today at ")}.</b>{" "}
+        {n ? `It matched on ${n === 1 ? "1 signal" : `${n} signals`}, listed below.` : ""}
+      </span>
+      <button className="btn sm" type="button" disabled={busy} onClick={() => act(() => confirmEmailMove(moved.eventId), "Thanks. The banner is gone; the email stays on the timeline.")}>Looks right</button>
+      <button className="btn sm" type="button" disabled={busy} onClick={() => act(() => undoApplicationEvent(moved.eventId), `Undone. Back to ${statusLabel[moved.from]}; the email stays on the timeline as not a Status change.`)}>
+        Undo<span className="sr-only">: the move to {statusLabel[moved.to]}</span>
+      </button>
+    </div>
+  );
+}
+
+/** The email that moved it: who, the subject, a quote (with an English line), and why it matched. */
+function MovedEmail({ moved }: { moved: MovedByEmail }) {
+  const e = moved.email;
+  const lang = e.language && e.language !== "en" ? e.language : langOf(e.quote);
+  const language = e.language === "bg" ? " · in Bulgarian" : "";
+  return (
+    <section className="panel" aria-labelledby="moved-h">
+      <div className="sec-head"><h2 id="moved-h">The email that moved it</h2><span className="meta">{when(e.receivedAt)}{language}</span></div>
+      <div className="quote">
+        <span className="where">{e.from} · <span lang={langOf(e.subject)}>{e.subject}</span></span>
+        <span lang={lang}>"{e.quote}"</span>
+        {e.summary && <span className="tr">In English: {e.summary}</span>}
+      </div>
+      {moved.signals.length > 0 && (
+        <div className="stack tight">
+          <span className="mini" style={{ fontWeight: 600 }}>Why it matched</span>
+          <ul className="signals">{moved.signals.map((s) => <li key={s}>{s}</li>)}</ul>
+        </div>
+      )}
+      <p className="meta">Undo puts the Status back to {statusLabel[moved.from]} and keeps the email on the timeline, marked "not a Status change".</p>
     </section>
   );
 }

@@ -3,13 +3,17 @@
 // and every Application grouped by Status. Interviewing, Screening, Offer and Applied start open;
 // Closed starts collapsed and is never deleted. Each row has a labelled Status select: a change is an
 // Event "by you" with a 10-second (or longer) undo toast. A row's title opens its Application page.
-// The Stats strip sits above (StatsStrip.tsx); Needs you, search and filters come with later Track tickets.
-import type { ApplicationGroup, ApplicationList, ApplicationSummary, GroupKey, HealthSummary, Status } from "@apply-kit/core";
+// The Stats strip sits above (StatsStrip.tsx), then Needs you with emails to match (EmailsToMatch.tsx);
+// the job mailbox's state shows as a banner and in the page-head line (MailState.tsx). Follow-ups in
+// Needs you, search and filters come with other Track tickets.
+import type { ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, GroupKey, HealthSummary, Status, TrackMailbox } from "@apply-kit/core";
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { fetchApplications, fetchSources, setApplicationStatus, undoApplicationEvent } from "../api.ts";
+import { fetchApplications, fetchEmailsToMatch, fetchSources, fetchTrackMailbox, setApplicationStatus, undoApplicationEvent } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Chevron } from "../icons.tsx";
 import { AddApplicationDialog, type Added } from "./AddApplicationDialog.tsx";
+import { EmailsToMatch } from "./EmailsToMatch.tsx";
+import { MailboxBanner, mailWords, useMailReading } from "./MailState.tsx";
 import { StatsStrip } from "./StatsStrip.tsx";
 import { angleLabel, eventTime, shortDay, statusLabel, statusOrder } from "./words.ts";
 
@@ -36,6 +40,17 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   /** Where focus goes once the next list has rendered (the button it targets may be a new one). */
   const focusNext = useRef<(() => void) | null>(null);
   const toaster = useToaster();
+  const [emails, setEmails] = useState<EmailToMatch[]>([]);
+  const [mailbox, setMailbox] = useState<TrackMailbox | null>(null);
+  /** When the list shown was loaded ("The list below is from 07:30"). */
+  const [loadedAt, setLoadedAt] = useState(() => new Date().toISOString());
+
+  /** Needs you's emails and the mailbox's state; a failure leaves what's shown. */
+  const refreshMail = useCallback(async () => {
+    const [e, m] = await Promise.all([fetchEmailsToMatch(), fetchTrackMailbox()]);
+    setEmails(e);
+    setMailbox(m);
+  }, []);
 
   useEffect(() => {
     const f = focusNext.current;
@@ -55,16 +70,29 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   useEffect(() => {
     const ctrl = new AbortController();
     fetchApplications(all, ctrl.signal)
-      .then((list) => setLoad({ state: "ready", list }))
+      .then((list) => { setLoad({ state: "ready", list }); setLoadedAt(new Date().toISOString()); })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setLoad({ state: "error", message: message(err) }); });
     return () => ctrl.abort();
   }, [all, attempt]);
 
+  useEffect(() => {
+    const ctrl = new AbortController();
+    Promise.all([fetchEmailsToMatch(ctrl.signal), fetchTrackMailbox(ctrl.signal)])
+      .then(([e, m]) => { setEmails(e); setMailbox(m); })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [attempt]);
+
   const refresh = useCallback(async (show: GroupKey[] = all) => {
     const list = await fetchApplications(show);
     setLoad({ state: "ready", list });
+    setLoadedAt(new Date().toISOString());
+    refreshMail().catch(() => {});
     return list;
-  }, [all]);
+  }, [all, refreshMail]);
+
+  // A check reading the job mailbox: one quiet line meanwhile, then the list and Needs you again.
+  const reading = useMailReading(useCallback(() => { refresh().catch(() => {}); }, [refresh]));
 
   /** Moves focus to an Application's Status select, or to its group's heading when its row isn't shown. */
   const focusApplication = useCallback((id: string, group?: GroupKey) => {
@@ -180,6 +208,12 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   if (list.total === 0) {
     return (
       <>
+        {(mailbox?.state === "failing" || mailbox?.state === "not-connected" || emails.length > 0) && (
+          <div className="stack" style={{ gap: "var(--s-7)", marginBottom: "var(--s-7)" }}>
+            <MailboxBanner mailbox={mailbox} />
+            <EmailsToMatch emails={emails} total={0} toaster={toaster} onAnswered={() => refresh()} />
+          </div>
+        )}
         <div className="empty">
           <svg viewBox="0 0 120 48" width="120" height="48" aria-hidden="true"><path d="M2 46 32 12l18 20 14-14 26 28z" fill="var(--met-soft)" stroke="var(--action)" strokeWidth="2" strokeLinejoin="round" /><circle cx="96" cy="10" r="5" fill="var(--bloom)" /></svg>
           <h1>No applications yet</h1>
@@ -199,6 +233,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     );
   }
 
+  const mailLine = mailWords(mailbox);
   const isOpen = (g: ApplicationGroup) => expanded[g.key] ?? g.open;
   const toggle = (g: ApplicationGroup) => setExpanded((e) => ({ ...e, [g.key]: !isOpen(g) }));
   const showMore = (g: ApplicationGroup) => {
@@ -217,10 +252,15 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   return (
     <section className="stack" style={{ gap: "var(--s-7)" }}>
+      {mailbox?.state === "failing" && <MailboxBanner mailbox={mailbox} />}
       <div className="page-head">
         <div className="lead">
           <h1>Applications</h1>
-          <p className="meta">{list.total} since {list.since ? shortDay(list.since) : "today"} · {list.open} open</p>
+          {reading ? (
+            <p className="meta" role="status"><span className="spin sm" aria-hidden="true" /> Reading the job mailbox for replies… The list below is from {eventTime(loadedAt).replace(/^today /, "")} and stays usable.</p>
+          ) : (
+            <p className="meta">{list.total} since {list.since ? shortDay(list.since) : "today"} · {list.open} open{mailLine && ` · ${mailLine}`}</p>
+          )}
         </div>
         <span className="grow" />
         <button className="btn" type="button" ref={addRef} onClick={() => setAdding(true)}>Add application</button>
@@ -233,9 +273,13 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         </div>
       )}
 
-      <StatsStrip version={list} />
+      {mailbox?.state === "not-connected" && <MailboxBanner mailbox={mailbox} />}
 
-      {list.total === 1 && (
+      <StatsStrip version={list} mailbox={mailbox} />
+
+      <EmailsToMatch emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />
+
+      {list.total === 1 && emails.length === 0 && (
         <div className="calm">
           <h2 className="sr-only">Needs you</h2>
           <h3>Nothing needs you yet</h3>

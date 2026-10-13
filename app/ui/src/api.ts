@@ -2,6 +2,7 @@ import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
+  EmailAnswer, EmailToMatch, TrackMailbox,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -305,4 +306,24 @@ export const applicationCvUrl = (id: string) => `${applicationPath(id)}/cv`;
 /** The Stats strip's numbers. */
 export async function fetchApplicationStats(signal?: AbortSignal): Promise<TrackStats> {
   return json(await fetch("/api/applications/stats", { signal }));
+}
+
+/** Emails waiting in Needs you for you to say which Application they're about. */
+export async function fetchEmailsToMatch(signal?: AbortSignal): Promise<EmailToMatch[]> {
+  return json(await fetch("/api/applications/emails", { signal }));
+}
+
+/** Your answer to an email to match. Rejects with the reason in words (no choice: "Choose where this email belongs first."). */
+export async function answerEmail(emailId: string, answer: EmailAnswer): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }> {
+  return json(await postJson(`/api/applications/emails/${encodeURIComponent(emailId)}/answer`, answer));
+}
+
+/** "Looks right" on the moved-by-email banner. */
+export async function confirmEmailMove(eventId: string): Promise<void> {
+  await json(await postJson(`/api/applications/events/${encodeURIComponent(eventId)}/looks-right`));
+}
+
+/** The job mailbox's state, for Applications' banners. */
+export async function fetchTrackMailbox(signal?: AbortSignal): Promise<TrackMailbox> {
+  return json(await fetch("/api/applications/mailbox", { signal }));
 }
