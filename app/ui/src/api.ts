@@ -2,6 +2,7 @@ import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
+  Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -296,3 +297,34 @@ export async function removePhoto(): Promise<Contact> {
 
 /** The one-click export downloads from here. */
 export const profileExportUrl = "/api/profile/export";
+
+// ---------- Answer bank (#56) ----------
+
+export async function fetchAnswers(query: AnswerQuery, signal?: AbortSignal): Promise<AnswerList> {
+  const q = new URLSearchParams({
+    ...(query.category && { category: query.category }),
+    ...(query.notUsedIn90Days && { stale: "1" }),
+    ...(query.search?.trim() && { q: query.search.trim() }),
+    ...(query.page && query.page > 1 && { page: String(query.page) }),
+  });
+  return json(await fetch(`/api/profile/answers?${q}`, { signal }));
+}
+
+export async function fetchAnswer(id: string, signal?: AbortSignal): Promise<{ answer: Answer; history: AnswerChange[] }> {
+  return json(await fetch(`/api/profile/answers/${encodeURIComponent(id)}`, { signal }));
+}
+
+/** Saves an answer; a refused one resolves with its problems (it doesn't throw). */
+export async function saveAnswer(input: AnswerInput): Promise<SaveAnswerResult> {
+  const res = await postJson("/api/profile/answers", input);
+  return res.status === 422 ? ((await res.json()) as SaveAnswerResult) : json(res);
+}
+
+export async function deleteAnswer(id: string): Promise<{ deleted: true }> {
+  return json(await postJson(`/api/profile/answers/${encodeURIComponent(id)}/delete`));
+}
+
+/** Keep new: the portal's version replaces the bank's (which stays in the history). Keep old: nothing changes. */
+export async function resolvePortalEdit(id: string, keep: "keep-new" | "keep-old"): Promise<Answer> {
+  return json(await postJson(`/api/profile/answers/${encodeURIComponent(id)}/portal-edit`, { keep }));
+}
