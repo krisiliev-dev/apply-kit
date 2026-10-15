@@ -514,6 +514,9 @@ const migrations: string[] = [
      near TEXT,
      created_at TEXT NOT NULL
    );`,
+  // #66: the package's screening answers (JSON): where the questions came from and each question's
+  // answer with its origin (bank, adapted, new, needs you, translated).
+  `ALTER TABLE package ADD COLUMN screening TEXT;`,
   // #65: the cover letter's drafts, kept and paged: what the writer wrote (null for one Kris writes
   // herself), the text as Kris edited it, the instruction it was asked with, the voice excerpts it
   // sent, and the voice edit recording Kris's changes to it. The package shows one draft at a time,

@@ -11,6 +11,8 @@
 // top of the step and sitting inside their requirement, none pre-selected; resolved ones stay with
 // the choice; Approve with an open flag moves focus to an alert naming it, linking to the flag.
 // Ticket #65: step 3, the cover letter (LetterStep.tsx), and "Write the letter myself" where it failed or the cap stopped it.
+// Ticket #66: step 4, screening answers (AnswersStep.tsx); Approve with an answer that needs Kris
+// moves focus to that question.
 import type {
   BudgetInfo, CvFlagView, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
 } from "@apply-kit/core";
@@ -22,6 +24,7 @@ import {
 import { useToaster } from "../feed/toast.tsx";
 import { Icon } from "../icons.tsx";
 import { LetterSide, LetterStep, writeOwnLetter, type LetterViewMode } from "./LetterStep.tsx";
+import { AnswersStep, questionElementId } from "./AnswersStep.tsx";
 // pdf.js is large: it loads only when a document is shown.
 const PdfPreview = lazy(() => import("./PdfPreview.tsx").then((m) => ({ default: m.PdfPreview })));
 
@@ -336,6 +339,7 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
   const content = viewing === "target" ? <TargetStep pkg={pkg} onChange={onChange} say={say} />
     : viewing === "cv" ? <CvStep pkg={pkg} view={cvView} onView={setCvView} flagAlert={flagAlert} onChange={onChange} onGo={onGo} say={say} />
     : viewing === "letter" ? <LetterStep pkg={pkg} view={letterView} onView={setLetterView} onChange={onChange} onGo={onGo} say={say} />
+    : viewing === "answers" ? <AnswersStep pkg={pkg} onChange={onChange} say={say} />
     : <LaterStep pkg={pkg} step={step} onGo={onGo} />;
 
   return (
@@ -397,9 +401,17 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
   const openFlags = step.step === "cv" ? pkg.cvVersion?.flags.filter((f) => !f.decision) ?? [] : [];
   const before = steps.slice(0, steps.indexOf(step.step)).some((s) => !pkg.steps.find((v) => v.step === s)?.approvedAt);
   const flagBlocked = openFlags.length > 0 && !before;
-  // What blocks it gets focus: the alert naming an open flag, the "how to fit one page" choices for a two-page CV, else the reason.
+  // An answer that needs Kris: Approve moves focus to that question.
+  const waiting = step.step === "answers" && !before ? pkg.answers?.waiting ?? null : null;
+  const goToAnswer = () => {
+    const el = waiting && document.getElementById(questionElementId(waiting.questionId));
+    el?.scrollIntoView({ block: "center" });
+    el?.focus({ preventScroll: true });
+  };
+  // What blocks it gets focus: the alert naming an open flag, the "how to fit one page" choices for a two-page CV, the answer that needs Kris, else the reason.
   const focusBlocker = () => {
     if (flagBlocked) return onFlagBlock();
+    if (waiting) return goToAnswer();
     const legend = step.step === "cv" && pkg.cvVersion?.fit.choices.length ? document.getElementById("tighten-legend") : null;
     (legend ?? why.current)?.focus();
   };
@@ -445,7 +457,9 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
       <span className="grow" />
       {reason && !step.approvedAt && (
         <p className="why-off" id={`why-${step.step}`} ref={why} tabIndex={-1}>
-          {reason}{" "}
+          {waiting && reason === step.blocked
+            ? <a href={`#${questionElementId(waiting.questionId)}`} onClick={(e) => { e.preventDefault(); goToAnswer(); }}>{reason}</a>
+            : reason}{" "}
           {blockedBy && <button className="link-btn" type="button" onClick={() => onGo(blockedBy)}>Go to step {steps.indexOf(blockedBy) + 1}</button>}
         </p>
       )}

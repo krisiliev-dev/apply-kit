@@ -3,7 +3,7 @@
 // output per task. Each task sends only the text it needs (extracted text, never files).
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import type { z } from "zod";
-import { coachTurnSchema, draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, writtenLetterSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
+import { coachTurnSchema, draftedAnswerSchema, writtenLetterSchema, draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
 import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
@@ -69,6 +69,16 @@ const writeLetterInstructions = `You write Kris's cover letter for one job posti
 - With an "instruction", rewrite "previous" as asked, keeping everything else to these rules.
 - Write in the language given ("en" English, "bg" Bulgarian); tool names stay in Latin script.`;
 
+const draftAnswerInstructions = `You answer one question from a job application form for Kris, as JSON matching the schema, using only the profile pieces given. Rules:
+- Answer the question asked, in Kris's first person, plainly. Stay within the limit given ("words" or "chars"; null means none): shorter is better.
+- Use only what the cited pieces state. Never add a skill, tool, employer, number, date or result that isn't in them; numbers keep the precision of their piece.
+- "pieceIds" are the ids of the pieces the answer rests on. Never cite an id that isn't given.
+- Tell the same story as the CV: follow "decisions" (the wording Kris chose for a claim, a gap Kris named or left out) and never claim more than they say.
+- "claim" is "as-written", "reworded" or "stronger" (a stronger verb or a rounder number than the pieces state). A "stronger" answer gives in "honest" a wording that keeps exactly to the pieces; otherwise "honest" is null.
+- "companySpecific" is true when the answer is written for this company or job (why them, what you'd do there), false when it would fit any application.
+- With "translate", put that answer in the language given, facts unchanged, citing the pieces it rests on.
+- Write in the language given ("en" English, "bg" Bulgarian); tool names stay in Latin script.`;
+
 /** What each task sends: its instructions and the prompt built from its input. */
 function promptOf(request: WriterRequest): { instructions: string; prompt: string } {
   switch (request.task) {
@@ -88,6 +98,8 @@ function promptOf(request: WriterRequest): { instructions: string; prompt: strin
       const { excerpts, ...rest } = request.input;
       return { instructions: writeLetterInstructions, prompt: `${JSON.stringify(rest)}\n\nExcerpts of Kris's writing:\n\n${excerptLines(excerpts)}` };
     }
+    case "draft-answer":
+      return { instructions: draftAnswerInstructions, prompt: JSON.stringify(request.input) };
   }
 }
 
@@ -126,5 +138,6 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
     tailorCv: (input) => write({ task: "tailor-cv", input }, tailoredCvSchema, "tailored_cv"),
     coachTurn: (input) => write({ task: "coach-turn", input }, coachTurnSchema, "coach_turn"),
     writeLetter: (input) => write({ task: "write-letter", input }, writtenLetterSchema, "cover_letter", input.excerpts),
+    draftAnswer: (input) => write({ task: "draft-answer", input }, draftedAnswerSchema, "drafted_answer"),
   };
 }

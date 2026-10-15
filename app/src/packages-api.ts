@@ -1,7 +1,7 @@
 // The Package's API (ticket #62): the Prepare button's state for a Job, starting the Job's package,
 // reading it, approving steps in order, the target posting, language and photo, stopping and
 // retrying parts, the CV version's changes (undo, redo) and fitting it on one page (#63), its flags
-// and gap questions (#64), the CV's draft PDF, and the cover letter's drafts, edits and PDF (#65). Mutations need a JSON body type, like the rest of the
+// and gap questions (#64), the screening answers and the drafter Apply uses (#66), the cover letter's drafts, edits and PDF (#65), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
 // service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
 import { packageSteps, type DiscoveryEngine, type PackageStep, type PreparationEngine } from "@apply-kit/core";
@@ -109,6 +109,19 @@ export function mountPackageApi(app: Hono, engine: DiscoveryEngine, preparation:
       "content-disposition": `${download ? "attachment" : "inline"}; filename="${download ? `DRAFT_${file.fileName}` : file.fileName}"`,
     });
   });
+  // Screening answers (#66). { text }: Kris's answer to a question (her number, an option, her words).
+  app.put("/api/packages/:id/answers/:question", (c) => withPackage(c, (id, body) =>
+    typeof body.text === "string" ? preparation.setScreeningAnswer(id, c.req.param("question")!, body.text) : c.json({ error: "text must be text" }, 400)));
+  app.post("/api/packages/:id/answers/:question/redraft", (c) => withPackage(c, (id) => preparation.redraftScreeningAnswer(id, c.req.param("question")!)));
+  app.post("/api/packages/:id/answers/:question/save", (c) => withPackage(c, (id) => preparation.saveScreeningAnswerToBank(id, c.req.param("question")!)));
+  // The drafter, for Apply: { question, language?, maxChars?, maxWords? } → { drafted, text, pieces } or { drafted: false, reason }.
+  app.post("/api/packages/:id/draft-answer", (c) => withPackage(c, async (id, body) => {
+    const n = (v: unknown) => (typeof v === "number" && Number.isInteger(v) && v > 0 ? v : null);
+    if (typeof body.question !== "string") return c.json({ error: "question must be text" }, 400);
+    if (body.language !== undefined && body.language !== "en" && body.language !== "bg") return c.json({ error: "language must be en or bg" }, 400);
+    const result = await preparation.draftAnswer(id, { question: body.question, language: body.language, maxChars: n(body.maxChars), maxWords: n(body.maxWords) });
+    return c.json(result, result.drafted ? 200 : 422);
+  }));
 
   // The CV's draft PDF, exactly as printed. ?download=1 saves it, named as a draft.
   app.get("/api/packages/:id/cv.pdf", async (c) => {

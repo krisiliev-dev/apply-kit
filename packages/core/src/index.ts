@@ -56,7 +56,8 @@ export { draftedPiecesSchema, learnedVoiceSchema } from "./writing/writer.ts";
 export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces, LearnedVoice, VoiceLearningInput } from "./writing/writer.ts";
 export { VOICE_EXCERPT_WORDS } from "./preparation/voice.ts";
 export type { VoiceView, VoiceSample, VoiceSampleFile, VoiceSampleKind, VoiceSampleProblem, VoiceRule, VoiceLanguage, VoiceSend, VoiceLearning, VoiceContext, VoiceContextRequest, VoiceEditInput } from "./preparation/voice.ts";
-export { tailoredCvSchema, coachTurnSchema } from "./writing/writer.ts";
+export { tailoredCvSchema, coachTurnSchema, draftedAnswerSchema } from "./writing/writer.ts";
+export type { DraftAnswerInput, DraftedAnswer } from "./writing/writer.ts";
 export type { CoachTurn, CoachTurnInput, CoachTopic, CoachLine, CoachEntry } from "./writing/writer.ts";
 export type { TailorCvInput, TailoredCv, TailoredLine } from "./writing/writer.ts";
 export { writtenLetterSchema } from "./writing/writer.ts";
@@ -95,6 +96,11 @@ export type {
   TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult, CvChangeView, CvFit, CvVersionView, FlagChoice, LearnedPiece,
   LetterView, LetterCheckView, LetterFileView,
 } from "./preparation/packages.ts";
+export type {
+  ScreeningOrigin, ScreeningNeed, ScreeningAnswerView, ScreeningAnswersView, SalaryView, DraftAnswerResult, DraftAnswerRequest,
+} from "./preparation/packages.ts";
+export { limitOf, wordCount, standardQuestions } from "./preparation/screening.ts";
+export type { AnswerLimit, QuestionType, FormQuestion, PostingSalary } from "./preparation/screening.ts";
 export type {
   CvLineView, EvidenceRow, HonestyCheckView, HonestyCheckState, PieceLink, TightenChoice, CvFlagView, FlagKind, FlagOption,
 } from "./preparation/cv-version.ts";

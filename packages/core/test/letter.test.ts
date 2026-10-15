@@ -394,7 +394,7 @@ describe("when the letter can't be written", () => {
 
     const pkg = await started(t);
 
-    expect(pkg.parts.map((p) => [p.part, p.state])).toEqual([["target", "done"], ["cv", "done"], ["letter", "not-written"], ["answers", "later"], ["ats", "waiting"]]);
+    expect(pkg.parts.map((p) => [p.part, p.state])).toEqual([["target", "done"], ["cv", "done"], ["letter", "not-written"], ["answers", "done"], ["ats", "waiting"]]);
     expect(pkg.parts[2]!.what).toBe("Not written: this month's AI budget would be crossed.");
     expect(await t.preparation.redraftLetter(pkg.id, "Shorter")).toMatchObject({
       changed: false, reason: "This month's AI budget would be crossed, so a new draft can't be written now. Edit it, or write it yourself.",
