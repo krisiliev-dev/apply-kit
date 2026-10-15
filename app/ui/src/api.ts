@@ -3,7 +3,7 @@ import type {
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
-  Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult,
+  Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -392,4 +392,18 @@ export async function confirmPiece(id: string): Promise<SavePieceResult> {
   const res = await postJson(`/api/profile/pieces/${encodeURIComponent(id)}/confirm`);
   if (res.status === 422) return (await res.json()) as SavePieceResult;
   return json(res);
+}
+
+// ---------- Voice (#59) ----------
+
+export async function fetchVoice(signal?: AbortSignal): Promise<VoiceView> {
+  return json(await fetch("/api/profile/voice", { signal }));
+}
+export const addVoiceSamples = async (files: UploadFile[]): Promise<VoiceView> => json(await postJson("/api/profile/voice/samples", { files }));
+export const replaceVoiceSample = async (id: string, file: UploadFile): Promise<VoiceView> =>
+  json(await postJson(`/api/profile/voice/samples/${encodeURIComponent(id)}/replace`, { file }));
+export const removeVoiceSample = async (id: string): Promise<VoiceView> => json(await postJson(`/api/profile/voice/samples/${encodeURIComponent(id)}/remove`));
+export const removeVoiceRule = async (id: string): Promise<VoiceView> => json(await postJson(`/api/profile/voice/rules/${encodeURIComponent(id)}/remove`));
+export async function setVoiceLearning(fromEdits: boolean): Promise<VoiceView> {
+  return json(await fetch("/api/profile/voice/learning", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ fromEdits }) }));
 }
