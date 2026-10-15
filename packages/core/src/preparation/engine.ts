@@ -40,7 +40,7 @@ import {
   type PrepareStatus, type StartPackageResult, type AtsFix,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
-import type { ApprovedPackage, FrozenFile, MarkSubmittedResult, PackageForApply, ProfileForApply, SubmittedVia } from "./contracts.ts";
+import type { ApplyQuery, ApprovedPackage, FrozenFile, MarkSubmittedResult, PackageForApply, ProfileForApply, SubmittedVia } from "./contracts.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -416,10 +416,11 @@ export interface PreparationEngine {
   // ---------- The contract for Apply (#38, #39, #41; docs/contracts.md) ----------
 
   /**
-   * The approved package for a Job (or by id), the way Apply fills from it; a draft, or a package
-   * reopened by an edit, answers "not approved yet" and is never returned for filling.
+   * The approved package for a Job (or by id, or by the portal job reference of any of the Job's
+   * postings), the way Apply fills from it; a draft, or a package reopened by an edit, answers "not
+   * approved yet" and is never returned for filling.
    */
-  packageForApply(query: { jobId: string } | { packageId: string }): PackageForApply;
+  packageForApply(query: ApplyQuery): PackageForApply;
   /** Every package approved now, newest first: what Apply matches a portal's job against. */
   approvedPackages(): ApprovedPackage[];
   /** The master profile as a portal's form asks for it: contact details split for forms, roles, education, skills. */

@@ -98,4 +98,36 @@ describe("the extension talking to apply-kit", () => {
     expect(await client.capture(page)).toEqual({ ok: false, state: "unpaired" });
     expect(data).toEqual({ serviceUrl: defaultServiceUrl });
   });
+
+  it("asks apply-kit to start a fill, answer a page and record it, with its token, keeping nothing", async () => {
+    const { store, writes } = memoryStore({ token: "t0k3n" });
+    const sent: [string, unknown][] = [];
+    const ghPage = { portal: "greenhouse" as const, host: "job-boards.greenhouse.io", jobRef: { portal: "greenhouse" as const, board: "kestrel", jobId: "4410" } };
+    const reading = { pageKind: "form" as const, jobRef: ghPage.jobRef, stepLabel: null, stepCount: null, fields: [] };
+    const service = fakeService((r) => {
+      if (r.auth !== "Bearer t0k3n") return json({ problem: "not-paired" }, 401);
+      sent.push([new URL(r.url).pathname, r.body]);
+      if (r.url.endsWith("/api/ext/fill/start")) return json({ kind: "no-package", job: null });
+      if (r.url.endsWith("/api/ext/fill/answer")) return json({ problem: "session-ended", error: "This tab's fill session has ended." }, 409);
+      if (r.url.endsWith("/api/ext/fill/record")) return json({ stepLabel: null });
+      return undefined;
+    });
+    const client = createClient({ fetch: service, store });
+
+    expect(await client.fill.start(ghPage, { sessionId: "s-1" })).toEqual({ ok: true, value: { kind: "no-package", job: null } });
+    expect(await client.fill.answer("s-1", reading)).toEqual({ ok: false, state: "error", problem: "session-ended", error: "This tab's fill session has ended." });
+    expect(await client.fill.record("s-1", reading, [])).toEqual({ ok: true, value: { stepLabel: null } });
+
+    expect(sent).toEqual([
+      ["/api/ext/fill/start", { page: ghPage, sessionId: "s-1" }],
+      ["/api/ext/fill/answer", { sessionId: "s-1", reading }],
+      ["/api/ext/fill/record", { sessionId: "s-1", reading, outcomes: [] }],
+    ]);
+    expect(writes).toEqual([]);
+  });
+
+  it("says when the app stopped answering in the middle of a fill", async () => {
+    const client = createClient({ fetch: fakeService(() => undefined), store: memoryStore({ token: "t0k3n" }).store });
+    expect(await client.fill.match({ portal: "greenhouse", host: "x", jobRef: null }, null)).toEqual({ ok: false, state: "not-running" });
+  });
 });

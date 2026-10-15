@@ -22,9 +22,12 @@ const read = (file: string) => readFileSync(file, "utf8").replace(/^\s*\/\/.*$/g
 /** The one background script: it only makes the toolbar icon and the keyboard command open the panel. */
 const background = "src/entrypoints/background.ts";
 
+/** Page actions: the one module that sets values, sends input events and scrolls a field into view, inside a fill Kris clicked. */
+const pageActions = "src/fill/page-actions.ts";
+
 const forbidden: [RegExp, string][] = [
-  [/\bscroll(To|By|IntoView)\b|\.scrollTop\s*=|\.scrollLeft\s*=/, "scrolls a page"],
-  [/\.click\(\)|dispatchEvent\(|new (Mouse|Keyboard|Pointer)Event/, "clicks or types on a page"],
+  [/\bscroll(To|By)\b|\.scrollTop\s*=|\.scrollLeft\s*=/, "scrolls a page"],
+  [/\.click\(\)|new (Mouse|Keyboard|Pointer)Event/, "clicks or types on a page"],
   [/tabs\.(create|update|reload|duplicate)|windows\.create|window\.open\(/, "opens or navigates tabs"],
   [/location\.(assign|replace)\(|location\.href\s*=|history\.(pushState|replaceState)/, "navigates a page"],
   [/\balarms\b|defineContentScript|content_scripts|registerContentScripts|webNavigation|webRequest/, "runs on pages or in the background by itself"],
@@ -57,6 +60,22 @@ describe("the extension only acts when Kris clicks", () => {
   it("never scrolls, clicks, pages, opens listings or runs by itself", () => {
     const found = files.flatMap((file) => forbidden.filter(([re]) => re.test(read(file))).map(([, what]) => `${file.slice(root.length)} ${what}`));
     expect(found).toEqual([]);
+  });
+
+  it("sends events and scrolls a field into view only from the page-actions module", () => {
+    expect(files.map((f) => f.slice(root.length))).toContain(pageActions);
+    const outside = files.filter((f) => f.slice(root.length) !== pageActions && /dispatchEvent\(|scrollIntoView|\.focus\(/.test(read(f)) && !f.includes(join("entrypoints", "sidepanel")));
+    expect(outside.map((f) => f.slice(root.length))).toEqual([]);
+    // The panel's own document may focus its own controls, but never sends events into a page.
+    expect(read(join(root, "src/entrypoints/sidepanel/main.ts"))).not.toMatch(/dispatchEvent\(|scrollIntoView/);
+    // Page actions never press anything: no clicks, no form submission.
+    expect(read(join(root, pageActions))).not.toMatch(/\.click\(|\.submit\(|requestSubmit|new (Mouse|Keyboard|Pointer)Event/);
+  });
+
+  it("keeps in the browser's session storage only which fill session each tab is in", () => {
+    const users = files.filter((f) => /storage\.session/.test(read(f))).map((f) => f.slice(root.length));
+    expect(users).toEqual(["src/entrypoints/sidepanel/main.ts"]);
+    expect(read(join(root, "src/entrypoints/sidepanel/main.ts")).match(/.*storage\.session.*/g)).toEqual([expect.stringMatching(/createTabSessions\(browser\.storage\.session\)/)]);
   });
 
   it("declares no content scripts and no background beyond opening the panel", () => {

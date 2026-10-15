@@ -1,0 +1,26 @@
+<!-- Synthetic Greenhouse classic board application form (boards.greenhouse.io), modelled on
+     docs/research/implementation/portals.md. Made-up company and job; no real person's data. -->
+<div id="app_body">
+  <div id="header"><h1 class="app-title">Platform Security Engineer</h1><span class="company-name">at Vireo Health</span><div class="location">Sofia, Bulgaria (Hybrid)</div></div>
+  <div id="application">
+    <form id="application_form" action="/vireohealth/jobs/4471029" method="post" enctype="multipart/form-data">
+      <div id="main_fields">
+        <div class="field"><label for="first_name">First Name <span class="asterisk">*</span></label><input type="text" id="first_name" name="job_application[first_name]" maxlength="255" autocomplete="given-name" aria-required="true"></div>
+        <div class="field"><label for="last_name">Last Name <span class="asterisk">*</span></label><input type="text" id="last_name" name="job_application[last_name]" maxlength="255" autocomplete="family-name" aria-required="true"></div>
+        <div class="field"><label for="email">Email <span class="asterisk">*</span></label><input type="text" id="email" name="job_application[email]" maxlength="255" autocomplete="email" aria-required="true"></div>
+        <div class="field"><label for="phone">Phone <span class="asterisk">*</span></label><input type="text" id="phone" name="job_application[phone]" maxlength="255" autocomplete="tel" aria-required="true" value="+359 000 0000"></div>
+        <div class="field"><label for="job_application_location">Location (City)</label><input type="text" id="job_application_location" name="job_application[location]" autocomplete="off"></div>
+        <div class="field"><label>Resume/CV <span class="asterisk">*</span></label><button type="button" class="attach-or-paste" data-source="attach">Attach</button><button type="button" data-source="paste">or enter manually</button><input type="file" id="resume" name="job_application[resume]" aria-label="Resume/CV" aria-required="true" style="display:none"></div>
+      </div>
+      <div id="custom_fields">
+        <div class="field"><label for="job_application_answers_attributes_0_text_value">LinkedIn Profile</label><input type="text" id="job_application_answers_attributes_0_text_value" name="job_application[answers_attributes][0][text_value]" maxlength="255"></div>
+        <div class="field"><label for="job_application_answers_attributes_1_text_value">Website</label><input type="text" id="job_application_answers_attributes_1_text_value" name="job_application[answers_attributes][1][text_value]" maxlength="255"></div>
+        <div class="field"><label for="job_application_answers_attributes_2_text_value">Why do you want to work at Vireo Health? <span class="asterisk">*</span></label><textarea id="job_application_answers_attributes_2_text_value" name="job_application[answers_attributes][2][text_value]" aria-required="true" maxlength="10000"></textarea></div>
+        <div class="field"><label for="job_application_answers_attributes_3_answer_selected_options_attributes_3_question_option_id">How did you hear about this job?</label>
+          <select id="job_application_answers_attributes_3_answer_selected_options_attributes_3_question_option_id" name="job_application[answers_attributes][3][answer_selected_options_attributes][3][question_option_id]"><option value="">--</option><option value="101">LinkedIn</option><option value="102">Company website</option><option value="103">Referral</option></select></div>
+      </div>
+      <div class="field" id="data_compliance"><label><input type="checkbox" id="job_application_data_compliance_gdpr_consent_given" name="job_application[data_compliance][gdpr_consent_given]" value="1"> I agree to Vireo Health processing my data as described in the privacy notice. <span class="asterisk">*</span></label></div>
+      <div id="submit_buttons"><input type="button" id="submit_app" value="Submit Application"></div>
+    </form>
+  </div>
+</div>

@@ -74,9 +74,10 @@ export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, Rejected
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts, PrepareForApply, PrepareForTrack } from "./preparation/engine.ts";
 export type {
-  ApprovedPackage, FrozenFile, PortalJobReference, CvEntryAsSent, PackageState, SubmittedVia, PackageForApply, ProfileForApply, MarkSubmittedResult,
+  ApprovedPackage, ApplyQuery, PageJobReference, FrozenFile, PortalJobReference, CvEntryAsSent, PackageState, SubmittedVia, PackageForApply, ProfileForApply, MarkSubmittedResult,
 } from "./preparation/contracts.ts";
 export { portalJobReference } from "./preparation/portal.ts";
+export { sameJobReference } from "./preparation/contracts.ts";
 export { atsCheckLabel } from "./preparation/ats-step.ts";
 export type { AtsStepView, AtsCheckView, AtsLine, AtsFixView, AtsFixField } from "./preparation/ats-step.ts";
 export type { ProfileExport } from "./preparation/engine.ts";
@@ -155,3 +156,7 @@ export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } fr
 export type {
   EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";
+export { createFillEngine, FillError } from "./fill/engine.ts";
+export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageInBrief, SessionEnd } from "./fill/engine.ts";
+export { countOutcomes } from "./fill/reading.ts";
+export type { PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, RecordedPage } from "./fill/reading.ts";

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createAiBudget, createEngine, createPairing, createPreparationEngine, createTracker, type DocumentToRender, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createFillEngine, createPairing, createPreparationEngine, createTracker, type DocumentToRender, type Scheduler } from "@apply-kit/core";
 import { createServer } from "./server.ts";
 
 const port = 4310;
@@ -36,7 +36,8 @@ function service(uiDir = "/nonexistent/") {
   const pairing = createPairing({ db, clock });
   const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const app = createServer({ engine, preparation, tracker, scheduler, pairing, uiDir, port });
+  const fill = createFillEngine({ db, clock, prepare: preparation });
+  const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
@@ -362,6 +363,43 @@ describe("the answer bank's API", () => {
     expect(form.status).toBe(415);
     expect(json.status).toBe(200);
     expect(s.preparation.answer(r.answer.id)).toBeNull();
+  });
+});
+
+describe("the extension's fill endpoints", () => {
+  const greenhouse = { portal: "greenhouse", host: "job-boards.greenhouse.io", jobRef: { portal: "greenhouse", board: "vireo", jobId: "4471029" } };
+  const reading = { pageKind: "form", jobRef: greenhouse.jobRef, stepLabel: null, stepCount: null, fields: [] };
+
+  it("need the pairing token", async () => {
+    const s = service();
+    for (const path of ["/api/ext/fill/match", "/api/ext/fill/start", "/api/ext/fill/answer", "/api/ext/fill/record"]) {
+      expect((await s.request(path, s.json({ page: greenhouse }))).status, path).toBe(401);
+    }
+  });
+
+  it("match and start a page: with no package, they say so and open nothing", async () => {
+    const s = service();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const match = await s.request("/api/ext/fill/match", s.json({ page: greenhouse, sessionId: null }, auth));
+    const start = await s.request("/api/ext/fill/start", s.json({ page: greenhouse }, auth));
+
+    expect(match.status).toBe(200);
+    expect(await match.json()).toEqual({ kind: "no-package", job: null });
+    expect(await start.json()).toEqual({ kind: "no-package", job: null });
+  });
+
+  it("refuse a malformed page or reading, and an unknown session", async () => {
+    const s = service();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    expect((await s.request("/api/ext/fill/start", s.json({ page: { portal: "myspace" } }, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/answer", s.json({ sessionId: "s1" }, auth))).status).toBe(400);
+    const unknown = await s.request("/api/ext/fill/answer", s.json({ sessionId: "s1", reading }, auth));
+    expect(unknown.status).toBe(409);
+    expect(await unknown.json()).toMatchObject({ problem: "no-session" });
+    const record = await s.request("/api/ext/fill/record", s.json({ sessionId: "s1", reading, outcomes: [] }, auth));
+    expect(record.status).toBe(409);
   });
 });
 
