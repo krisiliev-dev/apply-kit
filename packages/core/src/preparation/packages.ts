@@ -34,7 +34,7 @@ import {
   applyChanges, decisionsOf, deriveChanges, flagView, honestyChecks, keepTwoPages, offers, openReason, placesOnCv, tightenChange, tightenChoices,
   type CvChange, type CvFlag, type CvFlagView, type CvLineView, type CvPlan, type CvVersionState, type EvidenceRow, type HonestyCheckView, type PieceLink, type TightenChoice,
 } from "./cv-version.ts";
-import { checkWording, validateCv, type HonestyProfile } from "./honesty.ts";
+import { checkWording, quoteOf, validateCv, type HonestyProfile } from "./honesty.ts";
 import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview.ts";
 import type { Contact, ContactDetails, SaveContactResult } from "./contact.ts";
 import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
@@ -979,6 +979,47 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       flags,
     };
     db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
+    // Written again after a language switch: the decisions Kris made in the other language carry over.
+    if (!r.cvVersion) carryDecisions(id);
+  }
+
+  /**
+   * After a language switch, the decisions on the flags of the CV just left carry over to the same
+   * flag (same kind, requirement, line and pieces): the option Kris chose, in the new language's
+   * words. Kris's own wording (and a line from her answer) was in the other language: she decides
+   * again, and a note says so.
+   */
+  function carryDecisions(id: string): void {
+    const r = row(id)!;
+    const left = db.prepare("SELECT language, state FROM package_language WHERE package_id = ? AND language != ? ORDER BY kept_at DESC LIMIT 1").get(id, r.language);
+    const before = left ? (JSON.parse(String(left.state)) as KeptLanguage).cvVersion?.flags?.filter((f) => f.decision) ?? [] : [];
+    if (!before.length || !r.cvVersion) return;
+    const from = languageName(left!.language as DocumentLanguage);
+    const key = (f: CvFlag) => JSON.stringify([f.kind, f.requirement, f.place, [...f.pieceIds].sort()]);
+    const notes: string[] = [];
+    let carried = 0;
+    const decided: { flag: CvFlag; option: string; text: string | null }[] = [];
+    const flags = (r.cvVersion.flags ?? []).map((f) => {
+      const o = before.find((x) => key(x) === key(f));
+      if (!o?.decision) return f;
+      const option = o.decision.option;
+      const text = option === "letter" || option === "leave-out" ? null : option === "profile" ? f.piece : option === "honest" ? f.honest : undefined;
+      if (text === undefined || (option !== "letter" && option !== "leave-out" && !text)) {
+        const line = o.piece ?? requirementText(r, o) ?? "a line";
+        notes.push(option === "own"
+          ? `Decide again: your own wording for "${quoteOf(line)}" was in ${from}.`
+          : `Decide again: "${quoteOf(line)}" was decided in ${from}.`);
+        return f;
+      }
+      carried += 1;
+      decided.push({ flag: f, option, text });
+      return { ...f, decision: { option, text, at: o.decision.at } };
+    });
+    if (carried) notes.unshift(`Kept ${carried === 1 ? "1 decision" : `${carried} decisions`} from your ${from} draft.`);
+    saveVersion(id, { ...r.cvVersion, flags, notes: [...r.cvVersion.notes, ...notes] });
+    const now = row(id)!;
+    const changes = decided.map((d) => decisionChange(now, d.flag, d.option, d.text)).filter((c): c is CvChange => c !== null);
+    saveVersion(id, { ...now.cvVersion!, changes: [...now.cvVersion!.changes, ...changes] });
   }
 
   /** What a piece says, as far as a CV line can tell: its words and its facts. */

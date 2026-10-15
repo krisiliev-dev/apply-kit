@@ -10,7 +10,7 @@ import {
 const kestrelQuestions = "https://boards-api.greenhouse.io/v1/boards/kestrel/jobs/4410?questions=true";
 
 /** A recorded output with its placeholder ids ("piece-phishing") swapped for the profile's. */
-const withIds = <T>(recorded: T, ids: Record<string, string>): T =>
+export const withIds = <T>(recorded: T, ids: Record<string, string>): T =>
   JSON.parse(JSON.stringify(recorded).replace(/"piece-([a-z]+)"/g, (m, key: string) => (ids[key] ? JSON.stringify(ids[key]) : m))) as T;
 
 type Options = Parameters<typeof createTestPreparation>[0] & { phone?: string };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { DraftAnswerInput, LetterContent, PackageView, TailorCvInput, WriteLetterInput } from "../src/index.ts";
-import { fakePdfReader } from "./preparation-harness.ts";
-import { kestrelJob, mira, started, vitoshaJob } from "./package-fixtures.ts";
+import type { DraftAnswerInput, LetterContent, PackageView, TailorCvInput, TailoredCv, WriteLetterInput } from "../src/index.ts";
+import { fakePdfReader, fakeWriter, recordedLetter, recordedLetterBg, recordedTailoredCv, recordedTailoredCvBg } from "./preparation-harness.ts";
+import { kestrelJob, mira, started, vitoshaJob, withIds } from "./package-fixtures.ts";
 
 // Bulgarian packages (ticket #68) through the preparation engine, with the writer's recorded
 // Bulgarian outputs: a Bulgarian posting gets the whole package in Bulgarian, switching the language
@@ -151,5 +151,53 @@ describe("switching the package's language", () => {
     expect(await t.preparation.setPackageLanguage(r.package.id, "bg")).toMatchObject({
       changed: false, reason: "The package is still being written. Switch the language once it's done, or stop generating first.",
     });
+  });
+});
+
+describe("decisions on flags when the language switches", () => {
+  /** Mira, whose tailoring words the phishing bullet more strongly in either language, for a job that also asks for Kubernetes. */
+  async function withFlags() {
+    const ids: Record<string, string> = {};
+    const stronger = (cv: TailoredCv, draft: string, honest: string): TailoredCv => {
+      const out = withIds(cv, ids);
+      out.roles[0]!.bullets[0] = { ...out.roles[0]!.bullets[0]!, text: draft, claim: "stronger", honest };
+      return out;
+    };
+    const writer = fakeWriter({
+      tailorCv: (input) => (input.language === "bg"
+        ? stronger(recordedTailoredCvBg, "Ръководих реакцията при фишинг кампания срещу екипа по искове", "Проведох и описах реакцията при фишинг кампания срещу екипа по искове")
+        : stronger(recordedTailoredCv, "Led the response to a phishing campaign against the claims team", "Ran and wrote up the response to a phishing campaign against the claims team")),
+      writeLetter: (input) => withIds(input.language === "bg" ? recordedLetterBg : recordedLetter, ids),
+    });
+    const t = mira({ writer });
+    Object.assign(ids, t.ids);
+    const job = kestrelJob({ requirements: [...kestrelJob().requirements, { text: "Kubernetes", category: "skill" }] });
+    const pkg = await started(t, job);
+    const flag = (p: PackageView, kind: string) => p.cvVersion!.flags.find((f) => f.kind === kind)!;
+    return { t, pkg, flag };
+  }
+
+  it("carry over when the piece is the same: the option Kris chose, in the new language's words", async () => {
+    const { t, pkg, flag } = await withFlags();
+    await t.preparation.decideFlag(pkg.id, flag(pkg, "near-the-line").id, { option: "honest" });
+    await t.preparation.decideFlag(pkg.id, flag(pkg, "gap").id, { option: "letter" });
+
+    await t.preparation.setPackageLanguage(pkg.id, "bg");
+    const bg = (await t.preparation.packageSettled(pkg.id))!;
+
+    expect(bg.cvVersion!.flags.map((f) => [f.kind, f.decision?.option ?? null])).toEqual([["near-the-line", "honest"], ["gap", "letter"]]);
+    expect(await readBack((await t.preparation.packageCv(pkg.id))!.pdf)).toContain("Проведох и описах реакцията при фишинг кампания срещу екипа по искове");
+    expect(bg.cvVersion!.notes).toContain("Kept 2 decisions from your English draft.");
+  });
+
+  it("leave Kris's own wording to be decided again, saying why", async () => {
+    const { t, pkg, flag } = await withFlags();
+    await t.preparation.decideFlag(pkg.id, flag(pkg, "near-the-line").id, { own: "Ran the response to a phishing campaign, start to finish" });
+
+    await t.preparation.setPackageLanguage(pkg.id, "bg");
+    const bg = (await t.preparation.packageSettled(pkg.id))!;
+
+    expect(flag(bg, "near-the-line").decision).toBeNull();
+    expect(bg.cvVersion!.notes).toContain("Decide again: your own wording for \"Ran the response to a phishing campaign against the…\" was in English.");
   });
 });
