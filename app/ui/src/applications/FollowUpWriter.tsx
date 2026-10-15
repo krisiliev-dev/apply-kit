@@ -2,11 +2,12 @@
 // applications.html "Follow-up due · draft"): the points to cover, from the Application with no model
 // call; a text area kept as typed; Copy text and Open in Mail (a mailto with recipient and subject; the
 // user sends, there is no Send button); Mark sent, Snooze and "No note this time", each undoable by
-// whoever opened it. Used inline on the Application page and in a dialog over Needs you.
+// whoever opened it. Used inline on the Application page and in a dialog over Needs you. A thank-you
+// note asks for one thing discussed first (hi-fi application.html "Thank-you due"), which the points use.
 import type { FollowUpDraft } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { fetchFollowUp, saveFollowUpText } from "../api.ts";
-import { daysWord, wordsWord } from "./words.ts";
+import { fetchFollowUp, saveFollowUpText, saveFollowUpTopic } from "../api.ts";
+import { daysWord, isMessage, wordsWord } from "./words.ts";
 
 export type FollowUpAction = "sent" | "skip" | "snooze";
 
@@ -25,13 +26,14 @@ export function useFollowUpDraft(id: string) {
   const [draft, setDraft] = useState<FollowUpDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [topic, setTopic] = useState("");
   const pending = useRef<string | null>(null);
   const timer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     const ctrl = new AbortController();
     fetchFollowUp(id, ctrl.signal)
-      .then((d) => { setDraft(d); setText(d.followUp.text); })
+      .then((d) => { setDraft(d); setText(d.followUp.text); setTopic(d.followUp.topic); })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setError(message(err)); });
     return () => ctrl.abort();
   }, [id]);
@@ -50,8 +52,17 @@ export function useFollowUpDraft(id: string) {
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(flush, 500);
   };
-  return { draft, error, text, type, flush };
+  /** Keeps the thank-you note's topic and takes the points built from it. */
+  const keepTopic = () => {
+    if (!draft || topic.trim() === draft.followUp.topic) return;
+    saveFollowUpTopic(id, topic)
+      .then((r) => setDraft((d) => (d ? { ...d, outline: r.outline, followUp: { ...d.followUp, topic: r.followUp.topic } } : d)))
+      .catch(() => {});
+  };
+  return { draft, error, text, type, flush, topic, setTopic, keepTopic };
 }
+
+const fieldLabel = { nudge: "Your follow-up", "offer-note": "Your note to self", "thank-you": "Draft · body only, edit freely", "check-in": "Your check-in" } as const;
 
 export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
   id: string;
@@ -60,8 +71,9 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
   onAct: (action: FollowUpAction, draft: FollowUpDraft) => void;
   onAnnounce: (message: string) => void;
 }) {
-  const { draft, error, text, type, flush } = useFollowUpDraft(id);
+  const { draft, error, text, type, flush, topic, setTopic, keepTopic } = useFollowUpDraft(id);
   const fieldId = useId();
+  const topicId = useId();
   const helpId = useId();
   const countId = useId();
   const outlineId = useId();
@@ -69,7 +81,8 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
   if (error) return <p className="err" role="alert">Couldn't open this follow-up: {error}</p>;
   if (!draft) return <p className="meta" role="status">Loading the follow-up…</p>;
 
-  const nudge = draft.followUp.kind === "nudge";
+  const kind = draft.followUp.kind;
+  const nudge = isMessage(kind);
   const words = wordCount(text);
   const copy = () => {
     flush();
@@ -87,8 +100,15 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
           {draft.outline.map((p) => <li key={p} lang={langOf(p)}>{p}</li>)}
         </ul>
       </div>
+      {kind === "thank-you" && (
+        <div className="field">
+          <label htmlFor={topicId}>One thing you discussed <span className="meta">(makes the note specific)</span></label>
+          <input className="input" id={topicId} value={topic} onChange={(e) => setTopic(e.target.value)} onBlur={keepTopic}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); keepTopic(); } }} lang={langOf(topic)} />
+        </div>
+      )}
       <div className="field">
-        <label htmlFor={fieldId}>{nudge ? "Your follow-up" : "Your note to self"}</label>
+        <label htmlFor={fieldId}>{fieldLabel[kind]}</label>
         <span className="help" id={helpId}>
           {nudge ? "Kept as you type. Body only: your mail app adds the greeting line and signature you use." : "Kept as you type. Only you see it."}
         </span>

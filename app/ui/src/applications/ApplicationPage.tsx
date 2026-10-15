@@ -7,8 +7,10 @@
 // budget banner: this ticket has no drafting model, so the outline is always what's offered). When an
 // email moved the Status (state Moved by email): a banner with Looks right and Undo, and the email that
 // moved it with the signals it matched on (and an English line for one in Bulgarian). Interviews,
-// offers and the Package as sent come with later Track tickets.
-import type { ApplicationDetail, ApplicationSummary, FollowUp, HealthSummary, MovedByEmail, Status, TimelineEntry } from "@apply-kit/core";
+// offers and the Package as sent come with later Track tickets. Interviews (#33): the coming one in the
+// Next step box, the Interviews panel with Add interview and Edit (a dialog), the prep sheet, and a
+// thank-you note in the Next step box once an interview ends (Interviews.tsx).
+import type { ApplicationDetail, ApplicationSummary, FollowUp, HealthSummary, Interview, MovedByEmail, Status, TimelineEntry } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchSources,
@@ -17,6 +19,7 @@ import {
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { By, StatusSelect } from "./ApplicationsPage.tsx";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
+import { InterviewDialog, InterviewNext, InterviewsPanel, PrepSheetPanel, thankYouKicker } from "./Interviews.tsx";
 import { angleLabel, daysFrom, daysWord, dueWords, emailKindLabel, followUpName, longDay, statusLabel, todaySofia, weekDay } from "./words.ts";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; app: ApplicationDetail };
@@ -43,6 +46,7 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const [attempt, setAttempt] = useState(0);
   const toaster = useToaster();
   const contactRef = useRef<HTMLButtonElement>(null);
+  const [editing, setEditing] = useState<{ interview: Interview | null; opener: HTMLElement } | null>(null);
 
   // The top bar shows source health on every screen.
   useEffect(() => {
@@ -119,7 +123,9 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
       <div className="cols">
         <div className="col">
           {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
-          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} />
+          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onEditInterview={(i, opener) => setEditing({ interview: i, opener })} />
+          <PrepSheetPanel key={`${app.id}-${app.interviews.length}`} app={app} toaster={toaster} />
+          <InterviewsPanel app={app} onEdit={(i, opener) => setEditing({ interview: i, opener })} onAdd={(opener) => setEditing({ interview: null, opener })} />
           <Timeline app={app} refresh={refresh} toaster={toaster} />
         </div>
         <div className="col">
@@ -128,6 +134,20 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
           <Contacts app={app} refresh={refresh} toaster={toaster} addRef={contactRef} />
         </div>
       </div>
+      {editing && (
+        <InterviewDialog
+          app={app} interview={editing.interview}
+          onClose={() => { const o = editing.opener; setEditing(null); requestAnimationFrame(() => o.focus()); }}
+          onSaved={(saved) => {
+            const o = editing.opener;
+            setEditing(null);
+            refresh().then(() => {
+              requestAnimationFrame(() => (document.body.contains(o) ? o : document.getElementById("iv-h"))?.focus());
+              toaster.announce(editing.interview ? "Interview saved. A thank-you note and the calendar file follow the new time." : `Interview added: ${saved.start ? "a thank-you note comes due after it" : "add its time when it's agreed"}.`);
+            }).catch(() => {});
+          }}
+        />
+      )}
       {toaster.element}
     </section>
   );
@@ -183,8 +203,9 @@ function Check() {
   return <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
 }
 
-function NextStep({ app, onAddContact, refresh, toaster }: {
+function NextStep({ app, onAddContact, refresh, toaster, onEditInterview }: {
   app: ApplicationDetail; onAddContact: () => void; refresh: () => Promise<ApplicationDetail>; toaster: Toaster;
+  onEditInterview: (i: Interview, opener: HTMLElement) => void;
 }) {
   const n = app.nextStep;
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
@@ -199,7 +220,7 @@ function NextStep({ app, onAddContact, refresh, toaster }: {
       await refresh();
       focusPanel();
       toaster.show({
-        message: action === "sent" ? `Marked ${followUp.kind === "nudge" ? "sent" : "done"} · logged on the timeline.`
+        message: action === "sent" ? `Marked ${followUp.kind === "offer-note" ? "done" : "sent"} · logged on the timeline.`
           : action === "skip" ? `Skipped · no ${name} this time.` : `Snoozed · the ${name} is due again ${weekDay(after.dueOn)}.`,
         returnFocus: focusPanel,
         undo: () => {
@@ -214,11 +235,15 @@ function NextStep({ app, onAddContact, refresh, toaster }: {
     }
   }
 
+  if (n.kind === "interview") return <InterviewNext app={app} interview={n.interview} onEdit={onEditInterview} />;
   if (n.kind === "follow-up") {
     const fu = n.followUp;
     return (
       <div className="panel next-step ask">
-        <span className="kicker">{followUpName(fu.kind)} {dueWords(fu.dueOn)}{fu.kind === "nudge" && ` · ${daysWord(daysFrom(fu.anchorOn, fu.dueOn))} after ${app.status === "applied" ? "applying" : "moving to Screening"}`}</span>
+        <span className="kicker">
+          {fu.kind === "thank-you" ? thankYouKicker(fu) : `${followUpName(fu.kind)} ${dueWords(fu.dueOn)}`}
+          {fu.kind === "nudge" && ` · ${daysWord(daysFrom(fu.anchorOn, fu.dueOn))} after ${app.status === "applied" ? "applying" : "moving to Screening"}`}
+        </span>
         <h2 id="next-h" tabIndex={-1}>{n.text}</h2>
         <FollowUpWriter key={fu.id} id={fu.id} headingId="next-h" onAct={(action) => { act(fu, action).catch(() => {}); }} onAnnounce={toaster.announce} />
       </div>

@@ -3,7 +3,7 @@ import type {
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
   EmailAnswer, EmailToMatch, TrackMailbox, StatusFilter, Angle, SinceLastVisit,
-  FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou,
+  FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou, Interview, InterviewInput, PrepSheet,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -389,6 +389,40 @@ export async function saveFollowUpText(id: string, text: string): Promise<{ foll
 /** Marks it sent (from the user's own mail), skips it, or snoozes it: an Event, undone like any other. */
 export async function followUpAction(id: string, action: "sent" | "skip" | "snooze"): Promise<{ followUp: FollowUp; event: ApplicationEvent }> {
   return json(await postJson(`${followUpPath(id)}/${action}`));
+}
+
+/** The thank-you note's topic: one thing discussed. Returns the outline built from it. */
+export async function saveFollowUpTopic(id: string, topic: string): Promise<{ followUp: FollowUp; outline: string[] }> {
+  return json(await fetch(`${followUpPath(id)}/topic`, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic }),
+  }));
+}
+
+// ---------- Interviews and the prep sheet (Track #33) ----------
+
+/** Adds an interview by hand, or edits one (with its id). Times are "YYYY-MM-DDTHH:mm" in its time zone. */
+export async function saveInterview(applicationId: string, input: InterviewInput & { interviewId?: string }): Promise<{ interview: Interview; event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(applicationId)}/interviews`, input));
+}
+
+/** The interview's calendar file. */
+export const interviewIcsUrl = (interviewId: string) => `/api/interviews/${encodeURIComponent(interviewId)}/ics`;
+
+export async function fetchPrepSheet(applicationId: string, signal?: AbortSignal): Promise<PrepSheet | null> {
+  return ((await json(await fetch(`${applicationPath(applicationId)}/prep`, { signal }))) as { sheet: PrepSheet | null }).sheet;
+}
+
+/** Builds the prep sheet (once, within the AI budget). A refusal throws with the service's words. */
+export async function buildPrepSheet(applicationId: string): Promise<PrepSheet> {
+  return ((await json(await postJson(`${applicationPath(applicationId)}/prep`))) as { sheet: PrepSheet }).sheet;
+}
+
+export async function markPractised(applicationId: string, questionId: string, practised: boolean): Promise<PrepSheet> {
+  return ((await json(await postJson(`${applicationPath(applicationId)}/prep/${encodeURIComponent(questionId)}/practised`, { practised }))) as { sheet: PrepSheet }).sheet;
+}
+
+export async function addPrepStory(applicationId: string, questionId: string, text: string): Promise<PrepSheet> {
+  return ((await json(await postJson(`${applicationPath(applicationId)}/prep/${encodeURIComponent(questionId)}/story`, { text }))) as { sheet: PrepSheet }).sheet;
 }
 
 /** The follow-up delays. */
