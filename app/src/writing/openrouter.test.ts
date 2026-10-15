@@ -84,4 +84,27 @@ describe("OpenRouter writer", () => {
     expect(sent).toContain("Uses exclamation marks");
     expect(result).toEqual({ output: learned, costUsd: 0.00042, model: "deepseek/deepseek-v4.1-flash", excerpts });
   });
+
+  it("sends the coach only the question, Kris's lines and the roles, and returns the schema-checked turn", async () => {
+    const turn = {
+      reply: "I'll write that down.", ask: "Did you take deposits online?", followUp: true, answer: null,
+      pieces: [{ turn: "turn:2", updates: null, kind: "achievement", text: "Built a booking site for a dental clinic", entry: null, role: null, tags: [], angles: ["developer"], numberSource: null, claim: "as-said", honest: null }],
+    };
+    const api = fakeOpenRouter(JSON.stringify(turn));
+    const writer = createOpenRouterWriter({ apiKey: "test-key", fetch: api.fetch });
+
+    const result = await writer.coachTurn({
+      asked: {
+        topic: { kind: "gap", from: "2020-07", to: "2021-02", months: 8, before: null, after: null },
+        lines: [{ id: "turn:1", who: "coach", text: "What were you doing then?" }, { id: "turn:2", who: "you", text: "A booking site for a dental clinic." }],
+      },
+      next: null,
+      entries: [],
+    });
+
+    const sent = JSON.stringify(api.requests[0]!.body.messages);
+    expect(sent).toContain("A booking site for a dental clinic.");
+    expect(sent).toContain("only what Kris said");
+    expect(result).toEqual({ output: turn, costUsd: 0.00042, model: "deepseek/deepseek-v4.1-flash", excerpts: [] });
+  });
 });
