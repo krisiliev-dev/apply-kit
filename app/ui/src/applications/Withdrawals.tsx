@@ -229,7 +229,7 @@ function DeclineText({ id, onAnnounce }: { id: string; onAnnounce: (message: str
       .catch(() => onAnnounce("Couldn't copy. Select the text and copy it yourself."));
   };
   return (
-    <div className="stack" style={{ gap: "var(--s-3)" }}>
+    <div className="stack decline-text" style={{ gap: "var(--s-3)" }}>
       <div className="field">
         <label htmlFor={fieldId}>Draft · optional</label>
         <textarea

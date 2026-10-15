@@ -95,6 +95,7 @@ export function nextWords(next: NextUp): { text: string; due: boolean } | null {
   if (!next) return null;
   if (next.kind === "no-reply") return { text: `No reply for ${daysWord(next.days)}`, due: false };
   if (next.kind === "interview") return { text: `Interview ${interviewWhen({ start: next.start, end: null, timeZone: next.timeZone })}`, due: false };
+  if (next.followUpKind === "withdrawal") return { text: followUpName("withdrawal"), due: true };
   if (next.dueAt) return { text: `${followUpName(next.followUpKind)} ${dueByWords(next.dueAt)}`, due: next.due };
   return { text: `${followUpName(next.followUpKind)} ${dueWords(next.dueOn)}`, due: next.due };
 }

@@ -496,6 +496,17 @@ export interface UpcomingInterview {
   prep: { questions: number; withStory: number } | null;
 }
 
+/** An offer to answer, in Needs you: accept or decline it on its page when ready. */
+export interface OfferToAnswer {
+  application: Pick<ApplicationSummary, "id" | "title" | "company" | "status">;
+  /** When it got to Offer. */
+  since: string;
+  /** The offer email matched (who, when, its letter as attachments), or null when moved by hand. */
+  email: Pick<EmailSummary, "from" | "receivedAt" | "attachments"> | null;
+  /** The offer details' "Other" (often the deadline to answer), or null. */
+  other: string | null;
+}
+
 /** Something only coming up: one quiet "Coming up" line. */
 export interface ComingUp {
   applicationId: string;
@@ -530,6 +541,8 @@ export interface NeedsYou {
   items: NeedsYouEntry[];
   /** Interviews in the next 7 days, soonest first. */
   interviews: UpcomingInterview[];
+  /** Offers to answer (every Application at Offer), oldest first. */
+  offers: OfferToAnswer[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
   /** Kinds with 3 or more due (or done today): shown grouped, their items stepped through one by one. */
@@ -1712,8 +1725,21 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         companies: due.map((i) => i.application.company), followUpIds: due.map((i) => i.followUp.id),
       });
     }
+    const offers: OfferToAnswer[] = apps.filter((r) => r.status === "offer").map((r) => {
+      const id = String(r.id);
+      const since = stageStart(id)?.at ?? String(r.created_at);
+      const latest = db.prepare(
+        "SELECT email_id FROM application_event WHERE application_id = ? AND kind = 'email' AND email_kind = 'offer' AND undone_at IS NULL ORDER BY at DESC, rowid DESC LIMIT 1",
+      ).get(id);
+      const e = latest?.email_id ? emailSummary(String(latest.email_id)) : null;
+      return {
+        application: { id, title: String(r.title), company: String(r.company), status: "offer" as const }, since,
+        email: e ? { from: e.from, receivedAt: e.receivedAt, attachments: e.attachments } : null,
+        other: str(db.prepare("SELECT other FROM offer_details WHERE application_id = ?").get(id)?.other),
+      };
+    }).sort((a, b) => a.since.localeCompare(b.since));
     return {
-      count: items.filter((i) => !i.done).length + emails + interviews.length, items, groups, interviews, emailsToMatch: emails, comingUp,
+      count: items.filter((i) => !i.done).length + emails + interviews.length + offers.length, items, groups, interviews, offers, emailsToMatch: emails, comingUp,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }

@@ -196,10 +196,10 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
       <div className="cols">
         <div className="col">
           {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
-          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} drafted={loaded?.id === dueId ? loaded.drafted : null}
+          {!app.rejection && <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} drafted={loaded?.id === dueId ? loaded.drafted : null}
             onEditInterview={(i, opener) => setEditing({ interview: i, opener })}
             onAccept={() => { accept(app).catch(() => {}); }} onDecline={(opener) => setDeclining(opener)}
-            onWithdrawals={() => setWithdrawing({ from: app.status, eventId: null })} />
+            onWithdrawals={() => setWithdrawing({ from: app.status, eventId: null })} />}
           {app.offer && (app.status === "offer" || app.status === "accepted") && <OfferDetailsPanel key={app.offer.from ?? "none"} app={app} offer={app.offer} refresh={refresh} toaster={toaster} />}
           {app.status === "offer" && <OfferNonGoal />}
           {app.rejection && <RejectionPanel app={app} rejection={app.rejection} refresh={refresh} toaster={toaster} onUndo={undoRejection} />}

@@ -7,7 +7,7 @@
 // are sentence case in the source and set in capitals by CSS (TA-12). Thank-you notes (due within 24
 // hours of an interview's start) and interviews in the next 7 days, each with its prep sheet and
 // .ics, sit in the same queue (#33).
-import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, UpcomingInterview } from "@apply-kit/core";
+import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, OfferToAnswer, UpcomingInterview } from "@apply-kit/core";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
 import { interviewIcsUrl } from "../api.ts";
@@ -42,6 +42,25 @@ const kindPlural = (g: NeedsYouGroup) => kindPlurals[g.kind];
 const writeLabel = {
   nudge: "Review draft", "offer-note": "Write note", "thank-you": "Write thank-you", "check-in": "Write check-in", withdrawal: "Review withdrawal", decline: "Review reply",
 } as const;
+
+/** An offer to answer: one primary action, opening the offer (accept or decline happen there). */
+function OfferItem({ item }: { item: OfferToAnswer }) {
+  const { application: a, email: e } = item;
+  const page = `/applications/${encodeURIComponent(a.id)}`;
+  const from = e
+    ? `Matched from ${e.from.replace(/\s*<[^>]*>$/, "")}'s email ${eventTime(e.receivedAt)}${e.attachments.length ? `, ${e.attachments.length === 1 ? "the letter" : "its attachments"} kept` : ""}. `
+    : `Offer since ${eventTime(item.since)}. `;
+  return (
+    <li className="needs" id={`ny-offer-${a.id}`}>
+      <div className="stack" style={{ gap: "var(--s-1)" }}>
+        <span className="kind">Offer{item.other ? ` · ${item.other}` : ""}</span>
+        <span className="what"><a href={page} lang={langOf(a.title)}>{a.title} · {a.company}</a></span>
+        <span className="why">{from}Check the details against the letter, then accept or decline when you're ready. Nothing is sent for you.</span>
+      </div>
+      <div className="acts"><a className="btn primary sm" href={page}>Open offer<span className="sr-only">: {a.company}</span></a></div>
+    </li>
+  );
+}
 
 /** An interview in the next 7 days: when, with whom, the prep sheet and the calendar file. */
 function InterviewItem({ item }: { item: UpcomingInterview }) {
@@ -134,11 +153,12 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
     <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
       <div className="sec-head">
         <h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>
-        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch + needs.interviews.length > 1 && <span className="meta">Most urgent first</span>}
+        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch + needs.interviews.length + needs.offers.length > 1 && <span className="meta">Most urgent first</span>}
       </div>
-      {needs.items.length || needs.interviews.length || (emails && needs.emailsToMatch) ? (
+      {needs.items.length || needs.interviews.length || needs.offers.length || (emails && needs.emailsToMatch) ? (
         <ul className="needs-queue">
           {emails}
+          {needs.offers.map((o) => <OfferItem key={o.application.id} item={o} />)}
           {needs.items.map((e, i) => {
             const group = needs.groups.find((g) => g.kind === e.followUp.kind);
             if (group) {

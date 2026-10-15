@@ -204,7 +204,7 @@ export function RejectionPanel({ app, rejection, refresh, toaster, onUndo }: {
           {e.summary && <span className="tr">In English: {e.summary}</span>}
         </div>
       )}
-      <form className="stack" style={{ gap: "var(--s-4)" }} onSubmit={save} noValidate>
+      <form className="stack reject-form" style={{ gap: "var(--s-4)" }} onSubmit={save} noValidate>
         <div className="field">
           <label htmlFor={`${uid}-lesson`}>One-line lesson <span className="meta">(optional)</span></label>
           <span className="help" id={`${uid}-lesson-help`}>Specific to this one. Lines like "tailor your CV" don't count.</span>

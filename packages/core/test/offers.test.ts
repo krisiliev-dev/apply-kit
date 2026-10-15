@@ -223,6 +223,20 @@ describe("declining an offer", () => {
   });
 });
 
+describe("an offer to answer", () => {
+  it("is in Needs you from the day it came until accepted or declined, opening the offer", async () => {
+    const { tracker, ardent } = await withOffer();
+
+    const before = await tracker.needsYou();
+    expect(before.offers).toEqual([expect.objectContaining({ application: expect.objectContaining({ id: ardent, company: "Ardent Labs" }), email: null })]);
+    expect(before.count).toBe(before.items.filter((i) => !i.done).length + 1);
+
+    await tracker.declineOffer(ardent);
+
+    expect((await tracker.needsYou()).offers).toEqual([]);
+  });
+});
+
 describe("offer details", () => {
   /** The offer letter from Ardent Labs (made up), as the Track assistant reads it. */
   const offerEmail = mailMessage({

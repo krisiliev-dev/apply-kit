@@ -478,6 +478,8 @@ dialog.dlg.wide { width: min(720px, calc(100vw - 2 * var(--s-5))) }
 .wd > li { border: 1px solid var(--rule); border-radius: var(--r-control); padding: var(--s-4); display: grid; gap: var(--s-3); min-width: 0 }
 .wd .top { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; overflow-wrap: anywhere }
 .wd .top .grow { flex: 1 1 auto }
-.wd textarea.input { min-height: 112px; font-size: var(--fs-small) }
+.wd textarea.input, .decline-text textarea.input { min-height: calc(var(--s-10) * 2.5); font-size: var(--fs-small); line-height: var(--lh-body); resize: vertical }
 .wd > li.is-sent { background: var(--surface-sunken) }
 .offer-acts { display: flex; flex-wrap: wrap; gap: var(--s-3) }
+.reject-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+.reject-form legend { padding: 0; margin-bottom: var(--s-2); font-size: var(--fs-small); font-weight: 600 }

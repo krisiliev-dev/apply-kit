@@ -53,7 +53,7 @@ export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
   NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft, UpcomingInterview,
-  Withdrawal, Withdrawals, OfferDetails, OfferView, RejectionReason, RejectionView,
+  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView,
 } from "./tracker.ts";
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
 export type {

@@ -492,7 +492,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
       {visit && visit.changes.length > 0 && <SinceVisit visit={visit} />}
 
-      {list.total === 1 && !needs?.items.length && emails.length === 0 ? (
+      {list.total === 1 && !needs?.items.length && !needs?.offers.length && emails.length === 0 ? (
         <div className="calm">
           <h2 className="sr-only">Needs you</h2>
           <h3>Nothing needs you yet</h3>
