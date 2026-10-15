@@ -5,14 +5,15 @@
 // the draft download; the empty state without a master profile. The sticky action bar holds the
 // step's Approve, which explains itself when it can't approve and moves focus to the reason.
 import type { BudgetInfo, HealthSummary, PackagePart, PackageStep, PackageStepView, PackageView, PrepareStatus } from "@apply-kit/core";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   approveStep, fetchPackage, fetchPrepareStatus, fetchSources, packageCvUrl, retryPart, setPackageLanguage, setPackagePhoto,
   setTargetPosting, startPackage, stopGenerating,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Icon } from "../icons.tsx";
-import { PdfPreview } from "./PdfPreview.tsx";
+// pdf.js is large: it loads only when a document is shown.
+const PdfPreview = lazy(() => import("./PdfPreview.tsx").then((m) => ({ default: m.PdfPreview })));
 
 const steps: PackageStep[] = ["target", "cv", "letter", "answers", "ats"];
 /** What Kris is looking at: the generating progress, or one step. */
@@ -78,6 +79,13 @@ export function PackagePage({ jobId, onHealth }: { jobId: string; onHealth: (h: 
     }, 1_000);
     return () => window.clearTimeout(timer);
   }, [pkg, toaster]);
+
+  // Back, forward and links to a step (#target, #cv) move between steps.
+  useEffect(() => {
+    const onHash = () => { const s = fromHash(); if (s) setViewing(s); };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const go = useCallback((to: Viewing, focus = true) => {
     setViewing(to);
@@ -482,7 +490,9 @@ function CvStep({ pkg, onChange, onGo, say }: { pkg: PackageView; onChange: (p: 
     <div className="panel">
       <div className="step-title"><h2>CV version</h2><p className="muted">The exact PDF the extension uploads. For now it's your {pkg.angle.label.toLowerCase()} angle's pieces as they are in your profile; tailoring for this job comes with a later part of the rebuild.</p></div>
       {pkg.cv ? (
-        <PdfPreview key={pkg.cv.sha256} url={packageCvUrl(pkg.id, pkg.cv.sha256)} name="CV" pages={pkg.cv.pages} overflow={pkg.cv.overflow !== null} />
+        <Suspense fallback={<p className="meta" role="status">Opening the PDF…</p>}>
+          <PdfPreview key={pkg.cv.sha256} url={packageCvUrl(pkg.id, pkg.cv.sha256)} name="CV" pages={pkg.cv.pages} overflow={pkg.cv.overflow !== null} />
+        </Suspense>
       ) : part.state === "working" || part.state === "waiting" ? (
         <div className="stack" role="status"><p className="meta">Writing the CV…</p><span className="skel w70" /><span className="skel w90" /><span className="skel w50" /></div>
       ) : (

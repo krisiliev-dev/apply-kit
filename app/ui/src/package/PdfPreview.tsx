@@ -9,7 +9,7 @@ import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 
-/** CSS pixels per PDF point at 100% (96 / 72). */
+/** CSS pixels per PDF point at 100% (96 / 72). An A4 page is 595 points wide. */
 const CSS_PER_PT = 96 / 72;
 const ZOOM_KEY = "apply-kit.pdf-zoom";
 
@@ -34,6 +34,21 @@ export function PdfPreview({ url, name, pages, overflow }: {
   const [zoom, setZoomState] = useState<Zoom>(rememberedZoom);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const host = useRef<HTMLDivElement>(null);
+  const frame = useRef<HTMLDivElement>(null);
+
+  // Fit scales the page to the frame's width, so the whole page shows at any screen size.
+  useEffect(() => {
+    const el = frame.current!;
+    const fit = () => {
+      const pad = parseFloat(getComputedStyle(el).paddingLeft) * 2;
+      const pageWidth = 595 * CSS_PER_PT;
+      el.style.setProperty("--fit-zoom", String(Math.min(1, Math.max(0.2, (el.clientWidth - pad) / pageWidth))));
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   const setZoom = (z: Zoom) => {
     setZoomState(z);
@@ -77,7 +92,7 @@ export function PdfPreview({ url, name, pages, overflow }: {
 
   const pageWord = `${pages} ${pages === 1 ? "page" : "pages"}`;
   return (
-    <div className={`doc-frame${zoom === "fit" ? " fit" : ""}`} tabIndex={0} role="region" aria-label={`${name} preview, ${overflow ? `runs onto page ${pages}` : `page 1 of ${pages}`}`}>
+    <div ref={frame} className={`doc-frame${zoom === "fit" ? " fit" : ""}`} tabIndex={0} role="region" aria-label={`${name} preview, ${overflow ? `runs onto page ${pages}` : `page 1 of ${pages}`}`}>
       <div className="bar">
         <span className={`page-chip${overflow ? " over" : ""}`}>{overflow ? `Runs onto ${pageWord}` : pageWord}</span>
         <span className="meta">A4 · the exact file</span>
