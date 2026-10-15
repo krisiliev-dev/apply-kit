@@ -4,9 +4,9 @@
 // service does. Never live AI in tests.
 import { createHash } from "node:crypto";
 import {
-  createAiBudget, createEngine, createPreparationEngine, draftedPiecesSchema, tailoredCvSchema,
+  createAiBudget, createEngine, createPreparationEngine, draftedPiecesSchema, tailoredCvSchema, type LearnedVoice, type VoiceLearningInput,
   type AiBudget, type DiscoveryEngine, type DocumentRenderer, type DraftedPieces, type EngineDeps, type FileStore,
-  type ImportedText, type TailorCvInput, type TailoredCv, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type TextRecognizer, type Writer, type WriterRequest,
+  type ImportedText, type TailorCvInput, type TailoredCv, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type SentExcerpt, type TextRecognizer, type Writer, type WriterRequest,
 } from "../src/index.ts";
 import { fakeClock, fakeExtractor, fixtureFetch, loadFixture, memoryDb, type FakeClock, type FakeExtractor } from "./harness.ts";
 
@@ -23,6 +23,8 @@ type Recorded<I, O> = O | Error | ((input: I) => O | Error | Promise<O | Error>)
 export interface RecordedOutputs {
   draftPieces?: Recorded<ImportedText, DraftedPieces>;
   tailorCv?: Recorded<TailorCvInput, TailoredCv>;
+  /** No new rules by default. */
+  learnVoice?: LearnedVoice | Error | ((input: VoiceLearningInput) => LearnedVoice | Error | Promise<LearnedVoice | Error>);
 }
 
 export interface FakeWriter extends Writer {
@@ -32,7 +34,7 @@ export interface FakeWriter extends Writer {
 
 /**
  * A fake writer answering each task with its recorded output (the fixtures by default). Each call
- * costs `costUsd`, estimated at `estimateUsd`, and sends no excerpts.
+ * costs `costUsd`, estimated at `estimateUsd`, and reports sending exactly the excerpts it was given.
  */
 export function fakeWriter(
   recorded: RecordedOutputs = {},
@@ -42,7 +44,8 @@ export function fakeWriter(
   const answer = async <I, O>(given: Recorded<I, O> | undefined, fallback: O, input: I) => {
     const out = typeof given === "function" ? await (given as (input: I) => O | Error | Promise<O | Error>)(input) : (given ?? fallback);
     if (out instanceof Error) throw out;
-    return { output: out, costUsd, model: "fake/writer", excerpts: [] };
+    const excerpts = input && typeof input === "object" && "excerpts" in input ? (input as { excerpts: SentExcerpt[] }).excerpts : [];
+    return { output: out, costUsd, model: "fake/writer", excerpts };
   };
   return {
     calls,
@@ -50,6 +53,10 @@ export function fakeWriter(
     async draftPieces(input) {
       calls.push({ task: "draft-pieces", input });
       return answer(recorded.draftPieces, recordedDraftPieces, input);
+    },
+    async learnVoice(input) {
+      calls.push({ task: "learn-voice", input });
+      return answer(recorded.learnVoice, { rules: [] }, input);
     },
     async tailorCv(input) {
       calls.push({ task: "tailor-cv", input });

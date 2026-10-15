@@ -70,4 +70,18 @@ describe("OpenRouter writer", () => {
 
     expect(error?.costUsd).toBeGreaterThan(0);
   });
+
+  it("learns voice rules from only the excerpts and rules it's given, and reports exactly the excerpts it sent", async () => {
+    const learned = { rules: [{ id: null, text: "Short declarative sentences", evidence: "about-page", language: null, sources: ["sample:s1"] }] };
+    const api = fakeOpenRouter(JSON.stringify(learned));
+    const writer = createOpenRouterWriter({ apiKey: "test-key", fetch: api.fetch });
+    const excerpts = [{ source: "sample:s1", text: "I build small tools that make noisy systems quieter." }];
+
+    const result = await writer.learnVoice({ rules: [{ id: "r1", text: "Signs off \"Kind regards\"", evidence: "2 samples" }], removed: ["Uses exclamation marks"], excerpts });
+
+    const sent = JSON.stringify(api.requests[0]!.body.messages);
+    expect(sent).toContain("I build small tools that make noisy systems quieter.");
+    expect(sent).toContain("Uses exclamation marks");
+    expect(result).toEqual({ output: learned, costUsd: 0.00042, model: "deepseek/deepseek-v4.1-flash", excerpts });
+  });
 });

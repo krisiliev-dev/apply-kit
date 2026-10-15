@@ -3,7 +3,7 @@
 // output per task. Each task sends only the text it needs (extracted text, never files).
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import type { z } from "zod";
-import { draftedPiecesSchema, tailoredCvSchema, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
+import { draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
 import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
@@ -23,6 +23,18 @@ const draftPiecesInstructions = `You read the text of one of Kris's old CVs and 
 - An achievement is one sentence of at most 200 characters, in the text's own words. Achievements and skills set "role" to the index of the role or education entry they sit under, or null.
 - Other pieces have "entry": null; roles and education have "role": null.`;
 
+const learnVoiceInstructions = `You learn how Kris writes, as short readable voice rules, from a few excerpts of Kris's own writing (parts of samples, and edits Kris made to drafts: what the draft said and what Kris wrote instead). Answer as JSON matching the schema. Rules:
+- A rule is one plain statement of a habit the excerpts show, e.g. "Opens with the company's problem, not with you" or "Never: "passionate", "team player"". At most 80 characters.
+- Return only rules these excerpts show: new ones with "id": null, or ones already known (by their id) with updated evidence. Don't return known rules the excerpts don't touch.
+- "evidence" says in a few plain words what shows it, counting what you know, e.g. "3 samples; you rewrote 2 openers".
+- "sources" lists the sources of the excerpts that show it, exactly as given.
+- "language" is "en" or "bg" when the habit belongs to one language, otherwise null.
+- Never suggest a removed rule again from the same kind of evidence.
+- Never invent facts about Kris; rules are about style, not about experience.`;
+
+/** The excerpts, labelled with their source, as the model reads them. */
+const excerptLines = (excerpts: SentExcerpt[]) => excerpts.map((e) => `[${e.source}]\n${e.text}`).join("\n\n");
+
 const tailorCvInstructions = `You tailor Kris's CV to one job posting, as JSON matching the schema, using only the profile pieces given. Rules:
 - Every line cites the ids of the pieces it relies on ("pieceIds"). Never cite an id that isn't given.
 - Never add a skill, number, employer, title or date that isn't in the cited pieces. Employers, titles and dates stay exactly as given.
@@ -36,6 +48,12 @@ function promptOf(request: WriterRequest): { instructions: string; prompt: strin
   switch (request.task) {
     case "draft-pieces":
       return { instructions: draftPiecesInstructions, prompt: `File: ${request.input.fileName}\n\n${request.input.text}` };
+    case "learn-voice": {
+      const { rules, removed, excerpts } = request.input;
+      const known = rules.length ? rules.map((r) => `- ${r.id}: ${r.text} (${r.evidence})`).join("\n") : "(none yet)";
+      const gone = removed.length ? removed.map((r) => `- ${r}`).join("\n") : "(none)";
+      return { instructions: learnVoiceInstructions, prompt: `Known rules:\n${known}\n\nRemoved by Kris:\n${gone}\n\nExcerpts:\n\n${excerptLines(excerpts)}` };
+    }
     case "tailor-cv":
       return { instructions: tailorCvInstructions, prompt: JSON.stringify(request.input) };
   }
@@ -45,7 +63,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
   const { model, modelId } = openRouterModel(options);
 
   /** One schema-validated call. A failed call that was still billed throws with its `costUsd`. */
-  async function write<T>(request: WriterRequest, schema: z.ZodType<T>, name: string): Promise<Written<T>> {
+  async function write<T>(request: WriterRequest, schema: z.ZodType<T>, name: string, excerpts: SentExcerpt[] = []): Promise<Written<T>> {
     const { instructions, prompt } = promptOf(request);
     try {
       const result = await generateText({
@@ -58,7 +76,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
         maxRetries: 1,
         timeout: TIMEOUT_MS,
       });
-      return { output: result.output, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS), model: result.response.modelId || modelId, excerpts: [] };
+      return { output: result.output, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS), model: result.response.modelId || modelId, excerpts };
     } catch (err) {
       // The model answered but not in the schema's shape: the call was billed all the same.
       if (NoObjectGeneratedError.isInstance(err) && err.usage) Object.assign(err, { costUsd: billedUsd({ usage: err.usage }, MAX_OUTPUT_TOKENS) });
@@ -72,6 +90,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
       return usdFor(tokensIn(instructions.length + prompt.length + SCHEMA_CHARS), EXPECTED_OUTPUT_TOKENS);
     },
     draftPieces: (input) => write({ task: "draft-pieces", input }, draftedPiecesSchema, "drafted_pieces"),
+    learnVoice: (input) => write({ task: "learn-voice", input }, learnedVoiceSchema, "learned_voice", input.excerpts),
     tailorCv: (input) => write({ task: "tailor-cv", input }, tailoredCvSchema, "tailored_cv"),
   };
 }

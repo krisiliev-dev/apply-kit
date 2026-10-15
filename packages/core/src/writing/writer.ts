@@ -36,6 +36,33 @@ export const draftedPiecesSchema = z.object({
 });
 export type DraftedPieces = z.infer<typeof draftedPiecesSchema>;
 
+/**
+ * What learning the voice sends: the rules so far (to reinforce or refine), the rules Kris removed
+ * (not to suggest again from the same writing), and a few short excerpts of Kris's writing: parts
+ * of samples and edits to drafts, never more than the excerpt limit in one call.
+ */
+export interface VoiceLearningInput {
+  rules: { id: string; text: string; evidence: string }[];
+  removed: string[];
+  excerpts: SentExcerpt[];
+}
+
+/**
+ * Voice rules the excerpts show: new ones (id null) or ones already there (their id) with updated
+ * evidence. Each is a readable statement of how Kris writes, with its evidence in plain words, the
+ * language it holds for (null when both), and the sources of the excerpts that show it.
+ */
+export const learnedVoiceSchema = z.object({
+  rules: z.array(z.object({
+    id: z.string().nullable(),
+    text: z.string(),
+    evidence: z.string(),
+    language: z.enum(["en", "bg"]).nullable(),
+    sources: z.array(z.string()),
+  })),
+});
+export type LearnedVoice = z.infer<typeof learnedVoiceSchema>;
+
 /** What a CV version is tailored from: the posting, the angle it starts from and the confirmed pieces it may use. */
 export interface TailorCvInput {
   posting: { title: string; company: string; requirements: string[] };
@@ -64,13 +91,14 @@ export type TailoredCv = z.infer<typeof tailoredCvSchema>;
 /** Every writing task with its input, so one estimate covers them all. */
 export type WriterRequest =
   | { task: "draft-pieces"; input: ImportedText }
+  | { task: "learn-voice"; input: VoiceLearningInput }
   | { task: "tailor-cv"; input: TailorCvInput };
 
 export type WriterTask = WriterRequest["task"];
 
 /** A short piece of Kris's own writing sent with a call (voice excerpts), recorded so the Package can show it. */
 export interface SentExcerpt {
-  /** Where it comes from, e.g. a voice sample's id. */
+  /** Where it comes from: "sample:<sample id>" or "edit:<edit id>". */
   source: string;
   text: string;
 }
@@ -94,5 +122,7 @@ export interface Writer {
    * may carry a numeric `costUsd` if the failed call was still billed.
    */
   draftPieces(input: ImportedText): Promise<Written<DraftedPieces>>;
+  /** Learns voice rules from the excerpts; reports exactly the excerpts it sent. */
+  learnVoice(input: VoiceLearningInput): Promise<Written<LearnedVoice>>;
   tailorCv(input: TailorCvInput): Promise<Written<TailoredCv>>;
 }

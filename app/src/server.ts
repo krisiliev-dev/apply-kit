@@ -10,6 +10,7 @@ import { mountImportApi } from "./import-api.ts";
 import { mountAnswerApi } from "./answers-api.ts";
 import { mountPackageApi } from "./packages-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
+import { mountVoiceApi } from "./voice-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
 const documentLanguages: DocumentLanguage[] = ["en", "bg"];
@@ -350,6 +351,8 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
   if (preparation) mountImportApi(app, preparation);
   // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
   if (preparation) mountAnswerApi(app, preparation);
+  // Profile's voice: samples, the rules learned, and the "Learn from my edits" switch.
+  if (preparation) mountVoiceApi(app, preparation);
   // Packages: the Prepare button, starting a package, its steps, parts and the CV draft.
   if (preparation) mountPackageApi(app, engine, preparation);
 

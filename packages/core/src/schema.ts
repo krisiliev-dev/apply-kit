@@ -352,6 +352,58 @@ const migrations: string[] = [
    );
    CREATE INDEX import_merge_piece ON import_merge(piece_id);
    ALTER TABLE profile_piece ADD COLUMN check_this INTEGER NOT NULL DEFAULT 0;`,
+  // #59: voice. Samples keep their text here (the file itself is in the file store under its
+  // SHA-256) and how far learning has read them; rules keep their evidence, and a removed rule stays
+  // (with when) so it doesn't come back unless new writing shows it. Edits to drafts are before/after
+  // pairs, learned from once. Every voice excerpt sent to the model is recorded per call.
+  `CREATE TABLE voice_sample (
+     id TEXT PRIMARY KEY,
+     position INTEGER NOT NULL,
+     file_name TEXT NOT NULL,
+     sha256 TEXT NOT NULL,
+     size INTEGER NOT NULL,
+     kind TEXT NOT NULL,
+     language TEXT,
+     words INTEGER NOT NULL DEFAULT 0,
+     text TEXT,
+     problem TEXT,
+     learned_chunks INTEGER NOT NULL DEFAULT 0,
+     added_at TEXT NOT NULL
+   );
+   CREATE TABLE voice_rule (
+     id TEXT PRIMARY KEY,
+     key TEXT NOT NULL UNIQUE,
+     text TEXT NOT NULL,
+     evidence TEXT NOT NULL,
+     language TEXT,
+     samples TEXT NOT NULL DEFAULT '[]',
+     edits INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     removed_at TEXT
+   );
+   CREATE TABLE voice_edit (
+     id TEXT PRIMARY KEY,
+     at TEXT NOT NULL,
+     draft TEXT NOT NULL,
+     language TEXT NOT NULL,
+     source TEXT,
+     before TEXT NOT NULL,
+     after TEXT NOT NULL,
+     learned_at TEXT
+   );
+   CREATE TABLE voice_send (
+     id TEXT PRIMARY KEY,
+     at TEXT NOT NULL,
+     purpose TEXT NOT NULL,
+     language TEXT,
+     excerpts TEXT NOT NULL,
+     words INTEGER NOT NULL
+   );
+   CREATE TABLE voice_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     learn_from_edits INTEGER NOT NULL DEFAULT 1
+   );`,
   // #62: packages, one per Job. `job` (JSON) is the Job as it was when the package started (title,
   // company, requirements, postings), so the package reads the same however Discover changes later.
   // `approved` (JSON) maps each approved step to when, `reviewed_at` is Kris's first approval; `cv_draft` (JSON) is the CV's current draft file.

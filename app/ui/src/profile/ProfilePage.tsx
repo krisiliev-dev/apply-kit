@@ -1,6 +1,6 @@
 // Profile (hi-fi: docs/design/hifi/profile.html): the master profile with contact details, Add and
 // Edit piece, section links to Profile's areas, Angles (#58), and the answer bank (#56) with Add and
-// Edit answer. Voice arrives with a later ticket; Search and dealbreakers is the existing search settings page.
+// Edit answer, and Voice (#59). Search and dealbreakers is the existing search settings page.
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
 import { angles, pieceKinds } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { AnswerBank } from "./AnswerBank.tsx";
 import { AnswerEditor } from "./AnswerEditor.tsx";
 import { ContactPanel } from "./ContactPanel.tsx";
 import { PieceEditor } from "./PieceEditor.tsx";
+import { VoicePage } from "./VoicePage.tsx";
 import {
   ProfileSections, angleLabel, kindLabel, kindPlural, message, navLink, numberSourceLabel, pieceName, pieceText, type Go,
 } from "./common.tsx";
@@ -108,7 +109,7 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
       ) : path === "/profile/voice" ? (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
-          <NotYet area="Voice" />
+          <VoicePage announce={announce} />
         </section>
       ) : (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
@@ -117,15 +118,6 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
         </section>
       )}
     </>
-  );
-}
-
-function NotYet({ area }: { area: string }) {
-  return (
-    <div className="empty">
-      <h2>{area} isn't built yet</h2>
-      <p>It arrives with a later part of Prepare. Your master profile is ready to fill.</p>
-    </div>
   );
 }
 

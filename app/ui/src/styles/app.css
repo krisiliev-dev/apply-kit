@@ -353,6 +353,16 @@ h2[tabindex="-1"]:focus { outline: none }
 .setup .merges li { display: grid; gap: var(--s-1); padding-top: var(--s-3); border-top: 1px solid var(--rule) }
 .setup legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
 
+/* Profile › Voice (from the Profile hi-fi, state Voice samples). Tokens only. */
+.rules { list-style: none; margin: 0; padding: 0; display: grid }
+.rules li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-4); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.rules li:first-child { border-top: 0; padding-top: 0 }
+.rules b { font-weight: 600; font-size: var(--fs-body) }
+.block { display: block }
+.voice-notice .local { display: flex; flex-wrap: nowrap; gap: var(--s-3) }
+.voice .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.files .sample-acts { display: grid; gap: var(--s-2); justify-items: stretch }
+
 /* Package (#62, hi-fi package.html): header, the step's two columns, the exact PDF. Tokens only. */
 .pk-head { display: grid; gap: var(--s-3) }
 .pk-head h1 { overflow-wrap: anywhere }

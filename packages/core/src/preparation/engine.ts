@@ -10,6 +10,7 @@ import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, ty
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
+import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceEditInput, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -165,6 +166,46 @@ export interface PreparationEngine {
   /** Drafts one of the fictional demo profile's documents (package "demo"), for checking the template. */
   demoDocument(options: DemoOptions): Promise<DocumentDraft>;
 
+  // ---------- Voice (Profile › Voice, and drafts: the cover letter here, Track's follow-ups) ----------
+
+  /** Profile › Voice: the samples, the rules learned (with their evidence), the edits and the learning switch. */
+  voice(): VoiceView;
+  /**
+   * Keeps samples of Kris's writing (PDF, DOCX, TXT) on this laptop: the file in the file store, its
+   * text read here. One that can't be read says why and how to fix it; the others still count.
+   */
+  addVoiceSamples(files: VoiceSampleFile[]): Promise<VoiceSample[]>;
+  /** Replace: a new file in an (unreadable) sample's place. Null if there's no such sample. */
+  replaceVoiceSample(id: string, file: VoiceSampleFile): Promise<VoiceSample | null>;
+  /** Deletes a sample and its copy; drafts send nothing more from it. False if it was gone already. */
+  removeVoiceSample(id: string): Promise<boolean>;
+  /**
+   * Learns voice rules from what's new (unread parts of samples, edits not yet learned from), within
+   * the monthly budget. No call sends more than VOICE_EXCERPT_WORDS words of Kris's writing, and each
+   * call's excerpts are recorded. The service runs it after samples are added and periodically;
+   * a run already going is joined, not started twice.
+   */
+  learnVoice(): Promise<VoiceLearning>;
+  /** Every call that sent Kris's writing to the model, newest first, with exactly what it sent. */
+  voiceSends(): VoiceSend[];
+  /** Takes a voice rule out of use; it won't come back unless Kris's writing shows it again. False if it's gone already. */
+  removeVoiceRule(id: string): boolean;
+
+  // Drafting with the voice (the cover letter; Track's follow-ups through `VoiceForDrafts`). Local only.
+
+  /**
+   * What a draft in this language sends to sound like Kris: the rules in use and at most
+   * VOICE_EXCERPT_WORDS words of excerpts. Recorded (under the context's id) as it's handed out, so
+   * the draft can show what left the machine.
+   */
+  voiceContext(request: VoiceContextRequest): VoiceContext;
+  /**
+   * Kris edited a draft (a letter, an answer, a follow-up): kept as a before/after pair to learn the
+   * voice from, periodically. False when learning from edits is paused or nothing changed.
+   */
+  recordVoiceEdit(edit: VoiceEditInput): boolean;
+  /** The "Learn from my edits" switch: paused, edits aren't recorded as evidence. */
+  setVoiceLearning(fromEdits: boolean): VoiceView;
   /**
    * What the Job page's Prepare button shows: whether a package can start (with the reason when it
    * can't: a closed job, a posting not read, no master profile) and the Job's package, if it has one.
@@ -201,6 +242,9 @@ export interface PreparationEngine {
   packageCv(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 }
 
+/** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
+export type VoiceForDrafts = Pick<PreparationEngine, "voiceContext" | "recordVoiceEdit">;
+
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
   migrate(deps.db);
   const profile = createProfileStore(deps);
@@ -208,6 +252,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const imports = createImportStore(deps, profile);
   const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
   const answers = createAnswerStore(deps);
+  const voice = createVoiceStore(deps);
   /** The salary floor in Kris's search settings (the discovery engine keeps them in the same database). */
   const salaryFloor = () => {
     const stored = deps.db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
@@ -289,6 +334,16 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
     resolvePortalEdit: (id, keep) => answers.resolvePortalEdit(id, keep),
     answerHistory: (id) => answers.history(id),
+    voice: () => voice.view(),
+    addVoiceSamples: (files) => voice.add(files),
+    replaceVoiceSample: (id, file) => voice.replace(id, file),
+    removeVoiceSample: (id) => voice.remove(id),
+    learnVoice: () => voice.learn(),
+    voiceSends: () => voice.sends(),
+    removeVoiceRule: (id) => voice.removeRule(id),
+    voiceContext: (request) => voice.context(request),
+    recordVoiceEdit: (edit) => voice.recordEdit(edit),
+    setVoiceLearning: (on) => voice.setLearning(on),
     contact: () => contact.get(),
     saveContact(details) {
       const result = contact.save(details);
