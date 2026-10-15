@@ -1,6 +1,7 @@
 // Profile (hi-fi: docs/design/hifi/profile.html): the master profile with contact details, Add and
 // Edit piece, section links to Profile's areas, Angles (#58), and the answer bank (#56) with Add and
 // Edit answer, and Voice (#59). Search and dealbreakers is the existing search settings page.
+// Learned during packages (#64): pieces from answers given inside packages, waiting for Kris.
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
 import { angles, pieceKinds } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -11,6 +12,7 @@ import { AnglesPage } from "./AnglesPage.tsx";
 import { AnswerBank } from "./AnswerBank.tsx";
 import { AnswerEditor } from "./AnswerEditor.tsx";
 import { ContactPanel } from "./ContactPanel.tsx";
+import { LearnedPieces } from "./LearnedPieces.tsx";
 import { PieceEditor } from "./PieceEditor.tsx";
 import { VoicePage } from "./VoicePage.tsx";
 import {
@@ -106,6 +108,11 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
           {head}
           <AnglesPage announce={announce} />
         </section>
+      ) : path === "/profile/learned" ? (
+        <section className="stack" style={{ gap: "var(--s-6)" }}>
+          {head}
+          <LearnedPieces go={go} announce={announce} onChanged={refreshSummary} />
+        </section>
       ) : path === "/profile/voice" ? (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
@@ -114,15 +121,17 @@ export function ProfilePage({ onHealth, onSummary }: { onHealth: (h: HealthSumma
       ) : (
         <section className="stack" style={{ gap: "var(--s-6)" }}>
           {head}
-          <MasterProfile go={go} announce={announce} flash={flash} clearFlash={() => setFlash(null)} onChanged={refreshSummary} />
+          <MasterProfile go={go} announce={announce} flash={flash} clearFlash={() => setFlash(null)} onChanged={refreshSummary} learned={summary?.learned ?? 0} />
         </section>
       )}
     </>
   );
 }
 
-function MasterProfile({ go, announce, flash, clearFlash, onChanged }: {
+function MasterProfile({ go, announce, flash, clearFlash, onChanged, learned }: {
   go: Go;
+  /** Pieces learned during packages that wait for Kris. */
+  learned: number;
   announce: (msg: string) => void;
   flash: string | null;
   clearFlash: () => void;
@@ -200,6 +209,12 @@ function MasterProfile({ go, announce, flash, clearFlash, onChanged }: {
 
   return (
     <>
+      {learned > 0 && (
+        <div className="needs">
+          <span className="grow"><b>{learned === 1 ? "1 piece" : `${learned} pieces`} learned during packages {learned === 1 ? "is" : "are"} waiting for your OK.</b> <span className="muted">Each was used only in the package where you gave it.</span></span>
+          <a className="btn sm" href="/profile/learned" onClick={navLink(go)}>Review {learned === 1 ? "1 piece" : `${learned} pieces`}</a>
+        </div>
+      )}
       {contactPanel}
       <section className="panel" aria-labelledby="pieces-h">
         <div className="sec-head">

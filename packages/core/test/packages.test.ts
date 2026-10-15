@@ -806,7 +806,7 @@ describe("gap flags and gap questions (#64)", () => {
     // The piece waits in Profile, unconfirmed, with the question and Kris's own answer.
     expect(t.preparation.learnedPieces()).toEqual([{
       piece: expect.objectContaining({ text: "Locked down a Kubernetes test cluster with network policies", status: "unconfirmed", source: { from: "Kestrel Payments package", quote: kubernetesAnswer } }),
-      packageId: pkg.id, jobId: "job-kestrel", job: "Security Engineer at Kestrel Payments", company: "Kestrel Payments",
+      under: "Northwind Bank", packageId: pkg.id, jobId: "job-kestrel", job: "Security Engineer at Kestrel Payments", company: "Kestrel Payments",
       question: "What did you do with Kubernetes security?", answer: kubernetesAnswer, learnedAt: expect.any(String), nearTheLine: null,
     }]);
     expect(t.preparation.profileSummary()).toMatchObject({ learned: 1 });

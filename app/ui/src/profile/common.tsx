@@ -53,7 +53,7 @@ export function ProfileSections({ current, summary, go }: { current: string; sum
   return (
     <nav className="subnav" aria-label="Profile">
       {sections.map((s) => (
-        <a key={s.href} href={s.href} aria-current={s.href === current ? "page" : undefined} onClick={navLink(go)}>
+        <a key={s.href} href={s.href} aria-current={s.href === current || (s.href === "/profile" && current === "/profile/learned") ? "page" : undefined} onClick={navLink(go)}>
           {s.label}
           {s.count > 0 && (
             <>

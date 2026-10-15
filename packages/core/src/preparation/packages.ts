@@ -194,6 +194,8 @@ export interface CvVersionView {
 /** A piece learned from Kris's answer inside a package, waiting in Profile › Learned during packages. */
 export interface LearnedPiece {
   piece: ProfilePiece;
+  /** The employer (or school) of the role it sits under, if any. */
+  under: string | null;
   packageId: string;
   jobId: string;
   /** "Security Engineer at Kestrel Payments". */
@@ -1009,7 +1011,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         if (!piece || piece.status === "confirmed") return [];
         const job = JSON.parse(String(x.job)) as PackageJob;
         return [{
-          piece, packageId: String(x.package_id), jobId: job.id, job: `${job.titleTranslation ?? job.title} at ${job.company}`, company: job.company,
+          piece, under: (piece.belongsTo && pieces.get(piece.belongsTo)?.entry?.organisation) || null, packageId: String(x.package_id), jobId: job.id, job: `${job.titleTranslation ?? job.title} at ${job.company}`, company: job.company,
           question: String(x.question), answer: String(x.answer), learnedAt: String(x.created_at),
           // Near the line only while Kris hasn't chosen a wording for it.
           nearTheLine: x.near != null && piece.status === "flagged" ? (JSON.parse(String(x.near)) as NearTheLine) : null,
