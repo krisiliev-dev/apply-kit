@@ -24,7 +24,7 @@ const draftPiecesInstructions = `You read the text of one of Kris's old CVs and 
 - Other pieces have "entry": null; roles and education have "role": null.`;
 
 const learnVoiceInstructions = `You learn how Kris writes, as short readable voice rules, from a few excerpts of Kris's own writing (parts of samples, and edits Kris made to drafts: what the draft said and what Kris wrote instead). Answer as JSON matching the schema. Rules:
-- A rule is one plain statement of a habit the excerpts show, e.g. "Opens with the company's problem, not with you" or "Never: \"passionate\", \"team player\"". At most 80 characters.
+- A rule is one plain statement of a habit the excerpts show, e.g. "Opens with the company's problem, not with you" or "Never: "passionate", "team player"". At most 80 characters.
 - Return only rules these excerpts show: new ones with "id": null, or ones already known (by their id) with updated evidence. Don't return known rules the excerpts don't touch.
 - "evidence" says in a few plain words what shows it, counting what you know, e.g. "3 samples; you rewrote 2 openers".
 - "sources" lists the sources of the excerpts that show it, exactly as given.
