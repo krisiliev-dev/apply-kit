@@ -286,3 +286,27 @@ describe("follow-up delays as settings", () => {
     await expect(tracker.saveFollowUpSettings({ nudgeAfterDays: 0 })).rejects.toThrow("The follow-up delay must be a whole number of days from 1 to 60.");
   });
 });
+
+describe("at volume", () => {
+  it("groups same-kind follow-ups due once there are 4 or more, most urgent first; fewer stay one by one", async () => {
+    const { tracker } = tracked();
+    for (const [company, appliedOn] of [["Lumio Maps", "2026-10-03"], ["Tidewater Pay", "2026-10-01"], ["Velta Logistics", "2026-10-02"]] as const) {
+      await add(tracker, { company, appliedOn });
+    }
+    expect((await tracker.needsYou()).groups).toEqual([]);
+
+    const medora = await add(tracker, { company: "Medora", appliedOn: "2026-10-05" });
+    const needs = await tracker.needsYou();
+
+    expect(needs.groups).toEqual([{
+      kind: "nudge", count: 4, done: 0, oldestDueOn: "2026-10-08",
+      companies: ["Tidewater Pay", "Velta Logistics", "Lumio Maps", "Medora"],
+      followUpIds: needs.items.map((i) => i.followUp.id),
+    }]);
+    expect(needs.count).toBe(4);
+
+    // One done today stays out of the count and the drafts to step through; the group stays for the day.
+    await tracker.markFollowUpSent((await tracker.get(medora))!.followUp!.id);
+    expect((await tracker.needsYou()).groups[0]).toMatchObject({ count: 3, done: 1, companies: ["Tidewater Pay", "Velta Logistics", "Lumio Maps"] });
+  });
+});

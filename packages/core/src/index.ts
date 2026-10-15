@@ -51,7 +51,7 @@ export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, T
 export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
-  NextUp, NeedsYou, NeedsYouEntry, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft,
+  NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft,
 } from "./tracker.ts";
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
 export type {

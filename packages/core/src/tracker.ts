@@ -403,6 +403,24 @@ export interface ComingUp {
   dueOn: string;
 }
 
+/**
+ * Same-kind follow-ups at volume ("6 follow-ups due"): shown as one item whose drafts the user steps
+ * through one by one. A kind groups once 4 or more are due or done today, and stays grouped that day.
+ */
+export interface NeedsYouGroup {
+  kind: FollowUpKind;
+  /** How many are still due. */
+  count: number;
+  /** How many were done (sent or skipped) today. */
+  done: number;
+  /** The oldest due day among those still due (null once all are done). */
+  oldestDueOn: string | null;
+  /** The companies still due, most urgent first. */
+  companies: string[];
+  /** The follow-ups still due, most urgent first: the order "Next draft" steps through. */
+  followUpIds: string[];
+}
+
 /** Needs you: what only the user can do now, most urgent first, and what is coming up soon. */
 export interface NeedsYou {
   /** How many items need the user now (the top bar's Applications badge): follow-ups due and emails to match. Done ones aren't counted. */
@@ -410,6 +428,8 @@ export interface NeedsYou {
   items: NeedsYouEntry[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
+  /** Kinds with 4 or more due (or done today): shown grouped, their items stepped through one by one. */
+  groups: NeedsYouGroup[];
   /** Due in the next 3 days, soonest first. */
   comingUp: ComingUp[];
   /** How many days "Snooze" moves one on (a setting). */
@@ -568,6 +588,8 @@ const groupOrder: { key: GroupKey; label: string; statuses: Status[] }[] = [
 const defaultLimits: Partial<Record<GroupKey, number>> = { applied: 5, closed: 5 };
 /** The stages with a follow-up, and which. */
 const stageKinds: Partial<Record<Status, FollowUpKind>> = { applied: "nudge", screening: "nudge", offer: "offer-note" };
+/** Same-kind follow-ups group in Needs you from this many on. */
+const groupAt = 4;
 /** Follow-ups due within this many days are "Coming up". */
 const comingUpDays = 3;
 const isFollowUpEvent = (e: ApplicationEvent) => followUpEventKinds.includes(e.kind);
@@ -1127,7 +1149,17 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
     comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
     const emails = Number(db.prepare("SELECT COUNT(*) AS n FROM email_match WHERE state = 'to-match'").get()?.n ?? 0);
-    return { count: items.filter((i) => !i.done).length + emails, items, emailsToMatch: emails, comingUp, snoozeDays: followUpSettings().snoozeDays };
+    const groups: NeedsYouGroup[] = [];
+    for (const kind of [...new Set(items.map((i) => i.followUp.kind))]) {
+      const same = items.filter((i) => i.followUp.kind === kind);
+      if (same.length < groupAt) continue;
+      const due = same.filter((i) => !i.done);
+      groups.push({
+        kind, count: due.length, done: same.length - due.length, oldestDueOn: due[0]?.followUp.dueOn ?? null,
+        companies: due.map((i) => i.application.company), followUpIds: due.map((i) => i.followUp.id),
+      });
+    }
+    return { count: items.filter((i) => !i.done).length + emails, items, groups, emailsToMatch: emails, comingUp, snoozeDays: followUpSettings().snoozeDays };
   }
 
   /** A follow-up the user acts on: it must exist and still be its Application's current one. */
