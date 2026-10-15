@@ -105,6 +105,17 @@ const learnsRules = (...rules: string[]) => (input: VoiceLearningInput): Learned
   rules: rules.map((r) => ({ id: null, text: r, evidence: "samples", language: null, sources: [input.excerpts[0]!.source] })),
 });
 
+describe("learning within the budget", () => {
+  it("sends nothing once the monthly cap is reached, and learns the rest when there's budget again", async () => {
+    const writer = fakeWriter();
+    const t = await withSamples({ writer, capUsd: 0 });
+
+    expect(await t.preparation.learnVoice()).toMatchObject({ calls: 0, stopped: "budget" });
+    expect(learnCalls(writer)).toEqual([]);
+    expect(t.preparation.voiceSends()).toEqual([]);
+  });
+});
+
 describe("the voice context a draft sends", () => {
   it("carries the rules and at most 150 words of excerpts in the draft's language, and records what it sent", async () => {
     const t = await withSamples({ writer: fakeWriter({ learnVoice: learnsRules("Opens with the company's problem, not with you", "Short declarative sentences") }) });
@@ -207,5 +218,29 @@ describe("a removed rule", () => {
     await t.preparation.addVoiceSamples([{ fileName: "cover-letter-halden.txt", bytes: text("Dear Halden team,\n\nYour release notes go unread.\n\nKind regards,\nMira Petrova") }]);
     await t.preparation.learnVoice();
     expect(t.preparation.voice().rules.map((r) => r.text)).toEqual(["Signs off \"Kind regards\""]);
+  });
+});
+
+describe("changing the samples", () => {
+  it("replaces an unreadable sample in its place with a readable one", async () => {
+    const t = await withSamples();
+    const [pages] = await t.preparation.addVoiceSamples([{ fileName: "cover-letter-2022.pages", bytes: text("PK pages") }]);
+
+    const replaced = await t.preparation.replaceVoiceSample(pages!.id, { fileName: "cover-letter-2022.txt", bytes: text("Dear Varna Telecom team,\n\nYour outage reports arrive a day late.") });
+
+    expect(replaced).toMatchObject({ fileName: "cover-letter-2022.txt", words: 11, problem: null });
+    expect(t.preparation.voice().samples.map((s) => s.fileName)).toEqual(["cover-letter-orbital-2023.docx", "about-page.txt", "cover-letter-2022.txt"]);
+  });
+
+  it("removes a sample with its copy, so drafts send nothing from it", async () => {
+    const t = await withSamples();
+    const letter = t.added[0]!;
+
+    expect(await t.preparation.removeVoiceSample(letter.id)).toBe(true);
+
+    expect(t.preparation.voice().samples.map((s) => s.fileName)).toEqual(["about-page.txt"]);
+    expect(t.preparation.voiceContext({ language: "en", purpose: "cover-letter" }).excerpts.map((e) => e.source)).toEqual([`sample:${t.added[1]!.id}`]);
+    expect([...(t.files as unknown as { files: Map<string, Uint8Array> }).files.keys()]).toHaveLength(1);
+    expect(await t.preparation.removeVoiceSample(letter.id)).toBe(false);
   });
 });

@@ -124,6 +124,8 @@ export interface VoiceStore {
   removeRule(id: string): boolean;
   recordEdit(edit: VoiceEditInput): boolean;
   setLearning(fromEdits: boolean): VoiceView;
+  remove(id: string): Promise<boolean>;
+  replace(id: string, file: VoiceSampleFile): Promise<VoiceSample | null>;
 }
 
 const CYRILLIC = /\p{Script=Cyrillic}/gu;
@@ -249,13 +251,13 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     return wordCount(text) === 0 ? { problem: problems.empty } : { text };
   }
 
-  async function add(files: VoiceSampleFile[]): Promise<VoiceSample[]> {
+  async function add(files: VoiceSampleFile[], at?: number): Promise<VoiceSample[]> {
     const added: VoiceSample[] = [];
     for (const file of files) {
       const stored = await deps.files.put(file.bytes);
       const read = await readText(file);
       const id = `voice-sample:${crypto.randomUUID()}`;
-      const position = Number(db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM voice_sample").get()?.p ?? 1);
+      const position = at ?? Number(db.prepare("SELECT COALESCE(MAX(position), 0) + 1 AS p FROM voice_sample").get()?.p ?? 1);
       const t = "text" in read ? read.text : null;
       db.prepare(
         `INSERT INTO voice_sample (id, position, file_name, sha256, size, kind, language, words, text, problem, added_at)
@@ -437,6 +439,28 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     return true;
   }
 
+  /** Deletes a sample and, unless something else keeps the same bytes, its copy in the file store. Rules learned stay. */
+  async function remove(id: string): Promise<boolean> {
+    const row = db.prepare("SELECT sha256 FROM voice_sample WHERE id = ?").get(id);
+    if (!row) return false;
+    db.prepare("DELETE FROM voice_sample WHERE id = ?").run(id);
+    const sha = String(row.sha256);
+    const stillUsed =
+      db.prepare("SELECT 1 AS x FROM voice_sample WHERE sha256 = ?").get(sha) ??
+      db.prepare("SELECT 1 AS x FROM import_item WHERE sha256 = ?").get(sha) ??
+      db.prepare("SELECT 1 AS x FROM profile_contact WHERE photo_sha256 = ?").get(sha);
+    if (!stillUsed) await deps.files.remove(sha);
+    return true;
+  }
+
+  /** Replace: the new file takes the old one's place in the list. */
+  async function replace(id: string, file: VoiceSampleFile): Promise<VoiceSample | null> {
+    const row = db.prepare("SELECT position FROM voice_sample WHERE id = ?").get(id);
+    if (!row) return null;
+    await remove(id);
+    return (await add([file], Number(row.position)))[0]!;
+  }
+
   /** Keeps an edit to a draft as evidence, unless learning from edits is paused or nothing changed. */
   function recordEdit(edit: VoiceEditInput): boolean {
     if (!learnFromEdits() || !editExcerpt(edit.before, edit.after)) return false;
@@ -468,12 +492,14 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
 
   return {
     view,
-    add,
+    add: (files) => add(files),
     learn,
     context,
     removeRule,
     recordEdit,
     setLearning,
+    remove,
+    replace,
     sends: () => db.prepare("SELECT * FROM voice_send ORDER BY at DESC, rowid DESC").all().map(rowToSend),
   };
 }

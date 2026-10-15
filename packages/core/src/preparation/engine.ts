@@ -170,6 +170,10 @@ export interface PreparationEngine {
    * text read here. One that can't be read says why and how to fix it; the others still count.
    */
   addVoiceSamples(files: VoiceSampleFile[]): Promise<VoiceSample[]>;
+  /** Replace: a new file in an (unreadable) sample's place. Null if there's no such sample. */
+  replaceVoiceSample(id: string, file: VoiceSampleFile): Promise<VoiceSample | null>;
+  /** Deletes a sample and its copy; drafts send nothing more from it. False if it was gone already. */
+  removeVoiceSample(id: string): Promise<boolean>;
   /**
    * Learns voice rules from what's new (unread parts of samples, edits not yet learned from), within
    * the monthly budget. No call sends more than VOICE_EXCERPT_WORDS words of Kris's writing, and each
@@ -272,6 +276,8 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     answerHistory: (id) => answers.history(id),
     voice: () => voice.view(),
     addVoiceSamples: (files) => voice.add(files),
+    replaceVoiceSample: (id, file) => voice.replace(id, file),
+    removeVoiceSample: (id) => voice.remove(id),
     learnVoice: () => voice.learn(),
     voiceSends: () => voice.sends(),
     removeVoiceRule: (id) => voice.removeRule(id),
