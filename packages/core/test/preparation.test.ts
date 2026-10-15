@@ -31,6 +31,21 @@ describe("the shared monthly AI budget", () => {
     expect(t.preparation.budget()).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0.008, reached: true });
   });
 
+  it("keeps reading postings after a writer call too big for what's left was refused", async () => {
+    // A big import is estimated at $0.02, over the whole $0.01 cap; each read costs $0.004.
+    const writer = fakeWriter({}, { estimateUsd: 0.02 });
+    const extractor = fakeExtractor({}, { costUsd: 0.004 });
+    const t = await withKestrelJobs({ capUsd: 0.01, extractor, writer });
+
+    const drafted = await t.budget.call({ task: "draft-pieces", estimateUsd: 0.02 }, () => writer.draftPieces(cvText));
+    const budgetAfterRefusal = t.preparation.budget();
+    const read = await t.discovery.readPending();
+
+    expect(drafted).toEqual({ refused: true });
+    expect(budgetAfterRefusal).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0, reached: false });
+    expect(read).toMatchObject({ read: 2, unscreened: 0 });
+  });
+
   it("leaves postings unscreened once writing has used the cap", async () => {
     const writer = fakeWriter({}, { costUsd: 0.008 });
     const extractor = fakeExtractor({}, { costUsd: 0.004 });

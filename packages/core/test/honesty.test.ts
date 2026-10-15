@@ -154,6 +154,27 @@ describe("Kris's own wording (#64)", () => {
     expect(checkWording(text, ["detections"], profile)).toEqual([{ rule, message }]);
   });
 
+  it.each([
+    ["at the start of the line", "Kubernetes rollout: wrote 30 detection rules"],
+    ["after a full stop", "Wrote 30 detection rules. Splunk dashboards for each"],
+    ["after a bullet", "• Terraform modules for 30 detection rules"],
+  ])("refuses a name %s that isn't in the profile", (_, text) => {
+    expect(checkWording(text, ["detections"], profile)).toEqual([expect.objectContaining({ rule: "skill" })]);
+  });
+
+  it.each([
+    "Led the work on 30 detection rules",
+    "Built 30 detection rules",
+    "Cut false alerts by about a third with 30 detection rules",
+    "Automated 30 detection rules",
+    "Reviewing alerts daily, wrote 30 detection rules",
+    "Wazuh: wrote 30 detection rules",
+    "Over the year, wrote 30 detection rules. Then tuned them",
+    "Написах 30 правила за откриване",
+  ])("doesn't take an ordinary word starting a sentence for a name: %s", (text) => {
+    expect(checkWording(text, ["detections"], profile)).toEqual([]);
+  });
+
   it("refuses an empty wording", () => {
     expect(checkWording("  ", ["detections"], profile)).toEqual([{ rule: "citation", message: "is empty" }]);
   });
@@ -232,5 +253,58 @@ describe("every refused line, in full (for the tailoring evaluation, #69)", () =
     const v = validateCv(output({ roles: [analystRole([line("Led detection engineering, cutting false alerts by about a third", ["detections"], "stronger")])] }), profile);
     expect(v.heldBack).toBe(1);
     expect(v.rejected).toEqual([]);
+  });
+});
+
+describe("numbers as people write them (review fixes)", () => {
+  /** Made-up pieces with counts, under the analyst role. */
+  const counted: HonestyProfile = {
+    ...profile,
+    pieces: [
+      ...pieces,
+      piece({ id: "regions", kind: "achievement", belongsTo: "analyst", text: "Served customers in 2 regions.", numberSource: "measured" }),
+      piece({ id: "users", kind: "achievement", belongsTo: "analyst", text: "Rolled out phishing training to 1,500 users.", numberSource: "measured" }),
+      piece({ id: "onboarded", kind: "achievement", belongsTo: "analyst", text: "Onboarded 200 customers to the alert portal.", numberSource: "measured" }),
+      piece({ id: "nearly", kind: "achievement", belongsTo: "analyst", text: "Cut phishing clicks by nearly 30%.", numberSource: "measured" }),
+      piece({ id: "bare", kind: "achievement", belongsTo: "analyst", text: "Cut duplicate tickets by 30%.", numberSource: "measured" }),
+      piece({ id: "respond", kind: "achievement", belongsTo: "analyst", text: "Cut the time to respond to 2,5 hours.", numberSource: "told" }),
+    ],
+  };
+
+  it("reads a thousands separator as thousands, not as a decimal point", () => {
+    expect(checkWording("Served 1,900 customers", ["regions"], counted)).toEqual([{ rule: "number", message: "says \"1,900\", which its piece doesn't back" }]);
+    expect(checkWording("Rolled out phishing training to 1500 users", ["users"], counted)).toEqual([]);
+    expect(checkWording("Rolled out phishing training to 1 500 users", ["users"], counted)).toEqual([]);
+    // A comma before fewer (or more) than three digits is still a decimal comma.
+    expect(checkWording("Cut the time to respond to 2.5 hours", ["respond"], counted)).toEqual([]);
+  });
+
+  it("reads a four-digit number as a count unless it reads like a date", () => {
+    expect(checkWording("Onboarded 2000 customers to the alert portal", ["onboarded"], counted)).toEqual([{ rule: "number", message: "says \"2000\", which its piece doesn't back" }]);
+    for (const dated of [
+      "In 2023 onboarded 200 customers to the alert portal",
+      "Onboarded 200 customers to the alert portal since 2019",
+      "Onboarded 200 customers to the alert portal (2019–2022)",
+      "Onboarded 200 customers to the alert portal from 2019 to 2022",
+      "Onboarded 200 customers to the alert portal, 2024 г.",
+      "През 2024 onboarded 200 customers to the alert portal",
+    ]) expect(checkWording(dated, ["onboarded"], counted), dated).toEqual([]);
+  });
+
+  it.each([
+    ["drops \"nearly\"", "Cut phishing clicks by 30%", "nearly", "30%"],
+    ["turns \"nearly\" into \"over\"", "Cut phishing clicks by over 30%", "nearly", "over 30%"],
+    ["turns \"nearly\" into \"about\"", "Cut phishing clicks by about 30%", "nearly", "about 30%"],
+    ["adds \"over\" to a bare number", "Cut duplicate tickets by over 30%", "bare", "over 30%"],
+  ])("refuses a number that %s: the claim is stronger than its source", (_, text, id, raw) => {
+    expect(checkWording(text, [id], counted)).toEqual([{ rule: "number", message: `says "${raw}", which its piece doesn't back` }]);
+  });
+
+  it.each([
+    ["keeps the source's hedge", "Cut phishing clicks by almost 30%", "nearly"],
+    ["hedges a bare number", "Cut duplicate tickets by about 30%", "bare"],
+    ["hedges a bare number downwards", "Cut duplicate tickets by nearly 30%", "bare"],
+  ])("allows a number that %s", (_, text, id) => {
+    expect(checkWording(text, [id], counted)).toEqual([]);
   });
 });

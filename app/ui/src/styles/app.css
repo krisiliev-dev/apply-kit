@@ -267,11 +267,11 @@ h2[tabindex="-1"]:focus { outline: none }
 
 /* Profile (from the Profile hi-fi): master profile, Edit piece, contact. Tokens only. */
 .local { display: inline-flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; font-size: var(--fs-small); color: var(--ink-2) }
-.local svg { width: 14px; height: 14px; color: var(--action); flex: none }
-.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--s-6); align-items: start }
+.local svg { width: var(--icon-s); height: var(--icon-s); color: var(--action); flex: none }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(var(--w-side-min), var(--w-side)); gap: var(--s-6); align-items: start }
 .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
 @media (max-width: 960px) { .cols { grid-template-columns: minmax(0, 1fr) } }
-.form { max-width: 640px; display: grid; gap: var(--s-6); min-width: 0 }
+.form { max-width: var(--w-form); display: grid; gap: var(--s-6); min-width: 0 }
 .form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
 .form fieldset:focus { outline: none }
 .form legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
@@ -279,20 +279,20 @@ h2[tabindex="-1"]:focus { outline: none }
 .form .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
 .form .help { font-size: var(--fs-caption); color: var(--ink-3) }
 .field .label { font-weight: 600; font-size: var(--fs-small) }
-.textarea { font: inherit; width: 100%; min-height: 88px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); resize: vertical; line-height: var(--lh-body) }
+.textarea { font: inherit; width: 100%; min-height: var(--h-textarea); padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); resize: vertical; line-height: var(--lh-body) }
 .textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
 .textarea[aria-invalid="true"], .input[aria-invalid="true"] { border-color: var(--gap); box-shadow: 0 0 0 3px var(--gap-soft) }
 .errsum { display: grid; gap: var(--s-2) }
 .errsum:focus { outline: 2px solid var(--focus); outline-offset: 2px }
 .errsum ul { margin: 0; padding-left: var(--s-6) }
 .errsum a { color: inherit }
-.chips-edit { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; padding: var(--s-2) var(--s-3); border: 1px solid var(--border-control); border-radius: var(--r-control); background: var(--surface); min-height: 40px }
-.chips-edit .chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 var(--s-1); min-width: 24px; min-height: 24px }
-.chips-edit input { border: 0; outline: 0; font: inherit; flex: 1 1 120px; min-width: 80px; background: transparent; color: var(--ink) }
+.chips-edit { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; padding: var(--s-2) var(--s-3); border: 1px solid var(--border-control); border-radius: var(--r-control); background: var(--surface); min-height: var(--h-control) }
+.chips-edit .chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 var(--s-1); min-width: var(--s-7); min-height: var(--s-7) }
+.chips-edit input { border: 0; outline: 0; font: inherit; flex: 1 1 var(--w-chip-input); min-width: var(--w-chip-input-min); background: transparent; color: var(--ink) }
 .chips-edit:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4) }
 @media (max-width: 640px) { .pair { grid-template-columns: 1fr } }
-.pieces-search { flex: 1 1 220px; max-width: 320px }
+.pieces-search { flex: 1 1 var(--w-search-min); max-width: var(--w-search) }
 .angle-select { width: auto }
 .group .show-more { justify-self: start }
 .piece:focus { outline: 2px solid var(--focus); outline-offset: 2px }
@@ -301,7 +301,7 @@ h2[tabindex="-1"]:focus { outline: none }
 /* Answer bank and Edit answer (from the Profile hi-fi). Tokens only. */
 .answers-head { padding: var(--s-5) var(--s-6) var(--s-4) }
 .answers-toolbar { padding: 0 var(--s-6) var(--s-4) }
-.answers-search { flex: 1 1 220px; max-width: 320px }
+.answers-search { flex: 1 1 var(--w-search-min); max-width: var(--w-search) }
 .answers-none, .answers-pages { padding: var(--s-4) var(--s-6) }
 .answers-head h2:focus { outline: none }
 .answers-table .ans { max-width: 46ch; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
@@ -309,25 +309,25 @@ h2[tabindex="-1"]:focus { outline: none }
 .answers-table .q { font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px }
 .answers-table .q:hover { text-decoration-color: var(--action) }
 .needs-acts { flex-wrap: wrap; gap: var(--s-2) }
-@media (max-width: 640px) { .needs { grid-template-columns: 4px minmax(0, 1fr) } .needs-acts { grid-column: 2 } }
+@media (max-width: 640px) { .needs { grid-template-columns: var(--s-2) minmax(0, 1fr) } .needs-acts { grid-column: 2 } }
 .textarea.short { min-height: var(--s-10) }
 .answer-type { width: auto; max-width: 100% }
 .answer-floor { max-width: 12ch }
 .wordings { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--rule); border-radius: var(--r-control) }
 .wordings li { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; padding: var(--s-2) var(--s-3); border-top: 1px solid var(--rule); font-size: var(--fs-small); overflow-wrap: anywhere }
 .wordings li:first-child { border-top: 0 }
-.wordings li > span:first-child { flex: 1 1 200px }
-.form .row .input.grow { flex: 1 1 200px; width: auto }
+.wordings li > span:first-child { flex: 1 1 var(--w-field-min) }
+.form .row .input.grow { flex: 1 1 var(--w-field-min); width: auto }
 
 /* Angles (from the Profile hi-fi, state Angles). Tokens only. */
 .measure { max-width: 68ch }
-.angles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s-5); align-items: start }
+.angles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--w-card-min)), 1fr)); gap: var(--s-5); align-items: start }
 .angle { display: grid; gap: var(--s-4); min-width: 0 }
 .angle ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
-.angle.thin { border-left: 4px solid var(--partly) }
+.angle.thin { border-left: var(--s-2) solid var(--partly) }
 .angle .thin-why { color: var(--partly); margin: 0 }
 .angle > .btn { justify-self: start }
-.reorder { width: min(640px, calc(100vw - var(--s-8))) }
+.reorder { width: min(var(--w-form), calc(100vw - var(--s-8))) }
 .reorder h2:focus { outline: none }
 .lead-order { list-style: none; margin: 0; padding: 0; display: grid }
 .lead-order li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; padding: var(--s-3) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
@@ -342,7 +342,7 @@ h2[tabindex="-1"]:focus { outline: none }
 .setup .head { display: grid; gap: var(--s-2); max-width: 72ch }
 .setup .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
 .setup .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
-@media (min-width: 961px) and (min-height: 820px) { .setup .side { position: sticky; top: 96px } }
+@media (min-width: 961px) and (min-height: 820px) { .setup .side { position: sticky; top: calc(var(--s-10) + var(--s-9)) } }
 .setup .privacy ul, .setup .next ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
 .setup .links { display: grid; gap: var(--s-4) }
 .setup .scope { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0; padding: 0; list-style: none }
@@ -367,13 +367,13 @@ h2[tabindex="-1"]:focus { outline: none }
 .setup .draft-group .show-more { justify-self: start }
 .setup .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
 .setup .segmented button { white-space: nowrap }
-.setup .piece.confirmed { border-left: 4px solid var(--met) }
+.setup .piece.confirmed { border-left: var(--s-2) solid var(--met) }
 .setup .dispute { border: 0; margin: 0; padding: 0; min-width: 0 }
 .setup .dispute .opt .meta { display: block }
-.setup .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--s-4) }
+.setup .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--w-tile-min)), 1fr)); gap: var(--s-4) }
 .setup .tally .panel { gap: var(--s-2) }
 .setup .tally .big { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; font-variant-numeric: tabular-nums }
-.setup .learning { border-left: 4px solid var(--action) }
+.setup .learning { border-left: var(--s-2) solid var(--action) }
 .setup .learning p { max-width: 68ch }
 .setup .empty h1 { font-size: var(--fs-h3) }
 /* Profile › Voice (from the Profile hi-fi, state Voice samples). Tokens only. */
@@ -416,7 +416,7 @@ h2[tabindex="-1"]:focus { outline: none }
 .pdf-page .textLayer > :not(.markedContent), .pdf-page .textLayer .markedContent span:not(.markedContent) { --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)) }
 .pdf-page .textLayer .markedContent { display: contents }
 .pdf-page .textLayer ::selection { background: var(--bloom-soft) }
-.pkg-chip svg { width: 11px; height: 11px }
+.pkg-chip svg { width: var(--icon-xs); height: var(--icon-xs) }
 /* the CV version (#63): notes, and every line with its pieces */
 .package-page .notes { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
 .package-page .cv-lines summary { cursor: pointer }

@@ -9,6 +9,7 @@ import type { BudgetInfo } from "../budget.ts";
 import type { DraftedPieces } from "../writing/writer.ts";
 import { disagrees, isNearDuplicate } from "./duplicates.ts";
 import { docxText, fileTypeOf, pdfPlainText, plainText, quoteIsIn, type ImportFileType } from "./extract.ts";
+import { isFileReferenced } from "./file-references.ts";
 import { linkedInPieces } from "./linkedin.ts";
 import type { PreparationDeps } from "./ports.ts";
 import type { PieceEntry, PieceKind, PieceSource, ProfileStore } from "./profile.ts";
@@ -505,8 +506,7 @@ export function createImportStore(deps: PreparationDeps, profile: ProfileStore):
         const old = item.sha256;
         update(itemId, { name: choice.file.fileName, type: item.source === "linkedin" ? "zip" : stored.type, sha256: stored.sha256, size: stored.size, recognised: 0, text: null, detail: null });
         // The unreadable copy goes, unless something else still uses it.
-        if (old && old !== stored.sha256 && !db.prepare("SELECT 1 AS x FROM import_item WHERE sha256 = ?").get(old)
-          && !db.prepare("SELECT 1 AS x FROM profile_contact WHERE photo_sha256 = ?").get(old)) await deps.files.remove(old);
+        if (old && old !== stored.sha256 && !isFileReferenced(db, old)) await deps.files.remove(old);
       }
       return { resolved: true, ...enqueue(runId, [itemId]) };
     },

@@ -7,13 +7,14 @@
 //   belong to the role it sits under.
 // - Skills: every skill listed is a skill piece; a line names nothing (a tool, an employer) that
 //   isn't somewhere in the profile.
-// - Numbers: every number is in the cited pieces, within the rounding their number source allows;
-//   years of experience are at most what the cited roles' dates add up to.
+// - Numbers: every number is in the cited pieces, within the rounding their number source allows and
+//   keeping the piece's hedge (not "30%" or "over 30%" for "nearly 30%", see `keepsHedge`); years of
+//   experience are at most what the cited roles' dates add up to.
 // - Soft rule: a "stronger" claim is a near-the-line edit. It is held back (the piece's wording is
 //   used) and becomes a flag for Kris to decide (#64): the stronger draft is never offered, the
 //   writer's honest wording is, once it passes the hard rules, and so is Kris's own (checkWording).
 import type { TailoredCv, TailoredLine } from "../writing/writer.ts";
-import { closest, quantities, within } from "./numbers.ts";
+import { closest, exactly, quantities, within } from "./numbers.ts";
 import type { NumberSource, ProfilePiece } from "./profile.ts";
 
 export interface HonestyProfile {
@@ -103,10 +104,37 @@ export const lineText = (p: ProfilePiece) => p.text.trim().replace(/\.$/, "");
 
 const token = /[\p{L}\p{N}][\p{L}\p{N}+#./-]*[\p{L}\p{N}+#]|[\p{L}\p{N}]/gu;
 
+// Words that often start a sentence in a CV line or letter and aren't names. A Latin-script word
+// starting a sentence is a name ("Kubernetes rollout…") unless it is one of these, reads as a verb
+// form ("Automated", "Reviewing"), is a compound in lower case after its hyphen ("Final-year",
+// "Hands-on"), or is in the profile (checked by the caller). Cyrillic words
+// starting a sentence aren't taken for names: tools and employers in Bulgarian lines are in Latin script.
+const ordinaryStarts = new Set(`
+  a an the i we my our your you he she it they this that these those there here
+  at in on by for from with without after before during since over under across through into to as
+  and but or so yet if when while where what why how who which each every all both most many some more less
+  also then now still today again once first next last later finally recently currently previously together overall
+  not no yes dear hello hi kind best regards thanks thank sincerely please happy glad
+  could would should can will may might must are is was were be been have has had do did does
+  go get got make made take took see saw let help lead led build built run ran cut set put read
+  write wrote own grew grow drive drove keep kept win won bring brought teach taught begin began give gave
+  find found hold held speak spoke choose chose become became sell sold meet met ship spent spend
+  junior senior lead principal staff recent aspiring former seasoned motivated final student graduate
+  engineer developer analyst designer manager specialist consultant researcher intern
+  one two three four five six seven eight nine ten half about around nearly almost up
+`.split(/\s+/).filter(Boolean));
+
+function ordinaryStart(word: string): boolean {
+  const w = word.toLowerCase();
+  if (!/^\p{Script=Latin}/u.test(word)) return true;
+  return ordinaryStarts.has(w) || (w.length >= 5 && /ed$/.test(w)) || (w.length >= 7 && /ing$/.test(w)) || /^\p{Lu}\p{Ll}+(?:-\p{Ll}+)+$/u.test(word);
+}
+
 /**
- * The words in a line that name something (a tool, an employer, a place): a capitalised word that
- * doesn't start a sentence, a word with capitals inside it ("SIEM", "PowerShell"), or letters and
- * digits mixed ("k3s"). Ordinary words, including the posting's term for the same thing, aren't names.
+ * The words in a line that name something (a tool, an employer, a place): a capitalised word (one
+ * starting a sentence too, unless it's an ordinary word, see `ordinaryStart`), a word with capitals
+ * inside it ("SIEM", "PowerShell"), or letters and digits mixed ("k3s"). Ordinary words, including
+ * the posting's term for the same thing, aren't names.
  */
 function namesIn(text: string): string[] {
   const out: string[] = [];
@@ -117,7 +145,7 @@ function namesIn(text: string): string[] {
     const starts = before === "" || /[.!?:;(•–—-]$/.test(before);
     const inner = /\p{Lu}/u.test(w.slice(1));
     const mixed = /\p{L}/u.test(w) && /\p{N}/u.test(w) && !/^\d+(k|m|x|%)?$/i.test(w);
-    if (inner || mixed || (/^\p{Lu}/u.test(w) && !starts)) out.push(w);
+    if (inner || mixed || (/^\p{Lu}/u.test(w) && !(starts && ordinaryStart(w)))) out.push(w);
   }
   return out;
 }
@@ -182,7 +210,7 @@ function lineProblems(line: TailoredLine, ctx: Context): HonestyProblem[] {
     const backed = pieces.some((p) => {
       const source = closest(q, quantities(p.text, { source: true }));
       if (!source) return false;
-      return roundingRules[p.numberSource ?? "none"] === "favourable" ? within(q, source) : Math.abs(q.value - source.value) < 1e-9;
+      return roundingRules[p.numberSource ?? "none"] === "favourable" ? within(q, source) : exactly(q, source);
     });
     if (!backed) problems.push({ rule: "number", message: `says "${q.raw}", which its piece doesn't back` });
   }

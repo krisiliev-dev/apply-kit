@@ -237,7 +237,7 @@ describe("the monthly AI budget during import", () => {
       ["CV-2023.docx", "waiting", "budget"],
       ["Basic_LinkedInDataExport.zip", "done", null],
     ]);
-    expect(t.status).toMatchObject({ pieces: 6, waitingCostUsd: 0.006, budget: { reached: true } });
+    expect(t.status).toMatchObject({ pieces: 6, waitingCostUsd: 0.006, budget: { spentUsd: 0.006, reached: false } });
     expect(writer.calls).toHaveLength(1);
 
     t.clock.set("2026-11-01T07:00:00Z");

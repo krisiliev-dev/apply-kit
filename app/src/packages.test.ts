@@ -48,6 +48,34 @@ describe("packages folder", () => {
     expect(new TextDecoder().decode((await folder.read(frozen.path))!)).toBe("%PDF approved");
   });
 
+  it("freezes the same bytes again as the file already there (a retried approval), and refuses other bytes", async () => {
+    const dataDir = freshDir();
+    const folder = createPackageFolder(dataDir);
+    const first = await folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF approved"));
+
+    const again = await folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF approved"));
+
+    expect(again).toEqual(first);
+    await expect(folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF changed"))).rejects.toThrow();
+    expect(new TextDecoder().decode((await folder.read(first.path))!)).toBe("%PDF approved");
+  });
+
+  it("never replaces a copy in the Packages folder: a later version, or another package with the same name, gets its own", async () => {
+    const packagesDir = join(freshDir(), "apply-kit Packages");
+    const folder = createPackageFolder(freshDir(), packagesDir);
+    const name = "Mira_Petrova_CV_Kestrel.pdf";
+
+    const v1 = await folder.freeze("p1", 1, name, bytes("%PDF sent first"));
+    const v2 = await folder.freeze("p1", 2, name, bytes("%PDF sent second"));
+    const other = await folder.freeze("p2", 1, name, bytes("%PDF another role"));
+    const retried = await folder.freeze("p1", 1, name, bytes("%PDF sent first"));
+
+    expect([v1.copy, v2.copy, other.copy, retried.copy]).toEqual(
+      ["Mira_Petrova_CV_Kestrel.pdf", "Mira_Petrova_CV_Kestrel_v2.pdf", "Mira_Petrova_CV_Kestrel_2.pdf", "Mira_Petrova_CV_Kestrel.pdf"].map((f) => join(packagesDir, f)),
+    );
+    expect([v1, v2, other].map((f) => readFileSync(f.copy!, "utf8"))).toEqual(["%PDF sent first", "%PDF sent second", "%PDF another role"]);
+  });
+
   it("still freezes when the Packages folder can't be written, with no copy", async () => {
     const dataDir = freshDir();
     const folder = createPackageFolder(dataDir, "/dev/null/apply-kit Packages");

@@ -2255,11 +2255,23 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     };
   }
 
+  /** The approval running for each package: approvals of one package run one after another. */
+  const approving = new Map<string, Promise<ApproveResult>>();
+
   /**
    * Approves the package: every step approved and the ATS check passing (or its failing checks
-   * accepted knowingly). The CV and letter PDFs are frozen by SHA-256 as the next version.
+   * accepted knowingly). The CV and letter PDFs are frozen by SHA-256 as the next version. A second
+   * Approve waits for the first (and then finds the package approved); a retry after a failure
+   * freezes the same version again, reusing a file already frozen with the same bytes.
    */
-  async function approvePackage(id: string, { acceptFailingChecks = false }: { acceptFailingChecks?: boolean } = {}): Promise<ApproveResult> {
+  function approvePackage(id: string, options: { acceptFailingChecks?: boolean } = {}): Promise<ApproveResult> {
+    const run = (approving.get(id) ?? Promise.resolve()).catch(() => undefined).then(() => approveNow(id, options));
+    approving.set(id, run);
+    run.finally(() => { if (approving.get(id) === run) approving.delete(id); }).catch(() => undefined);
+    return run;
+  }
+
+  async function approveNow(id: string, { acceptFailingChecks = false }: { acceptFailingChecks?: boolean }): Promise<ApproveResult> {
     const r = mustGet(id);
     if (r.approvedVersion !== null) return { approved: true, package: view(r) };
     const block = blockOf(r, parts(id), "ats");

@@ -66,7 +66,8 @@ export interface PackageFolder {
   /**
    * Freezes an approved file: written once to "packages/<id>/v<version>/<file name>" and never
    * rewritten, and copied to Kris's Packages folder (a setting, inside Documents by default). `copy`
-   * is where the copy went, or null if it couldn't be written (the frozen file still counts).
+   * is where the copy went, or null if it couldn't be written (the frozen file still counts). Freezing
+   * the same bytes again (a retried approval) returns the file already there; different bytes throw.
    */
   freeze(packageId: string, version: number, fileName: string, bytes: Uint8Array): Promise<{ path: string; copy: string | null }>;
   /** The file at a path `saveDraft` or `freeze` returned, or null if it isn't there (any other path is refused). */
