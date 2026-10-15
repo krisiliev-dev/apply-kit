@@ -105,6 +105,38 @@ describe("approving the package", () => {
 });
 
 describe("frozen files", () => {
+  it("approves once when Approve is pressed twice at once: one version, frozen once", async () => {
+    const folder = memoryPackageFolder();
+    const t = mira({ packages: folder });
+    const pkg = await upToAts(t);
+
+    const [first, second] = await Promise.all([t.preparation.approvePackage(pkg.id), t.preparation.approvePackage(pkg.id)]);
+
+    expect(first).toMatchObject({ approved: true, package: { approved: { version: 1 } } });
+    expect(second).toMatchObject({ approved: true, package: { approved: { version: 1 } } });
+    expect([...folder.files.keys()].filter((p) => p.includes("/v")).map((p) => p.split("/")[2])).toEqual(["v1", "v1"]);
+  });
+
+  it("approves on a retry after freezing failed part-way, reusing the file already frozen", async () => {
+    const folder = memoryPackageFolder();
+    let failLetter = true;
+    const t = mira({
+      packages: {
+        ...folder,
+        async freeze(packageId, version, fileName, bytes) {
+          if (fileName.includes("Cover_Letter") && failLetter) { failLetter = false; throw new Error("The disk is full"); }
+          return folder.freeze(packageId, version, fileName, bytes);
+        },
+      },
+    });
+    const pkg = await upToAts(t);
+
+    await expect(t.preparation.approvePackage(pkg.id)).rejects.toThrow("The disk is full");
+    const retried = await t.preparation.approvePackage(pkg.id);
+
+    expect(retried).toMatchObject({ approved: true, package: { approved: { version: 1, cv: { file: { path: `packages/${pkg.id}/v1/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf` } } } } });
+  });
+
   it("freezes the CV and letter PDFs by SHA-256 as version 1, copied to the Packages folder", async () => {
     const folder = memoryPackageFolder();
     const t = mira({ packages: folder });

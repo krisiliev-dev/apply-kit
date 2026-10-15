@@ -121,6 +121,22 @@ describe("the honesty checks on saving a piece", () => {
     expect(t.preparation.piece(drafted.piece.id)).toMatchObject({ text: "Built 40 Splunk detections that cut false positives by about a third.", source: imported });
   });
 
+  it("refuses a number that drops its source's \"nearly\", offering fixes that keep it", () => {
+    const t = createTestPreparation();
+    const source = { from: "mira-petrova-cv.pdf, page 1", quote: "Cut phishing clicks by nearly a third." };
+
+    const saved = t.preparation.savePiece({ kind: "achievement", text: "Cut phishing clicks by 33%.", numberSource: "measured" }, source);
+
+    expect(saved).toMatchObject({
+      saved: false,
+      problems: [{ field: "text", fixes: [
+        { label: "Use \"nearly a third\"", text: "Cut phishing clicks by nearly a third." },
+        { label: "Use \"nearly 33%\"", text: "Cut phishing clicks by nearly 33%." },
+      ] }],
+    });
+    expect(t.preparation.savePiece({ kind: "achievement", text: "Cut phishing clicks by nearly 33%.", numberSource: "measured" }, source)).toMatchObject({ saved: true });
+  });
+
   it("reads numbers written as words in the source", () => {
     const t = createTestPreparation();
     const coach = { from: "Coach interview", quote: "I led one phishing incident and helped with two more" };
@@ -170,6 +186,15 @@ describe("the honesty checks on saving a piece", () => {
     const saved = t.preparation.savePiece({ kind: "achievement", text: "Moved the SOC's runbooks to the wiki in 2024.", numberSource: "measured" });
 
     expect(saved).toMatchObject({ saved: true, piece: { numberSource: null } });
+  });
+
+  it("asks where a number in the 1950–2099 range comes from when it's a count, not a date", () => {
+    const t = createTestPreparation();
+
+    const saved = t.preparation.savePiece({ kind: "achievement", text: "Onboarded 2000 customers to the alert portal." });
+
+    expect(saved).toEqual({ saved: false, problems: [{ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] }] });
+    expect(t.preparation.savePiece({ kind: "achievement", text: "Moved the SOC's runbooks to the wiki in March 2024." })).toMatchObject({ saved: true });
   });
 });
 
@@ -292,6 +317,19 @@ describe("contact details and links", () => {
     expect(stored).toEqual([second.saved && second.contact.photo!.sha256]);
     expect(removed.photo).toBeNull();
     expect((t.files as ReturnType<typeof memoryFileStore>).files.size).toBe(0);
+  });
+
+  it("keeps the photo's copy when something else still uses the same file", async () => {
+    const t = createTestPreparation();
+    t.preparation.saveContact(mira);
+    // The same picture was also added, by mistake, as a voice sample.
+    await t.preparation.addVoiceSamples([{ fileName: "mira.png", bytes: png }]);
+    const set = await t.preparation.setPhoto({ fileName: "mira.png", bytes: png });
+    if (!set.saved) throw new Error("not saved");
+
+    await t.preparation.removePhoto();
+
+    expect(await t.files.get(set.contact.photo!.sha256)).toEqual(png);
   });
 
   it("refuses a photo that isn't a JPEG or PNG", async () => {

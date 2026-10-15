@@ -148,7 +148,8 @@ export function memoryPackageFolder(): PackageFolder & { files: Map<string, Uint
     },
     async freeze(packageId, version, fileName, bytes) {
       const path = `packages/${packageId}/v${version}/${fileName}`;
-      if (files.has(path)) throw new Error(`Already frozen: ${path}`);
+      const frozen = files.get(path);
+      if (frozen && Buffer.compare(frozen, bytes) !== 0) throw new Error(`Already frozen with other bytes: ${path}`);
       files.set(path, new Uint8Array(bytes));
       return { path, copy: `Packages/${fileName}` };
     },

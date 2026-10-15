@@ -324,7 +324,8 @@ describe("stopping, the cap and failures", () => {
     expect(pkg.parts[1]).toMatchObject({ part: "cv", state: "not-written", what: "Not written: this month's AI budget would be crossed.", costUsd: 0 });
     expect(pkg.parts[0]).toMatchObject({ part: "target", state: "done" });
     expect(pkg.steps[1]).toMatchObject({ sub: "Not written" });
-    expect(t.preparation.budget()).toMatchObject({ spentUsd: 0, reached: true });
+    // The cap isn't reached for posting reads: only this part didn't fit.
+    expect(t.preparation.budget()).toMatchObject({ spentUsd: 0, reached: false });
   });
 
   it("retries a failed part once by itself, then shows it failed with the reason, keeping the rest", async () => {
