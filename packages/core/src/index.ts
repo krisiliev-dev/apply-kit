@@ -51,12 +51,14 @@ export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, T
 export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
-  NextUp, NeedsYou, NeedsYouEntry, ComingUp, FollowUpDraft, FollowUpEventKind,
+  NextUp, NeedsYou, NeedsYouEntry, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft,
 } from "./tracker.ts";
-export { defaultFollowUpSettings } from "./follow-ups.ts";
-export type { FollowUp, FollowUpKind, FollowUpSettings } from "./follow-ups.ts";
+export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
+export type {
+  DraftInput, DraftKind, DraftOutput, FollowUp, FollowUpDraftText, FollowUpKind, FollowUpSettings, MasterProfile, ProfileEvidence, VoiceSamples,
+} from "./follow-ups.ts";
 export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";
-export { emailKinds, emailClassificationSchema, highConfidence } from "./track-mail.ts";
+export { draftOutputSchema, emailKinds, emailClassificationSchema, highConfidence } from "./track-mail.ts";
 export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } from "./track-mail.ts";
 export type {
   EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed,

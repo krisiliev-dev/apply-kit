@@ -8,8 +8,8 @@ import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
 import {
-  addDays, daysBetween, defaultFollowUpSettings, outlineOf, parseFollowUpSettings,
-  type FollowUp, type FollowUpKind, type FollowUpSettings,
+  addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
+  type DraftInput, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
 } from "./follow-ups.ts";
 import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
@@ -19,7 +19,7 @@ import type { Clock, MailAttachment, MailMessage, SqlDatabase } from "./ports.ts
 import { migrate } from "./schema.ts";
 import { computeStats, type TrackStats } from "./track-stats.ts";
 import {
-  baseDomain, classifyInput, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
+  baseDomain, classifyInput, draftOutputSchema, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
   isAtsDomain, isBoardDomain, isJobAlert, isSharedProvider, namesCompany, namesTitle, quoteOf, replyKinds, ruleClassify, senderOf,
   type EmailClassification, type EmailKind, type TrackAssistant,
 } from "./track-mail.ts";
@@ -416,11 +416,27 @@ export interface NeedsYou {
   snoozeDays: number;
 }
 
-/** A follow-up opened to write: the outline (no model call), and how to send it from the user's own mail. */
+/**
+ * Why a follow-up has no draft, so the page can say so: this month's AI budget is used up (it ran out
+ * on the day of its last spending and resets on the 1st), AI isn't set up (no key, or no monthly
+ * budget), or the draft didn't come out right (the outline stands in).
+ */
+export type NoDraft =
+  | { reason: "budget-out"; capUsd: number; ranOutOn: string | null; resetsOn: string }
+  | { reason: "no-ai" }
+  | { reason: "failed"; why: string };
+
+/** A follow-up opened to write: the draft (or why there's none), the outline, and how to send it from the user's own mail. */
 export interface FollowUpDraft {
   followUp: FollowUp;
   application: ApplicationSummary;
-  /** The points to cover, from the Application, its posting and the user's notes. */
+  /** The text to show: as the user typed it, else the draft, else empty. */
+  text: string;
+  /** The Track assistant's draft, made once within the AI budget; null for a note to self or when there's none. */
+  draft: FollowUpDraftText | null;
+  /** Why a message has no draft; null when it has one, and for a note to self. */
+  noDraft: NoDraft | null;
+  /** The points to cover, from the Application, its posting and the user's notes (no model call). */
   outline: string[];
   /** For "Open in Mail": the recipient (null when only a domain is known) and the subject. Null for a note to self. */
   mail: { to: string | null; subject: string } | null;
@@ -529,6 +545,10 @@ export interface TrackerDeps {
   aiMonthlyCapUsd?: number;
   /** The user's own addresses: mail from them is a sent copy, left for follow-ups. */
   ownAddresses?: string[];
+  /** The Master profile, for drafts' evidence (Prepare's; without it drafts carry no numbers about the user). */
+  profile?: MasterProfile;
+  /** The user's past writing (Prepare's voice samples), beside the follow-up edits Track keeps itself. */
+  voice?: VoiceSamples;
 }
 
 const statusLabel: Record<Status, string> = {
@@ -558,7 +578,7 @@ const movesStatus = "(kind IN ('created', 'status') OR (kind = 'email' AND to_st
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [] }: TrackerDeps): Tracker {
+export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice }: TrackerDeps): Tracker {
   migrate(db);
   const now = () => clock.now().toISOString();
   const today = () => sofiaDay(clock.now());
@@ -1003,6 +1023,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
   // ---------- follow-ups ----------
 
+  /** The AI budget shared with Discover: what this month spent so far, and recording a spend. */
+  const month = () => clock.now().toISOString().slice(0, 7);
+  const spentThisMonth = () => Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
+  const spend = (task: "track-classify" | "track-draft", usd: number) =>
+    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, ?, NULL, ?)").run(now(), month(), task, usd);
+
   function followUpSettings(): FollowUpSettings {
     const r = db.prepare("SELECT value FROM track_settings WHERE id = 1").get();
     return r ? parseFollowUpSettings(JSON.parse(String(r.value))) : defaultFollowUpSettings;
@@ -1131,25 +1157,109 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const f = followUpOf(r);
     const job = application.jobId ? await discovery.getJob(application.jobId) : null;
     const requirement = job?.requirements.find((q) => q.kind === "required") ?? job?.requirements[0];
-    const note = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).at(-1)?.text ?? null;
+    const notes = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).map((e) => e.text);
+    const stage = r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied";
     const outline = outlineOf({
       kind: f.kind, title: application.title, company: application.company, since: dayWords(f.anchorOn),
-      stage: r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied",
-      postingDetail: requirement?.text ?? null, note,
+      stage, postingDetail: requirement?.text ?? null, note: notes.at(-1) ?? null,
     });
+    let draft: FollowUpDraftText | null = null;
+    let noDraft: NoDraft | null = null;
+    if (f.kind === "nudge" && stage !== "offer") {
+      const made = await draftFor(r, {
+        followUpId, kind: "nudge", company: application.company, title: application.title, since: dayWords(f.anchorOn), stage,
+        daysQuiet: daysBetween(f.anchorOn, today()),
+        requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
+        notes, evidence: [], voice: [], language: job?.language ?? str(row(application.id)?.language) ?? "en",
+        words: draftWords.nudge, banned: bannedPhrases,
+      });
+      if ("draft" in made) draft = made.draft;
+      else noDraft = made.noDraft;
+    }
     const to = contactsOf(application.id).find((c) => c.kind === "address")?.value ?? null;
     return {
-      followUp: f, application, outline,
+      followUp: f, application, text: r.text_saved_at ? f.text : (draft?.text ?? f.text), draft, noDraft, outline,
       mail: f.kind === "nudge" ? { to, subject: `Following up on my application: ${application.title}` } : null,
-      words: f.kind === "nudge" ? { min: 70, max: 110 } : null,
+      words: f.kind === "nudge" ? draftWords.nudge : null,
       snoozeDays: followUpSettings().snoozeDays,
     };
+  }
+
+  /** Drafts being made, so opening a follow-up twice at once drafts it once. */
+  const drafting = new Map<string, Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }>>();
+
+  /** The follow-up's draft: the one kept, else a new one from the assistant within the monthly budget. */
+  function draftFor(r: Row, base: DraftInput): Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }> {
+    if (r.draft_text != null) {
+      return Promise.resolve({ draft: { text: String(r.draft_text), language: String(r.draft_language ?? base.language), numbers: JSON.parse(String(r.draft_numbers ?? "[]")) } });
+    }
+    const id = String(r.id);
+    const running = drafting.get(id);
+    if (running) return running;
+    const p = makeDraft(id, base).finally(() => drafting.delete(id));
+    drafting.set(id, p);
+    return p;
+  }
+
+  async function makeDraft(followUpId: string, base: DraftInput): Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }> {
+    const cap = Math.max(0, aiMonthlyCapUsd ?? 0);
+    if (!assistant || cap === 0) return { noDraft: { reason: "no-ai" } };
+    const input: DraftInput = {
+      ...base,
+      evidence: profile ? await profile.evidence({ requirements: base.requirements, language: base.language }).catch(() => []) : [],
+      voice: await voiceExcerpts(base.language, followUpId),
+    };
+    const estimate = assistant.estimateDraftUsd(input);
+    if (spentThisMonth() + estimate > cap) return { noDraft: budgetOut(cap) };
+    let body: string;
+    let model: string;
+    try {
+      const out = await assistant.draft(input);
+      spend("track-draft", Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      body = draftOutputSchema.safeParse(out.draft).data?.body ?? "";
+      model = out.model;
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) spend("track-draft", billed);
+      return { noDraft: { reason: "failed", why: "the Track assistant didn't answer" } };
+    }
+    const checked = checkDraft(body, input);
+    if (!checked.ok) return { noDraft: { reason: "failed", why: checked.why } };
+    db.prepare("UPDATE follow_up SET draft_text = ?, draft_language = ?, draft_numbers = ?, draft_model = ?, drafted_at = ? WHERE id = ?")
+      .run(checked.draft.text, checked.draft.language, JSON.stringify(checked.draft.numbers), model, now(), followUpId);
+    return { draft: checked.draft };
+  }
+
+  /** "Ran out on" is the day of this month's last AI spending; it resets on the 1st of next month. */
+  function budgetOut(capUsd: number): NoDraft {
+    const last = db.prepare("SELECT MAX(at) AS at FROM ai_spend WHERE month = ?").get(month())?.at;
+    const d = clock.now();
+    const resetsOn = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+    return { reason: "budget-out", capUsd, ranOutOn: last ? sofiaDay(new Date(String(last))) : null, resetsOn };
+  }
+
+  /** Short excerpts of the user's own writing: their latest follow-ups first (the posting's language first), then Prepare's samples. */
+  async function voiceExcerpts(language: string, exceptFollowUpId: string): Promise<string[]> {
+    const own = db.prepare("SELECT text, language FROM voice_sample WHERE follow_up_id != ? ORDER BY saved_at DESC LIMIT 20").all(exceptFollowUpId)
+      .sort((a, b) => Number(b.language === language) - Number(a.language === language))
+      .slice(0, 3).map((v) => excerpt(String(v.text)));
+    const more = voice ? await voice.excerpts({ language, limit: 3 }).catch(() => []) : [];
+    return [...own, ...more.map((t) => excerpt(t))].slice(0, 5);
   }
 
   async function saveFollowUpText(followUpId: string, text: string) {
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     if (!r || !row(String(r.application_id))) throw new TrackerError("not-found", "There's no such follow-up.");
     db.prepare("UPDATE follow_up SET text = ?, text_saved_at = ? WHERE id = ?").run(text, now(), followUpId);
+    // What the user wrote or changed teaches their voice (kept locally); the draft as it came doesn't.
+    if (r.kind === "nudge") {
+      const own = text.trim() && text.trim() !== String(r.draft_text ?? "").trim();
+      if (own) {
+        db.prepare(`INSERT INTO voice_sample (follow_up_id, text, language, saved_at) VALUES (?, ?, ?, ?)
+          ON CONFLICT (follow_up_id) DO UPDATE SET text = excluded.text, language = excluded.language, saved_at = excluded.saved_at`)
+          .run(followUpId, text.trim(), str(r.draft_language) ?? (/[Ѐ-ӿ]/.test(text) ? "bg" : "en"), now());
+      } else db.prepare("DELETE FROM voice_sample WHERE follow_up_id = ?").run(followUpId);
+    }
     return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!) };
   }
 
@@ -1159,8 +1269,6 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   type Signal = { group: "thread" | "taught" | "sender" | "ats" | "title"; text: string };
   const strongGroups: Signal["group"][] = ["thread", "taught"];
 
-  const month = () => clock.now().toISOString().slice(0, 7);
-  const spentThisMonth = () => Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
   const own = new Set(ownAddresses.map((a) => a.trim().toLowerCase()).filter(Boolean));
 
   /** Reads an email with the assistant within the monthly budget; otherwise by rules (or not at all). */
@@ -1171,14 +1279,13 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       if (spentThisMonth() + estimate <= Math.max(0, aiMonthlyCapUsd ?? 0)) {
         try {
           const out = await assistant.classify(input);
-          db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-classify', NULL, ?)")
-            .run(now(), month(), Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+          spend("track-classify", Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
           const parsed = emailClassificationSchema.safeParse(out.classification);
           if (parsed.success) return { c: parsed.data, by: "assistant", model: out.model };
         } catch (err) {
           const billed = (err as { costUsd?: unknown } | null)?.costUsd;
           if (typeof billed === "number" && billed > 0) {
-            db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-classify', NULL, ?)").run(now(), month(), billed);
+            spend("track-classify", billed);
           }
         }
       }
@@ -1587,6 +1694,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 }
 
 /** The calendar day in Sofia (YYYY-MM-DD). */
+/** A short excerpt of the user's writing, as sent with a draft: the full sample stays on the laptop. */
+function excerpt(text: string, max = 400): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+
 function sofiaDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Sofia", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
