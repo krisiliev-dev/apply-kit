@@ -10,7 +10,7 @@ import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, ty
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
-import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
+import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceEditInput, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -190,7 +190,17 @@ export interface PreparationEngine {
    * the draft can show what left the machine.
    */
   voiceContext(request: VoiceContextRequest): VoiceContext;
+  /**
+   * Kris edited a draft (a letter, an answer, a follow-up): kept as a before/after pair to learn the
+   * voice from, periodically. False when learning from edits is paused or nothing changed.
+   */
+  recordVoiceEdit(edit: VoiceEditInput): boolean;
+  /** The "Learn from my edits" switch: paused, edits aren't recorded as evidence. */
+  setVoiceLearning(fromEdits: boolean): VoiceView;
 }
+
+/** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
+export type VoiceForDrafts = Pick<PreparationEngine, "voiceContext" | "recordVoiceEdit">;
 
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
   migrate(deps.db);
@@ -266,6 +276,8 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     voiceSends: () => voice.sends(),
     removeVoiceRule: (id) => voice.removeRule(id),
     voiceContext: (request) => voice.context(request),
+    recordVoiceEdit: (edit) => voice.recordEdit(edit),
+    setVoiceLearning: (on) => voice.setLearning(on),
     contact: () => contact.get(),
     saveContact(details) {
       const result = contact.save(details);

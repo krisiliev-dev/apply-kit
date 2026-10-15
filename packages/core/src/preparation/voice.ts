@@ -96,6 +96,18 @@ export interface VoiceContext {
   excerpts: SentExcerpt[];
 }
 
+/**
+ * Kris changed a draft (a letter, a screening answer, a follow-up): what the draft said and what Kris
+ * made of it. `source` names where the draft belongs (e.g. "package:<id>", "application:<id>").
+ */
+export interface VoiceEditInput {
+  purpose: string;
+  language: VoiceLanguage;
+  before: string;
+  after: string;
+  source?: string | null;
+}
+
 /** How a learning run ended: everything read, the monthly cap reached, or a failed call (tried again next time). */
 export interface VoiceLearning {
   calls: number;
@@ -110,6 +122,8 @@ export interface VoiceStore {
   sends(): VoiceSend[];
   context(request: VoiceContextRequest): VoiceContext;
   removeRule(id: string): boolean;
+  recordEdit(edit: VoiceEditInput): boolean;
+  setLearning(fromEdits: boolean): VoiceView;
 }
 
 const CYRILLIC = /\p{Script=Cyrillic}/gu;
@@ -175,9 +189,31 @@ interface Unit {
   done: () => void;
 }
 
+/**
+ * An edit as Kris's writing to learn from: only the sentences that changed, what the draft said and
+ * what Kris wrote, within the word limit.
+ */
+function editExcerpt(before: string, after: string, limit = VOICE_EXCERPT_WORDS): string | null {
+  const was = sentences(before);
+  const now = sentences(after);
+  let removed = was.filter((x) => !now.includes(x)).join(" ");
+  let added = now.filter((x) => !was.includes(x)).join(" ");
+  if (!removed && !added) return null;
+  const room = limit - 2;
+  if (wordCount(removed) + wordCount(added) > room) {
+    const half = Math.floor(room / 2);
+    const forAdded = Math.max(half, room - wordCount(removed));
+    added = firstWords(added, forAdded);
+    removed = firstWords(removed, room - wordCount(added));
+  }
+  return [removed && `Draft: ${removed}`, added && `Kris: ${added}`].filter(Boolean).join("\n");
+}
+
 export function createVoiceStore(deps: PreparationDeps): VoiceStore {
   const { db, clock } = deps;
   const now = () => clock.now().toISOString();
+  db.prepare("INSERT OR IGNORE INTO voice_settings (id) VALUES (1)").run();
+  const learnFromEdits = () => Number(db.prepare("SELECT learn_from_edits AS on_ FROM voice_settings WHERE id = 1").get()?.on_ ?? 1) === 1;
 
   const rowToSample = (r: Record<string, unknown>): VoiceSample => ({
     id: String(r.id),
@@ -273,6 +309,13 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
           done: () => db.prepare("UPDATE voice_sample SET learned_chunks = MAX(learned_chunks, ?) WHERE id = ?").run(i + 1, String(r.id)),
         });
       }
+    }
+    for (const r of db.prepare("SELECT id, before, after FROM voice_edit WHERE learned_at IS NULL ORDER BY at, rowid").all()) {
+      const id = String(r.id);
+      const markLearned = () => db.prepare("UPDATE voice_edit SET learned_at = ? WHERE id = ?").run(now(), id);
+      const excerpt = editExcerpt(String(r.before), String(r.after));
+      if (!excerpt) { markLearned(); continue; }
+      units.push({ excerpt: { source: `edit:${id}`, text: excerpt }, words: wordCount(excerpt), done: markLearned });
     }
     return units;
   }
@@ -394,14 +437,31 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     return true;
   }
 
+  /** Keeps an edit to a draft as evidence, unless learning from edits is paused or nothing changed. */
+  function recordEdit(edit: VoiceEditInput): boolean {
+    if (!learnFromEdits() || !editExcerpt(edit.before, edit.after)) return false;
+    db.prepare("INSERT INTO voice_edit (id, at, draft, language, source, before, after) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+      `voice-edit:${crypto.randomUUID()}`, now(), edit.purpose, edit.language, edit.source ?? null, edit.before, edit.after,
+    );
+    return true;
+  }
+
+  function setLearning(fromEdits: boolean): VoiceView {
+    db.prepare("UPDATE voice_settings SET learn_from_edits = ? WHERE id = 1").run(fromEdits ? 1 : 0);
+    return view();
+  }
+
   function view(): VoiceView {
     const samples = db.prepare("SELECT * FROM voice_sample ORDER BY position").all().map(rowToSample);
+    const edits = db.prepare(
+      "SELECT COUNT(*) AS total, COUNT(DISTINCT source) AS sources, SUM(CASE WHEN learned_at IS NULL THEN 1 ELSE 0 END) AS waiting FROM voice_edit",
+    ).get()!;
     return {
       samples,
       rules: db.prepare("SELECT * FROM voice_rule WHERE removed_at IS NULL ORDER BY created_at, rowid").all().map(rowToRule),
-      learnedFrom: { samples: samples.filter((s) => !s.problem).length, edits: 0 },
-      edits: { total: 0, sources: 0, waiting: 0 },
-      learnFromEdits: true,
+      learnedFrom: { samples: samples.filter((s) => !s.problem).length, edits: Number(edits.total) - Number(edits.waiting ?? 0) },
+      edits: { total: Number(edits.total), sources: Number(edits.sources), waiting: Number(edits.waiting ?? 0) },
+      learnFromEdits: learnFromEdits(),
       updating: running !== null,
     };
   }
@@ -412,6 +472,8 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     learn,
     context,
     removeRule,
+    recordEdit,
+    setLearning,
     sends: () => db.prepare("SELECT * FROM voice_send ORDER BY at DESC, rowid DESC").all().map(rowToSend),
   };
 }

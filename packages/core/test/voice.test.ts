@@ -138,3 +138,74 @@ describe("the voice context a draft sends", () => {
     expect(t.preparation.voice().rules.map((r) => r.text)).toEqual(["Opens with the company's problem, not with you"]);
   });
 });
+
+/** A made-up edit: Kris rewrote the draft's opener and cut a stock phrase, in a package's letter. */
+const letterEdit = {
+  purpose: "cover-letter",
+  language: "en" as const,
+  source: "package:kestrel",
+  before: "I am excited to apply for the Security Analyst role. I am passionate about security. I tuned detections at Northwind Bank.",
+  after: "Your analysts lose an hour a night to noisy alerts. I tuned detections at Northwind Bank.",
+};
+
+describe("learning from Kris's edits to drafts", () => {
+  it("records an edit to any draft as evidence and learns from only what changed", async () => {
+    const writer = fakeWriter();
+    const t = createTestPreparation({ writer });
+
+    expect(t.preparation.recordVoiceEdit(letterEdit)).toBe(true);
+    expect(t.preparation.recordVoiceEdit({ purpose: "follow-up", language: "en", source: "application:halden", before: "Just checking in!", after: "Is the role still open?" })).toBe(true);
+    expect(t.preparation.voice().edits).toEqual({ total: 2, sources: 2, waiting: 2 });
+
+    await t.preparation.learnVoice();
+
+    expect(learnCalls(writer).flatMap((c) => c.excerpts.map((e) => e.text))).toEqual([
+      "Draft: I am excited to apply for the Security Analyst role. I am passionate about security.\nKris: Your analysts lose an hour a night to noisy alerts.",
+      "Draft: Just checking in!\nKris: Is the role still open?",
+    ]);
+    expect(t.preparation.voice()).toMatchObject({ edits: { total: 2, sources: 2, waiting: 0 }, learnedFrom: { edits: 2 } });
+  });
+
+  it("records nothing when an edit changes nothing", () => {
+    const t = createTestPreparation();
+
+    expect(t.preparation.recordVoiceEdit({ ...letterEdit, after: letterEdit.before })).toBe(false);
+    expect(t.preparation.voice().edits.total).toBe(0);
+  });
+
+  it("stops recording edits as evidence while learning is paused, and starts again on resume", async () => {
+    const writer = fakeWriter();
+    const t = createTestPreparation({ writer });
+
+    expect(t.preparation.setVoiceLearning(false).learnFromEdits).toBe(false);
+    expect(t.preparation.recordVoiceEdit(letterEdit)).toBe(false);
+    await t.preparation.learnVoice();
+
+    expect(t.preparation.voice().edits).toEqual({ total: 0, sources: 0, waiting: 0 });
+    expect(learnCalls(writer)).toEqual([]);
+
+    expect(t.preparation.setVoiceLearning(true).learnFromEdits).toBe(true);
+    expect(t.preparation.recordVoiceEdit(letterEdit)).toBe(true);
+    expect(t.preparation.voice().edits.total).toBe(1);
+  });
+});
+
+describe("a removed rule", () => {
+  it("doesn't come back from writing it was removed over, only when newer writing shows it again", async () => {
+    const t = await withSamples({ writer: fakeWriter({ learnVoice: learnsRules("Signs off \"Kind regards\"") }) });
+    await t.preparation.learnVoice();
+    const rule = t.preparation.voice().rules[0]!;
+    // An edit made before the rule was removed, learned from after.
+    t.preparation.recordVoiceEdit(letterEdit);
+    await t.clock.advance(60_000);
+    t.preparation.removeVoiceRule(rule.id);
+    await t.clock.advance(60_000);
+
+    await t.preparation.learnVoice();
+    expect(t.preparation.voice().rules).toEqual([]);
+
+    await t.preparation.addVoiceSamples([{ fileName: "cover-letter-halden.txt", bytes: text("Dear Halden team,\n\nYour release notes go unread.\n\nKind regards,\nMira Petrova") }]);
+    await t.preparation.learnVoice();
+    expect(t.preparation.voice().rules.map((r) => r.text)).toEqual(["Signs off \"Kind regards\""]);
+  });
+});
