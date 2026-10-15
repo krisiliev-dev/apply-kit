@@ -10,6 +10,7 @@ import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, ty
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
+import { createVoiceStore, type VoiceSample, type VoiceSampleFile, type VoiceView } from "./voice.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -159,6 +160,16 @@ export interface PreparationEngine {
   closestAngle(posting: AnglePosting): AngleChoice;
   /** Drafts one of the fictional demo profile's documents (package "demo"), for checking the template. */
   demoDocument(options: DemoOptions): Promise<DocumentDraft>;
+
+  // ---------- Voice (Profile › Voice, and drafts: the cover letter here, Track's follow-ups) ----------
+
+  /** Profile › Voice: the samples, the rules learned (with their evidence), the edits and the learning switch. */
+  voice(): VoiceView;
+  /**
+   * Keeps samples of Kris's writing (PDF, DOCX, TXT) on this laptop: the file in the file store, its
+   * text read here. One that can't be read says why and how to fix it; the others still count.
+   */
+  addVoiceSamples(files: VoiceSampleFile[]): Promise<VoiceSample[]>;
 }
 
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
@@ -168,6 +179,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const imports = createImportStore(deps, profile);
   const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
   const answers = createAnswerStore(deps);
+  const voice = createVoiceStore(deps);
   /** The salary floor in Kris's search settings (the discovery engine keeps them in the same database). */
   const salaryFloor = () => {
     const stored = deps.db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
@@ -228,6 +240,8 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
     resolvePortalEdit: (id, keep) => answers.resolvePortalEdit(id, keep),
     answerHistory: (id) => answers.history(id),
+    voice: () => voice.view(),
+    addVoiceSamples: (files) => voice.add(files),
     contact: () => contact.get(),
     saveContact(details) {
       const result = contact.save(details);
