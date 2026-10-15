@@ -108,12 +108,30 @@ Use `pnpm run setup:data`, not `pnpm setup`: the latter is a pnpm built-in that 
 | `pnpm lint` | ESLint across the workspace |
 | `pnpm typecheck` | TypeScript project build, no output files |
 | `pnpm eval:extraction` | Checks how well postings are read (see below). Costs money; not part of `pnpm test` |
+| `pnpm eval:tailoring` | Checks tailoring quality: packages for fictional profiles (see below). Costs money; not part of `pnpm test` |
+| `pnpm eval:tailoring:verdicts` | Records your verdicts on the latest blind comparison sheet, then writes its report |
 
 ### Extraction accuracy check
 
 `pnpm eval:extraction` runs the real extractor over 50 hand-labelled postings in `eval/extraction/postings/` (English and Bulgarian; dev, security, design) and prints accuracy per fact type: F1 for requirements, years, languages, certificates and locations; accuracy for the remote rule, work authorisation, salary and posting language; then the same per language and field. It reads the same `.env` settings as the service (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_PROVIDERS`) and refuses to run without the key or without `AI_MONTHLY_CAP_USD`. Its spending is booked in the service's monthly ledger, and it won't start if its estimate (about $0.35 at most; usually far less) is more than what is left of this month's cap.
 
 Each run saves a report to `eval/extraction/reports/` (gitignored) with every posting's extracted facts and scores; the next run shows the change against the newest report, so a new model (`OPENROUTER_MODEL`) or prompt can be compared. Labelling rules for adding or fixing postings: `eval/extraction/labelling-rules.md`.
+
+### Tailoring quality check
+
+Run it before changing the writer's model or prompts. `pnpm eval:tailoring` writes a package (CV, cover letter, screening answers) with the real writer for each case in `eval/tailoring/cases.json`: three fictional profiles (`eval/tailoring/profiles/`: security, developer, design) tailored to eight real postings from the extraction set, three of them in Bulgarian. Each package is written by the preparation engine exactly as the app writes one, but in a throwaway in-memory database, so your own profile and packages are never touched. The report lists, per package, every line the honesty validator refused (word for word, with why), the flags (near the line, gaps), stock phrases, length (CV pages and lines on page 2, letter words against the target, answers against their limit) and cost. CVs and letters are printed with headless Chromium, so page fit is the real one; the PDFs are kept beside the report.
+
+It reads the same `.env` settings as the service (`OPENROUTER_API_KEY`, `OPENROUTER_MODEL`, `OPENROUTER_PROVIDERS`, `AI_MONTHLY_CAP_USD`), books its spending in the service's monthly ledger, and won't start if its estimate is more than what is left of this month's cap. One model costs a few cents; a stronger comparison model costs more (its estimate is printed before anything runs).
+
+To compare voice and quality against a stronger model, also set:
+
+- `EVAL_STRONGER_MODEL`: the OpenRouter id of the model to compare against
+- `EVAL_STRONGER_MAX_PRICE`: the highest price it may cost, USD per million prompt and completion tokens (default `3,15`)
+- `EVAL_STRONGER_PROVIDERS`: an allow-list of hosts for it, if `OPENROUTER_PROVIDERS` doesn't host it (China-hosted providers are always dropped)
+
+Then the run writes only a blind comparison sheet: each case's two versions as Version A and Version B, in an order that changes from case to case. Fill in `Verdict (A, B or same):` and `Why:` for every case and run `pnpm eval:tailoring:verdicts`; it refuses until every case has a verdict, then reveals which model wrote which and writes the report with your verdicts. Runs are saved in `eval/tailoring/reports/` (gitignored).
+
+Only made-up people belong in the repository's set: it refuses a profile not marked `"fictional": true`. To try real samples, keep a set with the same layout (`cases.json`, `profiles/`, optionally `postings/`) inside the data folder and point `APPLY_KIT_TAILORING_SET` at it; its reports are written beside it, never into the repository.
 
 ## Rules carried forward
 
