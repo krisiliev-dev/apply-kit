@@ -353,6 +353,23 @@ h2[tabindex="-1"]:focus { outline: none }
 .setup .merges li { display: grid; gap: var(--s-1); padding-top: var(--s-3); border-top: 1px solid var(--rule) }
 .setup legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
 
+/* ---------- Setup · check drafts, search, done, returning (#55, hi-fi onboarding.html) ---------- */
+.setup .draft-group .sec-head h2, .setup .draft-group > summary h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0; margin: 0 }
+.setup .draft-group > summary { padding: 0; flex-wrap: nowrap }
+.setup .draft-group > summary h2 { flex: 1 1 auto; min-width: 0 }
+.setup .draft-group .meta { font-weight: 400 }
+.setup .draft-group .show-more { justify-self: start }
+.setup .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
+.setup .segmented button { white-space: nowrap }
+.setup .piece.confirmed { border-left: 4px solid var(--met) }
+.setup .dispute { border: 0; margin: 0; padding: 0; min-width: 0 }
+.setup .dispute .opt .meta { display: block }
+.setup .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--s-4) }
+.setup .tally .panel { gap: var(--s-2) }
+.setup .tally .big { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; font-variant-numeric: tabular-nums }
+.setup .learning { border-left: 4px solid var(--action) }
+.setup .learning p { max-width: 68ch }
+.setup .empty h1 { font-size: var(--fs-h3) }
 /* Profile › Voice (from the Profile hi-fi, state Voice samples). Tokens only. */
 .rules { list-style: none; margin: 0; padding: 0; display: grid }
 .rules li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-4); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }

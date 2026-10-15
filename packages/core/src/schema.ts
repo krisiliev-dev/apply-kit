@@ -434,6 +434,17 @@ const migrations: string[] = [
      updated_at TEXT NOT NULL,
      PRIMARY KEY (package_id, part)
    );`,
+  // Setup (#55): sources that disagree about a piece, discarded pieces (restorable), and where Kris is in setup.
+  `ALTER TABLE profile_piece ADD COLUMN dispute TEXT;
+   ALTER TABLE profile_piece ADD COLUMN discarded_at TEXT;
+   CREATE TABLE setup_progress (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     step TEXT NOT NULL,
+     skipped INTEGER NOT NULL DEFAULT 0,
+     started_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     finished_at TEXT
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

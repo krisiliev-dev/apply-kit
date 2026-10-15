@@ -3,6 +3,7 @@ import type {
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
+  ConfirmGroupResult, DisputeChoice, DraftFilter, DraftsToCheck, SearchSuggestion, SetupProgress, SetupStep, SetupSummary,
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
 } from "@apply-kit/core";
@@ -398,6 +399,28 @@ export async function confirmPiece(id: string): Promise<SavePieceResult> {
   return json(res);
 }
 
+// ---------- Setup (#55) ----------
+
+export const fetchSetup = async (signal?: AbortSignal): Promise<SetupProgress> => json(await fetch("/api/setup", { signal }));
+export async function setSetupStep(step: SetupStep): Promise<SetupProgress> {
+  return json(await fetch("/api/setup/step", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ step }) }));
+}
+export const skipSetup = async (): Promise<SetupProgress> => json(await postJson("/api/setup/skip"));
+export async function fetchDrafts(show: DraftFilter, signal?: AbortSignal): Promise<DraftsToCheck> {
+  return json(await fetch(`/api/setup/drafts?show=${show}`, { signal }));
+}
+export const confirmDrafts = async (groupId: string): Promise<ConfirmGroupResult> =>
+  json(await postJson(`/api/setup/drafts/groups/${encodeURIComponent(groupId)}/confirm`));
+/** Picks the true version of a disputed piece, or leaves it to the interview; a refusal resolves with why. */
+export async function resolveDispute(id: string, choice: DisputeChoice): Promise<SavePieceResult> {
+  const res = await postJson(`/api/setup/drafts/${encodeURIComponent(id)}/dispute`, choice);
+  return res.status === 422 ? ((await res.json()) as SavePieceResult) : json(res);
+}
+export const discardPiece = async (id: string): Promise<ProfilePiece> => json(await postJson(`/api/setup/drafts/${encodeURIComponent(id)}/discard`));
+export const restorePiece = async (id: string): Promise<ProfilePiece> => json(await postJson(`/api/setup/drafts/${encodeURIComponent(id)}/restore`));
+export const unconfirmPiece = async (id: string): Promise<ProfilePiece> => json(await postJson(`/api/setup/drafts/${encodeURIComponent(id)}/unconfirm`));
+export const fetchSearchSuggestion = async (signal?: AbortSignal): Promise<SearchSuggestion> => json(await fetch("/api/setup/search", { signal }));
+export const fetchSetupSummary = async (signal?: AbortSignal): Promise<SetupSummary> => json(await fetch("/api/setup/summary", { signal }));
 // ---------- Voice (#59) ----------
 
 export async function fetchVoice(signal?: AbortSignal): Promise<VoiceView> {

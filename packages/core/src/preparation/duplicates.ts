@@ -49,3 +49,23 @@ export function isNearDuplicate(a: DraftPiece, b: DraftPiece): boolean {
   if (a.kind === "skill") return same(a.text, b.text);
   return numbersOf(a.text) === numbersOf(b.text) && overlap(a.text, b.text) >= ACHIEVEMENT_OVERLAP;
 }
+
+/** An achievement this alike, with a number in it, describes the same thing (if not a near-duplicate, differently). */
+const DISAGREEMENT_OVERLAP = 0.4;
+
+/**
+ * Two sources describing the same thing differently, so one of them isn't true: a role or education
+ * at the same place with another title or start (or another end, when both have ended), or an
+ * achievement about the same thing with another verb ("took part in" against "led") or other numbers.
+ * A near-duplicate whose words differ only in phrasing agrees; it merges instead.
+ */
+export function disagrees(a: DraftPiece, b: DraftPiece): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.entry || b.entry) {
+    if (!a.entry || !b.entry || !isNearDuplicate(a, b)) return false;
+    return !same(a.entry.title, b.entry.title) || a.entry.start !== b.entry.start || (!!a.entry.end && !!b.entry.end && a.entry.end !== b.entry.end);
+  }
+  if (a.kind !== "achievement" || isNearDuplicate(a, b)) return false;
+  const numbered = quantities(a.text).length > 0 || quantities(b.text).length > 0;
+  return numbered && overlap(a.text, b.text) >= DISAGREEMENT_OVERLAP;
+}
