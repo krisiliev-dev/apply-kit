@@ -34,6 +34,26 @@ export interface CvEntryAsSent {
   end: string | null;
 }
 
+/**
+ * The job reference of the page Kris is on, as the extension reads it from the address: the board
+ * is unknown (null) on a company's own page carrying a portal form (`?gh_jid=`).
+ */
+export interface PageJobReference {
+  portal: PortalJobReference["portal"];
+  board: string | null;
+  jobId: string;
+}
+
+/** The same job on the same portal: the ids equal, and the boards too when both are known (ignoring case). */
+export function sameJobReference(a: PageJobReference | null, b: PageJobReference | null): boolean {
+  if (!a || !b) return false;
+  return a.portal === b.portal && a.jobId.toLowerCase() === b.jobId.toLowerCase()
+    && (a.board === null || b.board === null || a.board.toLowerCase() === b.board.toLowerCase());
+}
+
+/** How Apply asks for a package: by Job, by package, or by the portal job reference of the page it's on. */
+export type ApplyQuery = { jobId: string } | { packageId: string } | { jobRef: PageJobReference };
+
 export type PackageState = "approved" | "submitted";
 export type SubmittedVia = "extension" | "app";
 

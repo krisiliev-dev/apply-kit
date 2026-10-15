@@ -777,6 +777,28 @@ const migrations: string[] = [
      PRIMARY KEY (package_id, language)
    );
    ALTER TABLE package_letter ADD COLUMN language TEXT;`,
+  // Apply #38: a fill session ties a browser tab's application to one approved package (the tab
+  // keeps only the session id). Each page filled is recorded with its counts and, per field, the
+  // label, kind, outcome and source: never a value.
+  `CREATE TABLE fill_session (
+     id TEXT PRIMARY KEY,
+     package_id TEXT NOT NULL,
+     portal TEXT NOT NULL,
+     host TEXT NOT NULL,
+     job_ref TEXT,
+     started_at TEXT NOT NULL,
+     ended_at TEXT,
+     end_reason TEXT
+   );
+   CREATE TABLE fill_page (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     session_id TEXT NOT NULL REFERENCES fill_session(id),
+     step_label TEXT,
+     page_kind TEXT NOT NULL,
+     filled_at TEXT NOT NULL,
+     counts TEXT NOT NULL,
+     fields TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

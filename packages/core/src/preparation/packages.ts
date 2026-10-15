@@ -39,7 +39,7 @@ import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview
 import type { Contact, ContactDetails, SaveContactResult } from "./contact.ts";
 import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
 import { atsCheckLabel, atsStepView, postingKeywords, type AtsFixField, type AtsStepView } from "./ats-step.ts";
-import type { ApprovedPackage, CvEntryAsSent, FrozenFile, MarkSubmittedResult, PackageForApply, SubmittedVia } from "./contracts.ts";
+import { sameJobReference, type ApplyQuery, type ApprovedPackage, type CvEntryAsSent, type FrozenFile, type MarkSubmittedResult, type PackageForApply, type PageJobReference, type SubmittedVia } from "./contracts.ts";
 import { portalJobReference } from "./portal.ts";
 import { createHash } from "node:crypto";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
@@ -533,7 +533,7 @@ export interface PackageStore {
   /** Approves the package (step 5's Approve) and freezes its files as the next version. */
   approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
   /** Apply's read: the Job's (or package's) approved package, or why there isn't one. */
-  forApply(query: { jobId: string } | { packageId: string }): PackageForApply;
+  forApply(query: ApplyQuery): PackageForApply;
   /** Every package approved now (not reopened), newest first. */
   approvedList(): ApprovedPackage[];
   /** Track's read: the version submitted, else the one approved now; null for a draft never approved. */
@@ -1453,6 +1453,13 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   const forJob = (jobId: string) => {
     const r = db.prepare("SELECT * FROM package WHERE job_id = ?").get(jobId);
     return r ? toRow(r) : null;
+  };
+  /** The package whose Job has a posting with this portal job reference (Apply's "is there a package for this page?"). */
+  const forJobRef = (ref: PageJobReference) => {
+    for (const r of db.prepare("SELECT * FROM package ORDER BY rowid DESC").all().map(toRow)) {
+      if (r.job.postings.some((p) => sameJobReference(portalJobReference(p.url), ref))) return r;
+    }
+    return null;
   };
 
   function status(job: PackageJob): PrepareStatus {
@@ -2440,7 +2447,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     fixAts,
     redraftChangedLines,
     forApply(query) {
-      const r = "jobId" in query ? forJob(query.jobId) : row(query.packageId);
+      const r = "jobId" in query ? forJob(query.jobId) : "packageId" in query ? row(query.packageId) : forJobRef(query.jobRef);
       if (!r) return { kind: "none" };
       const pkg = r.approvedVersion === null ? null : versionOf(r.id, r.approvedVersion);
       return pkg ? { kind: "approved", package: pkg } : { kind: "not-approved", packageId: r.id, jobId: r.jobId, reason: "Your package isn't approved yet · open it to approve" };
