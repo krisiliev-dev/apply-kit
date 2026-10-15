@@ -9,7 +9,7 @@ import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
-  type DraftInput, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
+  type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
 } from "./follow-ups.ts";
 import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
@@ -286,6 +286,8 @@ export interface ApplicationDetail extends ApplicationSummary {
   timeline: TimelineEntry[];
   /** Set while the latest Status change was made by an email you haven't confirmed ("Looks right") or undone. */
   movedByEmail: MovedByEmail | null;
+  /** Why it is closed, when the Status change said ("declined offer", "accepted another offer"); else null. */
+  closedReason: string | null;
 }
 
 /** What the user gives "Add application". */
@@ -602,6 +604,13 @@ export interface Tracker {
   acceptOffer(applicationId: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent; withdrawals: Withdrawal[] }>;
   /** The withdrawals of the offer accepted (still to send, and sent), for the withdrawal dialog. */
   withdrawals(): Promise<Withdrawals>;
+  /**
+   * "I declined it…": moves an Application at Offer to Withdrawn with the reason "declined offer", by
+   * you and undoable. Throws a TrackerError when refused.
+   */
+  declineOffer(applicationId: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent }>;
+  /** The optional reply declining an Application's offer: drafted in the user's voice, never due. Throws a TrackerError when refused. */
+  declineDraft(applicationId: string): Promise<FollowUpDraft>;
   /**
    * Classifies and matches every stored email not decided yet (run after each mailbox read; the
    * engine passes what it just stored). A confident unique match of a Status-changing kind moves the
@@ -1077,6 +1086,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return {
       ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing, followUp), followUp, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
+      closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
     };
   }
 
@@ -1302,6 +1312,40 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     }
   }
 
+  async function declineOffer(applicationId: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status !== "offer") throw new TrackerError("invalid", `Only an offer can be declined; this one is ${statusName(app.status)}.`, applicationId);
+    db.exec("BEGIN");
+    try {
+      db.prepare("UPDATE application SET status = 'withdrawn' WHERE id = ?").run(applicationId);
+      const event = addEvent({
+        applicationId, kind: "status", cause: "you", from: "offer", to: "withdrawn", text: "Declined the offer: moved to Withdrawn", undoes: null, reason: "declined offer",
+      });
+      db.exec("COMMIT");
+      return { application: summary(applicationId)!, event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  async function declineDraft(applicationId: string): Promise<FollowUpDraft> {
+    const app = row(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status !== "offer") throw new TrackerError("invalid", "Only an offer can be declined.", applicationId);
+    // One per offer: tied to the Event that made it an offer.
+    const start = stageStart(applicationId)!;
+    let r = db.prepare("SELECT * FROM follow_up WHERE started_by = ? AND kind = 'decline'").get(start.id);
+    if (!r) {
+      const id = randomUUID();
+      db.prepare("INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at) VALUES (?, ?, 'decline', 'offer', ?, ?, ?)")
+        .run(id, applicationId, start.id, sofiaDay(new Date(start.at)), now());
+      r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(id)!;
+    }
+    return (await followUpDraft(String(r.id)))!;
+  }
+
   async function needsYou(): Promise<NeedsYou> {
     const day = today();
     const soon = addDays(day, comingUpDays);
@@ -1392,29 +1436,35 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const job = application.jobId ? await discovery.getJob(application.jobId) : null;
     const requirement = job?.requirements.find((q) => q.kind === "required") ?? job?.requirements[0];
     const notes = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).map((e) => e.text);
-    const stage = r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied";
+    const stage = (["screening", "interviewing", "offer"] as const).find((x) => x === r.stage) ?? "applied";
+    // A nudge counts from its stage's start; a withdrawal or a decline from the date applied.
+    const since = dayWords(f.kind === "withdrawal" || f.kind === "decline" ? application.appliedOn : f.anchorOn);
     const outline = outlineOf({
       kind: f.kind, title: application.title, company: application.company, since: dayWords(f.anchorOn),
       stage, postingDetail: requirement?.text ?? null, note: notes.at(-1) ?? null,
     });
+    const kind: DraftKind | null = f.kind === "offer-note" || (f.kind === "nudge" && stage === "offer") ? null : f.kind;
     let draft: FollowUpDraftText | null = null;
     let noDraft: NoDraft | null = null;
-    if (f.kind === "nudge" && stage !== "offer") {
+    if (kind) {
       const made = await draftFor(r, {
-        followUpId, kind: "nudge", company: application.company, title: application.title, since: dayWords(f.anchorOn), stage,
-        daysQuiet: daysBetween(f.anchorOn, today()),
+        followUpId, kind, company: application.company, title: application.title, since, stage,
+        daysQuiet: kind === "nudge" ? daysBetween(f.anchorOn, today()) : 0,
         requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
-        notes, evidence: [], voice: [], language: job?.language ?? str(row(application.id)?.language) ?? "en",
-        words: draftWords.nudge, banned: bannedPhrases,
+        notes, evidence: [], voice: [],
+        language: job?.language ?? str(row(application.id)?.language) ?? (/[Ѐ-ӿ]/.test(application.title) ? "bg" : "en"),
+        words: draftWords[kind], banned: bannedPhrases,
       });
       if ("draft" in made) draft = made.draft;
       else noDraft = made.noDraft;
     }
     const to = contactsOf(application.id).find((c) => c.kind === "address")?.value ?? null;
+    const subject = kind === "withdrawal" ? `Withdrawing my application: ${application.title}`
+      : kind === "decline" ? `Your offer: ${application.title}` : `Following up on my application: ${application.title}`;
     return {
       followUp: f, application, text: r.text_saved_at ? f.text : (draft?.text ?? f.text), draft, noDraft, outline,
-      mail: f.kind === "nudge" ? { to, subject: `Following up on my application: ${application.title}` } : null,
-      words: f.kind === "nudge" ? draftWords.nudge : null,
+      mail: kind ? { to, subject } : null,
+      words: kind ? draftWords[kind] : null,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -1486,7 +1536,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (!r || !row(String(r.application_id))) throw new TrackerError("not-found", "There's no such follow-up.");
     db.prepare("UPDATE follow_up SET text = ?, text_saved_at = ? WHERE id = ?").run(text, now(), followUpId);
     // What the user wrote or changed teaches their voice (kept locally); the draft as it came doesn't.
-    if (r.kind === "nudge") {
+    if (r.kind !== "offer-note") {
       const own = text.trim() && text.trim() !== String(r.draft_text ?? "").trim();
       if (own) {
         db.prepare(`INSERT INTO voice_sample (follow_up_id, text, language, saved_at) VALUES (?, ?, ?, ?)
@@ -1961,6 +2011,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     },
     acceptOffer,
     withdrawals: async () => withdrawalList(),
+    declineOffer,
+    declineDraft,
     processMail,
     emailsToMatch,
     answerEmail,

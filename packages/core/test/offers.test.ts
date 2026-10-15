@@ -64,6 +64,17 @@ describe("accepting an offer", () => {
     // Offering a withdrawal changes nothing yet.
     expect(await statusOf(tracker, velta)).toBe("applied");
   });
+
+  it("is the only way to Accepted: from any Status (Accepted in a list select), never a silent Status change", async () => {
+    const { tracker, velta, medora } = await withOffer();
+
+    await expect(tracker.setStatus(velta, "accepted")).rejects.toMatchObject({ problem: "accepted" });
+    const r = await tracker.acceptOffer(medora);
+
+    expect(r.event).toMatchObject({ from: "interviewing", to: "accepted" });
+    expect(companies(r.withdrawals)).toEqual(["Ardent Labs", "Velta Logistics"]);
+    await expect(tracker.acceptOffer(medora)).rejects.toMatchObject({ problem: "unchanged" });
+  });
 });
 
 describe("a withdrawal", () => {
@@ -127,5 +138,72 @@ describe("a withdrawal", () => {
     expect(await statusOf(tracker, ardent)).toBe("offer");
     expect((await tracker.withdrawals()).items).toEqual([]);
     expect((await tracker.needsYou()).items.filter((i) => i.followUp.kind === "withdrawal")).toEqual([]);
+  });
+});
+
+describe("a withdrawal's draft", () => {
+  it("comes from the Track assistant in the posting's language, with Open in Mail's recipient and subject", async () => {
+    const ai = fakeAssistant({ body: (i) => (i.language === "bg" ? "Благодаря Ви за отделеното време. Приех друго предложение и оттеглям кандидатурата си. Пожелавам Ви успех." : withdrawalBody) });
+    const s = setup({ ai });
+    const ardent = await s.add("Ardent Labs", "Detection Engineer", "offer");
+    await s.add("Varna Trust Bank", "Специалист информационна сигурност", "screening", { contact: "careers@varnatrust.example" });
+    const { withdrawals } = await s.tracker.acceptOffer(ardent);
+
+    const d = (await s.tracker.followUp(withdrawals[0]!.followUp.id))!;
+
+    expect(ai.inputs[0]).toMatchObject({ kind: "withdrawal", company: "Varna Trust Bank", stage: "screening", language: "bg", words: { min: 30, max: 70 } });
+    expect(d.draft).toMatchObject({ language: "bg" });
+    expect(d.text).toContain("оттеглям кандидатурата си");
+    expect(d.mail).toEqual({ to: "careers@varnatrust.example", subject: "Withdrawing my application: Специалист информационна сигурност" });
+    expect(d.outline.length).toBeGreaterThan(0);
+  });
+});
+
+describe("declining an offer", () => {
+  it("moves it to Withdrawn with the reason \"declined offer\", by you; it counts as withdrawn, its offer still a reply", async () => {
+    const s = setup();
+    const ardent = await s.add("Ardent Labs", "Detection Engineer", "offer", { appliedOn: "2026-09-20" });
+    await s.add("Medora", "Full-stack Engineer", "applied", { appliedOn: "2026-09-21" });
+
+    const r = await s.tracker.declineOffer(ardent);
+
+    expect(r.event).toMatchObject({ kind: "status", cause: "you", from: "offer", to: "withdrawn", reason: "declined offer" });
+    expect(await s.tracker.get(ardent)).toMatchObject({ status: "withdrawn", closedReason: "declined offer" });
+    expect((await s.tracker.list()).counts).toMatchObject({ offer: 0, withdrawn: 1, rejected: 0 });
+    expect((await s.tracker.stats()).responseRate).toMatchObject({ replied: 1, counted: 2 });
+    // Declining offers no withdrawals: nothing was accepted.
+    expect((await s.tracker.withdrawals()).items).toEqual([]);
+  });
+
+  it("is undoable: back to Offer", async () => {
+    const s = setup();
+    const ardent = await s.add("Ardent Labs", "Detection Engineer", "offer");
+    const { event } = await s.tracker.declineOffer(ardent);
+
+    await s.tracker.undoEvent(event.id);
+
+    expect(await s.tracker.get(ardent)).toMatchObject({ status: "offer", closedReason: null });
+  });
+
+  it("is only for an Application at Offer", async () => {
+    const s = setup();
+    const id = await s.add("Medora", "Full-stack Engineer", "interviewing");
+
+    await expect(s.tracker.declineOffer(id)).rejects.toMatchObject({ problem: "invalid" });
+  });
+
+  it("offers an optional gracious reply, drafted by the Track assistant, before declining", async () => {
+    const body = "Thank you for the offer for the Detection Engineer role, and for the time your team spent with me. After a lot of thought I've decided to decline. I enjoyed our conversations about your detection pipeline and hope our paths cross again.";
+    const ai = fakeAssistant({ body });
+    const s = setup({ ai });
+    const ardent = await s.add("Ardent Labs", "Detection Engineer", "offer", { contact: "lea.hristova@ardentlabs.example" });
+
+    const d = await s.tracker.declineDraft(ardent);
+
+    expect(ai.inputs[0]).toMatchObject({ kind: "decline", company: "Ardent Labs", stage: "offer", words: { min: 40, max: 80 } });
+    expect(d).toMatchObject({ followUp: { kind: "decline" }, text: body, mail: { to: "lea.hristova@ardentlabs.example", subject: "Your offer: Detection Engineer" } });
+    // Never a Needs-you item, and declining doesn't need it sent.
+    expect((await s.tracker.needsYou()).items.some((i) => i.followUp.kind === "decline")).toBe(false);
+    await expect(s.tracker.markFollowUpSent(d.followUp.id)).rejects.toMatchObject({ problem: "invalid" });
   });
 });
