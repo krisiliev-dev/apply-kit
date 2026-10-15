@@ -186,10 +186,40 @@ _Avoid_: Final package, submitted package
 The fixed one-page A4 layout every CV version and cover letter is rendered in; the AI fills content only.
 _Avoid_: Theme, design, format
 
+## Applying
+
+**Portal**:
+The company's application site where a package is submitted: one of the supported job systems (Workday, Greenhouse, Lever, SmartRecruiters, Workable, Ashby) or a company's own form.
+_Avoid_: ATS (when meaning the page), site, careers page
+
+**Fill**:
+The extension entering values into the portal page the user is viewing, from the approved package, the master profile and the answer bank, only when the user clicks, one page at a time. It never presses Next or Submit.
+_Avoid_: Autofill, auto-apply
+
+**Filler**:
+The extension's knowledge of one portal: how to recognise its pages, read their fields and fill them. A generic filler covers forms of unknown portals, by opt-in.
+_Avoid_: Adapter (used for sources), bot, script
+
+**Fill session**:
+One approved package loaded for one browser tab, from the first fill until the user marks it submitted, the tab closes or the tab moves to a different job.
+_Avoid_: Run, autofill session
+
+**Needs-you field**:
+A portal field the extension couldn't fill with confidence; it's marked on the page and shown in the panel, with a draft or suggestion and its basis where one exists.
+_Avoid_: Unknown field, error
+
+**Mark as submitted**:
+The user's confirmation, after pressing the portal's Submit, that turns the package into an Application. A portal's confirmation page only prompts it.
+_Avoid_: Log, record (as verbs for this)
+
+**Field report**:
+The structure of one portal field the extension couldn't handle (label, kind, attributes, never values), saved locally by the user so a filler can be fixed.
+_Avoid_: Bug report, telemetry
+
 ## After applying
 
 **Application**:
-A package that has been submitted for a job.
+A package that has been submitted for a job; created when the user marks it as submitted.
 _Avoid_: Package (once submitted), submission
 
 **Status**:
