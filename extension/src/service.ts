@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, PageReading, RecordedPage } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -22,12 +22,25 @@ export type Connection =
 
 export type CaptureAnswer = { ok: true; report: CaptureReport } | { ok: false; state: "not-running" | "unpaired" } | { ok: false; state: "error"; error: string };
 
+/** A fill call's answer: its value, or why there isn't one (a refusal names its problem, "session-ended"). */
+export type Answer<T> = { ok: true; value: T } | { ok: false; state: "not-running" | "unpaired" } | { ok: false; state: "error"; error: string; problem?: string };
+
+export interface FillClient {
+  /** Which package fits the page; opens nothing. */
+  match(page: FillPage, sessionId: string | null): Promise<Answer<FillStart>>;
+  /** A Fill click: re-reads the job, keeps or ends the tab's session, opens one on a match. */
+  start(page: FillPage, options: { sessionId?: string | null; packageId?: string }): Promise<Answer<FillStart>>;
+  answer(sessionId: string, reading: PageReading): Promise<Answer<FieldAnswer[]>>;
+  record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedPage>>;
+}
+
 export interface Client {
   connect(): Promise<Connection>;
   /** Trades the code apply-kit shows for a token. A different address can be given at the same time. */
   pair(code: string, serviceUrl?: string): Promise<{ ok: true } | { ok: false; error: string }>;
   preview(page: CapturedPage): Promise<CaptureAnswer>;
   capture(page: CapturedPage): Promise<CaptureAnswer>;
+  fill: FillClient;
 }
 
 export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch; store: Store }): Client {
@@ -70,7 +83,31 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
     return { ok: true, report: (await res.json()) as CaptureReport };
   }
 
+  async function post<T>(path: string, body: unknown): Promise<Answer<T>> {
+    const { token } = await settings();
+    if (!token) return { ok: false, state: "unpaired" };
+    const res = await call(path, { method: "POST", body });
+    if (!res) return { ok: false, state: "not-running" };
+    if (res.status === 401) {
+      await store.remove(["token"]);
+      return { ok: false, state: "unpaired" };
+    }
+    if (!res.ok) {
+      const b = (await res.json().catch(() => null)) as { error?: unknown; problem?: unknown } | null;
+      const error = typeof b?.error === "string" ? b.error : `apply-kit answered ${res.status}.`;
+      return typeof b?.problem === "string" ? { ok: false, state: "error", problem: b.problem, error } : { ok: false, state: "error", error };
+    }
+    return { ok: true, value: (await res.json()) as T };
+  }
+
   return {
+    fill: {
+      match: (page, sessionId) => post("/api/ext/fill/match", { page, sessionId }),
+      start: (page, options) => post("/api/ext/fill/start", { page, ...options }),
+      answer: (sessionId, reading) => post("/api/ext/fill/answer", { sessionId, reading }),
+      record: (sessionId, reading, outcomes) => post("/api/ext/fill/record", { sessionId, reading, outcomes }),
+    },
+
     async connect() {
       const { serviceUrl, token } = await settings();
       const res = await call("/api/ext/status");
