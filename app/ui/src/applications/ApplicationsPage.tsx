@@ -649,7 +649,7 @@ function Group({ group: g, list, open, highlight, onToggle, onMore, onPage, onSt
             <button
               className="btn sm" type="button" aria-disabled={end >= g.count || undefined}
               onClick={() => { if (end < g.count) onPage(end); }}
-            >Next {Math.min(pageSize, Math.max(0, g.count - end))}<span className="sr-only"> {g.label}</span></button>
+            >{end < g.count ? `Next ${Math.min(pageSize, g.count - end)}` : "Next"}<span className="sr-only"> {g.label}</span></button>
           </div>
         )}
         {hidden > 0 && (
