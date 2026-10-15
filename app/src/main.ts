@@ -11,6 +11,7 @@ import { createFileStore } from "./files.ts";
 import { createChromiumRenderer } from "./documents/chromium.ts";
 import { createPdfJsReader } from "./documents/pdf-text.ts";
 import { createPackageFolder } from "./packages.ts";
+import { createFinderRevealer } from "./reveal.ts";
 import { createVisionRecognizer } from "./import/recognise.ts";
 import { createOpenRouterTrackAssistant } from "./extraction/track-assistant.ts";
 import type { Extractor, Tracker, Writer } from "@apply-kit/core";
@@ -58,6 +59,8 @@ const engine = createEngine({
   settings,
 });
 
+const packageFolder = createPackageFolder(dirname(config.dbPath), config.packagesDir);
+
 // Prepare: shares the database, clock, settings and AI budget with Discover. Files Kris brings are
 // kept as hash-named copies in files/ beside the database, generated PDFs in packages/ (ADR 0003).
 const preparation = createPreparationEngine({
@@ -68,7 +71,7 @@ const preparation = createPreparationEngine({
   renderer,
   pdfReader: createPdfJsReader(),
   files: createFileStore(join(dirname(config.dbPath), "files")),
-  packages: createPackageFolder(dirname(config.dbPath), config.packagesDir),
+  packages: packageFolder,
   settings,
   // Import reads the public GitHub API and a portfolio page; scans are read by text recognition on
   // this laptop (macOS Vision).
@@ -125,10 +128,11 @@ tracker = createTracker({
 });
 
 // Apply: the fill engine matches portal pages to approved packages and answers fields, reading
-// Prepare through PrepareForApply.
-const fill = createFillEngine({ db, clock, prepare: preparation });
+// Prepare through PrepareForApply. A package file approval couldn't copy to the Packages folder is
+// copied on first use, so "Show in Finder" has it there.
+const fill = createFillEngine({ db, clock, prepare: preparation, packages: packageFolder });
 
-const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
+const app = createServer({ engine, preparation, fill, revealer: createFinderRevealer(config.packagesDir), tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 
 // localhost only: the extension and UI talk to this, nothing else should.
 const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1" }, (info) => {

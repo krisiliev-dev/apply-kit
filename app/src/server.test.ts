@@ -3,13 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createAiBudget, createEngine, createFillEngine, createPairing, createPreparationEngine, createTracker, type DocumentToRender, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createFillEngine, createPairing, createPreparationEngine, createTracker, FillError, type DocumentToRender, type FillEngine, type PackageFileForFill, type Scheduler } from "@apply-kit/core";
+import type { Revealer } from "./fill-api.ts";
 import { createServer } from "./server.ts";
 
 const port = 4310;
 
 // The service as the extension and the UI see it: an in-memory engine, no network, a fixed clock.
-function service(uiDir = "/nonexistent/") {
+function service(uiDir = "/nonexistent/", stand: { fill?: FillEngine; revealer?: Revealer } = {}) {
   const db = new DatabaseSync(":memory:");
   const clock = { now: () => new Date("2026-10-12T07:30:00Z") };
   const engine = createEngine({
@@ -36,8 +37,8 @@ function service(uiDir = "/nonexistent/") {
   const pairing = createPairing({ db, clock });
   const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const fill = createFillEngine({ db, clock, prepare: preparation });
-  const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port });
+  const fill = stand.fill ?? createFillEngine({ db, clock, prepare: preparation });
+  const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port, revealer: stand.revealer });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
@@ -400,6 +401,68 @@ describe("the extension's fill endpoints", () => {
     expect(await unknown.json()).toMatchObject({ problem: "no-session" });
     const record = await s.request("/api/ext/fill/record", s.json({ sessionId: "s1", reading, outcomes: [] }, auth));
     expect(record.status).toBe(409);
+  });
+});
+
+describe("the extension's package-file endpoints", () => {
+  // The fill engine stands in for a session on Mira Petrova's (made-up) approved package: these
+  // endpoints only carry its files to the panel and ask Finder to show them.
+  const cv: PackageFileForFill = { which: "cv", fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", size: 9, path: "/Users/mira/Documents/apply-kit Packages/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", bytes: new TextEncoder().encode("%PDF-fake") };
+  const letter: PackageFileForFill = { ...cv, which: "letter", fileName: "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", path: "/Users/mira/Documents/apply-kit Packages/Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf" };
+  function withFiles(files: Record<string, PackageFileForFill | null> = { cv, letter }) {
+    const revealed: string[] = [];
+    const fill = {
+      packageFile: async (sessionId: string, which: "cv" | "letter") => {
+        if (sessionId !== "s1") throw new FillError("no-session", "This tab's fill session isn't known.");
+        return files[which] ?? null;
+      },
+    } as unknown as FillEngine;
+    const s = service("/nonexistent/", { fill, revealer: { reveal: async (path: string) => { revealed.push(path); } } });
+    return { ...s, revealed };
+  }
+
+  it("need the pairing token", async () => {
+    const s = withFiles();
+    for (const path of ["/api/ext/fill/file", "/api/ext/fill/reveal"]) expect((await s.request(path, s.json({ sessionId: "s1", which: "cv" }))).status, path).toBe(401);
+    expect(s.revealed).toEqual([]);
+  });
+
+  it("give the package's CV as base64, named as in the package", async () => {
+    const s = withFiles();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const res = await s.request("/api/ext/fill/file", s.json({ sessionId: "s1", which: "cv" }, auth));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ which: "cv", fileName: cv.fileName, size: 9, path: cv.path, type: "application/pdf", base64: "JVBERi1mYWtl" });
+  });
+
+  it("Show in Finder reveals the session's file, the letter when asked for the letter", async () => {
+    const s = withFiles();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const res = await s.request("/api/ext/fill/reveal", s.json({ sessionId: "s1", which: "letter" }, auth));
+
+    expect(res.status).toBe(200);
+    expect(s.revealed).toEqual([letter.path]);
+  });
+
+  it("say so when the package has no such file or it isn't in the Packages folder, and refuse an unknown session", async () => {
+    const s = withFiles({ cv: { ...cv, path: null }, letter: null });
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const noLetter = await s.request("/api/ext/fill/file", s.json({ sessionId: "s1", which: "letter" }, auth));
+    const noCopy = await s.request("/api/ext/fill/reveal", s.json({ sessionId: "s1", which: "cv" }, auth));
+    const unknown = await s.request("/api/ext/fill/reveal", s.json({ sessionId: "s2", which: "cv" }, auth));
+    const bad = await s.request("/api/ext/fill/file", s.json({ sessionId: "s1", which: "photo" }, auth));
+
+    expect(noLetter.status).toBe(404);
+    expect(await noLetter.json()).toEqual({ error: "Your package has no letter" });
+    expect(noCopy.status).toBe(404);
+    expect(await noCopy.json()).toEqual({ error: "The CV isn't in your Packages folder: apply-kit couldn't write it there" });
+    expect(unknown.status).toBe(409);
+    expect(bad.status).toBe(400);
+    expect(s.revealed).toEqual([]);
   });
 });
 
