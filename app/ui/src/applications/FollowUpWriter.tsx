@@ -8,7 +8,7 @@
 import type { FollowUpDraft, NoDraft } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { fetchFollowUp, saveFollowUpText } from "../api.ts";
-import { daysWord, longDay, wordsWord } from "./words.ts";
+import { daysWord, weekDay, wordsWord } from "./words.ts";
 
 export type FollowUpAction = "sent" | "skip" | "snooze";
 
@@ -59,8 +59,8 @@ export function useFollowUpDraft(id: string) {
 export function noDraftWords(n: NoDraft): { lead: string; rest: string } {
   if (n.reason === "budget-out") {
     return {
-      lead: `No draft this time: this month's AI budget ($${n.capUsd % 1 ? n.capUsd.toFixed(2) : n.capUsd}) ran out${n.ranOutOn ? ` on ${longDay(n.ranOutOn)}` : ""}.`,
-      rest: `It resets on ${longDay(n.resetsOn)}. Everything else works, and the points below make writing this one quick.`,
+      lead: `No draft this time: this month's AI budget ($${n.capUsd % 1 ? n.capUsd.toFixed(2) : n.capUsd}) ran out${n.ranOutOn ? ` on ${weekDay(n.ranOutOn)}` : ""}.`,
+      rest: `It resets on ${weekDay(n.resetsOn)}. Everything else works, and the points below make writing this one quick.`,
     };
   }
   if (n.reason === "no-ai") {

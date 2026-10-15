@@ -44,8 +44,8 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const toaster = useToaster();
   const contactRef = useRef<HTMLButtonElement>(null);
   /** Why the follow-up in the Next step has no draft (shown as a banner at the top), by follow-up id. */
-  const [noDraft, setNoDraft] = useState<{ id: string; noDraft: NoDraft } | null>(null);
-  const onDraftLoaded = useCallback((d: FollowUpDraft) => setNoDraft(d.noDraft ? { id: d.followUp.id, noDraft: d.noDraft } : null), []);
+  const [loaded, setLoaded] = useState<{ id: string; drafted: boolean; noDraft: NoDraft | null } | null>(null);
+  const onDraftLoaded = useCallback((d: FollowUpDraft) => setLoaded({ id: d.followUp.id, drafted: !!d.draft, noDraft: d.noDraft }), []);
 
   // The top bar shows source health on every screen.
   useEffect(() => {
@@ -118,13 +118,13 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const dueId = app.nextStep.kind === "follow-up" ? app.nextStep.followUp.id : null;
   return (
     <section className="stack app-page" style={{ gap: "var(--s-6)" }}>
-      {noDraft && noDraft.id === dueId && <NoDraftBanner noDraft={noDraft.noDraft} />}
+      {loaded?.noDraft && loaded.id === dueId && <NoDraftBanner noDraft={loaded.noDraft} />}
       {app.movedByEmail && <MovedBanner moved={app.movedByEmail} refresh={refresh} toaster={toaster} onDone={focusStatus} />}
       <Head app={app} onStatus={changeStatus} />
       <div className="cols">
         <div className="col">
           {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
-          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} />
+          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} drafted={loaded?.id === dueId ? loaded.drafted : null} />
           <Timeline app={app} refresh={refresh} toaster={toaster} />
         </div>
         <div className="col">
@@ -188,9 +188,11 @@ function Check() {
   return <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
 }
 
-function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded }: {
+function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded, drafted }: {
   app: ApplicationDetail; onAddContact: () => void; refresh: () => Promise<ApplicationDetail>; toaster: Toaster;
   onDraftLoaded: (d: FollowUpDraft) => void;
+  /** Whether the due follow-up came with a draft (null until it has loaded). */
+  drafted: boolean | null;
 }) {
   const n = app.nextStep;
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
@@ -225,7 +227,11 @@ function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded }: {
     return (
       <div className="panel next-step ask">
         <span className="kicker">{followUpName(fu.kind)} {dueWords(fu.dueOn)}{fu.kind === "nudge" && ` · ${daysWord(daysFrom(fu.anchorOn, fu.dueOn))} after ${app.status === "applied" ? "applying" : "moving to Screening"}`}</span>
-        <h2 id="next-h" tabIndex={-1}>{n.text}</h2>
+        <h2 id="next-h" tabIndex={-1}>
+          {fu.kind === "nudge" && drafted !== null
+            ? drafted ? n.text.replace("Write a short nudge", "Here's a short nudge") : "Write a short nudge (70–110 words works well)"
+            : n.text}
+        </h2>
         <FollowUpWriter key={fu.id} id={fu.id} headingId="next-h" onAct={(action) => { act(fu, action).catch(() => {}); }} onAnnounce={toaster.announce} onLoaded={onDraftLoaded} />
       </div>
     );
