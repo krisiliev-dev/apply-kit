@@ -50,7 +50,7 @@ export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult
 export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, TrackerError } from "./tracker.ts";
 export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
-  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
+  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
   NextUp, NeedsYou, NeedsYouEntry, ComingUp, FollowUpDraft, FollowUpEventKind,
 } from "./tracker.ts";
 export { defaultFollowUpSettings } from "./follow-ups.ts";
