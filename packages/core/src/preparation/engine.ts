@@ -33,7 +33,7 @@ import type { DocumentToRender } from "../documents/content.ts";
 import { demoDocument, demoFileName, type DemoOptions } from "../documents/demo.ts";
 import type { PdfText, PreparationDeps } from "./ports.ts";
 import {
-  createPackageStore, type ApproveResult, type ChangeResult, type FlagChoice, type LearnedPiece, type PackageChip, type PackageJob, type PackageStep, type PackageView,
+  createPackageStore, type ApproveResult, type ChangeResult, type DraftAnswerRequest, type DraftAnswerResult, type FlagChoice, type LearnedPiece, type PackageChip, type PackageJob, type PackageStep, type PackageView,
   type PrepareStatus, type StartPackageResult,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
@@ -336,6 +336,25 @@ export interface PreparationEngine {
   keepHonestVersion(pieceId: string): SavePieceResult;
   /** "Confirm the N unflagged": confirms the learned pieces that aren't near the line, never the ones that are. */
   confirmLearnedPieces(): { confirmed: number; refused: { pieceId: string; message: string }[] };
+
+  // ---------- Screening answers (#66) ----------
+
+  /**
+   * Kris's answer to a screening question: her salary number, one of the form's options, or her own
+   * words (checked against the form's limit). It counts as hers, so Approve stops waiting for it; an
+   * approved answers step reopens.
+   */
+  setScreeningAnswer(id: string, questionId: string, text: string): ChangeResult;
+  /** "Write another draft" for a paragraph question: the drafter writes it again from the profile. */
+  redraftScreeningAnswer(id: string, questionId: string): Promise<ChangeResult>;
+  /** "Save to answer bank": a reusable answer becomes a screening answer in the bank. A company-specific one is never saved. */
+  saveScreeningAnswerToBank(id: string, questionId: string): ChangeResult;
+  /**
+   * The drafter (Apply's needs-you questions, and the screening-answers step): an answer to a question
+   * for the package's Job, in its language (or the one asked), within a word or character limit,
+   * resting only on profile pieces (returned), honesty-checked and within the monthly cap.
+   */
+  draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
 }
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
@@ -395,6 +414,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     contact: () => contact.get(),
     closestAngle: (posting) => angles.closest(posting),
     draftDocument,
+    answers,
   });
 
   return {
@@ -430,6 +450,10 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     decideFlag: (id, flagId, choice) => packages.decideFlag(id, flagId, choice),
     answerGap: (id, flagId, answer) => packages.answerGap(id, flagId, answer),
     learnedPieces: () => packages.learned(),
+    setScreeningAnswer: (id, questionId, text) => packages.setAnswer(id, questionId, text),
+    redraftScreeningAnswer: (id, questionId) => packages.redraftAnswer(id, questionId),
+    saveScreeningAnswerToBank: (id, questionId) => packages.saveAnswerToBank(id, questionId),
+    draftAnswer: (id, request) => packages.draftAnswer(id, request),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });

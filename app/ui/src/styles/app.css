@@ -429,3 +429,16 @@ h2[tabindex="-1"]:focus { outline: none }
 .package-page legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
 /* Profile › Learned during packages (#64): a near-the-line piece's choice, as in the hi-fi */
 .piece fieldset legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+
+/* Package · screening answers (#66, hi-fi package.html state 4). Tokens only. */
+.package-page .qs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }
+.package-page .q { display: grid; gap: var(--s-3); padding: var(--s-5); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.package-page .q:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page .q.q-needs { border-left: var(--s-2) solid var(--bloom) }
+.package-page .q .qh { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: baseline }
+.package-page .q .qh b { font-weight: 600; flex: 1 1 calc(var(--s-10) * 4) }
+.package-page .q .foot { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; padding: 0; border-top: 0; font-size: var(--fs-small); color: var(--ink-3) }
+.package-page .q .ans { margin: 0; color: var(--ink); max-width: 68ch }
+.package-page .q fieldset { border: 0; margin: 0; padding: 0; min-width: 0 }
+.package-page .q select.input { appearance: auto; max-width: calc(var(--s-10) * 5) }
+.package-page .money { display: flex; gap: var(--s-3); align-items: center; max-width: calc(var(--s-10) * 5) }

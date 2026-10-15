@@ -515,6 +515,14 @@ export const answerGap = async (id: string, flagId: string, answer: string): Pro
   orRefusal(await postJson(`${packagePath(id)}/cv/flags/${encodeURIComponent(flagId)}/answer`, { answer }));
 export const retryPart = async (id: string, part: PackageStep): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/parts/${part}/retry`));
 
+// ---------- Screening answers (#66) ----------
+
+const answerPath = (id: string, questionId: string) => `${packagePath(id)}/answers/${encodeURIComponent(questionId)}`;
+/** Kris's answer to a screening question (a refusal resolves with why: over the limit, not an option, not one number). */
+export const setScreeningAnswer = async (id: string, questionId: string, text: string): Promise<ChangeResult> => orRefusal(await put(answerPath(id, questionId), { text }));
+export const redraftScreeningAnswer = async (id: string, questionId: string): Promise<ChangeResult> => orRefusal(await postJson(`${answerPath(id, questionId)}/redraft`));
+export const saveScreeningAnswerToBank = async (id: string, questionId: string): Promise<ChangeResult> => orRefusal(await postJson(`${answerPath(id, questionId)}/save`));
+
 /** The CV's draft PDF; `version` (its SHA-256) makes a re-printed CV load afresh. */
 export const packageCvUrl = (id: string, version: string, download = false) =>
   `${packagePath(id)}/cv.pdf?v=${version.slice(0, 12)}${download ? "&download=1" : ""}`;

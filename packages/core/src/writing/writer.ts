@@ -193,12 +193,44 @@ export const coachTurnSchema = z.object({
 });
 export type CoachTurn = z.infer<typeof coachTurnSchema>;
 
+/**
+ * What a screening answer is drafted from (#66): the form's question, the job, the package's
+ * language and the form's limit, the pieces it may cite (as for the CV), and the CV's decisions so
+ * the answer tells the same story (the incident wording Kris chose, the gap she named). With
+ * `translate`, it is Kris's answer from the bank in another language, to put in this one, facts unchanged.
+ */
+export interface DraftAnswerInput {
+  question: string;
+  job: { title: string; company: string; requirements: string[] };
+  language: "en" | "bg";
+  limit: { words: number | null; chars: number | null };
+  pieces: TailorCvInput["pieces"];
+  /** The CV's decisions, in words: "Incident response wording: Ran the response to a phishing campaign". */
+  decisions: string[];
+  translate: { language: "en" | "bg"; text: string } | null;
+}
+
+/**
+ * A drafted screening answer: its words, the piece ids it rests on, how its claim compares to them
+ * (a "stronger" one gives the wording that keeps to them in `honest`, as a CV line does), and
+ * whether it is written for this company (never saved to the answer bank).
+ */
+export const draftedAnswerSchema = z.object({
+  text: z.string(),
+  pieceIds: z.array(z.string()),
+  claim: z.enum(["as-written", "reworded", "stronger"]),
+  honest: z.string().nullable(),
+  companySpecific: z.boolean(),
+});
+export type DraftedAnswer = z.infer<typeof draftedAnswerSchema>;
+
 /** Every writing task with its input, so one estimate covers them all. */
 export type WriterRequest =
   | { task: "draft-pieces"; input: ImportedText }
   | { task: "learn-voice"; input: VoiceLearningInput }
   | { task: "tailor-cv"; input: TailorCvInput }
-  | { task: "coach-turn"; input: CoachTurnInput };
+  | { task: "coach-turn"; input: CoachTurnInput }
+  | { task: "draft-answer"; input: DraftAnswerInput };
 
 export type WriterTask = WriterRequest["task"];
 
@@ -233,4 +265,6 @@ export interface Writer {
   tailorCv(input: TailorCvInput): Promise<Written<TailoredCv>>;
   /** The coach interview's next turn: what the coach says, and the pieces it writes from Kris's answer. */
   coachTurn(input: CoachTurnInput): Promise<Written<CoachTurn>>;
+  /** A screening answer drafted (or translated) from the pieces, within the form's limit. */
+  draftAnswer(input: DraftAnswerInput): Promise<Written<DraftedAnswer>>;
 }
