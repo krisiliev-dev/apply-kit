@@ -4,6 +4,7 @@ import { stream } from "hono/streaming";
 import type { Context } from "hono";
 import { TrackerError, angles, maxCvBytes } from "@apply-kit/core";
 import type {
+  RejectionReason,
   AddApplicationInput, CapturedPage, EmailAnswer, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, GroupKey, Pairing, PassReason,
   PastedPosting, Scheduler, Status, StatusFilter, Tracker, Angle,
 } from "@apply-kit/core";
@@ -364,9 +365,32 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
   app.get("/api/applications/mailbox", async (c) => c.json(await tracker.mailbox()));
   // Needs you: follow-ups due, most urgent first, the count for the top bar's badge, and Coming up.
   app.get("/api/applications/needs-you", async (c) => c.json(await tracker.needsYou()));
+  // The withdrawals of the offer accepted (still to send, and sent), for the withdrawal dialog.
+  app.get("/api/applications/withdrawals", async (c) => c.json(await tracker.withdrawals()));
   app.get("/api/applications/:id", async (c) => {
     const a = await tracker.get(c.req.param("id"));
     return a ? c.json(a) : c.json({ error: "No such application" }, 404);
+  });
+  // Offers and closing: accept (Accepted, with withdrawals to send), decline (Withdrawn, "declined offer") and its
+  // optional draft, the offer's details ({ baseSalary, startDate, workPattern, contract, other }) and a rejection's
+  // optional lesson and likely reason ({ lesson, reason }).
+  app.post("/api/applications/:id/accept", async (c) => trackerCall(c, () => tracker.acceptOffer(c.req.param("id"))));
+  app.post("/api/applications/:id/decline", async (c) => trackerCall(c, () => tracker.declineOffer(c.req.param("id"))));
+  app.get("/api/applications/:id/decline-draft", async (c) => trackerCall(c, () => tracker.declineDraft(c.req.param("id"))));
+  app.put("/api/applications/:id/offer", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const details = Object.fromEntries((["baseSalary", "startDate", "workPattern", "contract", "other"] as const)
+      .filter((k) => k in body).map((k) => [k, typeof body[k] === "string" ? body[k] : null]));
+    return trackerCall(c, () => tracker.saveOfferDetails(c.req.param("id"), details));
+  });
+  app.put("/api/applications/:id/rejection", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.saveRejectionNote(c.req.param("id"), {
+      lesson: typeof body.lesson === "string" ? body.lesson : null,
+      reason: typeof body.reason === "string" ? (body.reason as RejectionReason) : null,
+    }));
   });
   // A note ({ text }) and a contact address or domain ({ value }) on one Application.
   app.post("/api/applications/:id/notes", async (c) => {

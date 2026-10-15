@@ -110,4 +110,18 @@ describe("OpenRouter Track assistant: drafts", () => {
       expect(sent).toContain(part);
     }
   });
+
+  it("tells the model a withdrawal is after accepting another offer, never naming it, and a decline is declining this one", async () => {
+    const api = fakeOpenRouter(JSON.stringify({ body: "Thank you." }));
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
+
+    await assistant.draft({ ...draftInput, kind: "withdrawal", stage: "interviewing", words: { min: 30, max: 70 } });
+    await assistant.draft({ ...draftInput, kind: "decline", stage: "offer", words: { min: 40, max: 80 } });
+
+    const withdrawal = JSON.stringify(api.requests[0]!.messages);
+    for (const part of ["withdrawing from this process (now interviewing) after accepting another offer", "never name the other company", "30-70 words"]) {
+      expect(withdrawal).toContain(part);
+    }
+    expect(JSON.stringify(api.requests[1]!.messages)).toContain("declining their offer");
+  });
 });

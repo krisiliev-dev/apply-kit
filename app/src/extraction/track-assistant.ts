@@ -29,7 +29,11 @@ const instructions = `You read one email from a job seeker's job mailbox and cla
   is fixed yet; timeZone as an IANA name ("CET" means "Europe/Berlin", "UK time" "Europe/London"), null when not stated;
   format "video", "phone" or "onsite" or null; place: the call link, phone number or address as written, or null;
   people: who it is with, as written ("Mara Ivanova, Engineering Manager"); round: which round or stage as written, or null;
-  notes: anything else useful (what to prepare, time-zone remarks), or null.`;
+  notes: anything else useful (what to prepare, time-zone remarks), or null.
+- offer: for an offer only (null otherwise): what the email states, never guessed. baseSalary as written with its
+  currency and period ("€3,100 gross / month"); startDate as "YYYY-MM-DD"; workPattern (remote, hybrid, on-site, shifts);
+  contract (permanent, fixed-term, probation); other: anything else that matters, such as a deadline to answer. Null for
+  anything the email doesn't state.`;
 
 const prepInstructions = `You write a light interview prep sheet as JSON matching the schema, for a job seeker's application. Rules:
 - facts: 3 to 6 short company facts. source "posting" only for what the posting text says, "notes" only for what the
@@ -39,11 +43,12 @@ const prepInstructions = `You write a light interview prep sheet as JSON matchin
   given; never invent, merge or stretch a story. A null is fine and honest.
 - Write in the given language.`;
 
-const draftInstructions = `You draft a short email for a job seeker (a nudge after no reply, a thank-you note after an interview, or a check-in when interviews have gone quiet), in their voice, as JSON {"body": "..."}. Rules:
+const draftInstructions = `You draft a short email for a job seeker (a nudge after no reply, a thank-you note after an interview, a check-in when interviews have gone quiet, a withdrawal after accepting another offer, or a reply declining an offer), in their voice, as JSON {"body": "..."}. Rules:
 - Body only: no subject, greeting, sign-off or name. The job seeker adds those in their own mail app.
 - Concise and warm, never fawning. Plain, declarative sentences; direct tone.
 - Mention exactly one concrete detail from the posting's requirements or the job seeker's notes; for a thank-you note,
-  that detail is the topic they discussed in the interview, as given.
+  that detail is the topic they discussed in the interview, as given. A withdrawal or a decline needs no detail: thank
+  them, say it plainly and keep the door open; never name the other company or the offer accepted.
 - Facts about the job seeker come only from the Master profile pieces given. Never invent experience.
   Any number about them (counts, percentages, years) must be copied exactly from those pieces; if none fits, use no number.
 - Never use these phrases: {banned}.
@@ -78,7 +83,11 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
       ? `Message: a thank-you note after an interview on ${input.since}${input.people?.length ? ` with ${input.people.join(", ")}` : ""}. One thing discussed: ${input.topic ?? "(not given)"}.`
       : input.kind === "check-in"
         ? `Message: a polite check-in, ${input.daysQuiet} days after the last interview (${input.since}) with no news.`
-        : `Message: a nudge after no reply, ${input.daysQuiet} days after ${input.stage === "applied" ? "applying" : "moving to screening"} (${input.since}).`,
+        : input.kind === "withdrawal"
+          ? `Message: withdrawing from this process (now ${input.stage}) after accepting another offer; never name the other company. Applied ${input.since}.`
+          : input.kind === "decline"
+            ? `Message: declining their offer, graciously. Applied ${input.since}.`
+            : `Message: a nudge after no reply, ${input.daysQuiet} days after ${input.stage === "applied" ? "applying" : "moving to screening"} (${input.since}).`,
     `Job: ${input.title} at ${input.company}. Language: ${input.language}.`,
     `Posting requirements:\n${input.requirements.map((r) => `- ${r}`).join("\n") || "- (not read)"}`,
     `The job seeker's notes:\n${input.notes.map((n) => `- ${n}`).join("\n") || "- (none)"}`,

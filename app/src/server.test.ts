@@ -245,6 +245,31 @@ describe("the Applications routes", () => {
     expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
 
+  it("accepts an offer with withdrawals to send, declines one, and keeps offer details and a rejection's lesson", async () => {
+    const s = service();
+    const add = async (company: string, status: string) =>
+      ((await (await s.request("/api/applications", s.json({ job: { company, title: "Engineer" }, appliedOn: "2026-10-09", status }))).json()) as { application: { id: string } }).application.id;
+    const ardent = await add("Ardent Labs", "offer");
+    const velta = await add("Velta Logistics", "applied");
+    const kestrel = await add("Kestrel Payments", "offer");
+    const pixelmoor = await add("Pixelmoor", "rejected");
+
+    const accepted = await s.request(`/api/applications/${ardent}/accept`, s.json({}));
+    expect(await accepted.json()).toMatchObject({ application: { status: "accepted" }, withdrawals: [{ application: { id: velta } }, { application: { id: kestrel } }] });
+    const list = (await (await s.request("/api/applications/withdrawals")).json()) as { items: { followUp: { id: string } }[] };
+    const sent = await s.request(`/api/follow-ups/${list.items[0]!.followUp.id}/sent`, s.json({}));
+    expect(await sent.json()).toMatchObject({ event: { to: "withdrawn" } });
+
+    expect((await s.request(`/api/applications/${kestrel}/decline-draft`)).status).toBe(200);
+    expect(await (await s.request(`/api/applications/${kestrel}/decline`, s.json({}))).json()).toMatchObject({ event: { reason: "declined offer" } });
+    expect((await s.request(`/api/applications/${velta}/decline`, s.json({}))).status).toBe(422);
+
+    const offer = await s.request(`/api/applications/${ardent}/offer`, { ...s.json({ baseSalary: "€3,100 gross / month" }), method: "PUT" });
+    expect(await offer.json()).toMatchObject({ offer: { from: "you", details: { baseSalary: "€3,100 gross / month" } } });
+    const note = await s.request(`/api/applications/${pixelmoor}/rejection`, { ...s.json({ lesson: "They wanted a shipped design system", reason: null }), method: "PUT" });
+    expect(await note.json()).toMatchObject({ rejection: { lesson: "They wanted a shipped design system", reason: null } });
+  });
+
   it("searches, filters and pages the list from the query string, and records a visit", async () => {
     const s = service();
     for (let i = 0; i < 30; i++) {
