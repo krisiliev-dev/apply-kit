@@ -154,6 +154,27 @@ describe("Kris's own wording (#64)", () => {
     expect(checkWording(text, ["detections"], profile)).toEqual([{ rule, message }]);
   });
 
+  it.each([
+    ["at the start of the line", "Kubernetes rollout: wrote 30 detection rules"],
+    ["after a full stop", "Wrote 30 detection rules. Splunk dashboards for each"],
+    ["after a bullet", "• Terraform modules for 30 detection rules"],
+  ])("refuses a name %s that isn't in the profile", (_, text) => {
+    expect(checkWording(text, ["detections"], profile)).toEqual([expect.objectContaining({ rule: "skill" })]);
+  });
+
+  it.each([
+    "Led the work on 30 detection rules",
+    "Built 30 detection rules",
+    "Cut false alerts by about a third with 30 detection rules",
+    "Automated 30 detection rules",
+    "Reviewing alerts daily, wrote 30 detection rules",
+    "Wazuh: wrote 30 detection rules",
+    "Over the year, wrote 30 detection rules. Then tuned them",
+    "Написах 30 правила за откриване",
+  ])("doesn't take an ordinary word starting a sentence for a name: %s", (text) => {
+    expect(checkWording(text, ["detections"], profile)).toEqual([]);
+  });
+
   it("refuses an empty wording", () => {
     expect(checkWording("  ", ["detections"], profile)).toEqual([{ rule: "citation", message: "is empty" }]);
   });
