@@ -23,6 +23,7 @@ Design step 5. Direction **Vitosha**, chosen 2026-10-11 from three directions ([
 | Colour | Alias tokens only: `ground`, `surface`, `surface-sunken`, `ink`/`ink-2`/`ink-3`, `rule`, `border-control`, `action`(+hover, on-action), `bloom`(+soft), `met`/`partly`/`gap` (+soft), `focus`; `doc-*` for documents. Light and dark defined; all text pairs ≥ 4.5:1, control borders ≥ 3:1 (verified 2026-10-11) |
 | Type | **Geologica** (headings, numbers, CV name/sections), **Onest** (everything else). Both have full Cyrillic. Scale 1.25 from 15px: 12 · 13 · 15 · 18 · 22 · 28 · 35 · 44. Hierarchy by weight and colour before size |
 | Space | 4px base: 2 · 4 · 8 · 12 · 16 · 20 · 24 · 32 · 40 · 56 |
+| Sizes | icons 11 · 14; control height 40, text box 88; layout widths (`--w-*`): chip input 80–120, tile 160, field 200, search 220–320, side column 260–320, card 280, form 640 |
 | Radius | sheet 3 · small 6 · control 10 · card 14 · pill 999 (buttons, chips, statuses) |
 | Elevation | `raised` (soft two-layer, light mode only; dark uses rules) · `overlay` (menus, dialogs, toasts) |
 | Motion | 120 / 200 / 320ms; standard ease in, faster ease out; only in response to user actions; reduced motion respected |
