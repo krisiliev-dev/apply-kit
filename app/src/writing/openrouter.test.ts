@@ -107,4 +107,23 @@ describe("OpenRouter writer", () => {
     expect(sent).toContain("only what Kris said");
     expect(result).toEqual({ output: turn, costUsd: 0.00042, model: "deepseek/deepseek-v4.1-flash", excerpts: [] });
   });
+
+  it("writes a letter from the posting, the CV's wording and the voice, and reports exactly the excerpts it sent", async () => {
+    const letter = { greeting: "Dear Kestrel hiring team,", paragraphs: [{ sentences: [{ text: "Noisy alerts cost your analysts time.", forCompany: true, pieceIds: [] }] }], closing: "Kind regards," };
+    const api = fakeOpenRouter(JSON.stringify(letter));
+    const writer = createOpenRouterWriter({ apiKey: "test-key", fetch: api.fetch });
+    const excerpts = [{ source: "sample:s1", text: "Your night shift loses an hour to noisy alerts." }];
+
+    const result = await writer.writeLetter({
+      posting: { title: "Security Engineer", company: "Kestrel Payments", requirements: ["Incident response"] }, language: "en", words: 220,
+      voice: ["Opens with the company's problem"], excerpts, cv: { summary: null, lines: [{ text: "Led 1 of 3 phishing responses", pieceIds: ["p1"] }] },
+      gaps: ["Kubernetes security"], pieces: [], instruction: null, previous: null,
+    });
+
+    const sent = JSON.stringify(api.requests[0]!.body.messages);
+    expect(sent).toContain("Your night shift loses an hour to noisy alerts.");
+    expect(sent).toContain("Led 1 of 3 phishing responses");
+    expect(sent).toContain("Kubernetes security");
+    expect(result).toEqual({ output: letter, costUsd: 0.00042, model: "deepseek/deepseek-v4.1-flash", excerpts });
+  });
 });

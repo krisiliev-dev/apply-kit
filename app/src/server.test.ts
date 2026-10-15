@@ -23,7 +23,7 @@ function service(uiDir = "/nonexistent/") {
   const stored = new Map<string, Uint8Array>();
   const preparation = createPreparationEngine({
     db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
-    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi(), tailorCv: async () => noAi(), coachTurn: async () => noAi() },
+    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi(), tailorCv: async () => noAi(), coachTurn: async () => noAi(), writeLetter: async () => noAi() },
     renderer: { render: async () => noAi() },
     pdfReader: { read: async () => noAi() },
     files: {
@@ -302,6 +302,11 @@ describe("the Package's API", () => {
     expect((await s.request("/api/packages/nope/cv/fit", s.json({ choice: "keep-two-pages" }))).status).toBe(404);
     expect((await s.request("/api/packages/nope/cv/flags/f1/decide", s.json({ option: "letter" }))).status).toBe(404);
     expect((await s.request("/api/packages/nope/cv/flags/f1/answer", s.json({ answer: "Once." }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/drafts", s.json({ instruction: "Shorter" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/drafts/1", { ...s.json({ text: "Hi" }), method: "PUT" })).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/current", { ...s.json({ draft: 1 }), method: "PUT" })).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/own", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter.pdf")).status).toBe(404);
     expect(await (await s.request("/api/profile/learned")).json()).toEqual([]);
     expect((await s.request("/api/profile/learned/confirm", { method: "POST", body: "" })).status).toBe(415);
   });
@@ -365,7 +370,7 @@ describe("developer route: the demo documents", () => {
     const rendered: DocumentToRender[] = [];
     const preparation = createPreparationEngine({
       db, clock, budget: createAiBudget({ db, clock, capUsd: 10 }),
-      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); }, coachTurn: async () => { throw new Error("no AI in tests"); } },
+      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); }, coachTurn: async () => { throw new Error("no AI in tests"); }, writeLetter: async () => { throw new Error("no AI in tests"); } },
       renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
       pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
       files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
