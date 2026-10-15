@@ -321,7 +321,9 @@ export interface ApplicationGroup {
   label: string;
   /** Every Application in the group. */
   count: number;
-  /** The ones shown (the first `limit`). */
+  /** Where the ones shown start in the group (0 unless paged). */
+  offset: number;
+  /** The ones shown: `limit` of them from `offset`. */
   applications: ApplicationSummary[];
   /** Whether the group starts open. Closed starts collapsed (and is never deleted). */
   open: boolean;
@@ -334,7 +336,12 @@ export interface ApplicationList {
   total: number;
   /** Those not closed. */
   open: number;
-  /** Per Status. */
+  /** Those the search and every filter match (what the groups hold). */
+  matching: number;
+  /**
+   * Per Status, of those the search, angle and date filters match: the Status filter is left out, so
+   * each Status chip says how many it would show.
+   */
   counts: Record<Status, number>;
   /** The earliest date applied, or null when there are none. */
   since: string | null;
@@ -342,9 +349,22 @@ export interface ApplicationList {
   groups: ApplicationGroup[];
 }
 
+/** The Status filter: the open ones (not Rejected or Withdrawn), or one group. */
+export type StatusFilter = "open" | GroupKey;
+
 export interface ListQuery {
   /** How many to show per group. Applied and Closed show 5 unless asked for more; the rest show all. */
   limits?: Partial<Record<GroupKey, number>>;
+  /** Where to start in a group, for paging ("Applied 26–47 of 47"). Past the end: the last page. */
+  offsets?: Partial<Record<GroupKey, number>>;
+  /** Groups with more Applications than this are paged, this many at a time from their offset (their limit doesn't apply). */
+  pageSize?: number | null;
+  /** Words to find in the job, company, contacts and matched email text (every word must appear). */
+  search?: string | null;
+  status?: StatusFilter | null;
+  angle?: Angle | null;
+  /** Only those applied in the last N days (today included). */
+  appliedWithinDays?: number | null;
 }
 
 /** A Job the user can pick when adding an Application. */
@@ -429,6 +449,28 @@ export interface FollowUpDraft {
   /** How many days "Snooze" moves it on (a setting). */
   snoozeDays: number;
 }
+
+/** A Status change an email made, for "Since your last visit". */
+export interface EmailChange {
+  applicationId: string;
+  title: string;
+  company: string;
+  from: Status;
+  to: Status;
+  at: string;
+  eventId: string;
+}
+
+/** "Since your last visit": the Status changes email made since the previous visit ended. */
+export interface SinceLastVisit {
+  /** When the previous visit ended, or null on the first visit. */
+  since: string | null;
+  /** Oldest first; undone ones left out. */
+  changes: EmailChange[];
+}
+
+/** Opening Applications again within this long is the same visit. */
+const visitGapMs = 30 * 60_000;
 
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
@@ -516,6 +558,11 @@ export interface Tracker {
   confirmEmailMove(eventId: string): Promise<void>;
   /** The job mailbox's state, for Applications' banners. */
   mailbox(): Promise<TrackMailbox>;
+  /**
+   * Records a visit to Applications and returns what email changed since the previous one. Opening
+   * the page again within 30 minutes continues the same visit (and shows the same changes).
+   */
+  visit(): Promise<SinceLastVisit>;
 }
 
 export interface TrackerDeps {
@@ -707,10 +754,37 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     }
   }
 
+  /** Each Application's searchable text: job, company, contacts and the text of the emails matched to it, lower-cased. */
+  function searchTexts(): Map<string, string> {
+    const out = new Map<string, string>();
+    const add = (id: string, text: string) => out.set(id, `${out.get(id) ?? ""}\n${text.toLowerCase()}`);
+    for (const r of db.prepare("SELECT id, title, company FROM application WHERE removed_at IS NULL").all()) add(String(r.id), `${String(r.title)}\n${String(r.company)}`);
+    for (const r of db.prepare("SELECT application_id, value FROM application_contact").all()) add(String(r.application_id), String(r.value));
+    const emails = db.prepare(
+      `SELECT d.application_id, m.from_header, m.subject, m.text, m.html, c.summary FROM email_match d JOIN mail_message m ON m.id = d.email_id
+       LEFT JOIN email_classification c ON c.email_id = d.email_id WHERE d.state = 'matched' AND d.application_id IS NOT NULL`,
+    ).all();
+    for (const r of emails) {
+      const body = String(r.text) || String(r.html).replace(/<[^>]*>/g, " ");
+      add(String(r.application_id), `${String(r.from_header)}\n${String(r.subject)}\n${body}\n${str(r.summary) ?? ""}`);
+    }
+    return out;
+  }
+
   async function list(query: ListQuery = {}): Promise<ApplicationList> {
-    const all = db.prepare("SELECT * FROM application WHERE removed_at IS NULL").all().map(summaryOf);
+    const everything = db.prepare("SELECT * FROM application WHERE removed_at IS NULL").all().map(summaryOf);
+    const words = (query.search ?? "").toLowerCase().split(/\s+/).filter(Boolean);
+    const texts = words.length ? searchTexts() : null;
+    const from = query.appliedWithinDays ? addDays(today(), -(query.appliedWithinDays - 1)) : null;
+    // The search, angle and date filters; the Status filter comes after the counts.
+    const found = everything.filter((a) =>
+      (!texts || words.every((w) => texts.get(a.id)?.includes(w)))
+      && (!query.angle || a.angle === query.angle)
+      && (!from || a.appliedOn >= from));
     const counts = Object.fromEntries(statuses.map((s) => [s, 0])) as Record<Status, number>;
-    for (const a of all) counts[a.status]++;
+    for (const a of found) counts[a.status]++;
+    const status = query.status ?? null;
+    const all = found.filter((a) => !status || (status === "open" ? !isClosed(a.status) : groupOrder.find((g) => g.key === status)?.statuses.includes(a.status)));
     const limits = { ...defaultLimits, ...query.limits };
     const groups: ApplicationGroup[] = [];
     for (const g of groupOrder) {
@@ -719,16 +793,19 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       // Applied: the oldest first, since its follow-up falls due soonest. The rest: latest change first.
       if (g.key === "applied") members.sort((a, b) => a.appliedOn.localeCompare(b.appliedOn) || a.title.localeCompare(b.title));
       else members.sort((a, b) => b.lastEvent.at.localeCompare(a.lastEvent.at) || b.appliedOn.localeCompare(a.appliedOn));
-      const limit = limits[g.key];
+      const paged = !!query.pageSize && query.pageSize > 0 && members.length > query.pageSize;
+      const limit = paged ? query.pageSize! : limits[g.key];
+      let offset = Math.max(0, Math.floor(Number(query.offsets?.[g.key] ?? 0)) || 0);
+      if (limit !== undefined && limit > 0 && offset >= members.length) offset = Math.max(0, Math.floor((members.length - 1) / limit) * limit);
       groups.push({
-        key: g.key, label: g.label, count: members.length,
-        applications: limit === undefined ? members : members.slice(0, limit),
+        key: g.key, label: g.label, count: members.length, offset,
+        applications: limit === undefined ? members.slice(offset) : members.slice(offset, offset + limit),
         open: g.key !== "closed",
         order: g.key === "applied" ? "soonest due first" : null,
       });
     }
-    const since = all.map((a) => a.appliedOn).sort()[0] ?? null;
-    return { total: all.length, open: all.filter((a) => !isClosed(a.status)).length, counts, since, groups };
+    const since = everything.map((a) => a.appliedOn).sort()[0] ?? null;
+    return { total: everything.length, open: everything.filter((a) => !isClosed(a.status)).length, matching: all.length, counts, since, groups };
   }
 
   async function setStatus(applicationId: string, status: Status) {
@@ -1543,7 +1620,31 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     };
   }
 
+  function visit(): SinceLastVisit {
+    const at = now();
+    const latest = db.prepare("SELECT * FROM track_visit ORDER BY id DESC LIMIT 1").get();
+    let since: string | null;
+    if (latest && clock.now().getTime() - Date.parse(String(latest.seen_at)) < visitGapMs) {
+      since = str(latest.since);
+      db.prepare("UPDATE track_visit SET seen_at = ? WHERE id = ?").run(at, Number(latest.id));
+    } else {
+      since = latest ? String(latest.seen_at) : null;
+      db.prepare("INSERT INTO track_visit (started_at, seen_at, since) VALUES (?, ?, ?)").run(at, at, since);
+    }
+    if (!since) return { since: null, changes: [] };
+    const changes = db.prepare(
+      `SELECT e.*, a.title, a.company FROM application_event e JOIN application a ON a.id = e.application_id
+       WHERE e.kind = 'email' AND e.cause = 'email' AND e.to_status IS NOT NULL AND e.undone_at IS NULL AND a.removed_at IS NULL
+       AND e.at > ? AND e.at <= ? ORDER BY e.at, e.rowid`,
+    ).all(since, at).map((r) => ({
+      applicationId: String(r.application_id), title: String(r.title), company: String(r.company),
+      from: r.from_status as Status, to: r.to_status as Status, at: String(r.at), eventId: String(r.id),
+    }));
+    return { since, changes };
+  }
+
   return {
+    visit: async () => visit(),
     needsYou,
     followUp: followUpDraft,
     saveFollowUpText,

@@ -6,14 +6,20 @@
 // The Stats strip sits above (StatsStrip.tsx), then Needs you (NeedsYou.tsx): emails to match
 // (EmailsToMatch.tsx) and follow-ups due, written in a dialog over the list. Each row's Next says what
 // comes next. The job mailbox's state shows as a banner and in the page-head line (MailState.tsx).
-// Search and filters come later.
+// At scale (hi-fi state "214 applications"): search across job, company, contacts and matched email
+// text; Status chips with counts that follow the search and filters, angle and date selects; the
+// active filters named in one line with one Clear; groups over 25 rows paged inside the group
+// ("Applied 1–25 of 47") so headers stay put. "Since your last visit" lists the Status changes email
+// made, each linking to its Application (T-12). A mailbox read never moves rows under the user: when
+// it changes what's shown, a quiet line offers the update instead.
 import type {
-  ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, FollowUp, GroupKey, HealthSummary, NeedsYou, NeedsYouEntry, Status, TrackMailbox,
+  Angle, ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, FollowUp, GroupKey, HealthSummary, NeedsYou, NeedsYouEntry, SinceLastVisit,
+  Status, StatusFilter, TrackMailbox,
 } from "@apply-kit/core";
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  fetchApplications, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
-  setApplicationStatus, undoApplicationEvent,
+  fetchApplicationList, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
+  setApplicationStatus, undoApplicationEvent, visitApplications, type ApplicationListParams,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Chevron } from "../icons.tsx";
@@ -23,7 +29,23 @@ import type { FollowUpAction } from "./FollowUpWriter.tsx";
 import { MailboxBanner, mailWords, useMailReading } from "./MailState.tsx";
 import { FollowUpDialog, itemId, NeedsYouSection } from "./NeedsYou.tsx";
 import { StatsStrip } from "./StatsStrip.tsx";
-import { angleLabel, dueWords, eventTime, followUpName, nextWords, shortDay, statusLabel, statusOrder, todaySofia, weekDay } from "./words.ts";
+import { angleLabel, daysWord, dueWords, eventTime, followUpName, nextWords, shortDay, statusLabel, statusOrder, todaySofia, weekDay } from "./words.ts";
+
+/** Groups over this many rows are paged (the service's page size). */
+const pageSize = 25;
+/** From this many Applications on, the Status chips show. */
+const chipsFrom = 26;
+
+interface Filters { q: string; status: StatusFilter | null; angle: Angle | null; within: number | null }
+const noFilters: Filters = { q: "", status: null, angle: null, within: null };
+const isFiltered = (f: Filters) => !!(f.q.trim() || f.status || f.angle || f.within);
+const groupLabels: Record<GroupKey, string> = { accepted: "Accepted", offer: "Offer", interviewing: "Interviewing", screening: "Screening", applied: "Applied", closed: "Closed" };
+const chipOrder: GroupKey[] = ["accepted", "offer", "interviewing", "screening", "applied", "closed"];
+const groupCount = (counts: Record<Status, number>, k: GroupKey) => (k === "closed" ? counts.rejected + counts.withdrawn : counts[k]);
+
+/** What's shown, to tell whether a mailbox read would move rows under the user. */
+const shownKey = (list: ApplicationList, needs: NeedsYou | null) =>
+  JSON.stringify([list.groups.map((g) => [g.key, g.count, g.applications.map((a) => [a.id, a.status])]), needs?.items.map((i) => [i.followUp.id, i.done]), needs?.count]);
 
 type Load = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; list: ApplicationList };
 
@@ -45,7 +67,16 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   const [linkProblem, setLinkProblem] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [needs, setNeeds] = useState<NeedsYou | null>(null);
-  const [writing, setWriting] = useState<{ entry: NeedsYouEntry; opener: HTMLElement } | null>(null);
+  const [writing, setWriting] = useState<{ entries: NeedsYouEntry[]; index: number; opener: HTMLElement } | null>(null);
+  const [filters, setFilters] = useState<Filters>(noFilters);
+  /** The search box as typed; the list follows it a moment after the last key. */
+  const [typed, setTyped] = useState("");
+  /** Where each paged group starts. */
+  const [at, setAt] = useState<Partial<Record<GroupKey, number>>>({});
+  const [visit, setVisit] = useState<SinceLastVisit | null>(null);
+  /** What a mailbox read changed, held so rows don't move under the user until they ask. */
+  const [held, setHeld] = useState<{ list: ApplicationList; needs: NeedsYou } | null>(null);
+  const params = useMemo<ApplicationListParams>(() => ({ all, paged: true, at, ...filters }), [all, at, filters]);
   const addRef = useRef<HTMLButtonElement>(null);
   /** Where focus goes once the next list has rendered (the button it targets may be a new one). */
   const focusNext = useRef<(() => void) | null>(null);
@@ -79,11 +110,21 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   useEffect(() => {
     const ctrl = new AbortController();
-    Promise.all([fetchApplications(all, ctrl.signal), fetchNeedsYou(ctrl.signal)])
-      .then(([list, n]) => { setNeeds(n); setLoad({ state: "ready", list }); setLoadedAt(new Date().toISOString()); })
+    Promise.all([fetchApplicationList(params, ctrl.signal), fetchNeedsYou(ctrl.signal)])
+      .then(([list, n]) => { setNeeds(n); setHeld(null); setLoad({ state: "ready", list }); setLoadedAt(new Date().toISOString()); })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setLoad({ state: "error", message: message(err) }); });
     return () => ctrl.abort();
-  }, [all, attempt]);
+  }, [params, attempt]);
+
+  // The search follows typing a moment after the last key; a new search starts every group at its first page.
+  useEffect(() => {
+    if (typed === filters.q) return;
+    const t = window.setTimeout(() => { setFilters((f) => ({ ...f, q: typed })); setAt({}); }, 250);
+    return () => window.clearTimeout(t);
+  }, [typed, filters.q]);
+
+  // "Since your last visit": recorded once per arrival (opening the page again within 30 minutes is the same visit).
+  useEffect(() => { visitApplications().then(setVisit).catch(() => {}); }, []);
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -95,17 +136,30 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   /** Loads the list and Needs you again; the top bar's badge counts again too. */
   const refresh = useCallback(async (show: GroupKey[] = all) => {
-    const [list, n] = await Promise.all([fetchApplications(show), fetchNeedsYou()]);
+    const [list, n] = await Promise.all([fetchApplicationList({ ...params, all: show }), fetchNeedsYou()]);
     setNeeds(n);
+    setHeld(null);
     setLoad({ state: "ready", list });
     setLoadedAt(new Date().toISOString());
     refreshMail().catch(() => {});
     needsYouChanged();
     return list;
-  }, [all, refreshMail]);
+  }, [all, params, refreshMail]);
 
-  // A check reading the job mailbox: one quiet line meanwhile, then the list and Needs you again.
-  const reading = useMailReading(useCallback(() => { refresh().catch(() => {}); }, [refresh]));
+  // A check reading the job mailbox: one quiet line meanwhile. Then the list and Needs you are read
+  // again; when that would move what's shown, it is held behind "Show the update" instead.
+  const shown = useRef<string>("");
+  useEffect(() => { if (load.state === "ready") shown.current = shownKey(load.list, needs); }, [load, needs]);
+  const reading = useMailReading(useCallback(() => {
+    refreshMail().catch(() => {});
+    needsYouChanged();
+    Promise.all([fetchApplicationList(params), fetchNeedsYou()])
+      .then(([list, n]) => {
+        if (shownKey(list, n) === shown.current) { setLoad({ state: "ready", list }); setNeeds(n); setLoadedAt(new Date().toISOString()); }
+        else setHeld({ list, needs: n });
+      })
+      .catch(() => {});
+  }, [params, refreshMail]));
 
   /** Moves focus to an Application's Status select, or to its group's heading when its row isn't shown. */
   const focusApplication = useCallback((id: string, group?: GroupKey) => {
@@ -118,9 +172,25 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   /** Shows one Application (a link to it, or one that already exists): its group opened in full, its row marked. */
   const reveal = useCallback(async (id: string) => {
+    // Shown in full, without search or filters; in a paged group, on the page that holds it.
     const show = [...new Set([...all, ...limited])];
-    const list = await refresh(show);
+    const offsets: Partial<Record<GroupKey, number>> = {};
+    const fetchWith = () => fetchApplicationList({ all: show, paged: true, at: { ...offsets } });
+    let list = await fetchWith();
+    for (const g of list.groups) {
+      if (g.count <= pageSize || list.groups.some((x) => x.applications.some((a) => a.id === id))) continue;
+      for (let o = pageSize; o < g.count; o += pageSize) {
+        offsets[g.key] = o;
+        list = await fetchWith();
+        if (list.groups.find((x) => x.key === g.key)?.applications.some((a) => a.id === id)) break;
+        delete offsets[g.key];
+      }
+    }
+    setTyped("");
+    setFilters(noFilters);
+    setAt(offsets);
     setAll(show);
+    setLoad({ state: "ready", list });
     const group = list.groups.find((g) => g.applications.some((a) => a.id === id));
     if (!group) return;
     setExpanded((e) => ({ ...e, [group.key]: true }));
@@ -129,7 +199,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
       document.getElementById(rowId(id))?.scrollIntoView({ block: "center" });
       focusApplication(id, group.key);
     });
-  }, [all, refresh, focusApplication]);
+  }, [all, focusApplication]);
 
   // A link to one Application (#app-<id>), as "Add application" gives when one is already open.
   useEffect(() => {
@@ -181,24 +251,26 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     const name = `${a.company} ${followUpName(f.kind).toLowerCase()}`;
     try {
       const { event, followUp } = await followUpAction(f.id, action);
-      setWriting(null);
+      // Written one by one from a group: on to the next one; otherwise the dialog closes.
+      const advance = writing && writing.entries.length > 1 && writing.index < writing.entries.length - 1;
+      setWriting((w) => (advance && w ? { ...w, index: w.index + 1 } : null));
       await refresh();
       // Sent or skipped, it stays in place as done; snoozed, it leaves Needs you.
       const focusAfter = () => requestAnimationFrame(() => {
         const link = document.querySelector<HTMLElement>(`#${CSS.escape(itemId(f.id))} a`);
         (action === "snooze" || !link ? document.getElementById("ny-h") : link)?.focus();
       });
-      focusAfter();
+      if (!advance) focusAfter();
       toaster.show({
         message: action === "sent"
           ? `Marked ${f.kind === "nudge" ? "sent" : "done"} · ${name} logged on its timeline.`
           : action === "skip" ? `Skipped · no ${followUpName(f.kind).toLowerCase()} for ${a.company} this time.`
           : `Snoozed · ${name} due again ${weekDay(followUp.dueOn)}.`,
-        returnFocus: focusAfter,
+        returnFocus: advance ? undefined : focusAfter,
         undo: () => {
           undoApplicationEvent(event.id)
             .then(() => refresh())
-            .then(() => { focusAfter(); toaster.announce(`Undone: the ${name} is ${dueWords(f.dueOn)} again.`); })
+            .then(() => { if (!advance) focusAfter(); toaster.announce(`Undone: the ${name} is ${dueWords(f.dueOn)} again.`); })
             .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
         },
       });
@@ -206,6 +278,31 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
       await refresh().catch(() => {});
       toaster.show({ message: `Couldn't change the follow-up: ${message(err)}` });
     }
+  }
+
+  /** "Snooze all": every follow-up of a group, with one Undo for all of them. */
+  async function snoozeAll(entries: NeedsYouEntry[]) {
+    const done: string[] = [];
+    try {
+      for (const e of entries) done.push((await followUpAction(e.followUp.id, "snooze")).event.id);
+    } catch (err) {
+      toaster.show({ message: `Couldn't snooze them all: ${message(err)}` });
+    }
+    await refresh().catch(() => {});
+    const focus = () => requestAnimationFrame(() => document.getElementById("ny-h")?.focus());
+    focus();
+    if (!done.length) return;
+    const kind = followUpName(entries[0]!.followUp.kind).toLowerCase();
+    toaster.show({
+      message: `Snoozed ${done.length} · each ${kind} comes due again in ${daysWord(needs?.snoozeDays ?? 3)}.`,
+      returnFocus: focus,
+      undo: () => {
+        Promise.all(done.map((id) => undoApplicationEvent(id)))
+          .then(() => refresh())
+          .then(() => { focus(); toaster.announce(`Undone: ${done.length} are due again.`); })
+          .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+      },
+    });
   }
 
   function added(result: Added) {
@@ -233,8 +330,10 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   const followUpDialog = writing && (
     <FollowUpDialog
-      entry={writing.entry}
-      onAct={(action) => { actOn(writing.entry, action).catch(() => {}); }}
+      entries={writing.entries}
+      index={writing.index}
+      onIndex={(index) => setWriting((w) => (w ? { ...w, index } : w))}
+      onAct={(action) => { actOn(writing.entries[writing.index]!, action).catch(() => {}); }}
       onClose={() => { const o = writing.opener; setWriting(null); requestAnimationFrame(() => o.focus()); }}
       onAnnounce={toaster.announce}
     />
@@ -259,6 +358,22 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   }
 
   const { list } = load;
+
+  /** Changes the filters: every group starts again at its first page. */
+  const filter = (f: Partial<Filters>) => { setFilters((x) => ({ ...x, ...f })); setAt({}); };
+  const clear = () => { setTyped(""); setFilters(noFilters); setAt({}); requestAnimationFrame(() => document.getElementById("apps-q")?.focus()); };
+  /** Moves a paged group to the page starting at `offset`; focus goes to its first row. */
+  const page = (g: ApplicationGroup, offset: number) => {
+    setAt((a) => ({ ...a, [g.key]: offset }));
+    toaster.announce(`${g.label} ${offset + 1}–${Math.min(offset + pageSize, g.count)} of ${g.count}.`);
+    const wait = (tries: number) => requestAnimationFrame(() => {
+      const first = document.querySelector<HTMLElement>(`#g-${g.key} tbody tr select`);
+      const row = first?.closest("tr");
+      if (first && row && row.dataset.offset === String(offset)) first.focus();
+      else if (tries > 0) setTimeout(() => wait(tries - 1), 50);
+    });
+    wait(40);
+  };
 
   if (list.total === 0) {
     return (
@@ -337,6 +452,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
       <StatsStrip version={list} mailbox={mailbox} />
 
+      {visit && visit.changes.length > 0 && <SinceVisit visit={visit} />}
+
       {list.total === 1 && !needs?.items.length && emails.length === 0 ? (
         <div className="calm">
           <h2 className="sr-only">Needs you</h2>
@@ -348,20 +465,82 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         </div>
       ) : needs && (
         <NeedsYouSection
-          needs={needs} onWrite={(entry, opener) => setWriting({ entry, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
+          needs={needs} onWrite={(entries, opener) => setWriting({ entries, index: 0, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
+          onSnoozeAll={(entries) => { snoozeAll(entries).catch(() => {}); }}
           emails={<EmailToMatchItems emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />}
         />
       )}
 
       <section className="panel flush" aria-labelledby="apps-h">
         <div className="sec-head"><h2 id="apps-h">All applications · {list.total}</h2></div>
+        {held && (
+          <p className="held" role="status">
+            <span>New mail changed what's shown here. The list stays as it is until you're ready.</span>
+            <button className="btn sm" type="button" onClick={() => { const h = held; setHeld(null); setNeeds(h.needs); setLoad({ state: "ready", list: h.list }); setLoadedAt(new Date().toISOString()); toaster.announce("Updated with the new mail."); }}>
+              Show the update
+            </button>
+          </p>
+        )}
+        {list.total > 1 && (
+          <div className="list-tools">
+            <div className="toolbar">
+              <div className="search">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.6" /><path d="m11 11 3.5 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
+                <input
+                  className="input" id="apps-q" type="search" autoComplete="off" value={typed} onChange={(e) => setTyped(e.target.value)}
+                  placeholder="Search job, company, contact or email…" aria-label="Search applications"
+                />
+              </div>
+              {(list.total >= chipsFrom || filters.status) && (
+                <div className="chips" role="group" aria-label="Status filter">
+                  {(["open", ...chipOrder] as StatusFilter[]).map((k) => {
+                    const n = k === "open" ? statusOrder.filter((s) => s !== "rejected" && s !== "withdrawn").reduce((a, s) => a + list.counts[s], 0) : groupCount(list.counts, k);
+                    if (k !== "open" && !n && filters.status !== k) return null;
+                    const on = filters.status === k;
+                    return (
+                      <button key={k} className="filter" type="button" aria-pressed={on} onClick={() => filter({ status: on ? null : k })}>
+                        {k === "open" ? "Open" : groupLabels[k]} <span className="n">{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="end">
+                <label className="sr-only" htmlFor="apps-angle">Angle</label>
+                <select className="input" id="apps-angle" value={filters.angle ?? ""} onChange={(e) => filter({ angle: (e.target.value || null) as Angle | null })}>
+                  <option value="">All angles</option>
+                  {(Object.keys(angleLabel) as Angle[]).map((a) => <option key={a} value={a}>{angleLabel[a]}</option>)}
+                </select>
+                <label className="sr-only" htmlFor="apps-within">Applied</label>
+                <select className="input" id="apps-within" value={filters.within ?? ""} onChange={(e) => filter({ within: e.target.value ? Number(e.target.value) : null })}>
+                  <option value="">Any time</option>
+                  <option value="30">Last 30 days</option>
+                  <option value="90">Last 90 days</option>
+                </select>
+              </div>
+            </div>
+            {isFiltered(filters) && (
+              <p className="active-filters" aria-live="polite">
+                <span>{activeWords(filters, list.matching)}</span>
+                <button className="btn sm" type="button" onClick={clear}>Clear</button>
+              </p>
+            )}
+          </div>
+        )}
         <div className="groups">
           {list.groups.map((g) => (
             <Group
               key={g.key} group={g} list={list} open={isOpen(g)} highlight={highlight}
-              onToggle={() => toggle(g)} onMore={() => showMore(g)} onStatus={changeStatus}
+              onToggle={() => toggle(g)} onMore={() => showMore(g)} onPage={(offset) => page(g, offset)} onStatus={changeStatus}
             />
           ))}
+          {list.groups.length === 0 && (
+            <div className="calm none-match">
+              <h3>No applications match</h3>
+              <p className="muted">Nothing matches the search and filters above. Clear them to see all {list.total}.</p>
+              <button className="btn" type="button" onClick={clear}>Clear search and filters</button>
+            </div>
+          )}
         </div>
       </section>
       {dialog}
@@ -371,25 +550,68 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   );
 }
 
+/** The active filters named in one line ("Showing open applications · matching “nimbus” · 14 match"). */
+function activeWords(f: Filters, matching: number): string {
+  const parts = [
+    f.status === "open" ? "Showing open applications" : f.status ? `Showing ${groupLabels[f.status]}` : "Showing every Status",
+    f.q.trim() && `matching “${f.q.trim()}”`,
+    f.angle && `${angleLabel[f.angle]} angle`,
+    f.within && `applied in the last ${f.within} days`,
+    `${matching} ${matching === 1 ? "matches" : "match"}`,
+    "counts follow the search and filters",
+  ];
+  return parts.filter(Boolean).join(" · ");
+}
+
+/** "Since yesterday", "Since today 08:40", "Since Mon 12 Oct". */
+function sinceWords(iso: string): string {
+  const day = todaySofia(new Date(iso));
+  const today = todaySofia();
+  const yesterday = todaySofia(new Date(Date.now() - 86_400_000));
+  if (day === today) return `Since ${eventTime(iso)}`;
+  if (day === yesterday) return "Since yesterday";
+  return `Since ${weekDay(day)}`;
+}
+
+/** "Since your last visit": one quiet line of the Status changes email made, each linking to its Application. No queue item: nothing needs the user. */
+function SinceVisit({ visit }: { visit: SinceLastVisit }) {
+  return (
+    <p className="since-visit">
+      <b>{sinceWords(visit.since!)}:</b>{" "}
+      {visit.changes.map((c, i) => (
+        <span key={c.eventId}>
+          {i > 0 && " · "}
+          <a href={`/applications/${encodeURIComponent(c.applicationId)}`}>{c.company}</a>
+          {" "}<span className="sr-only">(<span lang={langOf(c.title)}>{c.title}</span>) </span>
+          moved to {statusLabel[c.to]} by email
+        </span>
+      ))}
+    </p>
+  );
+}
+
 /** What a Status change did to a pending follow-up, for its toast. */
 function cancelledWords(f: FollowUp | null): string {
   if (!f) return "";
   return ` The ${followUpName(f.kind).toLowerCase()} ${f.dueOn <= todaySofia() ? "that was due" : `due ${weekDay(f.dueOn)}`} is cancelled; Undo brings it back.`;
 }
 
-function Group({ group: g, list, open, highlight, onToggle, onMore, onStatus }: {
+function Group({ group: g, list, open, highlight, onToggle, onMore, onPage, onStatus }: {
   group: ApplicationGroup;
   list: ApplicationList;
   open: boolean;
   highlight: string | null;
   onToggle: () => void;
   onMore: () => void;
+  onPage: (offset: number) => void;
   onStatus: (a: ApplicationSummary, to: Status) => Promise<boolean>;
 }) {
   const hint = g.key === "closed"
     ? `${list.counts.rejected} rejected · ${list.counts.withdrawn} withdrawn · never deleted`
     : g.order;
-  const hidden = g.count - g.applications.length;
+  const paged = g.count > pageSize;
+  const hidden = paged ? 0 : g.count - g.applications.length;
+  const end = g.offset + g.applications.length;
   return (
     <div className="group">
       <div className="group-h">
@@ -413,10 +635,23 @@ function Group({ group: g, list, open, highlight, onToggle, onMore, onStatus }: 
               </tr>
             </thead>
             <tbody>
-              {g.applications.map((a) => <Row key={a.id} app={a} highlighted={a.id === highlight} onStatus={onStatus} />)}
+              {g.applications.map((a) => <Row key={a.id} app={a} offset={g.offset} highlighted={a.id === highlight} onStatus={onStatus} />)}
             </tbody>
           </table>
         </div>
+        {paged && (
+          <div className="group-foot">
+            <span>{g.label} {g.offset + 1}–{end} of {g.count}</span>
+            <button
+              className="btn sm" type="button" aria-disabled={g.offset === 0 || undefined}
+              onClick={() => { if (g.offset > 0) onPage(Math.max(0, g.offset - pageSize)); }}
+            >Previous<span className="sr-only"> {g.label}</span></button>
+            <button
+              className="btn sm" type="button" aria-disabled={end >= g.count || undefined}
+              onClick={() => { if (end < g.count) onPage(end); }}
+            >{end < g.count ? `Next ${Math.min(pageSize, g.count - end)}` : "Next"}<span className="sr-only"> {g.label}</span></button>
+          </div>
+        )}
         {hidden > 0 && (
           <div className="group-foot">
             Showing {g.applications.length} of {g.count}
@@ -428,13 +663,13 @@ function Group({ group: g, list, open, highlight, onToggle, onMore, onStatus }: 
   );
 }
 
-function Row({ app: a, highlighted, onStatus }: { app: ApplicationSummary; highlighted: boolean; onStatus: (a: ApplicationSummary, to: Status) => Promise<boolean> }) {
+function Row({ app: a, offset, highlighted, onStatus }: { app: ApplicationSummary; offset: number; highlighted: boolean; onStatus: (a: ApplicationSummary, to: Status) => Promise<boolean> }) {
   const closed = a.status === "rejected" || a.status === "withdrawn";
   const last = `${a.lastEvent.text} · ${eventTime(a.lastEvent.at)}`;
   const lang = langOf(a.title);
   const next = nextWords(a.next);
   return (
-    <tr id={rowId(a.id)} className={[closed && "closed", highlighted && "is-focused"].filter(Boolean).join(" ") || undefined}>
+    <tr id={rowId(a.id)} data-offset={offset} className={[closed && "closed", highlighted && "is-focused"].filter(Boolean).join(" ") || undefined}>
       <td>
         <a className="t" href={`/applications/${encodeURIComponent(a.id)}`} lang={lang}>{a.title}</a>
         <span className="co">{a.company}</span>
