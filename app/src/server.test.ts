@@ -302,6 +302,9 @@ describe("the Package's API", () => {
     expect((await s.request("/api/packages/nope/cv/fit", s.json({ choice: "keep-two-pages" }))).status).toBe(404);
     expect((await s.request("/api/packages/nope/cv/flags/f1/decide", s.json({ option: "letter" }))).status).toBe(404);
     expect((await s.request("/api/packages/nope/cv/flags/f1/answer", s.json({ answer: "Once." }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/answers/question_1", { ...s.json({ text: "1 month" }), method: "PUT" })).status).toBe(404);
+    expect((await s.request("/api/packages/nope/answers/question_1/save", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/draft-answer", s.json({ question: "Why us?" }))).status).toBe(404);
     expect(await (await s.request("/api/profile/learned")).json()).toEqual([]);
     expect((await s.request("/api/profile/learned/confirm", { method: "POST", body: "" })).status).toBe(415);
   });

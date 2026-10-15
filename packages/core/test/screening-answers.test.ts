@@ -214,3 +214,121 @@ describe("Approve", () => {
     expect(question(set.package, "Describe a security incident")).toMatchObject({ text: "I ran the response to a phishing campaign.", words: 8, yours: true });
   });
 });
+
+describe("the drafter (Apply's needs-you questions use it too)", () => {
+  it("drafts from the profile in the package's language within the limit, returning the pieces it rests on", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    const r = await t.preparation.draftAnswer(pkg.id, { question: "Tell us about an incident you responded to", maxWords: 20 });
+
+    // The recorded draft is two clauses in one sentence of 32 words: too long for 20, so it isn't offered.
+    expect(r).toEqual({ drafted: false, reason: "The draft didn't fit the form's limit. Write it yourself, or ask for another draft." });
+    const fits = await t.preparation.draftAnswer(pkg.id, { question: "Tell us about an incident you responded to", maxChars: 400 });
+    expect(fits).toEqual({
+      drafted: true, text: recordedDraftAnswer.text, companySpecific: false, costUsd: 0.002,
+      pieces: [{ id: t.ids.phishing, label: "Ran the response to a phishing campaign against the claims team." }],
+    });
+    const sent = t.writer.calls.filter((c) => c.task === "draft-answer").at(-1)!.input as DraftAnswerInput;
+    expect(sent).toMatchObject({ question: "Tell us about an incident you responded to", language: "en", limit: { words: null, chars: 400 }, job: { company: "Kestrel Payments" }, translate: null });
+    expect(sent.pieces.map((p) => p.id).sort()).toEqual([t.ids.analyst, t.ids.detections, t.ids.phishing, t.ids.wazuh].sort());
+  });
+
+  it("never offers a draft that claims more than the profile: a stronger one gives way to its honest wording", async () => {
+    const stronger = (_: DraftAnswerInput, ids: Record<string, string>): DraftedAnswer => ({
+      text: "I led the bank's incident response team through a phishing campaign.", pieceIds: [ids.phishing!], claim: "stronger",
+      honest: "I ran the response to a phishing campaign against the claims team.", companySpecific: false,
+    });
+    const t = mira({ draft: stronger });
+    const pkg = await started(t);
+
+    expect(question(pkg, "Describe a security incident")).toMatchObject({ origin: "new", text: "I ran the response to a phishing campaign against the claims team." });
+  });
+
+  it("a draft naming a tool the profile doesn't have isn't offered: the question waits for Kris", async () => {
+    const t = mira({ draft: (_, ids) => ({ text: "I hunted the phishing campaign down in Splunk.", pieceIds: [ids.phishing!], claim: "reworded", honest: null, companySpecific: false }) });
+    const pkg = await started(t);
+
+    expect(question(pkg, "Describe a security incident")).toMatchObject({
+      origin: "needs-you", text: "", needsYou: true, redraft: true,
+      note: "The draft claimed more than your profile backs, so it isn't offered. Write it yourself, or ask for another draft.",
+    });
+    expect(await t.preparation.draftAnswer(pkg.id, { question: "Which SIEM have you used?" })).toMatchObject({ drafted: false });
+  });
+
+  it("is sent the CV's decisions, so the answers tell the same story", async () => {
+    const t = mira();
+    const pkg = await started(t, kestrelJob({ requirements: [{ text: "Experience triaging alerts in a SIEM" }, { text: "Kubernetes security" }] }));
+    const gap = pkg.cvVersion!.flags.find((f) => f.kind === "gap")!;
+    await t.preparation.decideFlag(pkg.id, gap.id, { option: "leave-out" });
+
+    await t.preparation.redraftScreeningAnswer(pkg.id, "question_31005");
+
+    const sent = t.writer.calls.filter((c) => c.task === "draft-answer").at(-1)!.input as DraftAnswerInput;
+    expect(sent.decisions).toEqual(["Kubernetes security gap: Left out of the CV and letter"]);
+  });
+
+  it("writes another draft on request", async () => {
+    let n = 0;
+    const t = mira({ draft: (input, ids) => (/^why/i.test(input.question) ? withIds(recordedWhyAnswer, ids) : { ...withIds(recordedDraftAnswer, ids), text: n++ === 0 ? recordedDraftAnswer.text : "I ran the response to a phishing campaign against the claims team." }) });
+    const pkg = await started(t);
+
+    const again = await t.preparation.redraftScreeningAnswer(pkg.id, "question_31005");
+
+    expect(question(again.package, "Describe a security incident")).toMatchObject({ origin: "new", text: "I ran the response to a phishing campaign against the claims team." });
+    expect(await t.preparation.redraftScreeningAnswer(pkg.id, "question_31003")).toMatchObject({ changed: false, reason: "There's nothing to draft for that question." });
+  });
+});
+
+describe("when the form or the model isn't there", () => {
+  it("uses the standard questions most forms ask when the target posting's site doesn't publish its form", async () => {
+    const t = mira();
+    const job = kestrelJob({
+      postings: [{ id: "posting-devbg", site: "dev.bg", url: "https://dev.bg/company/jobads/kestrel-security-engineer/", source: { name: "dev.bg IT security", kind: "devbg", label: "dev.bg", category: "aggregator" } }],
+      target: { postingId: "posting-devbg" },
+    });
+
+    const pkg = await started(t, job);
+
+    expect(pkg.answers).toMatchObject({ from: "standard", problem: null });
+    expect(pkg.answers!.questions.map((q) => [q.question, q.origin])).toEqual([
+      ["Do you have the right to work in this country?", "needs-you"],
+      ["What is your notice period?", "bank"],
+      ["What are your salary expectations?", "needs-you"],
+      ["How did you hear about this job?", "new"],
+      ["LinkedIn profile", "bank"],
+    ]);
+    expect(pkg.answers!.summary).toBe("5 questions most forms ask · 2 from your answer bank · 1 new draft · 2 need you.");
+  });
+
+  it("says why when the form couldn't be read, and uses the standard questions", async () => {
+    const t = mira({ fetch: fixtureFetch() });
+    const pkg = await started(t);
+    expect(pkg.answers).toMatchObject({ from: "standard", problem: "job-boards.greenhouse.io's form couldn't be read (fixtureFetch: no fixture for https://boards-api.greenhouse.io/v1/boards/kestrel/jobs/4410?questions=true)." });
+  });
+
+  it("a draft that would cross the monthly cap isn't made; the answers from the bank are still there", async () => {
+    const t = mira({ capUsd: 0.001 });
+    const pkg = await started(t);
+
+    expect(t.writer.calls.filter((c) => c.task === "draft-answer")).toEqual([]);
+    expect(question(pkg, "Why Kestrel")).toMatchObject({ origin: "needs-you", note: "Not drafted: this month's AI budget would be crossed. Write it yourself." });
+    expect(question(pkg, "What is your notice period")).toMatchObject({ origin: "bank", text: "1 month" });
+  });
+
+  it("an answer the bank has only in another language is a translation for Kris to check, never filled silently", async () => {
+    const translated = (input: DraftAnswerInput, ids: Record<string, string>): DraftedAnswer =>
+      input.translate ? { text: "Ръководих реакцията при фишинг кампания срещу екипа по искове.", pieceIds: [ids.phishing!], claim: "as-written", honest: null, companySpecific: false } : recordedFor(ids)(input);
+    const u = mira({ draft: translated });
+    u.bank({ question: "Describe a security incident you handled", category: "screening", versions: { en: "I ran the response to a phishing campaign against the claims team." } });
+
+    const pkg = await started(u, kestrelJob({ packageLanguage: "bg" }));
+
+    expect(question(pkg, "Describe a security incident")).toMatchObject({
+      origin: "translated", label: "Translated · check it", needsYou: true, text: "Ръководих реакцията при фишинг кампания срещу екипа по искове.",
+      note: "Translated from your English answer: check it, then confirm.",
+    });
+    const sent = u.writer.calls.filter((c) => c.task === "draft-answer").map((c) => c.input as DraftAnswerInput).find((i) => i.translate)!;
+    expect(sent).toMatchObject({ language: "bg", translate: { language: "en", text: "I ran the response to a phishing campaign against the claims team." } });
+  });
+});
