@@ -1,6 +1,7 @@
 // The Package's API (ticket #62): the Prepare button's state for a Job, starting the Job's package,
 // reading it, approving steps in order, the target posting, language and photo, stopping and
-// retrying parts, the CV version's changes (undo, redo) and fitting it on one page (#63), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
+// retrying parts, the CV version's changes (undo, redo) and fitting it on one page (#63), its flags
+// and gap questions (#64), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
 // service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
 import { packageSteps, type DiscoveryEngine, type PackageStep, type PreparationEngine } from "@apply-kit/core";
@@ -75,6 +76,15 @@ export function mountPackageApi(app: Hono, engine: DiscoveryEngine, preparation:
   // { choice }: one of the ways offered to fit the CV on one page, or "keep-two-pages".
   app.post("/api/packages/:id/cv/fit", (c) => withPackage(c, (id, body) =>
     typeof body.choice === "string" ? preparation.fitCv(id, body.choice) : c.json({ error: "choice must be one of the offered ways" }, 400)));
+
+  // { option } or { own }: Kris's decision on a flag (one of its options, or her own wording).
+  app.post("/api/packages/:id/cv/flags/:flag/decide", (c) => withPackage(c, (id, body) =>
+    typeof body.option === "string" ? preparation.decideFlag(id, c.req.param("flag")!, { option: body.option })
+      : typeof body.own === "string" ? preparation.decideFlag(id, c.req.param("flag")!, { own: body.own })
+      : c.json({ error: "Send { option } or { own }" }, 400)));
+  // { answer }: Kris's answer to a gap's question, for the coach.
+  app.post("/api/packages/:id/cv/flags/:flag/answer", (c) => withPackage(c, (id, body) =>
+    typeof body.answer === "string" ? preparation.answerGap(id, c.req.param("flag")!, body.answer) : c.json({ error: "answer must be text" }, 400)));
 
   // The CV's draft PDF, exactly as printed. ?download=1 saves it, named as a draft.
   app.get("/api/packages/:id/cv.pdf", async (c) => {
