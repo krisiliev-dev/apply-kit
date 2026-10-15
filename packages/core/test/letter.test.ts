@@ -230,3 +230,38 @@ describe("the letter's checks", () => {
     expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({ approved: true });
   });
 });
+
+describe("drafts", () => {
+  it("asking for a new draft keeps the previous one, reachable by paging", async () => {
+    let n = 0;
+    const t = await mira({
+      letter: (letter) => {
+        n += 1;
+        if (n === 2) letter.paragraphs.pop();
+      },
+    });
+    const pkg = await started(t);
+
+    const second = await t.preparation.redraftLetter(pkg.id, "Shorter");
+
+    expect(second.package.letter).toMatchObject({ draft: 2, drafts: 2, instruction: "Shorter", words: 74 });
+    expect(letterInputs(t).at(-1)).toMatchObject({ instruction: "Shorter", previous: pkg.letter!.text });
+    const first = await t.preparation.showLetterDraft(pkg.id, 1);
+    expect(first.package.letter).toMatchObject({ draft: 1, drafts: 2, instruction: null, words: 113, text: pkg.letter!.text });
+    expect((await t.preparation.showLetterDraft(pkg.id, 2)).package.letter).toMatchObject({ draft: 2, words: 74 });
+    expect(await t.preparation.showLetterDraft(pkg.id, 3)).toMatchObject({ changed: false, reason: "There's no draft 3." });
+  });
+
+  it("a new draft that fails keeps the one there is, and says so", async () => {
+    let n = 0;
+    const t = await mira({ letter: () => { n += 1; return n > 1 ? new Error("The model host didn't answer within 90 s") : undefined; } });
+    const pkg = await started(t);
+
+    const r = await t.preparation.redraftLetter(pkg.id, "More direct");
+
+    expect(r).toMatchObject({
+      changed: false, reason: "The new draft wasn't written: The model host didn't answer within 90 s. Draft 1 is kept. Try again, or edit this one yourself.",
+      package: { letter: { draft: 1, drafts: 1 } },
+    });
+  });
+});

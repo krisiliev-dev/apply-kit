@@ -367,6 +367,8 @@ export interface PackageStore {
   answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
   /** A new letter draft with Kris's instruction; the earlier drafts are kept. */
   redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
+  /** Shows another draft: the one approved and printed. */
+  showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
   learned(): LearnedPiece[];
 }
@@ -1315,6 +1317,17 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return { changed: true, package: view(row(id)!) };
   }
 
+  async function showLetterDraft(id: string, draft: number): Promise<ChangeResult> {
+    const r = mustGet(id);
+    if (!letterOf(id, draft)) return { changed: false, reason: `There's no draft ${draft}.`, package: view(r) };
+    if (draft !== r.letterDraft) {
+      db.prepare("UPDATE package SET letter_draft = ? WHERE id = ?").run(draft, id);
+      reopenFrom(r, "letter");
+      await renderLetter(id);
+    }
+    return { changed: true, package: view(row(id)!) };
+  }
+
   const mustGet = (id: string) => {
     const r = row(id);
     if (!r) throw new Error("No such package");
@@ -1441,6 +1454,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     answerGap,
     learned,
     redraftLetter,
+    showLetterDraft,
 
   };
 }

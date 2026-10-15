@@ -337,6 +337,8 @@ export interface PreparationEngine {
    * gap"), within the cap. Earlier drafts are kept and paged; a failure keeps the draft there is.
    */
   redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
+  /** Pages to another draft: it becomes the letter (printed, and the one approved). An approved letter step reopens. */
+  showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
 
   /** Profile › Learned during packages: pieces learned from answers in packages, waiting for Kris, newest first. */
   learnedPieces(): LearnedPiece[];
@@ -445,6 +447,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     answerGap: (id, flagId, answer) => packages.answerGap(id, flagId, answer),
     learnedPieces: () => packages.learned(),
     redraftLetter: (id, instruction) => packages.redraftLetter(id, instruction),
+    showLetterDraft: (id, draft) => packages.showLetterDraft(id, draft),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });
