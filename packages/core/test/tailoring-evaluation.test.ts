@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  runTailoringEvaluation, tailoringProfileSchema, type EvaluationCase, type TailoredCv, type TailoringCase, type TailoringProfile, type Writer, type WrittenLetter,
+  blindSheet, formatTailoringReport, readVerdicts, runTailoringEvaluation, tailoringProfileSchema, type EvaluationCase, type TailoredCv, type TailoringCase, type TailoringProfile, type Writer, type WrittenLetter,
 } from "../src/index.ts";
 import { createTestPreparation, fakeWriter, templateRenderer, type RecordedOutputs } from "./preparation-harness.ts";
 
@@ -152,5 +152,80 @@ describe("the budget, failures and the summary per model", () => {
     expect(b).toMatchObject({ model: "fake/strong", packages: 2, stockPhrases: 0 });
     expect(b!.costUsd).toBeGreaterThan(a!.costUsd);
     expect(report.costUsd).toBeCloseTo(a!.costUsd + b!.costUsd, 6);
+  });
+});
+
+describe("the report and the blind comparison sheet", () => {
+  async function twoModels() {
+    const flash = fakeWriter({ tailorCv, draftAnswer, writeLetter: letter("I am passionate about detection work.") });
+    const strong = fakeWriter({ tailorCv, draftAnswer, writeLetter: letter("I wrote 30 detection rules that cut false alerts by a quarter.") }, { costUsd: 0.01 });
+    return runTailoringEvaluation({
+      cases: [...cases, { ...cases[0]!, id: "mira-kestrel-again" }],
+      models: [{ model: "fake/flash", writer: flash }, { model: "fake/strong", writer: strong }],
+      engine: engineWith().engine, leftUsd: () => 10,
+    });
+  }
+
+  it("reads as a report: the summary per model, then every package with each refused line in full and why", async () => {
+    const report = await twoModels();
+
+    const md = formatTailoringReport(report, { startedAt: "2026-10-15T09:30:00.000Z" });
+
+    expect(md).toContain("# Tailoring evaluation");
+    expect(md).toMatch(/\| Lines the honesty validator refused \| 2 \| 2 \|/);
+    expect(md).toMatch(/\| Stock phrases \| 2 \| 0 \|/);
+    expect(md).toMatch(/\| CV on one page \| 2 of 2 \| 2 of 2 \|/);
+    expect(md).toContain("### mira-kestrel · Security Engineer at Kestrel Payments · English · mira-security");
+    expect(md).toContain("#### fake/flash");
+    expect(md).toContain("- Bullet under Northwind Bank: \"Wrote 30 detection rules for Kubernetes clusters that cut false alerts by a quarter\": names \"Kubernetes\", which isn't in your profile.");
+    expect(md).toContain("- \"passionate\" in Cover letter: \"I am passionate about detection work.\"");
+  });
+
+  it("shows both versions of each package unlabelled, in an order only the key knows", async () => {
+    const report = await twoModels();
+    const flips = [0.9, 0.1];
+
+    const { sheet, key } = blindSheet(report, () => flips.shift()!);
+
+    expect(sheet).not.toMatch(/fake\/flash|fake\/strong/);
+    expect(key.cases).toEqual([
+      { caseId: "mira-kestrel", A: "fake/strong", B: "fake/flash" },
+      { caseId: "mira-kestrel-again", A: "fake/flash", B: "fake/strong" },
+    ]);
+    // Case 1: the stronger model's letter is Version A.
+    const first = sheet.slice(sheet.indexOf("## Case 1"), sheet.indexOf("## Case 2"));
+    expect(first.indexOf("I wrote 30 detection rules that cut false alerts by a quarter.")).toBeLessThan(first.indexOf("I am passionate about detection work."));
+    expect(first).toContain("Verdict (A, B or same):");
+  });
+
+  it("records the verdicts only once every case has one, then says which model each preferred", async () => {
+    const report = await twoModels();
+    const { sheet, key } = blindSheet(report, () => 0.9);
+    const fill = (text: string, ...answers: [string, string][]) => {
+      let i = 0;
+      return text.replace(/^Verdict \(A, B or same\):.*\nWhy:.*$/gm, (m) => {
+        const a = answers[i++];
+        return a ? `Verdict (A, B or same): ${a[0]}\nWhy: ${a[1]}` : m;
+      });
+    };
+
+    const half = readVerdicts(fill(sheet, ["A", "Plainer"]), key);
+    expect(half).toEqual({ complete: false, missing: ["Case 2 (mira-kestrel-again)"], unreadable: [] });
+
+    const odd = readVerdicts(fill(sheet, ["A", "Plainer"], ["maybe", ""]), key);
+    expect(odd).toEqual({ complete: false, missing: [], unreadable: ["Case 2 (mira-kestrel-again): \"maybe\""] });
+
+    const done = readVerdicts(fill(sheet, ["a", "Plainer, no stock phrases"], ["same", "Both fine"]), key);
+    expect(done).toEqual({
+      complete: true,
+      verdicts: [
+        { caseId: "mira-kestrel", job: "Security Engineer at Kestrel Payments", choice: "A", preferred: "fake/strong", why: "Plainer, no stock phrases" },
+        { caseId: "mira-kestrel-again", job: "Security Engineer at Kestrel Payments", choice: "same", preferred: null, why: "Both fine" },
+      ],
+      tally: { "fake/flash": 0, "fake/strong": 1, same: 1 },
+    });
+    const md = formatTailoringReport(report, { startedAt: "2026-10-15T09:30:00.000Z", verdicts: done.complete ? done : undefined });
+    expect(md).toContain("## Your verdicts");
+    expect(md).toContain("fake/strong preferred 1 · fake/flash preferred 0 · the same 1");
   });
 });

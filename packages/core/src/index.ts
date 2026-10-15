@@ -49,6 +49,8 @@ export type { ExpectedFacts, EvaluationCase } from "./evaluation/labels.ts";
 export { scoreCase, similarity, TEXT_MATCH } from "./evaluation/score.ts";
 export type { CaseScore, ListScore } from "./evaluation/score.ts";
 export { runEvaluation } from "./evaluation/run.ts";
+export { blindSheet, readVerdicts, formatTailoringReport } from "./evaluation/tailoring-sheet.ts";
+export type { BlindKey, Verdict, VerdictReading, ReportInfo as TailoringReportInfo } from "./evaluation/tailoring-sheet.ts";
 export { runTailoringEvaluation, tailoringProfileSchema, tailoringSetSchema, tailoringQuestionSchema, jobOf, estimatePackageUsd } from "./evaluation/tailoring.ts";
 export type {
   TailoringProfile, TailoringSet, TailoringQuestion, TailoringCase, TailoringModel, TailoringEngine, TailoringOptions, TailoringReport,
