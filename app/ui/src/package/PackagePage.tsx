@@ -7,12 +7,15 @@
 // Ticket #63: the CV step's Changes view (requirements → evidence, every change with Undo, every
 // line and its pieces; beside it the honesty check and tailoring notes) and Preview (the exact PDF
 // with the parse check), and a CV that runs onto page 2 with the ways to tighten it.
+// Ticket #64: flags (near the line, gaps, lines from Kris's answers) listed with jump links at the
+// top of the step and sitting inside their requirement, none pre-selected; resolved ones stay with
+// the choice; Approve with an open flag moves focus to an alert naming it, linking to the flag.
 import type {
-  BudgetInfo, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
+  BudgetInfo, CvFlagView, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
 } from "@apply-kit/core";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  approveStep, fetchPackage, fetchPrepareStatus, fetchSources, fitCv, packageCvUrl, redoCvChange, retryPart, setPackageLanguage, setPackagePhoto,
+  answerGap, approveStep, decideFlag, fetchPackage, fetchPrepareStatus, fetchSources, fitCv, packageCvUrl, redoCvChange, retryPart, setPackageLanguage, setPackagePhoto,
   setTargetPosting, startPackage, stopGenerating, undoCvChange,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
@@ -313,9 +316,16 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
   const goal = 10;
   // The CV step shows its changes, or the exact PDF; a CV on two pages opens on the PDF.
   const [cvView, setCvView] = useState<CvView>(() => (pkg.cvVersion?.fit.choices.length ? "preview" : "changes"));
+  // Approve pressed while a flag is open: an alert names it, and focus moves there (PA-02).
+  const [flagAlert, setFlagAlert] = useState(false);
+  const onFlagBlock = () => {
+    setCvView("changes");
+    setFlagAlert(true);
+    window.setTimeout(() => document.getElementById("flag-alert")?.focus(), 0);
+  };
 
   const content = viewing === "target" ? <TargetStep pkg={pkg} onChange={onChange} say={say} />
-    : viewing === "cv" ? <CvStep pkg={pkg} view={cvView} onView={setCvView} onChange={onChange} onGo={onGo} say={say} />
+    : viewing === "cv" ? <CvStep pkg={pkg} view={cvView} onView={setCvView} flagAlert={flagAlert} onChange={onChange} onGo={onGo} say={say} />
     : <LaterStep pkg={pkg} step={step} onGo={onGo} />;
 
   return (
@@ -331,7 +341,7 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
       <div className="cols">
         <div className="col">
           {content}
-          <ActionBar key={step.step} pkg={pkg} step={step} jobPage={jobPage} onChange={onChange} onGo={onGo} say={say} />
+          <ActionBar key={step.step} pkg={pkg} step={step} jobPage={jobPage} onChange={onChange} onGo={onGo} onFlagBlock={onFlagBlock} say={say} />
         </div>
         <aside className="col side" aria-label={viewing === "cv" ? (cvView === "changes" ? "Honesty check" : "File and template") : "This package"}>
           {viewing === "cv" ? (cvView === "changes" && pkg.cvVersion ? <CvHonesty cv={pkg.cvVersion} onPreview={() => setCvView("preview")} /> : <CvSide pkg={pkg} onChange={onChange} say={say} />) : (
@@ -369,19 +379,24 @@ function useMinutesSince(iso: string): number {
 }
 
 /** The step's one decision, in a sticky bar. An Approve that can't approve names why and moves focus there (PA-02, PA-10). */
-function ActionBar({ pkg, step, jobPage, onChange, onGo, say }: {
-  pkg: PackageView; step: PackageStepView; jobPage: string; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; say: (m: string) => void;
+function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
+  pkg: PackageView; step: PackageStepView; jobPage: string; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; onFlagBlock: () => void; say: (m: string) => void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
   const why = useRef<HTMLParagraphElement>(null);
-  // What blocks it gets focus: the "how to fit one page" choices for a two-page CV, else the reason.
+  const openFlags = step.step === "cv" ? pkg.cvVersion?.flags.filter((f) => !f.decision) ?? [] : [];
+  const before = steps.slice(0, steps.indexOf(step.step)).some((s) => !pkg.steps.find((v) => v.step === s)?.approvedAt);
+  const flagBlocked = openFlags.length > 0 && !before;
+  // What blocks it gets focus: the alert naming an open flag, the "how to fit one page" choices for a two-page CV, else the reason.
   const focusBlocker = () => {
+    if (flagBlocked) return onFlagBlock();
     const legend = step.step === "cv" && pkg.cvVersion?.fit.choices.length ? document.getElementById("tighten-legend") : null;
     (legend ?? why.current)?.focus();
   };
   const index = steps.indexOf(step.step);
   const next = steps[index + 1];
-  const reason = refused ?? step.blocked;
+  // With flags open, the bar says how many are left; the alert above has the whole reason.
+  const reason = flagBlocked ? (openFlags.length === 1 ? `1 flag left: ${openFlags[0]!.title}` : `${openFlags.length} flags left to decide`) : refused ?? step.blocked;
 
   async function approve() {
     if (step.approvedAt) {
@@ -398,6 +413,7 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, say }: {
       onChange(r.package);
       if (!r.approved) {
         setRefused(r.reason);
+        if (r.flagId) { onFlagBlock(); say(`Can't approve yet: ${r.reason}`); return; }
         window.setTimeout(focusBlocker, 0);
         say(`Can't approve yet: ${r.reason}`);
         return;
@@ -493,8 +509,8 @@ function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Pa
 
 type CvView = "changes" | "preview";
 
-function CvStep({ pkg, view, onView, onChange, onGo, say }: {
-  pkg: PackageView; view: CvView; onView: (v: CvView) => void; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; say: (m: string) => void;
+function CvStep({ pkg, view, onView, flagAlert, onChange, onGo, say }: {
+  pkg: PackageView; view: CvView; onView: (v: CvView) => void; flagAlert: boolean; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; say: (m: string) => void;
 }) {
   const part = pkg.parts.find((p) => p.part === "cv")!;
   const cv = pkg.cvVersion;
@@ -508,6 +524,7 @@ function CvStep({ pkg, view, onView, onChange, onGo, say }: {
     : "The exact PDF the extension uploads. Undoing a change prints it again.";
   return (
     <>
+      {cv && flagAlert && <FlagAlert pkg={pkg} cv={cv} />}
       <div className="panel">
         <div className="sec-head">
           <div className="step-title grow"><h2 id="cv-title" tabIndex={-1}>CV version</h2><p className="muted">{lead}</p></div>
@@ -518,6 +535,7 @@ function CvStep({ pkg, view, onView, onChange, onGo, say }: {
             </div>
           )}
         </div>
+        {cv && view === "changes" && <FlagList cv={cv} />}
         {cv && cv.fit.choices.length > 0 && <FitChoices pkg={pkg} cv={cv} onChange={onChange} say={say} />}
         {cv && cv.fit.keepTwoPages && <KeptTwo pkg={pkg} onChange={onChange} say={say} />}
         {pkg.cv && (view === "preview" || !cv) ? (
@@ -537,7 +555,8 @@ function CvStep({ pkg, view, onView, onChange, onGo, say }: {
       </div>
       {cv && view === "changes" && (
         <>
-          <Evidence rows={cv.evidence} />
+          <LoneFlags pkg={pkg} cv={cv} must={flagAlert} onChange={onChange} say={say} />
+          <Evidence pkg={pkg} cv={cv} must={flagAlert} onChange={onChange} say={say} />
           <Changes pkg={pkg} cv={cv} onChange={onChange} say={say} />
           <Lines cv={cv} />
         </>
@@ -556,7 +575,8 @@ const statusChip: Record<EvidenceRow["status"], [string, string, string]> = {
   met: ["met", "met", "Met"], partly: ["partly", "partly", "Partly"], gap: ["gap", "gap", "Gap"], "not-held": ["partly", "partly", "Not held"], unknown: ["neutral", "unknown", "Unknown"],
 };
 
-function Evidence({ rows }: { rows: EvidenceRow[] }) {
+function Evidence({ pkg, cv, must, onChange, say }: { pkg: PackageView; cv: CvVersionView; must: boolean; onChange: (p: PackageView) => void; say: (m: string) => void }) {
+  const rows = cv.evidence;
   if (rows.length === 0) return null;
   const count = (st: EvidenceRow["status"]) => rows.filter((r) => r.status === st).length;
   const summary = [`${rows.length} from the posting`, ...(["met", "partly", "gap", "not-held"] as const).filter((st) => count(st)).map((st) => `${count(st)} ${statusChip[st][2].toLowerCase()}`)].join(" · ");
@@ -567,7 +587,7 @@ function Evidence({ rows }: { rows: EvidenceRow[] }) {
         {rows.map((r, i) => {
           const [cls, icon, label] = statusChip[r.status];
           return (
-            <div className="ev-row" key={i}>
+            <div className="ev-row" key={i} id={`req-${i}`}>
               <div className="req">
                 <b>{r.requirement}{r.kind === "preferred" && <> <span className="meta">preferred</span></>}</b>
                 <span className={`chip ${cls}`}><Icon name={icon as "met"} />{label}</span>
@@ -579,6 +599,7 @@ function Evidence({ rows }: { rows: EvidenceRow[] }) {
                 </span>
                 <span className="cvline">{r.onCv.join(" · ")}</span>
               </div>
+              {cv.flags.filter((f) => f.requirement === i).map((f) => <Flag key={f.id} pkg={pkg} flag={f} must={must} onChange={onChange} say={say} />)}
             </div>
           );
         })}
@@ -586,6 +607,186 @@ function Evidence({ rows }: { rows: EvidenceRow[] }) {
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------------------------
+// Flags (#64)
+
+/** Moves to a flag: scrolls it into view and focuses its heading. */
+function goToFlag(id: string) {
+  const h = document.getElementById(`flag-h-${id}`);
+  h?.scrollIntoView({ block: "center" });
+  h?.focus({ preventScroll: true });
+}
+
+/** The flags at the top of the step, each a jump link to where it sits. */
+function FlagList({ cv }: { cv: CvVersionView }) {
+  const open = cv.flags.filter((f) => !f.decision);
+  if (cv.flags.length === 0) return null;
+  if (open.length === 0) {
+    return <p className="meta"><span className="chip met"><Icon name="met" />Flags decided</span> {cv.flags.length === 1 ? "The flag is decided" : `All ${cv.flags.length} flags are decided`}; each stays below with your choice.</p>;
+  }
+  return (
+    <div className="banner warning" role="note">
+      <span className="text">
+        <b>{open.length === 1 ? "1 flag" : `${open.length} flags`} to decide before you can approve.</b>{" "}
+        {open.map((f, i) => (
+          <span key={f.id}>{i > 0 && " · "}<a href={`#flag-${f.id}`} onClick={(e) => { e.preventDefault(); goToFlag(f.id); }}>{f.title}</a></span>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/** Approve pressed with a flag open: the reason, focused, with a link to the flag (PA-02). */
+function FlagAlert({ pkg, cv }: { pkg: PackageView; cv: CvVersionView }) {
+  const first = cv.flags.find((f) => !f.decision);
+  const reason = pkg.steps[1]!.blocked;
+  if (!first || !reason) return null;
+  const cut = reason.indexOf(". ");
+  return (
+    <div className="banner error" role="alert" id="flag-alert" tabIndex={-1}>
+      <span className="text"><b>{cut === -1 ? reason : reason.slice(0, cut + 1)}</b>{cut === -1 ? "" : reason.slice(cut + 1)}</span>
+      <a className="btn sm" href={`#flag-${first.id}`} onClick={(e) => { e.preventDefault(); goToFlag(first.id); }}>Go to the flag</a>
+    </div>
+  );
+}
+
+/** Flags that don't sit inside a requirement (a summary's wording, a line no requirement asks for). */
+function LoneFlags({ pkg, cv, must, onChange, say }: { pkg: PackageView; cv: CvVersionView; must: boolean; onChange: (p: PackageView) => void; say: (m: string) => void }) {
+  const lone = cv.flags.filter((f) => f.requirement === null || f.requirement >= cv.evidence.length);
+  if (lone.length === 0) return null;
+  return (
+    <div className="panel">
+      <div className="sec-head"><h2>Lines to decide</h2><span className="meta">not tied to one requirement</span></div>
+      <div className="stack">{lone.map((f) => <Flag key={f.id} pkg={pkg} flag={f} must={must} onChange={onChange} say={say} />)}</div>
+    </div>
+  );
+}
+
+const flagKind: Record<CvFlagView["kind"], [string, "line" | "gap", string]> = {
+  "near-the-line": ["line", "line", "NEAR THE LINE"],
+  gap: ["gap", "gap", "GAP"],
+  learned: ["line", "line", "NEW LINE · FROM YOUR ANSWER"],
+};
+
+/**
+ * One flag: its options (none pre-selected), Kris's own wording (checked first), a gap's question.
+ * Follow-up fields show from the checked option, never from clicks (PA-01). Decided, it stays with
+ * the choice and a Change button.
+ */
+function Flag({ pkg, flag, must, onChange, say }: { pkg: PackageView; flag: CvFlagView; must: boolean; onChange: (p: PackageView) => void; say: (m: string) => void }) {
+  const [changing, setChanging] = useState(false);
+  const [picked, setPicked] = useState<string | null>(null);
+  const [own, setOwn] = useState("");
+  const [answer, setAnswer] = useState(flag.answer ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cls, icon, kind] = flagKind[flag.kind];
+  const h = `flag-h-${flag.id}`;
+  const focusSoon = (id: string) => window.setTimeout(() => document.getElementById(id)?.focus(), 0);
+
+  async function send(act: () => Promise<{ changed: boolean; reason?: string; package: PackageView }>, done: (p: PackageView) => void) {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await act();
+      onChange(r.package);
+      if (!r.changed) { setError(r.reason ?? "That didn't work."); return; }
+      setChanging(false);
+      setPicked(null);
+      done(r.package);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const decide = (option: string) => send(() => decideFlag(pkg.id, flag.id, { option }), (p) => {
+    const d = p.cvVersion?.flags.find((f) => f.id === flag.id)?.decision;
+    say(`Decided: ${d?.label ?? option}.${p.cv?.sha256 !== pkg.cv?.sha256 ? " The CV was printed again." : ""}`);
+    focusSoon(h);
+  });
+  const chooseOwn = () => send(() => decideFlag(pkg.id, flag.id, { own }), () => { say("Your wording is used. The CV was printed again."); focusSoon(h); });
+  const tellCoach = () => {
+    say("Thanks. The coach is reading your answer.");
+    return send(() => answerGap(pkg.id, flag.id, answer), (p) => {
+      const learned = p.cvVersion?.flags.find((f) => f.kind === "learned" && f.requirement === flag.requirement);
+      say("The coach wrote a line from your answer. It's below as a new flag; the CV changes only once you decide.");
+      if (learned) focusSoon(`flag-h-${learned.id}`);
+    });
+  };
+
+  if (flag.decision && !changing) {
+    return (
+      <div className={`flag ${cls} resolved`} role="group" aria-labelledby={h} id={`flag-${flag.id}`}>
+        <span className="kind"><Icon name="met" />{kind} · DECIDED</span>
+        <h3 id={h} tabIndex={-1}>{flag.title}: {lowerFirst(flag.decision.label)}</h3>
+        {flag.kind === "gap" && flag.decision.option === "experience" && <p className="muted mini">The line the coach wrote from your answer is the next flag.</p>}
+        <div className="row"><button className="btn ghost sm" type="button" onClick={() => { setChanging(true); setPicked(flag.decision!.option); focusSoon(`${h}-legend`); }}>Change<span className="sr-only"> {flag.title}</span></button></div>
+      </div>
+    );
+  }
+
+  const open = !flag.decision;
+  const name = `flag-${flag.id}-option`;
+  return (
+    <div className={`flag ${cls}${must && open ? " must" : ""}`} role="group" aria-labelledby={h} id={`flag-${flag.id}`}>
+      <span className="kind"><Icon name={icon} />{kind}{must && open ? " · STILL OPEN" : ""}</span>
+      <h3 id={h} tabIndex={-1}>{flag.heading}</h3>
+      <p className="muted mini">{flag.detail}</p>
+      <fieldset className="choices" disabled={busy}>
+        <legend className="sr-only" id={`${h}-legend`} tabIndex={-1}>{flag.title}</legend>
+        {flag.options.map((o) => (
+          <label className="opt" key={o.id}>
+            <input
+              type="radio" name={name} value={o.id} checked={picked === o.id}
+              aria-controls={o.id === "experience" ? `${h}-question` : undefined}
+              onChange={() => { setPicked(o.id); if (o.id !== "experience") void decide(o.id); }}
+            />
+            <span><b>{flag.kind === "near-the-line" || o.id === "use" ? `"${o.label}"` : o.label}</b><span className="meta">{o.holdsUp}</span></span>
+          </label>
+        ))}
+        {flag.ownWording && (
+          <label className="opt">
+            <input type="radio" name={name} value="own" checked={picked === "own"} aria-controls={`${h}-own`} onChange={() => setPicked("own")} />
+            <span><b>Write my own wording</b><span className="meta">Checked against your profile before it's used.</span></span>
+          </label>
+        )}
+      </fieldset>
+      {picked === "own" && (
+        <div className="field" id={`${h}-own`}>
+          <label htmlFor={`${h}-own-text`}>Your wording</label>
+          <span className="help" id={`${h}-own-help`}>Only what your profile backs. Numbers and names are checked against the pieces this line relies on.</span>
+          <textarea
+            className="textarea short" id={`${h}-own-text`} value={own} onChange={(e) => setOwn(e.target.value)}
+            aria-describedby={`${h}-own-help${error ? ` ${h}-error` : ""}`} aria-invalid={error ? "true" : undefined}
+          />
+          <div className="row"><button className="btn sm" type="button" disabled={busy || !own.trim()} onClick={() => void chooseOwn()}>Use this wording</button></div>
+        </div>
+      )}
+      {picked === "experience" && flag.question && (
+        <div className="field" id={`${h}-question`}>
+          <label htmlFor={`${h}-answer`}>{flag.question.text}</label>
+          <span className="help" id={`${h}-answer-help`}>{flag.question.help}</span>
+          <textarea
+            className="textarea" id={`${h}-answer`} value={answer} onChange={(e) => setAnswer(e.target.value)}
+            aria-describedby={`${h}-answer-help${error ? ` ${h}-error` : ""}`} aria-invalid={error ? "true" : undefined}
+          />
+          <div className="row">
+            <button className="btn sm" type="button" disabled={busy || !answer.trim()} aria-busy={busy || undefined} onClick={() => void tellCoach()}>{busy ? "The coach is reading…" : "Send to the coach"}</button>
+            <span className="meta">The piece is used for this job only until you confirm it in Profile.</span>
+          </div>
+        </div>
+      )}
+      {flag.notOffered && <p className="meta">{flag.notOffered}</p>}
+      {error && <p className="why-off" role="alert" id={`${h}-error`}>{error}</p>}
+      {changing && <div className="row"><button className="btn ghost sm" type="button" onClick={() => { setChanging(false); setError(null); focusSoon(h); }}>Keep "{lowerFirst(flag.decision!.label)}"</button></div>}
+    </div>
+  );
+}
+
+const lowerFirst = (t: string) => (/^(Kept|Used|Your|Named|Left|Told)\b/.test(t) ? t.charAt(0).toLowerCase() + t.slice(1) : t);
 
 function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionView; onChange: (p: PackageView) => void; say: (m: string) => void }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -605,8 +806,8 @@ function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionVi
   const live = cv.changes.filter((c) => !c.undone).length;
   return (
     <div className="panel">
-      <div className="sec-head"><h2>Changes from your master profile</h2><span className="meta">{cv.changes.length === 0 ? "None: the CV is your profile as it is" : `${live} of ${cv.changes.length} in use · each can be undone`}</span></div>
-      {cv.changes.length > 0 && (
+      <div className="sec-head"><h2>Changes from your master profile</h2><span className="meta">{cv.changes.length === 0 ? "None: the CV is your profile as it is" : `${live} of ${cv.changes.length} in use · each can be undone, decisions through their flag`}</span></div>
+      {(cv.changes.length > 0 || cv.flags.some((f) => f.kind === "near-the-line" && !f.decision)) && (
         <ol className="edits">
           {cv.changes.map((c) => (
             <li key={c.id} className={`edit${c.undone ? " undone" : ""}`}>
@@ -617,9 +818,24 @@ function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionVi
                 {c.detail && <span>{c.detail}</span>}
                 <span className="why">{c.why}</span>
               </div>
-              <button className="btn ghost sm" type="button" aria-busy={busy === c.id || undefined} onClick={() => void toggle(c.id, !c.undone, c.label)}>
-                {c.undone ? "Redo" : "Undo"}<span className="sr-only"> {c.label.toLowerCase()}</span>
-              </button>
+              {c.flagId
+                ? <a className="btn ghost sm" href={`#flag-${c.flagId}`} onClick={(e) => { e.preventDefault(); goToFlag(c.flagId!); }}>Change decision<span className="sr-only"> on {c.label.toLowerCase()}</span></a>
+                : (
+                  <button className="btn ghost sm" type="button" aria-busy={busy === c.id || undefined} onClick={() => void toggle(c.id, !c.undone, c.label)}>
+                    {c.undone ? "Redo" : "Undo"}<span className="sr-only"> {c.label.toLowerCase()}</span>
+                  </button>
+                )}
+            </li>
+          ))}
+          {cv.flags.filter((f) => f.kind === "near-the-line" && !f.decision).map((f) => (
+            <li key={f.id} className="edit">
+              <div className="what">
+                <b>{f.title}</b>
+                {f.piece && <del>{f.piece}</del>}
+                {f.draft && <ins>{f.draft}</ins>}
+                <span className="why"><span className="chip partly"><Icon name="line" />Flagged</span> near the line: decide it above. Until then your profile's wording is used.</span>
+              </div>
+              <a className="btn ghost sm" href={`#flag-${f.id}`} onClick={(e) => { e.preventDefault(); goToFlag(f.id); }}>Decide<span className="sr-only"> {f.title}</span></a>
             </li>
           ))}
         </ol>
@@ -700,7 +916,7 @@ function KeptTwo({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Packa
 }
 
 const checkChip: Record<HonestyCheckView["state"], [string, "met" | "line" | "gap", string]> = {
-  ok: ["met", "met", "OK"], fixed: ["met", "met", "Fixed"], line: ["partly", "line", "Held"], gap: ["gap", "gap", "Gap"],
+  ok: ["met", "met", "OK"], fixed: ["met", "met", "Fixed"], line: ["partly", "line", "Open"], gap: ["gap", "gap", "Gap"],
 };
 
 function CvHonesty({ cv, onPreview }: { cv: CvVersionView; onPreview: () => void }) {

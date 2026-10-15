@@ -7,6 +7,7 @@ import type {
   Angle, FinishInterviewResult, InterviewChange, InterviewView,
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
+  FlagChoice, LearnedPiece,
 } from "@apply-kit/core";
 
 /** A Feed row as the service sends it: the Job with its package chip, if it has a package. */
@@ -400,6 +401,18 @@ export async function confirmPiece(id: string): Promise<SavePieceResult> {
   return json(res);
 }
 
+// ---------- Learned during packages (#64) ----------
+
+export const fetchLearned = async (signal?: AbortSignal): Promise<LearnedPiece[]> => json(await fetch("/api/profile/learned", { signal }));
+/** "Confirm the N unflagged": never a near-the-line piece. */
+export const confirmLearned = async (): Promise<{ confirmed: number; refused: { pieceId: string; message: string }[] }> =>
+  json(await postJson("/api/profile/learned/confirm"));
+/** A near-the-line learned piece: keep its suggested honest version, confirmed. */
+export async function keepHonestVersion(pieceId: string): Promise<SavePieceResult> {
+  const res = await postJson(`/api/profile/learned/${encodeURIComponent(pieceId)}/honest`);
+  return res.status === 422 ? ((await res.json()) as SavePieceResult) : json(res);
+}
+
 // ---------- Setup (#55) ----------
 
 export const fetchSetup = async (signal?: AbortSignal): Promise<SetupProgress> => json(await fetch("/api/setup", { signal }));
@@ -494,6 +507,12 @@ export const stopGenerating = async (id: string): Promise<PackageView> => json(a
 export const undoCvChange = async (id: string, changeId: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/changes/${encodeURIComponent(changeId)}/undo`));
 export const redoCvChange = async (id: string, changeId: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/changes/${encodeURIComponent(changeId)}/redo`));
 export const fitCv = async (id: string, choice: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/fit`, { choice }));
+/** Kris's decision on a flag: one of its options, or her own wording (a refusal resolves with why). */
+export const decideFlag = async (id: string, flagId: string, choice: FlagChoice): Promise<ChangeResult> =>
+  orRefusal(await postJson(`${packagePath(id)}/cv/flags/${encodeURIComponent(flagId)}/decide`, choice));
+/** Kris's answer to a gap's question, for the coach. */
+export const answerGap = async (id: string, flagId: string, answer: string): Promise<ChangeResult> =>
+  orRefusal(await postJson(`${packagePath(id)}/cv/flags/${encodeURIComponent(flagId)}/answer`, { answer }));
 export const retryPart = async (id: string, part: PackageStep): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/parts/${part}/retry`));
 
 /** The CV's draft PDF; `version` (its SHA-256) makes a re-printed CV load afresh. */
