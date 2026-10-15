@@ -395,6 +395,12 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     contact: () => contact.get(),
     closestAngle: (posting) => angles.closest(posting),
     draftDocument,
+    voice: {
+      context: (request) => voice.context(request),
+      saveEdit: (edit, previous) => voice.saveEdit(edit, previous),
+      learnedFrom: () => voice.view().learnedFrom,
+      sourceLabel: (source) => voice.sourceLabel(source),
+    },
   });
 
   return {

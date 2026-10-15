@@ -59,6 +59,8 @@ export type { VoiceView, VoiceSample, VoiceSampleFile, VoiceSampleKind, VoiceSam
 export { tailoredCvSchema, coachTurnSchema } from "./writing/writer.ts";
 export type { CoachTurn, CoachTurnInput, CoachTopic, CoachLine, CoachEntry } from "./writing/writer.ts";
 export type { TailorCvInput, TailoredCv, TailoredLine } from "./writing/writer.ts";
+export { writtenLetterSchema } from "./writing/writer.ts";
+export type { WriteLetterInput, WrittenLetter } from "./writing/writer.ts";
 export { checkWording, validateCv } from "./preparation/honesty.ts";
 export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";

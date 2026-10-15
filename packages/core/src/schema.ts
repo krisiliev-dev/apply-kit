@@ -514,6 +514,26 @@ const migrations: string[] = [
      near TEXT,
      created_at TEXT NOT NULL
    );`,
+  // #65: the cover letter's drafts, kept and paged: what the writer wrote (null for one Kris writes
+  // herself), the text as Kris edited it, the instruction it was asked with, the voice excerpts it
+  // sent, and the voice edit recording Kris's changes to it. The package shows one draft at a time,
+  // and keeps the letter's printed draft PDF.
+  `CREATE TABLE package_letter (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     number INTEGER NOT NULL,
+     origin TEXT NOT NULL,
+     instruction TEXT,
+     written TEXT,
+     content TEXT NOT NULL,
+     excerpts TEXT NOT NULL DEFAULT '[]',
+     voice_edit_id TEXT,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL,
+     edited_at TEXT,
+     PRIMARY KEY (package_id, number)
+   );
+   ALTER TABLE package ADD COLUMN letter_draft INTEGER;
+   ALTER TABLE package ADD COLUMN letter_file TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {
