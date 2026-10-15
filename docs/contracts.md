@@ -28,4 +28,8 @@ Prepare (spec #51) is the only owner of the master profile, the answer bank, the
 | A confirmation email for an approved package with no Application (story 82) | `approvedWithoutApplication()` |
 | Record submission sets the package's state | `markPackageSubmitted`, `undoPackageSubmitted` |
 | An interview story into Profile, unconfirmed, with its source | `addUnconfirmedPiece({ text, source })` (shaped like Track's `MasterProfile.addUnconfirmedPiece`) |
-| Voice for follow-up drafts, and Kris's edits as evidence | `voiceContext({ language, purpose })`, `recordVoiceEdit(edit)` (Track's `VoiceSamples.excerpts` maps to `voiceContext(...).excerpts`) |
+| Master profile pieces a follow-up draft may draw on, with where each sits | `profileEvidence({ requirements, language })` (Track's `MasterProfile.evidence`) |
+| True stories for the prep sheet (confirmed achievements) | `profileStories()` (Track's `MasterProfile.stories`) |
+| Voice for follow-up drafts, and Kris's edits as evidence | `voiceContext({ language, purpose: "follow-up" })` (rules and excerpts sent with each draft), `recordVoiceEdit(edit)` (once per follow-up, when what Kris marked sent differs from the draft) |
+
+The tracker's `profile` and `voice` ports are made from the preparation engine with `trackPortsFrom(preparation)` (`packages/core/src/track-prepare.ts`); the service wires them in `app/src/main.ts`.

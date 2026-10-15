@@ -11,7 +11,7 @@ The first feature being built is **Discover**: one trustworthy Feed of every rel
 | `app/` | Local service: Hono API (and later the scheduler, mail reader and PDF), in `app/src/` |
 | `app/ui/` | React + Vite UI. `app/ui/src/styles/tokens.css` and `components.css` are the design system's single copy |
 | `packages/core/` | Discovery engine and domain rules. Its dependencies (fetch, clock, database, AI extractor, mail reader) are injected |
-| `extension/` | Chrome-first WXT extension: captures the job page, or the search results, you're viewing |
+| `extension/` | Chrome-first WXT extension: a side panel that captures the job page, or the search results, you're viewing, and (from the Apply spec) fills application portals when you click |
 | `docs/` | Product, design, architecture ([ARCHITECTURE.md](docs/ARCHITECTURE.md)), ADRs, research |
 | `data` | Gitignored shortcut to `~/Library/Application Support/apply-kit`, where the database lives |
 
@@ -61,13 +61,15 @@ While the service runs it checks Sources every 30 minutes between 07:00 and 23:0
 
 On the Feed (first run, or **Add job** in the toolbar), paste a job's link to add that one job. apply-kit reads the page once (its JSON-LD JobPosting, otherwise the page's heading and main text), only where the site's robots.txt allows it, and the Job is merged, ranked and read like any other. A link already in the Feed opens its Job. LinkedIn, jobs.bg, Google, Apple and Meta careers, Indeed and Glassdoor are never fetched, and a page behind bot protection is never retried: apply-kit keeps the link and asks you to paste the job's text instead. Pasted jobs aren't a Source to check, so they never close because a check missed them; one that no job system lists shows **Unverified after 30 days** and stays in the Feed.
 
-### Chrome extension (capture)
+### Chrome extension (capture, and fill from the Apply spec)
 
 Capture the job page you're viewing in Chrome, or every listing a search results page shows (LinkedIn and jobs.bg included), with one click.
 
 1. `pnpm build:extension`, then in Chrome open `chrome://extensions`, turn on **Developer mode**, choose **Load unpacked** and pick `extension/.output/chrome-mv3`. (`pnpm --filter @apply-kit/extension dev` opens a Chrome with it loaded and reloads on change.)
-2. With the service running, open apply-kit › **Settings** › **Pair the extension**, click the apply-kit icon in Chrome and type the 6-digit code. The code works once, for 10 minutes. Paired extensions are listed there and can be unpaired.
-3. On a job page or a page of search results, click the apply-kit icon, then **Capture this page** (or **Capture search results**). The panel shows each listing as New, Already in Feed, Hidden (with the dealbreaker) or Couldn't read; **Add to Feed** stores them under the Source "Captured · <site>".
+2. With the service running, open apply-kit › **Settings** › **Pair the extension**, click the apply-kit icon in Chrome (it opens apply-kit's side panel) and type the 6-digit code. The code works once, for 10 minutes. Paired extensions are listed there and can be unpaired.
+3. On a job page or a page of search results, click the apply-kit icon, choose **Capture** in the panel's switch if it isn't already, then **Capture this page** (or **Capture search results**). The panel shows each listing as New, Already in Feed, Hidden (with the dealbreaker) or Couldn't read; **Add to Feed** stores them under the Source "Captured · <site>".
+
+On one of the six portals apply-kit knows (Workday, Greenhouse, Lever, SmartRecruiters, Workable, Ashby) the panel opens on **Fill this application** and names the portal and the job from the page's address. The first time, it asks once to **Allow the 6 portals** (Chrome's prompt for those sites only; **Not now** works, and then you click the apply-kit icon on each new site before filling). **Fill this page** (also `Alt+Shift+F`, remappable at `chrome://extensions/shortcuts`) doesn't fill anything yet: filling comes with the next Apply tickets.
 
 The extension reads a page only when you click, as Chrome has rendered it: it never scrolls, clicks, pages or opens listings, and has no access to any site until you open it on that tab (`activeTab`). Scroll or open the next page yourself, then capture again; listings already captured are recognised. It talks only to the service on this laptop (default `http://127.0.0.1:4310`; change it under **Service address** when pairing) and keeps nothing but that address and its pairing token. When the service isn't running it says so and retries. A captured job is re-checked on the company's own job system when apply-kit watches one (it closes when that stops listing it); otherwise it shows **Unverified after 30 days** and stays in the Feed.
 
@@ -80,6 +82,7 @@ Job-alert emails (LinkedIn, jobs.bg, Google Careers, Workday, MyGreenhouse) are 
 3. In `.env`: `GMAIL_ADDRESS` (the job address), `GMAIL_APP_PASSWORD` (spaces are fine) and optionally `GMAIL_MAILBOX` (a Gmail label; default `INBOX`).
 4. On icloud.com › Mail › Settings › Rules, forward job mail from your usual address to the job Gmail. Either forward everything, or add one rule per alert sender (from contains `linkedin.com`, `jobs.bg`, `google.com`, `myworkday.com`, `greenhouse`). Point each site's alerts at your usual address, or straight at the job Gmail.
 5. Add the alert Sources to `APPLY_KIT_SOURCES`: `email:linkedin,email:jobsbg,email:google,email:workday,email:mygreenhouse` (only the ones you use), then restart.
+6. Optional: set `MY_EMAIL_ADDRESSES` to the address(es) you send mail from. When you send a follow-up, BCC the job Gmail and the next read marks that follow-up sent for you.
 
 The mailbox is read at each scheduled check. Each alert learns its usual rhythm; one with no email for more than 3× its usual gap shows **Quiet longer than usual** on Sources. If Gmail refuses the app password (revoked, or the Google password changed), Sources says so with these steps; create a new app password and restart.
 

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createAiBudget, createEngine, createPairing, createPreparationEngine, type DocumentToRender, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createPairing, createPreparationEngine, createTracker, type DocumentToRender, type Scheduler } from "@apply-kit/core";
 import { createServer } from "./server.ts";
 
 const port = 4310;
@@ -34,8 +34,9 @@ function service(uiDir = "/nonexistent/") {
     packages: { saveDraft: async () => noFiles(), freeze: async () => noFiles(), read: async () => null },
   });
   const pairing = createPairing({ db, clock });
+  const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const app = createServer({ engine, preparation, scheduler, pairing, uiDir, port });
+  const app = createServer({ engine, preparation, tracker, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
@@ -385,7 +386,7 @@ describe("developer route: the demo documents", () => {
       packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), freeze: async (id, v, name) => ({ path: `packages/${id}/v${v}/${name}`, copy: null }), read: async () => null },
     });
     const scheduler = { status: () => ({}) } as unknown as Scheduler;
-    const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });
+    const app = createServer({ engine, preparation, tracker: createTracker({ db, clock, discovery: engine }), scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });
     return { request: (path: string) => app.request(`http://127.0.0.1:${port}${path}`), rendered };
   }
 
@@ -508,5 +509,196 @@ describe("the coach interview's API", () => {
     expect((await s.request("/api/interviews/elsewhere/skip", s.json({}))).status).toBe(404);
     expect((await s.request("/api/interviews/setup/finish", { method: "POST" })).status).toBe(415);
     expect((await s.request("/api/interview/items/x/decide", s.json({ choice: "maybe" }))).status).toBe(400);
+  });
+});
+
+describe("the Applications routes", () => {
+  it("adds an application by hand, lists it grouped, changes its Status and undoes that", async () => {
+    const s = service();
+
+    const added = await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+    expect(added.status).toBe(201);
+    const { application } = (await added.json()) as { application: { id: string } };
+
+    const changed = await s.request(`/api/applications/${encodeURIComponent(application.id)}/status`, s.json({ status: "screening" }));
+    const { event } = (await changed.json()) as { event: { id: string } };
+    expect((await (await s.request("/api/applications")).json()) as unknown).toMatchObject({ total: 1, groups: [{ key: "screening", count: 1 }] });
+
+    const undone = await s.request(`/api/applications/events/${encodeURIComponent(event.id)}/undo`, s.json({}));
+    expect(await undone.json()).toMatchObject({ application: { status: "applied" } });
+  });
+
+  it("explains a refused add or change in words, and shows more of a group when asked", async () => {
+    const s = service();
+    const invalid = await s.request("/api/applications", s.json({ job: { company: "", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+    expect(invalid.status).toBe(422);
+    expect(await invalid.json()).toMatchObject({ outcome: "invalid", field: "company", error: "Enter the company, so replies can be matched to it." });
+
+    for (let i = 0; i < 7; i++) {
+      await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: `Job ${i}` }, appliedOn: "2026-10-09", status: "applied" }));
+    }
+    const five = (await (await s.request("/api/applications")).json()) as { groups: { applications: { id: string }[] }[] };
+    const all = (await (await s.request("/api/applications?all=applied")).json()) as { groups: { applications: unknown[] }[] };
+    expect([five.groups[0]!.applications.length, all.groups[0]!.applications.length]).toEqual([5, 7]);
+
+    const accepted = await s.request(`/api/applications/${encodeURIComponent(five.groups[0]!.applications[0]!.id)}/status`, s.json({ status: "accepted" }));
+    expect(accepted.status).toBe(409);
+    expect(await accepted.json()).toMatchObject({ problem: "accepted" });
+  });
+
+  it("accepts an offer with withdrawals to send, declines one, and keeps offer details and a rejection's lesson", async () => {
+    const s = service();
+    const add = async (company: string, status: string) =>
+      ((await (await s.request("/api/applications", s.json({ job: { company, title: "Engineer" }, appliedOn: "2026-10-09", status }))).json()) as { application: { id: string } }).application.id;
+    const ardent = await add("Ardent Labs", "offer");
+    const velta = await add("Velta Logistics", "applied");
+    const kestrel = await add("Kestrel Payments", "offer");
+    const pixelmoor = await add("Pixelmoor", "rejected");
+
+    const accepted = await s.request(`/api/applications/${ardent}/accept`, s.json({}));
+    expect(await accepted.json()).toMatchObject({ application: { status: "accepted" }, withdrawals: [{ application: { id: velta } }, { application: { id: kestrel } }] });
+    const list = (await (await s.request("/api/applications/withdrawals")).json()) as { items: { followUp: { id: string } }[] };
+    const sent = await s.request(`/api/follow-ups/${list.items[0]!.followUp.id}/sent`, s.json({}));
+    expect(await sent.json()).toMatchObject({ event: { to: "withdrawn" } });
+
+    expect((await s.request(`/api/applications/${kestrel}/decline-draft`)).status).toBe(200);
+    expect(await (await s.request(`/api/applications/${kestrel}/decline`, s.json({}))).json()).toMatchObject({ event: { reason: "declined offer" } });
+    expect((await s.request(`/api/applications/${velta}/decline`, s.json({}))).status).toBe(422);
+
+    const offer = await s.request(`/api/applications/${ardent}/offer`, { ...s.json({ baseSalary: "€3,100 gross / month" }), method: "PUT" });
+    expect(await offer.json()).toMatchObject({ offer: { from: "you", details: { baseSalary: "€3,100 gross / month" } } });
+    const note = await s.request(`/api/applications/${pixelmoor}/rejection`, { ...s.json({ lesson: "They wanted a shipped design system", reason: null }), method: "PUT" });
+    expect(await note.json()).toMatchObject({ rejection: { lesson: "They wanted a shipped design system", reason: null } });
+  });
+
+  it("searches, filters and pages the list from the query string, and records a visit", async () => {
+    const s = service();
+    for (let i = 0; i < 30; i++) {
+      await s.request("/api/applications", s.json({ job: { company: i % 2 ? "Amber Labs" : "Birch Works", title: `Job ${i}` }, appliedOn: "2026-10-09", status: "applied" }));
+    }
+
+    const amber = (await (await s.request("/api/applications?q=amber&status=open")).json()) as { matching: number; groups: { applications: unknown[] }[] };
+    expect([amber.matching, amber.groups[0]!.applications.length]).toEqual([15, 5]);
+    const paged = (await (await s.request("/api/applications?paged=1&at=applied:25")).json()) as { groups: { offset: number; applications: unknown[] }[] };
+    expect([paged.groups[0]!.offset, paged.groups[0]!.applications.length]).toEqual([25, 5]);
+
+    const visit = await s.request("/api/applications/visit", s.json({}));
+    expect(await visit.json()).toEqual({ since: null, changes: [] });
+  });
+
+  it("lists emails to match, refuses an answer with no choice in words, and gives the mailbox's state", async () => {
+    const s = service();
+
+    expect(await (await s.request("/api/applications/emails")).json()).toEqual([]);
+    const noChoice = await s.request("/api/applications/emails/%3Cinv-1%40nimbus-cloud.example%3E/answer", s.json({}));
+    expect(noChoice.status).toBe(422);
+    expect(await noChoice.json()).toMatchObject({ problem: "invalid", error: "Choose where this email belongs first." });
+    const unknown = await s.request("/api/applications/emails/%3Cnone%40example.com%3E/answer", s.json({ choice: "none" }));
+    expect(unknown.status).toBe(404);
+    expect(await (await s.request("/api/applications/mailbox")).json()).toMatchObject({ state: "not-read" });
+  });
+
+  it("shows one Application in full, takes notes, contacts and the CV sent, and says when there's no such one", async () => {
+    const s = service();
+    const added = await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+    const { application } = (await added.json()) as { application: { id: string } };
+    const at = `/api/applications/${encodeURIComponent(application.id)}`;
+
+    expect((await s.request(`${at}/notes`, s.json({ text: "Recruiter called." }))).status).toBe(201);
+    expect((await s.request(`${at}/contacts`, s.json({ value: "mira@example.com" }))).status).toBe(201);
+    const badContact = await s.request(`${at}/contacts`, s.json({ value: "Mira" }));
+    expect(badContact.status).toBe(422);
+    expect(await badContact.json()).toMatchObject({ problem: "invalid" });
+
+    const pdf = new TextEncoder().encode("%PDF-1.7\n% Mira Petrova\n%%EOF\n");
+    const put = (type: string) => s.request(`${at}/cv?name=${encodeURIComponent("cv-design.pdf")}&label=Design%20v2`, { method: "PUT", headers: { "content-type": type }, body: pdf });
+    expect((await put("text/plain")).status).toBe(415);
+    expect((await put("application/pdf")).status).toBe(201);
+
+    const detail = await (await s.request(at)).json();
+    expect(detail).toMatchObject({
+      id: application.id, cvVersion: "Design v2", contacts: [{ value: "mira@example.com" }],
+      nextStep: { kind: "note", text: "Recruiter called." }, steps: [{ status: "applied", state: "current" }, {}, {}, {}, {}],
+    });
+    const file = await s.request(`${at}/cv`);
+    expect(file.headers.get("content-type")).toBe("application/pdf");
+    expect(new TextDecoder().decode(await file.arrayBuffer())).toContain("Mira Petrova");
+
+    expect((await s.request("/api/applications/no-such-id")).status).toBe(404);
+    expect((await s.request("/api/applications/no-such-id/cv")).status).toBe(404);
+  });
+
+  it("carries Track's markers on the Feed and the Job: All open keeps an applied Job with its Application", async () => {
+    const s = service();
+    const pasted = { title: "Security Engineer", company: "Kestrel Payments", location: "Sofia", text: "Protect payments.\n3+ years in security." };
+    const { jobId } = (await (await s.request("/api/jobs/link", s.json({ link: "https://www.linkedin.com/jobs/view/4100000001/", pasted }))).json()) as { jobId: string };
+    await s.request("/api/applications", s.json({ job: { jobId }, appliedOn: "2026-10-07", status: "applied", how: "i-applied" }));
+
+    const open = (await (await s.request("/api/feed?view=open")).json()) as { jobs: { id: string }[]; markers: Record<string, unknown> };
+    const job = await (await s.request(`/api/jobs/${encodeURIComponent(jobId)}`)).json();
+
+    expect(open.jobs.map((j) => j.id)).toEqual([jobId]);
+    expect(open.markers[jobId]).toMatchObject({ application: { appliedOn: "2026-10-07", status: "applied" } });
+    expect(job).toMatchObject({ id: jobId, track: { application: { status: "applied" }, history: [{ title: "Security Engineer" }] } });
+  });
+
+  it("lists Needs you, opens a follow-up to write, keeps its text, marks it sent with undo, and has the delays as settings", async () => {
+    const s = service();
+    await s.request("/api/applications", s.json({ job: { company: "Tidewater Pay", title: "Application Security Engineer" }, appliedOn: "2026-10-05", status: "applied", contact: "careers@tidewaterpay.example" }));
+
+    const needs = (await (await s.request("/api/applications/needs-you")).json()) as { count: number; items: { followUp: { id: string } }[] };
+    expect(needs).toMatchObject({ count: 1, items: [{ application: { company: "Tidewater Pay" }, followUp: { kind: "nudge", dueOn: "2026-10-12" } }] });
+    const at = `/api/follow-ups/${encodeURIComponent(needs.items[0]!.followUp.id)}`;
+
+    const text = await s.request(`${at}/text`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: "Still keen." }) });
+    expect(text.status).toBe(200);
+    expect(await (await s.request(at)).json()).toMatchObject({ followUp: { text: "Still keen." }, mail: { to: "careers@tidewaterpay.example" }, outline: expect.any(Array) });
+
+    const sent = await s.request(`${at}/sent`, s.json({}));
+    expect(sent.status).toBe(200);
+    expect(await (await s.request(`${at}/sent`, s.json({}))).json()).toMatchObject({ problem: "unchanged" });
+    const { event } = (await sent.json()) as { event: { id: string } };
+    await s.request(`/api/applications/events/${encodeURIComponent(event.id)}/undo`, s.json({}));
+    expect((await s.request(`${at}/snooze`, s.json({}))).status).toBe(200);
+    expect((await s.request(`${at}/skip`, s.json({}))).status).toBe(200);
+    expect((await s.request("/api/follow-ups/no-such-id")).status).toBe(404);
+
+    expect(await (await s.request("/api/settings/follow-ups")).json()).toEqual({ nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3, checkInAfterDays: 7 });
+    const put = (body: unknown) => s.request("/api/settings/follow-ups", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    expect((await put({ nudgeAfterDays: 0 })).status).toBe(400);
+    expect(await (await put({ nudgeAfterDays: 10, offerNoteAfterDays: 1, snoozeDays: 3 })).json()).toMatchObject({ nudgeAfterDays: 10 });
+  });
+
+  it("takes an interview, gives its .ics, and says the prep sheet can't be built without the AI", async () => {
+    const s = service();
+    const added = await s.request("/api/applications", s.json({ job: { company: "Medora", title: "Full-stack Engineer" }, appliedOn: "2026-09-28", status: "interviewing" }));
+    const { application } = (await added.json()) as { application: { id: string } };
+    const at = `/api/applications/${encodeURIComponent(application.id)}`;
+
+    const bad = await s.request(`${at}/interviews`, s.json({ start: "2026-10-15T14:00", end: "2026-10-15T13:00", timeZone: "Europe/Sofia" }));
+    expect(bad.status).toBe(422);
+    const set = await s.request(`${at}/interviews`, s.json({ start: "2026-10-15T14:00", end: "2026-10-15T15:00", timeZone: "Europe/Sofia", format: "video", people: ["Mara Ivanova"] }));
+    expect(set.status).toBe(201);
+    const { interview } = (await set.json()) as { interview: { id: string } };
+
+    const ics = await s.request(`/api/interviews/${encodeURIComponent(interview.id)}/ics`);
+    expect(ics.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
+    expect(ics.headers.get("content-disposition")).toContain("interview-medora-2026-10-15.ics");
+    expect(await ics.text()).toContain("DTSTART;TZID=Europe/Sofia:20261015T140000");
+
+    expect(await (await s.request(`${at}/prep`)).json()).toEqual({ sheet: null });
+    const build = await s.request(`${at}/prep`, s.json({}));
+    expect(build.status).toBe(409);
+    expect(await build.json()).toMatchObject({ problem: "budget" });
+  });
+
+  it("gives the Stats strip its numbers", async () => {
+    const s = service();
+    await s.request("/api/applications", s.json({ job: { company: "Fennel Studio", title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }));
+
+    const stats = await s.request("/api/applications/stats");
+
+    expect(stats.status).toBe(200);
+    expect(await stats.json()).toMatchObject({ total: 1, weeks: expect.any(Array), responseRate: { excluded: 1, rate: null } });
   });
 });

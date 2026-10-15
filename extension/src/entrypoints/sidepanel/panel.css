@@ -1,0 +1,57 @@
+/* apply-kit's side panel (Chrome gives it 320–480px; designed at 360). Tokens and components come from
+   the app (app/ui/src/styles); only the panel's layout lives here, after docs/design/hifi/extension-fill.html. */
+/* The sticky footer never covers the focused control (WCAG 2.4.11): main.ts keeps --foot-h at its height. */
+html { scroll-padding-bottom: var(--foot-h, calc(var(--s-10) * 3)) }
+body { margin: 0; background: var(--surface); color: var(--ink); font-family: var(--font-text); font-size: var(--fs-small); line-height: var(--lh-body) }
+.sp { min-height: 100vh; display: flex; flex-direction: column; min-width: 0 }
+.sp h1 { font-family: var(--font-display); font-size: var(--fs-title); line-height: var(--lh-tight); font-weight: 600; margin: 0; overflow-wrap: anywhere }
+.sp p { margin: 0 }
+.sp :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+.ico { display: inline-flex; flex: none }
+.ico svg { width: 100%; height: 100% }
+
+.sp-head { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-4) var(--s-5); border-bottom: 1px solid var(--rule) }
+.sp-head .brand { font-size: var(--fs-body) }
+.sp-head .brand .ico { width: 22px; height: 22px }
+.conn { margin-left: auto; display: inline-flex; align-items: center; gap: var(--s-2); font-size: var(--fs-caption); color: var(--ink-3) }
+.conn i { width: 7px; height: 7px; border-radius: 50%; background: var(--met) }
+.conn.off { color: var(--gap) }
+.conn.off i { background: transparent; border: 1.5px solid var(--gap) }
+.conn[hidden], .sp-modes[hidden] { display: none }
+.sp-modes { padding: var(--s-3) var(--s-5) 0 }
+.sp-modes .segmented { display: flex }
+.sp-modes .segmented button { flex: 1; min-height: 36px }
+
+.sp-body { flex: 1 0 auto; padding: var(--s-5); display: grid; gap: var(--s-5); align-content: start; min-width: 0 }
+.sp-foot { position: sticky; bottom: 0; padding: var(--s-4) var(--s-5); border-top: 1px solid var(--rule); background: var(--surface); display: grid; gap: var(--s-3) }
+.sp-foot .btn.primary { min-height: 44px; font-size: var(--fs-body) }
+.bound { font-size: var(--fs-caption); color: var(--ink-3) }
+.lead-h { display: grid; gap: var(--s-2) }
+.lead-h .muted { font-size: var(--fs-small) }
+.form { gap: var(--s-5) }
+.form details .field { margin-top: var(--s-3) }
+.sp details summary { cursor: pointer }
+
+.ctx { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); min-width: 0 }
+.ctx .where { font-size: var(--fs-caption); color: var(--ink-3); font-weight: 600; letter-spacing: .02em; text-transform: uppercase; overflow-wrap: anywhere }
+.ctx .job { font-family: var(--font-text); font-size: var(--fs-body) }
+.ctx .why { display: flex; gap: var(--s-2); align-items: flex-start; font-size: var(--fs-small); color: var(--ink-2) }
+.ctx .why .ico { width: 14px; height: 14px; margin-top: 3px; color: var(--met) }
+.ctx .why .ico.info { color: var(--ink-3) }
+.callout { display: grid; gap: var(--s-2); padding: var(--s-4); border-radius: var(--r-control); background: var(--surface-sunken); font-size: var(--fs-small); color: var(--ink-2) }
+.callout b { color: var(--ink); font-weight: 600 }
+.callout .btn { justify-self: start }
+.ticks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.ticks li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--s-3); align-items: start; overflow-wrap: anywhere }
+.ticks .ico { width: 14px; height: 14px; margin-top: 3px; color: var(--ink-3) }
+.steps { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--s-4); counter-reset: st; font-size: var(--fs-small) }
+.steps li { counter-increment: st; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: var(--s-3); align-items: start }
+.steps li::before { content: counter(st); width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: var(--fs-caption); font-weight: 700; background: var(--surface-sunken); color: var(--ink-2) }
+
+/* Capture */
+.sp .summary { font-weight: 600 }
+.sp .actions { display: flex; flex-wrap: wrap; gap: var(--s-3) }
+.listings { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); border-top: 1px solid var(--rule) }
+.listing { display: grid; gap: var(--s-1); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule) }
+.listing .title { font-weight: 600; overflow-wrap: anywhere }
+.listing .chip { justify-self: start; white-space: normal }

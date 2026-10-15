@@ -1,7 +1,8 @@
-import type { FeedJob, FeedResult, FeedSort, FeedView, LearnedAdjustment, PackageChip, PassInput } from "@apply-kit/core";
+import type { FeedJob, FeedSort, FeedView, JobMarker, LearnedAdjustment, PackageChip, PassInput } from "@apply-kit/core";
 import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { passJobs, saveJobs, undoDecision, type FeedRow } from "../api.ts";
+import { passJobs, saveJobs, undoDecision, type FeedRow, type TrackedFeed } from "../api.ts";
 import { Icon } from "../icons.tsx";
+import { FeedMarker } from "../applications/markers.tsx";
 import { PassDialog } from "./PassDialog.tsx";
 import { useShortcutsSetting } from "./shortcuts.ts";
 import type { Toaster } from "./toast.tsx";
@@ -23,8 +24,8 @@ const leavesView = (view: FeedView, action: "save" | "pass") => action === "pass
  * the table and can be turned off.
  */
 export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShowQueued, checking, onShowRelocation, onShowHidden }: {
-  /** The Feed, with `jobs` set to the rows on screen. */
-  feed: FeedResult;
+  /** The Feed, with `jobs` set to the rows on screen, and Track's markers for them. */
+  feed: TrackedFeed;
   view: FeedView;
   sort: FeedSort;
   toaster: Toaster;
@@ -260,6 +261,7 @@ export function JobsTable({ feed, view, sort, toaster, onChanged, queued, onShow
                 )}
                 <JobRow
                   job={j}
+                  marker={feed.markers[j.id]}
                   asOf={feed.asOf}
                   active={j.id === current}
                   checked={selected.has(j.id)}
@@ -308,8 +310,10 @@ export function PackageChipView({ chip }: { chip: PackageChip | null | undefined
   return <span className={`chip ${cls} pkg-chip`}>{chip.kind === "ready" && <Icon name="met" />}{chip.label}</span>;
 }
 
-function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, onCheck, onSave, onPass }: {
+function JobRow({ job, marker, asOf, active, checked, showSavedChip, rowRef, onFocus, onCheck, onSave, onPass }: {
   job: FeedJob;
+  /** What Track knows: this Job's Application, or a recent one at the same company. */
+  marker: JobMarker | undefined;
   asOf: string;
   active: boolean;
   checked: boolean;
@@ -343,6 +347,7 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
           : job.postingCount > 1 && <span className="meta"> · seen in {job.postingCount} postings</span>}
         <span className="narrow meta">{where} · {salary} · {posted}</span>
         <div className="narrow"><RowChips job={job} /></div>
+        <FeedMarker marker={marker} company={job.company} tabIndex={tab} jobName={named(job)} />
         <div className="why-row">
           <div className="why">
             {job.fit.why}
