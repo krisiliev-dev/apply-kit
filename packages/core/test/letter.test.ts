@@ -352,3 +352,53 @@ describe("the letter's PDF", () => {
     expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({ approved: false, reason: "The letter runs onto 2 pages. Shorten it to fit one." });
   });
 });
+
+describe("when the letter can't be written", () => {
+  it("a timed-out letter says so; the CV stays, and the letter can be retried or written by hand", async () => {
+    let fail = true;
+    const t = await mira({ letter: () => (fail ? new Error("The model host didn't answer within 90 s") : undefined) });
+
+    const pkg = await started(t);
+
+    expect(pkg.parts.find((p) => p.part === "letter")).toMatchObject({
+      state: "failed", attempts: 2, what: "Not written: The model host didn't answer within 90 s. The rest is saved.",
+    });
+    expect(pkg).toMatchObject({ cv: { pages: 1 }, letter: null, steps: [{}, {}, { state: "failed", sub: "Failed" }, {}, {}] });
+
+    fail = false;
+    t.preparation.retryPart(pkg.id, "letter");
+    expect((await t.preparation.packageSettled(pkg.id))!.letter).toMatchObject({ draft: 1, origin: "writer" });
+  });
+
+  it("Write it myself opens an empty draft with the greeting and closing, which can't be approved empty", async () => {
+    const t = await mira({ letter: () => new Error("The model host didn't answer within 90 s") });
+    const pkg = await started(t);
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+
+    const r = await t.preparation.writeLetterYourself(pkg.id);
+
+    expect(r.package.letter).toMatchObject({ draft: 1, drafts: 1, origin: "own", words: 0, text: "Dear Kestrel Payments hiring team,\n\nKind regards,", voice: { sent: [] } });
+    expect(r.package.parts.find((p) => p.part === "letter")).toMatchObject({ state: "done" });
+    expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({ approved: false, reason: "The letter is empty. Write it, or ask for a draft." });
+
+    const written = await t.preparation.editLetter(pkg.id, 1, "Dear Kestrel Payments hiring team,\n\nAt Northwind Bank I wrote 30 detection rules that cut false alerts by a quarter.\n\nKind regards,");
+    expect(written.package.letter!.checks.map((c) => c.state)).toEqual(["ok", "ok", "ok", "ok", "ok"]);
+    expect(t.preparation.voice().edits.total).toBe(0);
+    expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({ approved: true });
+  });
+
+  it("isn't started when it would cross the monthly cap; the rest is kept and Kris can write it herself", async () => {
+    // Learning the voice and the CV each cost $0.002; the letter would cross a $0.005 cap.
+    const t = await mira({ capUsd: 0.005 });
+
+    const pkg = await started(t);
+
+    expect(pkg.parts.map((p) => [p.part, p.state])).toEqual([["target", "done"], ["cv", "done"], ["letter", "not-written"], ["answers", "later"], ["ats", "waiting"]]);
+    expect(pkg.parts[2]!.what).toBe("Not written: this month's AI budget would be crossed.");
+    expect(await t.preparation.redraftLetter(pkg.id, "Shorter")).toMatchObject({
+      changed: false, reason: "This month's AI budget would be crossed, so a new draft can't be written now. Edit it, or write it yourself.",
+    });
+    expect((await t.preparation.writeLetterYourself(pkg.id)).package.letter).toMatchObject({ origin: "own" });
+  });
+});

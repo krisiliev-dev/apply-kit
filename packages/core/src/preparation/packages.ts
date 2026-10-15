@@ -371,6 +371,8 @@ export interface PackageStore {
   showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
   /** Kris's text for a draft: saved, printed, and recorded as voice evidence unless learning is paused. */
   editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
+  /** An empty draft with the greeting and closing, for Kris to write herself. */
+  writeLetterYourself(id: string): Promise<ChangeResult>;
   /** The letter's draft PDF, as printed from the draft shown. */
   letterFile(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
@@ -1332,6 +1334,16 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return { changed: true, package: view(row(id)!) };
   }
 
+  async function writeLetterYourself(id: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    if (parts(id).get("letter")!.state === "working") return { changed: false, reason: "The letter is still being written. Stop generating first, or wait for it.", package: view(r) };
+    addLetter(id, { origin: "own", instruction: null, written: null, content: emptyLetter(r.job.company, r.language), excerpts: [], costUsd: 0 });
+    setPart(id, "letter", { state: "done", error: null });
+    reopenFrom(r, "letter");
+    await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
   async function editLetter(id: string, draft: number, text: string): Promise<ChangeResult> {
     const r = mustGet(id);
     const l = letterOf(id, draft);
@@ -1478,6 +1490,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     redraftLetter,
     showLetterDraft,
     editLetter,
+    writeLetterYourself,
     async letterFile(id) {
       const r = row(id);
       const file = r?.letterFile;
