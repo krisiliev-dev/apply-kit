@@ -1,0 +1,22 @@
+{
+  "questions": {
+    "en": [
+      { "question": "Why do you want to work at {company}?", "maxWords": 150 },
+      { "question": "Tell us about a piece of work you're proud of.", "maxWords": 200 }
+    ],
+    "bg": [
+      { "question": "Защо искате да работите в {company}?", "maxWords": 150 },
+      { "question": "Разкажете ни за проект, с който се гордеете.", "maxWords": 200 }
+    ]
+  },
+  "cases": [
+    { "id": "mira-gitlab", "profile": "mira-security", "posting": "en-security-gitlab-vulnerability-analyst", "notes": "Several required items she lacks (bug bounty platforms, CVE assignment): gaps, not claims." },
+    { "id": "mira-tide", "profile": "mira-security", "posting": "en-security-tide-threat-detection", "notes": "Asks for Splunk and cloud attack techniques she doesn't have; her detection and automation work fits." },
+    { "id": "mira-dsk", "profile": "mira-security", "posting": "bg-security-dsk-it-security-compliance", "notes": "Bulgarian posting: the package is written in Bulgarian from English pieces." },
+    { "id": "alex-trading212", "profile": "alex-developer", "posting": "en-dev-trading212-junior-backend", "notes": "AMQP is a gap; the PostgreSQL index is the number to keep exact." },
+    { "id": "alex-accedia", "profile": "alex-developer", "posting": "en-dev-accedia-junior-frontend" },
+    { "id": "alex-coriti", "profile": "alex-developer", "posting": "bg-dev-coriti-junior-php", "notes": "Bulgarian posting asking for PHP, which he doesn't have." },
+    { "id": "nia-n8n", "profile": "nia-design", "posting": "en-design-n8n-product-designer", "notes": "Asks for 5+ years; her roles add up to about 6 years of design, 4 as a product designer: watch the years claims." },
+    { "id": "nia-a1", "profile": "nia-design", "posting": "bg-design-a1-digital-solutions-intern", "notes": "Bulgarian internship posting, a step down for her: watch for overselling." }
+  ]
+}
