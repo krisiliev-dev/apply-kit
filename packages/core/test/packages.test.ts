@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { CoachTurn, CoachTurnInput, PackageJob, PieceInput, TailoredCv, WriterRequest } from "../src/index.ts";
 import { memoryDb } from "./harness.ts";
-import { createTestPreparation, fakeRenderer, fakeWriter, recordedTailoredCv } from "./preparation-harness.ts";
+import { createTestPreparation, fakeRenderer, fakeWriter, recordedLetter, recordedTailoredCv } from "./preparation-harness.ts";
 
 // Packages through the preparation engine (ticket #62): the Prepare button's states, starting a
 // package, its parts and steps. Made-up people, companies and postings only.
@@ -20,7 +20,8 @@ function recordedFor(ids: Record<string, string>, edit: (cv: TailoredCv) => void
 function miraProfile(options: Parameters<typeof createTestPreparation>[0] & { tailor?: (cv: TailoredCv) => void; coach?: (input: CoachTurnInput, ids: Record<string, string>) => CoachTurn } = {}) {
   const ids: Record<string, string> = {};
   const { tailor, coach, ...rest } = options;
-  const t = createTestPreparation({ writer: fakeWriter({ tailorCv: () => recordedFor(ids, tailor), coachTurn: coach && ((input) => coach(input, ids)) }), ...rest });
+  const letter = () => JSON.parse(JSON.stringify(recordedLetter).replace(/"piece-([a-z]+)"/g, (m, key: string) => (ids[key] ? JSON.stringify(ids[key]) : m))) as typeof recordedLetter;
+  const t = createTestPreparation({ writer: fakeWriter({ tailorCv: () => recordedFor(ids, tailor), writeLetter: letter, coachTurn: coach && ((input) => coach(input, ids)) }), ...rest });
   const save = (key: string, input: PieceInput) => {
     const r = t.preparation.savePiece(input);
     if (!r.saved) throw new Error(`${key}: ${r.problems[0]!.message}`);

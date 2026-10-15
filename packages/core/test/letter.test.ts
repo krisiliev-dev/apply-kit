@@ -100,3 +100,78 @@ describe("writing the cover letter", () => {
     expect(input!.excerpts).toEqual([{ source: expect.stringMatching(/^sample:/), text: expect.stringContaining("Your night shift loses an hour to noisy alerts.") }]);
   });
 });
+
+describe("the letter as the step shows it", () => {
+  it("shows draft 1 with its word count, the sentences written for the company named in words, and the excerpts it sent", async () => {
+    const t = await mira();
+
+    const { letter } = await started(t);
+
+    expect(letter).toMatchObject({
+      draft: 1, drafts: 1, origin: "writer", instruction: null, words: 113, target: 220,
+      greeting: "Dear Kestrel Payments hiring team,", closing: "Kind regards,",
+      forCompany: { count: 2, where: "the first sentence of paragraph 1 and the first sentence of paragraph 3" },
+      voice: {
+        samples: 1, edits: 0, sentWords: 24,
+        sent: [{ from: "cover-letter-harbour-2024.txt", text: "Dear Harbour team, Your night shift loses an hour to noisy alerts. I have spent two years making those alerts quieter. Kind regards, Mira" }],
+      },
+    });
+    expect(letter!.paragraphs[0]).toEqual([
+      { text: "Every false alert in a payments SOC costs an analyst's time, and every missed one can cost a merchant.", forCompany: true },
+      { text: "Telling those apart is the work I do as a security analyst at Northwind Bank, and it is why the Security Engineer role stood out to me.", forCompany: false },
+    ]);
+    expect(letter!.text).toBe([
+      "Dear Kestrel Payments hiring team,",
+      "Every false alert in a payments SOC costs an analyst's time, and every missed one can cost a merchant. Telling those apart is the work I do as a security analyst at Northwind Bank, and it is why the Security Engineer role stood out to me.",
+      "At Northwind Bank I wrote 30 detection rules that cut false alerts by a quarter. I also ran the response to a phishing campaign against the claims team.",
+      "Your posting asks for alert triage in a SIEM and for incident response, which is the work I want to keep doing. I would like to hear where the team wants its detections to be a year from now.",
+      "Kind regards,",
+    ].join("\n\n"));
+  });
+});
+
+describe("the letter's checks", () => {
+  it("passes every check when it keeps to the profile and the CV, with one example that has a number", async () => {
+    const t = await mira();
+
+    const { letter } = await started(t);
+
+    expect(letter!.checks).toEqual([
+      { id: "trace", state: "ok", label: "Every claim traces to your master profile", detail: null },
+      { id: "decisions", state: "ok", label: "Wording matches your CV", detail: null },
+      { id: "gaps", state: "ok", label: "No gap to name: you chose none in the CV step", detail: null },
+      { id: "stock", state: "ok", label: "No stock phrases (\"passionate\", \"excited to apply\")", detail: null },
+      { id: "example", state: "ok", label: "One concrete example with a number", detail: null },
+    ]);
+  });
+
+  it("flags a letter that contradicts a CV decision (\"led all 3\"), and the step can't be approved", async () => {
+    const t = await mira({
+      pieces: (save, ids) => save("incidents", { kind: "achievement", text: "Responded to 3 phishing incidents and led 1 of them.", belongsTo: ids.analyst, tags: ["incident response"], angles: ["security"], numberSource: "measured" }),
+      tailor: (cv) => {
+        cv.roles[0]!.bullets.push({ text: "Led the response to all 3 phishing incidents", pieceIds: [t.ids.incidents!], claim: "stronger", why: "The posting asks for incident response.", honest: "Responded to 3 phishing incidents, leading 1 of them" });
+      },
+      letter: (letter) => {
+        letter.paragraphs[1]!.sentences[1] = { text: "I also led the response to all 3 phishing incidents at Northwind Bank.", forCompany: false, pieceIds: [t.ids.incidents!] };
+      },
+    });
+    const pkg = await started(t);
+    const flag = pkg.cvVersion!.flags.find((f) => f.kind === "near-the-line")!;
+    await t.preparation.decideFlag(pkg.id, flag.id, { option: "honest" });
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+
+    const refused = t.preparation.approveStep(pkg.id, "letter");
+
+    expect(refused.package.letter!.checks.find((c) => c.id === "decisions")).toEqual({
+      id: "decisions", state: "problem",
+      label: "Contradicts your CV decision: \"Responded to 3 phishing incidents, leading 1 of them\"",
+      detail: "\"I also led the response to all 3 phishing incidents at Northwind Bank\" says \"all\", which your CV decision doesn't. Use the CV's wording, or ask for a new draft.",
+    });
+    expect(refused).toMatchObject({
+      approved: false, blockedBy: "letter",
+      reason: "The cover letter can't be approved yet: it contradicts your CV decision: \"Responded to 3 phishing incidents, leading 1 of them\".",
+    });
+    expect(refused.package.steps[2]).toMatchObject({ state: "current", sub: "1 to fix" });
+  });
+});

@@ -31,7 +31,7 @@ import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder } from "./ports.ts";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
 import type { DocumentDraft, DraftRequest } from "./engine.ts";
-import { bodyWords, emptyLetter, forCompanyCount, forCompanyPlaces, fromWritten, LETTER_WORDS, letterText, type LetterDraft } from "./letter.ts";
+import { bodyWords, checkLetter, emptyLetter, forCompanyCount, forCompanyPlaces, fromWritten, LETTER_WORDS, letterText, type LetterCheck, type LetterDraft } from "./letter.ts";
 import { wordCount, type VoiceContext, type VoiceContextRequest, type VoiceEditInput } from "./voice.ts";
 
 export const packageSteps = ["target", "cv", "letter", "answers", "ats"] as const;
@@ -498,6 +498,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         if (step === "cv" && r.cvDraft?.overflow && !r.cvVersion?.keepTwoPages) {
           return { reason: `This CV runs onto ${r.cvDraft.pages} pages. Choose how to fit one page, or keep ${r.cvDraft.pages}.`, by: step };
         }
+        if (step === "letter") return letterBlock(r);
         return null;
       }
       case "working": return { reason: `The ${name} is still being written.`, by: step };
@@ -517,12 +518,15 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       const block = blockOf(r, ps, step);
       const flags = step === "cv" && p.state === "done" ? r.cvVersion?.flags ?? [] : [];
       const open = flags.filter((f) => !f.decision).length;
+      const letter = step === "letter" && p.state === "done" ? currentLetter(r) : null;
+      const toFix = letter ? letterChecks(r, letter).filter((c) => c.state === "problem").length : 0;
       const [state, sub]: [StepState, string] = approvedAt ? ["done", "Approved"]
         : open ? [step === current ? "current" : "flagged", open === 1 ? "1 flag" : `${open} flags`]
         : flags.length && step === current ? ["current", "Flags decided"]
+        : toFix ? [step === current ? "current" : "flagged", `${toFix} to fix`]
         : p.state === "working" ? ["working", "Writing…"]
         : p.state === "failed" ? ["failed", "Failed"]
-        : step === current ? ["current", p.state === "done" ? (step === "target" ? "Choose" : "Ready to check") : p.state === "later" ? "Not built yet" : "Not written"]
+        : step === current ? ["current", p.state === "done" ? (step === "target" ? "Choose" : step === "letter" ? "Review" : "Ready to check") : p.state === "later" ? "Not built yet" : "Not written"]
         : p.state === "later" ? ["upcoming", "Not built yet"]
         : p.state === "stopped" || p.state === "not-written" ? ["upcoming", "Not written"]
         : step === "ats" ? ["upcoming", "After the CV"]
@@ -863,6 +867,30 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     };
   }
 
+  /** The letter's checks against the profile, the CV's decisions and the gaps Kris chose to name or leave out. */
+  function letterChecks(r: Row, l: LetterRow): LetterCheck[] {
+    const flags = r.cvVersion?.flags ?? [];
+    const decisions = flags.filter((f) => f.draft && f.decision?.text && f.decision.option !== "experience")
+      .map((f) => ({ chosen: f.decision!.text!, draft: f.draft!, pieceIds: f.pieceIds, piece: f.piece }));
+    const gapAt = new Set(flags.filter((f) => f.kind === "gap").map((f) => f.requirement));
+    const leftOut = flags.filter((f) => f.kind === "gap" && f.decision?.option === "leave-out").map((f) => requirementText(r, f)).filter((t): t is string => !!t);
+    // Besides the profile, the letter may name the company, the role and what the posting asks for (gaps only as gaps).
+    const alsoNamed = [r.job.company, r.job.title, ...r.job.requirements.filter((_, i) => !gapAt.has(i)).map((q) => q.text)];
+    return checkLetter(l.content, { profile: { ...honestyProfile(r), alsoNamed }, decisions, named: namedGaps(r), leftOut, language: r.language });
+  }
+
+  /** Why the letter can't be approved: no draft, an empty one, a check's problem, or more than one page. */
+  function letterBlock(r: Row): { reason: string; by: PackageStep } | null {
+    const l = currentLetter(r);
+    if (!l) return { reason: "There's no cover letter to approve yet.", by: "letter" };
+    if (bodyWords(l.content) === 0) return { reason: "The letter is empty. Write it, or ask for a draft.", by: "letter" };
+    const problem = letterChecks(r, l).find((c) => c.state === "problem");
+    if (problem) return { reason: `The cover letter can't be approved yet: ${problem.because}`, by: "letter" };
+    const file = r.letterFile?.draft === l.number ? r.letterFile : null;
+    if (file?.overflow) return { reason: `The letter runs onto ${file.pages} pages. Shorten it to fit one.`, by: "letter" };
+    return null;
+  }
+
   function estimateOf(r: Row, part: PackageStep): number {
     if (part === "cv") return deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) });
     if (part === "letter") return deps.writer.estimateCostUsd({ task: "write-letter", input: letterInput(r, { rules: [], excerpts: [] }, null, null) });
@@ -898,7 +926,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       words: bodyWords(l.content),
       target: LETTER_WORDS,
       forCompany: { count: forCompanyCount(l.content), where: forCompanyPlaces(l.content) },
-      checks: [],
+      checks: letterChecks(r, l).map(({ id, state, label, detail }) => ({ id, state, label, detail })),
       voice: { samples: learned.samples, edits: learned.edits, sent, sentWords: sent.reduce((n, e) => n + wordCount(e.text), 0) },
       quick: ["Shorter", "More direct"],
       file: r.letterFile && r.letterFile.draft === l.number ? r.letterFile : null,
