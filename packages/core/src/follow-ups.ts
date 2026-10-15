@@ -4,9 +4,15 @@
 // after an Offer. A Status change cancels the pending one, and undoing that change brings it back.
 // The tracker owns their state; this module holds the types, the delays (settings) and the outline:
 // plain points from the Application and its posting, with no model call.
+import type { ProfileStory } from "./interviews.ts";
 
-/** nudge: a short follow-up email after a quiet stage. offer-note: a note to self about an offer. */
-export type FollowUpKind = "nudge" | "offer-note";
+/**
+ * nudge: a short follow-up email after a quiet stage. offer-note: a note to self about an offer.
+ * thank-you: a note after an interview (#33), due 24 hours after its start, ready at its end.
+ * check-in: a polite nudge once interviews go quiet (#33), a number of days after the last one ends.
+ */
+
+export type FollowUpKind = "nudge" | "offer-note" | "thank-you" | "check-in";
 
 /** A follow-up as Needs you and the Application page show it. */
 export interface FollowUp {
@@ -27,6 +33,14 @@ export interface FollowUp {
   doneBy: "you" | "email" | null;
   /** The text as the user typed it ("" until they type). */
   text: string;
+  /** For a thank-you note or a check-in: the interview it follows; null otherwise. */
+  interviewId: string | null;
+  /** For a thank-you note: the exact moment it is due (24 hours after the interview's start); null otherwise. */
+  dueAt: string | null;
+  /** For a thank-you note: when its draft is ready (the interview's end); null otherwise. */
+  readyAt: string | null;
+  /** For a thank-you note: one thing discussed, which makes it specific ("" until given). */
+  topic: string;
 }
 
 /** The delays follow-ups come due after, in days. Settings; these are the defaults. */
@@ -37,12 +51,15 @@ export interface FollowUpSettings {
   offerNoteAfterDays: number;
   /** "Snooze" moves a follow-up this many days on from today. */
   snoozeDays: number;
+  /** A check-in, this many days after the last interview ends with no news. (A thank-you's 24 hours are fixed.) */
+  checkInAfterDays: number;
 }
 
-export const defaultFollowUpSettings: FollowUpSettings = { nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3 };
+export const defaultFollowUpSettings: FollowUpSettings = { nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3, checkInAfterDays: 7 };
 
 const settingNames: Record<keyof FollowUpSettings, string> = {
   nudgeAfterDays: "The follow-up delay", offerNoteAfterDays: "The note-to-self delay", snoozeDays: "Snooze",
+  checkInAfterDays: "The check-in delay",
 };
 
 /** Checks follow-up settings from outside (the settings form). Throws with a plain message when one is invalid. */
@@ -84,6 +101,9 @@ export interface OutlineInput {
   postingDetail: string | null;
   /** The latest note the user wrote on the Application, or null. */
   note: string | null;
+  /** For a thank-you note or a check-in: who the interview was with (may be empty), and the topic given. */
+  people?: string[];
+  topic?: string;
 }
 
 /**
@@ -91,6 +111,25 @@ export interface OutlineInput {
  * user (their Master profile), so the outline names where to take them from and never invents one.
  */
 export function outlineOf(i: OutlineInput): string[] {
+  const whom = i.people?.length ? i.people.join(" and ") : null;
+  if (i.kind === "thank-you") {
+    return [
+      `Thank ${whom ?? "them"} for the interview for ${i.title} on ${i.since}.`,
+      i.topic?.trim()
+        ? `The thing you discussed: "${i.topic.trim()}". Say in a sentence why it interested you.`
+        : "One thing you discussed (add it above: it makes the note specific).",
+      "Still interested; happy to go deeper on anything you touched on.",
+      "Keep it short: no new claims, numbers only from your Master profile.",
+    ];
+  }
+  if (i.kind === "check-in") {
+    return [
+      `Your last interview for ${i.title} at ${i.company}${whom ? ` (with ${whom})` : ""} was ${i.since}; no news since.`,
+      "Ask politely where the process stands and when they expect to decide.",
+      ...(i.note ? [`From your notes: "${i.note}".`] : []),
+      "Still interested; no pressure.",
+    ];
+  }
   if (i.kind === "offer-note") {
     return [
       `The offer from ${i.company} for ${i.title} came ${i.since}. When do they need your answer?`,
@@ -114,13 +153,15 @@ export function outlineOf(i: OutlineInput): string[] {
 // ---------- Drafts (Track #32; spec #24 "Draft rules") ----------
 
 /**
- * The messages the Track assistant drafts. Only the nudge so far: thank-you notes, check-ins,
- * withdrawals and declines join with their tickets. A note to self is never drafted (its outline is it).
+ * The messages the Track assistant drafts: the nudge, the thank-you note and the check-in (#33);
+ * withdrawals and declines join with their ticket. A note to self is never drafted (its outline is it).
  */
-export type DraftKind = "nudge";
+export type DraftKind = "nudge" | "thank-you" | "check-in";
 
 /** The length that works well, in words, per kind (spec "Draft rules"). */
-export const draftWords: Record<DraftKind, { min: number; max: number }> = { nudge: { min: 70, max: 110 } };
+export const draftWords: Record<DraftKind, { min: number; max: number }> = {
+  nudge: { min: 70, max: 110 }, "thank-you": { min: 70, max: 130 }, "check-in": { min: 70, max: 110 },
+};
 
 /**
  * Phrases a draft must never use (docs/knowledge/application-tactics.md: the follow-up draft rules
@@ -142,11 +183,16 @@ export interface ProfileEvidence {
 }
 
 /**
- * The Master profile as Track needs it: the pieces that bear on a posting's requirements. An assumed
- * contract with Prepare (its master profile isn't built yet); without one, drafts carry no numbers.
+ * The Master profile as Track needs it (an assumed contract with Prepare, spec #51; its master profile
+ * isn't built yet): the pieces that bear on a posting's requirements (without them, drafts carry no
+ * numbers), its true stories for the prep sheet, and adding an unconfirmed profile piece from another
+ * feature (an interview story), with its source.
  */
 export interface MasterProfile {
   evidence(input: { requirements: string[]; language: string }): Promise<ProfileEvidence[]>;
+  /** Confirmed stories only. */
+  stories(): Promise<ProfileStory[]>;
+  addUnconfirmedPiece(piece: { text: string; source: string }): Promise<{ id: string }>;
 }
 
 /**
@@ -165,9 +211,9 @@ export interface DraftInput {
   kind: DraftKind;
   company: string;
   title: string;
-  /** The day the stage began, in words ("Mon 5 Oct"), and the stage. */
+  /** The day the stage began (for a thank-you note or check-in: the interview's day), in words ("Mon 5 Oct"), and the stage. */
   since: string;
-  stage: "applied" | "screening";
+  stage: "applied" | "screening" | "interviewing";
   /** Whole days with no reply. */
   daysQuiet: number;
   /** The posting's requirements as read (English labels), most important first; empty when it wasn't read. */
@@ -182,6 +228,10 @@ export interface DraftInput {
   language: string;
   words: { min: number; max: number };
   banned: readonly string[];
+  /** For a thank-you note: the one thing discussed that the user gave. */
+  topic?: string;
+  /** For a thank-you note or a check-in: who the interview was with. */
+  people?: string[];
 }
 
 /** The draft as the assistant returns it: the body only (no greeting, sign-off or subject). */
@@ -207,14 +257,14 @@ const numberRe = /\d+(?:[.,]\d+)*%?/g;
  */
 export function checkDraft(
   body: string,
-  input: Pick<DraftInput, "evidence" | "banned" | "language" | "since" | "requirements" | "notes" | "title" | "company">,
+  input: Pick<DraftInput, "evidence" | "banned" | "language" | "since" | "requirements" | "notes" | "title" | "company" | "topic">,
 ): { ok: true; draft: FollowUpDraftText } | { ok: false; why: string } {
   const text = body.trim();
   if (!text) return { ok: false, why: "it was empty" };
   const plain = text.replace(/[’‘]/g, "'");
   const banned = input.banned.find((p) => new RegExp(`(^|[^\\p{L}])${escapeRe(p)}($|[^\\p{L}])`, "iu").test(plain));
   if (banned) return { ok: false, why: `it used "${banned}"` };
-  const context = [input.since, input.title, input.company, ...input.requirements, ...input.notes].join("\n");
+  const context = [input.since, input.title, input.company, input.topic ?? "", ...input.requirements, ...input.notes].join("\n");
   const numbers: { quote: string; origin: string }[] = [];
   for (const m of text.matchAll(numberRe)) {
     const n = m[0];

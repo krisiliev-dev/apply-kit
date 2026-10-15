@@ -167,6 +167,8 @@ function withMail() {
     },
     estimateDraftUsd: () => 0.002,
     draft: async () => { throw new Error("no drafts in these tests"); },
+    estimatePrepSheetUsd: () => 0.0005,
+    buildPrepSheet: async () => { throw new Error("no prep sheet in these tests"); },
   };
   let tracker: AnyTracker | null = null;
   const t = createTestEngine({ clock, mailReader: mailbox, aiMonthlyCapUsd: 10, onMailStored: (emails) => tracker!.processMail(emails) });

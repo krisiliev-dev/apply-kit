@@ -4,11 +4,14 @@
 // place with a sunken background and "Done" in its kind line (never faded). At volume, same-kind
 // follow-ups are one item ("6 follow-ups due") whose drafts the dialog steps through one by one
 // ("1 of 6", Next draft, focus to the new draft's heading); nothing is ever sent in bulk. Kind lines
-// are sentence case in the source and set in capitals by CSS (TA-12).
-import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup } from "@apply-kit/core";
+// are sentence case in the source and set in capitals by CSS (TA-12). Thank-you notes (due within 24
+// hours of an interview's start) and interviews in the next 7 days, each with its prep sheet and
+// .ics, sit in the same queue (#33).
+import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, UpcomingInterview } from "@apply-kit/core";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
-import { daysFrom, daysWord, dueWords, eventTime, followUpName, todaySofia, weekDay } from "./words.ts";
+import { interviewIcsUrl } from "../api.ts";
+import { daysFrom, daysWord, dueByWords, dueWords, eventTime, followUpName, interviewWhen, sofiaClock, todaySofia, weekDay } from "./words.ts";
 
 const langOf = (text: string) => (/[Ѐ-ӿ]/.test(text) ? "bg" : undefined);
 export const itemId = (followUpId: string) => `ny-${followUpId}`;
@@ -17,16 +20,45 @@ function why(e: NeedsYouEntry): string {
   const f = e.followUp;
   if (e.done) {
     if (f.doneBy === "email") return `Marked sent ${eventTime(f.doneAt!)}: apply-kit saw the copy you BCC'd to the job mailbox. Logged on its timeline.`;
-    const how = f.state === "sent" ? (f.kind === "nudge" ? "Marked sent" : "Marked done") : "Skipped: no note this time";
+    const how = f.state === "sent" ? (f.kind === "offer-note" ? "Marked done" : "Marked sent") : "Skipped: no note this time";
     return `${how} ${eventTime(f.doneAt!)}. Logged on its timeline.`;
   }
   const quiet = daysFrom(f.anchorOn, todaySofia());
+  if (f.kind === "thank-you") {
+    return `Your interview was ${f.anchorOn === todaySofia() ? "today" : weekDay(f.anchorOn)}${f.readyAt ? `, ended ${sofiaClock(f.readyAt)}` : ""}. Thank-you notes are due within 24 hours of the start. Add one thing you discussed and the points are ready.`;
+  }
+  if (f.kind === "check-in") return `No news in ${daysWord(quiet)} since your last interview (${weekDay(f.anchorOn)}). One polite check-in; you write it and send it from your own mail.`;
   if (f.kind === "offer-note") return `The offer came ${weekDay(f.anchorOn)}. Before you decide: the deadline, one question to answer, one action. Points to cover are ready.`;
   const since = e.application.status === "applied" ? `Applied ${daysWord(quiet)} ago (${weekDay(f.anchorOn)})` : `In Screening for ${daysWord(quiet)} (since ${weekDay(f.anchorOn)})`;
   return `${since}, no reply you've recorded. Review the draft and send it from your own mail.`;
 }
 
-const kindPlural = (g: NeedsYouGroup) => (g.kind === "nudge" ? "follow-ups" : "notes to self");
+const kindPlurals = { nudge: "follow-ups", "offer-note": "notes to self", "thank-you": "thank-you notes", "check-in": "check-ins" } as const;
+const kindPlural = (g: NeedsYouGroup) => kindPlurals[g.kind];
+const writeLabel = { nudge: "Review draft", "offer-note": "Write note", "thank-you": "Write thank-you", "check-in": "Write check-in" } as const;
+
+/** An interview in the next 7 days: when, with whom, the prep sheet and the calendar file. */
+function InterviewItem({ item }: { item: UpcomingInterview }) {
+  const { interview: i, application: a, prep } = item;
+  const page = `/applications/${encodeURIComponent(a.id)}`;
+  const withWhom = i.people.length ? `With ${i.people.join(", ")}. ` : "";
+  const prepWords = prep
+    ? `Prep sheet ready: ${prep.questions} likely questions, ${prep.withStory} with a story${prep.questions - prep.withStory ? `, ${prep.questions - prep.withStory} to prepare` : ""}.`
+    : "Prep sheet not built yet: it takes a minute, on the Application page.";
+  return (
+    <li className="needs" id={`ny-iv-${i.id}`}>
+      <div className="stack" style={{ gap: "var(--s-1)" }}>
+        <span className="kind">Interview · {interviewWhen(i)}</span>
+        <span className="what"><a href={page} lang={langOf(a.title)}>{a.title} · {a.company}</a></span>
+        <span className="why">{withWhom}{prepWords}</span>
+      </div>
+      <div className="acts">
+        <a className="btn sm" href={`${page}#prep`}>Open prep sheet<span className="sr-only">: {a.company}</span></a>
+        <a className="btn ghost sm" href={interviewIcsUrl(i.id)} download>Add to calendar<span className="sr-only">: {a.company} interview (.ics)</span></a>
+      </div>
+    </li>
+  );
+}
 const numberWords = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 /** "Tidewater Pay, Velta Logistics, Lumio Maps and 3 more". */
@@ -94,9 +126,9 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
     <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
       <div className="sec-head">
         <h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>
-        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch > 1 && <span className="meta">Most urgent first</span>}
+        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch + needs.interviews.length > 1 && <span className="meta">Most urgent first</span>}
       </div>
-      {needs.items.length || (emails && needs.emailsToMatch) ? (
+      {needs.items.length || needs.interviews.length || (emails && needs.emailsToMatch) ? (
         <ul className="needs-queue">
           {emails}
           {needs.items.map((e, i) => {
@@ -111,7 +143,7 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
             return (
               <li key={e.followUp.id} id={itemId(e.followUp.id)} className={`needs${e.done ? " done" : ""}`}>
                 <div className="stack" style={{ gap: "var(--s-1)" }}>
-                  <span className="kind">{e.done ? `${name} · Done` : `${name} ${dueWords(e.followUp.dueOn)}`}</span>
+                  <span className="kind">{e.done ? `${name} · Done` : `${name} ${e.followUp.dueAt ? dueByWords(e.followUp.dueAt) : dueWords(e.followUp.dueOn)}`}</span>
                   <span className="what">
                     <a href={`/applications/${encodeURIComponent(e.application.id)}`} lang={langOf(e.application.title)}>{e.application.title} · {e.application.company}</a>
                   </span>
@@ -120,7 +152,7 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
                 {!e.done && (
                   <div className="acts">
                     <button className="btn primary sm" type="button" onClick={(ev) => onWrite(e, ev.currentTarget)}>
-                      {e.followUp.kind === "nudge" ? "Review draft" : "Write note"}<span className="sr-only">: {e.application.company}</span>
+                      {writeLabel[e.followUp.kind]}<span className="sr-only">: {e.application.company}</span>
                     </button>
                     <button className="btn sm" type="button" onClick={() => onSnooze(e)}>
                       Snooze {daysWord(needs.snoozeDays)}<span className="sr-only">: {e.application.company}</span>
@@ -130,17 +162,23 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
               </li>
             );
           })}
+          {needs.interviews.map((iv) => <InterviewItem key={iv.interview.id} item={iv} />)}
         </ul>
       ) : (
         <div className="calm">
           <h3>Nothing needs you now</h3>
-          <p className="muted">Follow-ups come due here on their own, {coming.length ? "the next ones are below" : "7 days after you apply if there's no reply"}.</p>
+          <p className="muted">Follow-ups and thank-you notes come due here on their own, {coming.length ? "the next ones are below" : "7 days after you apply if there's no reply"}.</p>
         </div>
       )}
       {coming.length > 0 && <p className="coming"><span><b>Coming up:</b> {coming.join(" · ")}</span></p>}
     </section>
   );
 }
+
+const dialogTitle: Record<NeedsYouEntry["followUp"]["kind"], (company: string) => string> = {
+  nudge: (c) => `Follow up with ${c}`, "offer-note": (c) => `Note to self · ${c}`,
+  "thank-you": (c) => `Thank ${c} for the interview`, "check-in": (c) => `Check in with ${c}`,
+};
 
 /**
  * The follow-up over the list: its draft (or outline), Copy text, Open in Mail, Mark sent, Snooze,
@@ -176,13 +214,16 @@ export function FollowUpDialog({ entries, index, onAct, onNext, onClose, onAnnou
         <div className="dlg-head">
           <div className="stack" style={{ gap: "var(--s-1)" }}>
             <span className="meta">{followUpName(f.kind)} · {entries.length > 1 ? `${index + 1} of ${entries.length}` : dueWords(f.dueOn)}</span>
-            <h2 id={`${uid}-h`} tabIndex={-1}>{f.kind === "nudge" ? `Follow up with ${a.company}` : `Note to self · ${a.company}`}</h2>
+            <h2 id={`${uid}-h`} tabIndex={-1}>{dialogTitle[f.kind](a.company)}</h2>
           </div>
           <button className="btn ghost sm x" type="button" aria-label="Close" onClick={close}>✕</button>
         </div>
         <p className="muted mini">
           <span lang={langOf(a.title)}>{a.title}</span>
-          {f.kind === "nudge" ? ` · ${a.status === "applied" ? "applied" : "in Screening since"} ${weekDay(f.anchorOn)} · no reply in ${daysWord(quiet)}. You send this from your own mail.` : ` · offer ${weekDay(f.anchorOn)}.`}
+          {f.kind === "nudge" ? ` · ${a.status === "applied" ? "applied" : "in Screening since"} ${weekDay(f.anchorOn)} · no reply in ${daysWord(quiet)}. You send this from your own mail.`
+            : f.kind === "thank-you" ? ` · interview ${weekDay(f.anchorOn)}${f.dueAt ? ` · ${dueByWords(f.dueAt)}` : ""}. You send this from your own mail.`
+            : f.kind === "check-in" ? ` · last interview ${weekDay(f.anchorOn)} · no news in ${daysWord(quiet)}. You send this from your own mail.`
+            : ` · offer ${weekDay(f.anchorOn)}.`}
         </p>
         <FollowUpWriter key={f.id} id={f.id} headingId={`${uid}-h`} onAct={onAct} onAnnounce={onAnnounce} />
         <div className="dlg-foot">

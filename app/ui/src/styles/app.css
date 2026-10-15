@@ -444,3 +444,29 @@ h2[tabindex="-1"]:focus { outline: none }
   .none-match { margin-inline: var(--s-5) }
   .list-tools .search { width: 100% }
 }
+
+/* Interviews and the prep sheet on an Application (#33; from the Track hi-fi, track.css "prep sheet"). Tokens only. */
+.iv-list { list-style: none; margin: 0; padding: 0; display: grid }
+.iv-list li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.iv-list li:first-child { border-top: 0; padding-top: 0 }
+.iv-list b { font-weight: 600 }
+.iv-when { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: var(--s-4) }
+.next-step .kv { overflow-wrap: anywhere }
+@media (max-width: 520px) { .next-step .kv { grid-template-columns: minmax(0, 1fr) } .next-step .kv dd { margin-bottom: var(--s-2) } }
+.prep .table td:first-child { font-weight: 600; color: var(--ink); min-width: 14ch }
+.prep .table td { font-size: var(--fs-small); vertical-align: top }
+.prep .table tbody tr { cursor: default }
+.prep .table tr.gap-row td:first-child { box-shadow: inset 3px 0 0 var(--gap) }
+.prep .table td .btn { margin-top: var(--s-2) }
+.prep .table textarea.input { min-width: 22ch }
+.tag { font-size: var(--fs-caption); color: var(--ink-3); white-space: nowrap }
+@media (max-width: 600px) {
+  /* The questions reflow to one card per question: no sideways scrolling on a phone. */
+  .prep .table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+  .prep .table, .prep .table tbody, .prep .table tr, .prep .table td { display: block }
+  .prep .table tr { padding: var(--s-3) 0 var(--s-3) var(--s-4); border-top: 1px solid var(--rule) }
+  .prep .table tr.gap-row { box-shadow: inset 3px 0 0 var(--gap) }
+  .prep .table tr.gap-row td:first-child { box-shadow: none }
+  .prep .table td { padding: var(--s-1) 0; border: 0 }
+  .prep .table td[data-label]::before { content: attr(data-label); display: block; font-size: var(--fs-caption); color: var(--ink-3); font-weight: 600 }
+}

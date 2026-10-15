@@ -10,7 +10,7 @@ const input = {
   text: "Thank you for applying. We have decided to move forward with other candidates.",
 };
 const classification: EmailClassification = {
-  kind: "rejection", confidence: 0.95, company: "Northwind Labs", jobTitle: "Security Engineer", stage: null, language: "en", summary: null,
+  kind: "rejection", confidence: 0.95, company: "Northwind Labs", jobTitle: "Security Engineer", stage: null, language: "en", summary: null, interview: null,
 };
 
 function fakeOpenRouter(content: string = JSON.stringify(classification)) {
@@ -49,6 +49,28 @@ describe("OpenRouter Track assistant", () => {
     expect(api.requests).toHaveLength(0);
     await expect(assistant.classify(input)).rejects.toThrow();
   });
+
+  it("builds a prep sheet from the posting, notes and stories it is given, sending story ids and texts but nothing else of the profile", async () => {
+    const sheet = {
+      facts: [{ text: "Booking software for private clinics.", source: "posting" }],
+      questions: [{ requirement: "TypeScript", question: "Walk me through a codebase you made safer.", storyId: "piece-ts" }],
+    };
+    const api = fakeOpenRouter(JSON.stringify(sheet));
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
+    const prep = {
+      company: "Medora", title: "Full-stack Engineer", postingText: "Booking software for private clinics.\nTypeScript, 2+ years.",
+      requirements: [{ text: "TypeScript, 2+ years", kind: "required" as const }], notes: ["Liked the salary range."],
+      stories: [{ id: "piece-ts", text: "Moved 40k lines to strict TypeScript", where: "Velora · 2023" }], language: "en",
+    };
+
+    expect(assistant.estimatePrepSheetUsd(prep)).toBeGreaterThan(0);
+    const result = await assistant.buildPrepSheet(prep);
+
+    expect(result).toEqual({ sheet, costUsd: 0.00012, model: "deepseek/deepseek-v4.1-flash" });
+    const sent = JSON.stringify(api.requests[0]!.messages);
+    expect(sent).toContain("piece-ts");
+    expect(sent).toContain("Moved 40k lines to strict TypeScript");
+  });
 });
 
 // A synthetic follow-up (made-up company, person and profile).
@@ -75,5 +97,17 @@ describe("OpenRouter Track assistant: drafts", () => {
       expect(sent).toContain(part);
     }
     expect(sent).not.toContain("fu-secret-id");
+  });
+
+  it("tells the model a thank-you note's interview, people and the topic discussed", async () => {
+    const api = fakeOpenRouter(JSON.stringify({ body: "Thank you." }));
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
+
+    await assistant.draft({ ...draftInput, kind: "thank-you", stage: "interviewing", since: "Mon 12 Oct", topic: "IAM drift in Terraform", people: ["Ivo Marinov"], words: { min: 70, max: 130 } });
+
+    const sent = JSON.stringify(api.requests[0]!.messages);
+    for (const part of ["thank-you note after an interview on Mon 12 Oct with Ivo Marinov", "One thing discussed: IAM drift in Terraform", "70-130 words"]) {
+      expect(sent).toContain(part);
+    }
   });
 });

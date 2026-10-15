@@ -9,8 +9,13 @@ import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
-  type DraftInput, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
+  type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
 } from "./follow-ups.ts";
+import {
+  defaultTimeZone, interviewFormats, interviewIcs, invitedInterviewSchema, isLocalTime, isTimeZone,
+  prepSheetDraftSchema, zonedToInstant, zoneName,
+  type FactTag, type Interview, type InterviewInput, type InvitedInterview, type PrepSheet, type ProfileStory,
+} from "./interviews.ts";
 import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
 import { mailboxFix, type MailboxProblem } from "./mailbox.ts";
@@ -43,9 +48,10 @@ export interface ApplicationEvent {
    * created: the Application was added. status: its Status changed. note: the user wrote a note.
    * cv: the user attached the CV they sent. email: an email was matched here (and, when `to` is
    * set, moved the Status). undo: an earlier Event was undone. follow-up-sent, follow-up-skipped,
-   * follow-up-snoozed: what the user did with a follow-up (`followUpId`).
+   * follow-up-snoozed: what the user did with a follow-up (`followUpId`). interview: an interview
+   * was set or changed (read from an invite email, or by you).
    */
-  kind: "created" | "status" | "note" | "cv" | "email" | "undo" | FollowUpEventKind;
+  kind: "created" | "status" | "note" | "cv" | "email" | "undo" | "interview" | FollowUpEventKind;
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -71,7 +77,8 @@ const followUpEventKinds: readonly string[] = ["follow-up-sent", "follow-up-skip
  * day), or, once its nudge was sent or skipped, how long it has been quiet. Null when nothing is.
  */
 export type NextUp =
-  | { kind: "follow-up"; followUpKind: FollowUpKind; dueOn: string; due: boolean }
+  | { kind: "follow-up"; followUpKind: FollowUpKind; dueOn: string; due: boolean; dueAt?: string }
+  | { kind: "interview"; startAt: string; start: string; timeZone: string }
   | { kind: "no-reply"; days: number }
   | null;
 
@@ -114,6 +121,7 @@ export interface StatusStep {
  */
 export type NextStep =
   | { kind: "follow-up"; text: string; followUp: FollowUp }
+  | { kind: "interview"; text: string; interview: Interview }
   | { kind: "wait"; text: string }
   | { kind: "note"; text: string; at: string }
   | { kind: "closed"; text: string };
@@ -122,7 +130,7 @@ export type NextStep =
 export interface TimelineEntry {
   id: string;
   at: string;
-  kind: ApplicationEvent["kind"] | "posting-closed";
+  kind: ApplicationEvent["kind"] | "posting-closed" | "interview-held";
   cause: EventCause;
   from: Status | null;
   to: Status | null;
@@ -280,6 +288,10 @@ export interface ApplicationDetail extends ApplicationSummary {
   nextStep: NextStep;
   /** The follow-up of its current stage (pending, sent or skipped), or null when the stage has none. */
   followUp: FollowUp | null;
+  /** Its interviews, soonest first (those without a time last). */
+  interviews: Interview[];
+  /** A thank-you note per interview with a time (pending, sent or skipped); none once closed. */
+  thankYous: FollowUp[];
   /** Newest first. */
   timeline: TimelineEntry[];
   /** Set while the latest Status change was made by an email you haven't confirmed ("Looks right") or undone. */
@@ -414,6 +426,14 @@ export interface NeedsYouEntry {
   done: boolean;
 }
 
+/** An interview coming up in the next 7 days: Needs you lists it with its prep sheet. */
+export interface UpcomingInterview {
+  interview: Interview;
+  application: Pick<ApplicationSummary, "id" | "title" | "company" | "status">;
+  /** Whether its prep sheet is built, and how many questions have a story. */
+  prep: { questions: number; withStory: number } | null;
+}
+
 /** Something only coming up: one quiet "Coming up" line. */
 export interface ComingUp {
   applicationId: string;
@@ -443,9 +463,11 @@ export interface NeedsYouGroup {
 
 /** Needs you: what only the user can do now, most urgent first, and what is coming up soon. */
 export interface NeedsYou {
-  /** How many items need the user now (the top bar's Applications badge): follow-ups due and emails to match. Done ones aren't counted. */
+  /** How many items need the user now (the top bar's Applications badge): follow-ups due, emails to match and interviews coming up. Done ones aren't counted. */
   count: number;
   items: NeedsYouEntry[];
+  /** Interviews in the next 7 days, soonest first. */
+  interviews: UpcomingInterview[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
   /** Kinds with 3 or more due (or done today): shown grouped, their items stepped through one by one. */
@@ -511,7 +533,7 @@ const visitGapMs = 30 * 60_000;
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
   constructor(
-    readonly problem: "not-found" | "accepted" | "unchanged" | "already-open" | "changed-since" | "not-undoable" | "invalid",
+    readonly problem: "not-found" | "accepted" | "unchanged" | "already-open" | "changed-since" | "not-undoable" | "invalid" | "budget",
     message: string,
     readonly applicationId: string | null = null,
   ) {
@@ -599,6 +621,26 @@ export interface Tracker {
    * the page again within 30 minutes continues the same visit (and shows the same changes).
    */
   visit(): Promise<SinceLastVisit>;
+  /**
+   * Adds an interview by hand, or edits one (`interviewId`), including one read from an invite email.
+   * An Event by you. Throws a TrackerError when refused.
+   */
+  setInterview(applicationId: string, input: InterviewInput & { interviewId?: string }): Promise<{ interview: Interview; event: ApplicationEvent }>;
+  /** The interview as a calendar file (.ics), or null when it has no time. */
+  interviewIcs(interviewId: string): Promise<{ fileName: string; text: string } | null>;
+  /** Keeps the one thing discussed that makes a thank-you note specific. */
+  saveFollowUpTopic(followUpId: string, topic: string): Promise<{ followUp: FollowUp; outline: string[] }>;
+  /** The Application's prep sheet, or null until built. */
+  prepSheet(applicationId: string): Promise<PrepSheet | null>;
+  /**
+   * Builds the prep sheet once per Application through the Track assistant, within the monthly AI
+   * budget (an existing one is returned as is). Throws a TrackerError ("budget") when it can't.
+   */
+  buildPrepSheet(applicationId: string): Promise<PrepSheet>;
+  /** Ticks (or unticks) a likely question as practised. */
+  markPractised(applicationId: string, questionId: string, practised: boolean): Promise<PrepSheet>;
+  /** Adds your own story to a question: it goes to the Master profile as an unconfirmed profile piece. */
+  addPrepStory(applicationId: string, questionId: string, text: string): Promise<PrepSheet>;
 }
 
 export interface TrackerDeps {
@@ -612,7 +654,7 @@ export interface TrackerDeps {
   aiMonthlyCapUsd?: number;
   /** The user's own addresses: mail from them is a sent copy, left for follow-ups. */
   ownAddresses?: string[];
-  /** The Master profile, for drafts' evidence (Prepare's; without it drafts carry no numbers about the user). */
+  /** The Master profile (Prepare's): evidence for drafts, true stories for the prep sheet, and where stories added there go. */
   profile?: MasterProfile;
   /** The user's past writing (Prepare's voice samples), beside the follow-up edits Track keeps itself. */
   voice?: VoiceSamples;
@@ -702,13 +744,13 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   }
 
   type NewEvent = Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "followUpId" | "emailId" | "emailKind">
-    & { followUpId?: string; dueOn?: string; emailId?: string | null; emailKind?: EmailKind | null };
+    & { followUpId?: string; dueOn?: string; emailId?: string | null; emailKind?: EmailKind | null; interviewId?: string };
   function addEvent(e: NewEvent): ApplicationEvent {
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on, email_id, email_kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null, e.emailId ?? null, e.emailKind ?? null);
+      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on, email_id, email_kind, interview_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null, e.emailId ?? null, e.emailKind ?? null, e.interviewId ?? null);
     return eventOf(db.prepare("SELECT * FROM application_event WHERE id = ?").get(id)!);
   }
 
@@ -1002,14 +1044,24 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return { contacts: contactsOf(applicationId) };
   }
 
-  function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[], followUp: FollowUp | null): NextStep {
+  function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[], followUp: FollowUp | null, thankYous: FollowUp[], interviews: Interview[]): NextStep {
     if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
+    const thanks = thankYous.find(isDueNow);
+    if (thanks) {
+      const iv = interviews.find((i) => i.id === thanks.interviewId);
+      const whom = iv?.people.length ? iv.people.join(" and ") : "them";
+      return { kind: "follow-up", text: `Thank ${whom} for the interview. Thank-you notes are due within 24 hours of its start.`, followUp: thanks };
+    }
     if (followUp?.state === "pending" && followUp.dueOn <= today()) {
       const text = followUp.kind === "nudge"
         ? `No reply in ${daysBetween(followUp.anchorOn, today())} days. Write a short nudge to send from your own mail.`
-        : "Write yourself a note about the offer before you decide.";
+        : followUp.kind === "check-in"
+          ? `No news since your last interview ${daysBetween(followUp.anchorOn, today())} days ago. Write a short check-in to send from your own mail.`
+          : "Write yourself a note about the offer before you decide.";
       return { kind: "follow-up", text, followUp };
     }
+    const coming = interviews.find((i) => i.startAt && i.startAt > now());
+    if (coming) return { kind: "interview", text: `Interview ${whenWords(coming)}`, interview: coming };
     const note = standing.filter((e) => e.kind === "note").at(-1);
     return note ? { kind: "note", text: note.text, at: note.at } : { kind: "wait", text: "Wait for a reply." };
   }
@@ -1046,11 +1098,26 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         undoneAt: null, undoable: false, email: null,
       });
     }
+    const interviews = interviewsOf(applicationId);
+    const thankYous = thankYousOf(row(applicationId)!);
+    for (const iv of interviews) {
+      if (!iv.endAt || iv.endAt > now()) continue;
+      // The interview's end, as a fact apply-kit noticed (the thank-you note comes due from it).
+      const thanks = thankYous.find((f) => f.interviewId === iv.id);
+      timeline.push({
+        id: `interview-held:${iv.id}`, at: iv.endAt, kind: "interview-held", cause: "apply-kit", from: null, to: null,
+        text: "Interview held",
+        detail: [iv.round, iv.people.length ? `with ${iv.people.join(", ")}` : null].filter(Boolean).join(" ")
+          + (thanks?.dueAt ? `${iv.round || iv.people.length ? " · " : ""}thank-you note due within 24 hours of its start` : "") || null,
+        undoneAt: null, undoable: false, email: null,
+      });
+    }
     timeline.sort((a, b) => b.at.localeCompare(a.at)); // stable: same-time Events stay newest first
     const setter = standing.filter((e) => e.kind === "created" || e.kind === "status" || (e.kind === "email" && !!e.to)).at(-1);
     const followUp = currentFollowUp(row(applicationId)!);
     return {
-      ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing, followUp), followUp, timeline,
+      ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
+      nextStep: nextStepOf(app, standing, followUp, thankYous, interviews), followUp, interviews, thankYous, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
     };
   }
@@ -1159,16 +1226,87 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const snoozedTo = str(events.filter((e) => e.kind === "follow-up-snoozed").at(-1)?.due_on);
     const kind = r.kind as FollowUpKind;
     const s = followUpSettings();
-    const anchorOn = String(r.anchor_on);
+    let anchorOn = String(r.anchor_on);
+    let dueAt: string | null = null;
+    let readyAt: string | null = null;
+    if (kind === "thank-you") {
+      // Fixed by decision: due 24 hours after the interview's start, ready at its end. Follows the interview when it's corrected.
+      const iv = interviewRow(str(r.interview_id));
+      if (iv?.startAt) {
+        anchorOn = sofiaDay(new Date(iv.startAt));
+        dueAt = new Date(Date.parse(iv.startAt) + 24 * 60 * 60_000).toISOString();
+        readyAt = iv.endAt;
+      }
+    }
+    const delay = kind === "nudge" ? s.nudgeAfterDays : kind === "check-in" ? s.checkInAfterDays : s.offerNoteAfterDays;
     return {
       id: String(r.id), applicationId: String(r.application_id), kind, anchorOn,
-      dueOn: snoozedTo ?? addDays(anchorOn, kind === "nudge" ? s.nudgeAfterDays : s.offerNoteAfterDays),
+      dueOn: snoozedTo ?? (dueAt ? sofiaDay(new Date(dueAt)) : addDays(anchorOn, delay)),
       snoozedTo,
       state: done ? (done.kind === "follow-up-sent" ? "sent" : "skipped") : "pending",
       doneAt: done ? String(done.at) : null,
       doneBy: done ? (done.cause === "email" ? "email" : "you") : null,
       text: String(r.text),
+      interviewId: str(r.interview_id),
+      dueAt: snoozedTo ? null : dueAt,
+      readyAt,
+      topic: String(r.topic ?? ""),
     };
+  }
+
+  /** Whether a pending follow-up needs the user now: a thank-you once its interview ended (or its snooze is over); the rest on their day. */
+  function isDueNow(f: FollowUp): boolean {
+    if (f.state !== "pending") return false;
+    if (f.kind === "thank-you" && !f.snoozedTo) return !!f.readyAt && f.readyAt <= now();
+    return f.dueOn <= today();
+  }
+
+  /**
+   * The thank-you notes of an Application: one per interview with a time, made the first time it is
+   * asked for. None once the Application is closed or removed.
+   */
+  function thankYousOf(app: Row): FollowUp[] {
+    if (app.removed_at || isClosed(app.status as Status)) return [];
+    const out: FollowUp[] = [];
+    for (const iv of interviewsOf(String(app.id))) {
+      if (!iv.startAt) continue;
+      const createdBy = String(db.prepare("SELECT created_by FROM interview WHERE id = ?").get(iv.id)!.created_by);
+      let r = db.prepare("SELECT * FROM follow_up WHERE started_by = ? AND kind = 'thank-you'").get(createdBy);
+      if (!r) {
+        const fid = randomUUID();
+        db.prepare("INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at, interview_id) VALUES (?, ?, 'thank-you', ?, ?, ?, ?, ?)")
+          .run(fid, String(app.id), String(app.status), createdBy, sofiaDay(new Date(iv.startAt)), now(), iv.id);
+        r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(fid)!;
+      }
+      out.push(followUpOf(r));
+    }
+    return out;
+  }
+
+  /**
+   * The check-in while Interviewing: due a number of days after the last interview that has ended,
+   * unless a reply came since. One per last interview (a later interview gets its own).
+   */
+  function checkInOf(app: Row): FollowUp | null {
+    const all = interviewsOf(String(app.id));
+    if (all.some((i) => i.startAt && i.startAt > now())) return null; // another one is still to come
+    const ended = all.filter((i) => i.endAt && i.endAt <= now());
+    const last = ended.sort((a, b) => a.endAt!.localeCompare(b.endAt!)).at(-1);
+    if (!last) return null;
+    const replied = db.prepare(
+      `SELECT 1 FROM application_event WHERE application_id = ? AND undone_at IS NULL AND kind = 'email'
+       AND email_kind IN (${replyKinds.map(() => "?").join(", ")}) AND at > ? LIMIT 1`,
+    ).get(String(app.id), ...replyKinds, last.endAt!);
+    if (replied) return null;
+    const createdBy = String(db.prepare("SELECT created_by FROM interview WHERE id = ?").get(last.id)!.created_by);
+    let r = db.prepare("SELECT * FROM follow_up WHERE started_by = ? AND kind = 'check-in'").get(createdBy);
+    if (!r) {
+      const fid = randomUUID();
+      db.prepare("INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at, interview_id) VALUES (?, ?, 'check-in', 'interviewing', ?, ?, ?, ?)")
+        .run(fid, String(app.id), createdBy, sofiaDay(new Date(last.endAt!)), now(), last.id);
+      r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(fid)!;
+    }
+    return followUpOf(r);
   }
 
   /**
@@ -1179,6 +1317,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
    */
   function currentFollowUp(app: Row): FollowUp | null {
     const status = app.status as Status;
+    if (status === "interviewing" && !app.removed_at) return checkInOf(app);
     const kind = stageKinds[status];
     if (!kind || app.removed_at) return null;
     const id = String(app.id);
@@ -1200,6 +1339,10 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   }
 
   function nextOf(app: Row): NextUp {
+    const thanks = thankYousOf(app).find(isDueNow);
+    if (thanks) return { kind: "follow-up", followUpKind: "thank-you", dueOn: thanks.dueOn, due: true, ...(thanks.dueAt ? { dueAt: thanks.dueAt } : {}) };
+    const coming = isClosed(app.status as Status) || app.removed_at ? undefined : interviewsOf(String(app.id)).find((i) => i.startAt && i.startAt > now());
+    if (coming) return { kind: "interview", startAt: coming.startAt!, start: coming.start!, timeZone: coming.timeZone };
     const f = currentFollowUp(app);
     if (!f) return null;
     if (f.state === "pending") return { kind: "follow-up", followUpKind: f.kind, dueOn: f.dueOn, due: f.dueOn <= today() };
@@ -1212,16 +1355,28 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const items: NeedsYouEntry[] = [];
     const comingUp: ComingUp[] = [];
     const apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL AND status NOT IN ('rejected', 'withdrawn')").all();
+    const interviews: UpcomingInterview[] = [];
+    const weekAhead = new Date(clock.now().getTime() + 7 * 24 * 60 * 60_000).toISOString();
     for (const r of apps) {
-      const f = currentFollowUp(r);
-      if (!f) continue;
       const application = { id: String(r.id), title: String(r.title), company: String(r.company), status: r.status as Status, appliedOn: String(r.applied_on) };
-      if (f.state === "pending" && f.dueOn <= day) items.push({ followUp: f, application, done: false });
-      else if (f.state !== "pending" && f.doneAt && sofiaDay(new Date(f.doneAt)) === day) items.push({ followUp: f, application, done: true });
-      else if (f.state === "pending" && f.dueOn <= soon) {
-        comingUp.push({ applicationId: application.id, title: application.title, company: application.company, kind: f.kind, dueOn: f.dueOn });
+      for (const f of [...thankYousOf(r), currentFollowUp(r)]) {
+        if (!f) continue;
+        if (isDueNow(f)) items.push({ followUp: f, application, done: false });
+        else if (f.state !== "pending" && f.doneAt && sofiaDay(new Date(f.doneAt)) === day) items.push({ followUp: f, application, done: true });
+        else if (f.state === "pending" && f.kind !== "thank-you" && f.dueOn <= soon) {
+          comingUp.push({ applicationId: application.id, title: application.title, company: application.company, kind: f.kind, dueOn: f.dueOn });
+        }
+      }
+      for (const iv of interviewsOf(application.id)) {
+        if (!iv.startAt || iv.startAt <= now() || iv.startAt > weekAhead) continue;
+        const sheet = prepRow(application.id);
+        interviews.push({
+          interview: iv, application,
+          prep: sheet ? { questions: sheet.questions.length, withStory: sheet.questions.filter((q) => q.storyId || q.yourStory).length } : null,
+        });
       }
     }
+    interviews.sort((a, b) => a.interview.startAt!.localeCompare(b.interview.startAt!));
     // Most urgent first: due the longest; done ones keep their place.
     items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
     comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
@@ -1236,7 +1391,10 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         companies: due.map((i) => i.application.company), followUpIds: due.map((i) => i.followUp.id),
       });
     }
-    return { count: items.filter((i) => !i.done).length + emails, items, groups, emailsToMatch: emails, comingUp, snoozeDays: followUpSettings().snoozeDays };
+    return {
+      count: items.filter((i) => !i.done).length + emails + interviews.length, items, groups, interviews, emailsToMatch: emails, comingUp,
+      snoozeDays: followUpSettings().snoozeDays,
+    };
   }
 
   /** A follow-up the user acts on: it must exist and still be its Application's current one. */
@@ -1244,7 +1402,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     const app = r ? row(String(r.application_id)) : undefined;
     if (!r || !app) throw new TrackerError("not-found", "There's no such follow-up.");
-    const f = currentFollowUp(app);
+    const f = r.kind === "thank-you" ? thankYousOf(app).find((x) => x.id === followUpId) : currentFollowUp(app);
     if (f?.id !== followUpId) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this follow-up no longer applies.", String(app.id));
     }
@@ -1269,30 +1427,61 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const requirement = job?.requirements.find((q) => q.kind === "required") ?? job?.requirements[0];
     const notes = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).map((e) => e.text);
     const stage = r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied";
-    const outline = outlineOf({
-      kind: f.kind, title: application.title, company: application.company, since: dayWords(f.anchorOn),
-      stage, postingDetail: requirement?.text ?? null, note: notes.at(-1) ?? null,
-    });
+    const outline = outlineFor(f, application, requirement?.text ?? null);
     let draft: FollowUpDraftText | null = null;
     let noDraft: NoDraft | null = null;
-    if (f.kind === "nudge" && stage !== "offer") {
+    // A nudge and a check-in are drafted when opened; a thank-you note once its interview ended and
+    // you gave one thing you discussed (that makes it specific).
+    const thanksReady = f.kind === "thank-you" && f.state === "pending" && !!f.readyAt && f.readyAt <= now() && !!f.topic.trim();
+    if ((f.kind === "nudge" && stage !== "offer") || f.kind === "check-in" || thanksReady) {
+      const kind = f.kind as DraftKind;
+      const iv = interviewRow(f.interviewId);
       const made = await draftFor(r, {
-        followUpId, kind: "nudge", company: application.company, title: application.title, since: dayWords(f.anchorOn), stage,
+        followUpId, kind, company: application.company, title: application.title, since: dayWords(f.anchorOn),
+        stage: kind === "nudge" ? (stage === "screening" ? "screening" : "applied") : "interviewing",
         daysQuiet: daysBetween(f.anchorOn, today()),
         requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
         notes, evidence: [], voice: [], language: job?.language ?? str(row(application.id)?.language) ?? "en",
-        words: draftWords.nudge, banned: bannedPhrases,
+        words: draftWords[kind], banned: bannedPhrases,
+        ...(kind === "thank-you" ? { topic: f.topic.trim(), people: iv?.people ?? [] } : kind === "check-in" ? { people: iv?.people ?? [] } : {}),
       });
       if ("draft" in made) draft = made.draft;
       else noDraft = made.noDraft;
     }
     const to = contactsOf(application.id).find((c) => c.kind === "address")?.value ?? null;
+    const subject: Record<FollowUpKind, string | null> = {
+      nudge: `Following up on my application: ${application.title}`, "offer-note": null,
+      "thank-you": `Thank you: ${application.title} interview`, "check-in": `Checking in: ${application.title}`,
+    };
     return {
       followUp: f, application, text: r.text_saved_at ? f.text : (draft?.text ?? f.text), draft, noDraft, outline,
-      mail: f.kind === "nudge" ? { to, subject: `Following up on my application: ${application.title}` } : null,
-      words: f.kind === "nudge" ? draftWords.nudge : null,
+      mail: subject[f.kind] ? { to, subject: subject[f.kind]! } : null,
+      words: f.kind === "offer-note" ? null : draftWords[f.kind],
       snoozeDays: followUpSettings().snoozeDays,
     };
+  }
+
+  function outlineFor(f: FollowUp, application: ApplicationSummary, postingDetail: string | null): string[] {
+    const r = db.prepare("SELECT stage FROM follow_up WHERE id = ?").get(f.id);
+    const note = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).at(-1)?.text ?? null;
+    const iv = interviewRow(f.interviewId);
+    return outlineOf({
+      kind: f.kind, title: application.title, company: application.company, since: dayWords(f.anchorOn),
+      stage: r?.stage === "screening" ? "screening" : r?.stage === "offer" ? "offer" : "applied",
+      postingDetail, note, people: iv?.people ?? [], topic: f.topic,
+    });
+  }
+
+  async function saveFollowUpTopic(followUpId: string, topic: string) {
+    const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
+    const application = r ? summary(String(r.application_id)) : null;
+    if (!r || !application) throw new TrackerError("not-found", "There's no such follow-up.");
+    const clean = topic.trim().slice(0, 300);
+    // A new topic makes a new draft, unless you have already written your own text.
+    if (clean !== String(r.topic ?? "") && !r.text_saved_at) db.prepare("UPDATE follow_up SET draft_text = NULL WHERE id = ?").run(followUpId);
+    db.prepare("UPDATE follow_up SET topic = ? WHERE id = ?").run(clean, followUpId);
+    const followUp = followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!);
+    return { followUp, outline: outlineFor(followUp, application, null) };
   }
 
   /** Drafts being made, so opening a follow-up twice at once drafts it once. */
@@ -1371,6 +1560,234 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       } else db.prepare("DELETE FROM voice_sample WHERE follow_up_id = ?").run(followUpId);
     }
     return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!) };
+  }
+
+  // ---------- Interviews and the prep sheet (#33) ----------
+
+  function interviewOf(r: Row): Interview {
+    const emailId = str(r.email_id);
+    const edited = str(r.edited_at);
+    let readFrom: Interview["readFrom"] = null;
+    if (emailId && !edited) {
+      const m = db.prepare("SELECT subject, from_header, received_at FROM mail_message WHERE id = ?").get(emailId);
+      if (m) readFrom = { emailId, subject: String(m.subject), from: String(m.from_header), receivedAt: String(m.received_at) };
+    }
+    return {
+      id: String(r.id), applicationId: String(r.application_id),
+      start: str(r.start_local), end: str(r.end_local), timeZone: String(r.time_zone),
+      startAt: str(r.start_at), endAt: str(r.end_at),
+      format: str(r.format) as Interview["format"], place: str(r.place), people: JSON.parse(String(r.people)) as string[],
+      round: str(r.round), notes: str(r.notes), readFrom, editedAt: edited,
+    };
+  }
+
+  function interviewRow(id: string | null): Interview | null {
+    const r = id ? db.prepare("SELECT * FROM interview WHERE id = ?").get(id) : undefined;
+    return r ? interviewOf(r) : null;
+  }
+
+  /** An Application's interviews, soonest first; those without a time last, oldest added first. */
+  const interviewsOf = (applicationId: string): Interview[] =>
+    db.prepare("SELECT * FROM interview WHERE application_id = ? ORDER BY start_at IS NULL, start_at, created_at, rowid").all(applicationId).map(interviewOf);
+
+  /** "Thu 15 Oct, 14:00 Sofia time", or "no time agreed yet". */
+  function whenWords(i: { start: string | null; timeZone: string }): string {
+    if (!i.start) return "no time agreed yet";
+    return `${dayWords(i.start.slice(0, 10))}, ${i.start.slice(11, 16)} ${zoneName(i.timeZone)}`;
+  }
+
+  /** Checks an interview's details; returns them cleaned, with the instants. */
+  function cleanInterview(input: InterviewInput, applicationId: string) {
+    const invalid = (message: string) => new TrackerError("invalid", message, applicationId);
+    const timeZone = input.timeZone?.trim() || defaultTimeZone;
+    if (!isTimeZone(timeZone)) throw invalid(`"${timeZone}" isn't a time zone apply-kit knows. Pick one from the list.`);
+    const start = input.start?.trim() || null;
+    const end = input.end?.trim() || null;
+    if (start && !isLocalTime(start)) throw invalid("Enter the day and time it starts.");
+    if (end && !isLocalTime(end)) throw invalid("Enter the time it ends, or leave it empty.");
+    if (end && !start) throw invalid("Enter when it starts first.");
+    const startAt = start ? zonedToInstant(start, timeZone).toISOString() : null;
+    const endAt = end ? zonedToInstant(end, timeZone).toISOString() : startAt ? new Date(Date.parse(startAt) + 60 * 60_000).toISOString() : null;
+    if (startAt && endAt && endAt <= startAt) throw invalid("It has to end after it starts.");
+    if (input.format != null && !interviewFormats.includes(input.format)) throw invalid("Choose video call, phone call or on site.");
+    const text = (v: string | null | undefined) => v?.trim() || null;
+    const people = (Array.isArray(input.people) ? input.people : []).map((p) => String(p).trim()).filter(Boolean);
+    return { start, end, timeZone, startAt, endAt, format: input.format ?? null, place: text(input.place), people, round: text(input.round), notes: text(input.notes) };
+  }
+
+  function insertInterview(applicationId: string, v: ReturnType<typeof cleanInterview>, eventId: string, emailId: string | null): string {
+    const id = randomUUID();
+    db.prepare(
+      `INSERT INTO interview (id, application_id, created_by, start_local, end_local, time_zone, start_at, end_at, format, place, people, round, notes, email_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, applicationId, eventId, v.start, v.end, v.timeZone, v.startAt, v.endAt, v.format, v.place, JSON.stringify(v.people), v.round, v.notes, emailId, now());
+    db.prepare("UPDATE application_event SET interview_id = ? WHERE id = ?").run(id, eventId);
+    return id;
+  }
+
+  async function setInterview(applicationId: string, input: InterviewInput & { interviewId?: string }) {
+    if (!row(applicationId)) throw new TrackerError("not-found", "There's no such Application.");
+    const v = cleanInterview(input, applicationId);
+    db.exec("BEGIN");
+    try {
+      let id: string;
+      let event: ApplicationEvent;
+      if (input.interviewId) {
+        const existing = db.prepare("SELECT * FROM interview WHERE id = ? AND application_id = ?").get(input.interviewId, applicationId);
+        if (!existing) throw new TrackerError("not-found", "There's no such interview here.", applicationId);
+        id = input.interviewId;
+        db.prepare(
+          `UPDATE interview SET start_local = ?, end_local = ?, time_zone = ?, start_at = ?, end_at = ?, format = ?, place = ?, people = ?, round = ?, notes = ?, edited_at = ?
+           WHERE id = ?`,
+        ).run(v.start, v.end, v.timeZone, v.startAt, v.endAt, v.format, v.place, JSON.stringify(v.people), v.round, v.notes, now(), id);
+        event = addEvent({ applicationId, kind: "interview", cause: "you", from: null, to: null, text: `Interview changed: ${whenWords(v)}`, undoes: null, interviewId: id });
+      } else {
+        event = addEvent({ applicationId, kind: "interview", cause: "you", from: null, to: null, text: `Interview added: ${whenWords(v)}`, undoes: null });
+        id = insertInterview(applicationId, v, event.id, null);
+      }
+      db.exec("COMMIT");
+      return { interview: interviewRow(id)!, event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  /** An interview read from an invite email, filed on an Application (inside the caller's transaction). */
+  function interviewFromEmail(applicationId: string, m: MailMessage, invite: InvitedInterview | null) {
+    const zone = invite?.timeZone && isTimeZone(invite.timeZone) ? invite.timeZone : defaultTimeZone;
+    const start = invite?.start && isLocalTime(invite.start) ? invite.start : null;
+    const end = start && invite?.end && isLocalTime(invite.end) && invite.end > start ? invite.end : null;
+    const v = cleanInterview({
+      start, end, timeZone: zone, format: invite?.format ?? null, place: invite?.place ?? null, people: invite?.people ?? [],
+      round: invite?.round ?? null,
+      notes: [invite?.notes, invite?.start && !invite.timeZone ? "The email doesn't name a time zone, so Sofia time is assumed." : null].filter(Boolean).join(" ") || null,
+    }, applicationId);
+    const event = addEvent({
+      applicationId, kind: "interview", cause: "email", from: null, to: null,
+      text: start ? `Interview read from the invite email: ${whenWords(v)}` : "Interview invite: no time agreed yet",
+      undoes: null, emailId: m.id,
+    });
+    insertInterview(applicationId, v, event.id, m.id);
+  }
+
+  async function icsOf(interviewId: string) {
+    const iv = interviewRow(interviewId);
+    const app = iv ? summary(iv.applicationId) : null;
+    if (!iv || !app) return null;
+    const text = interviewIcs(iv, app, clock.now());
+    if (!text) return null;
+    const slug = `${app.company}-${iv.start!.slice(0, 10)}`.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
+    return { fileName: `interview-${slug}.ics`, text };
+  }
+
+  type StoredQuestion = {
+    id: string; requirement: string; question: string; storyId: string | null; practised: boolean;
+    yourStory: { text: string; addedAt: string; pieceId: string | null } | null;
+  };
+  type StoredSheet = { facts: { text: string; tag: FactTag }[]; questions: StoredQuestion[]; builtAt: string };
+
+  function prepRow(applicationId: string): StoredSheet | null {
+    const r = db.prepare("SELECT * FROM prep_sheet WHERE application_id = ?").get(applicationId);
+    return r ? { facts: JSON.parse(String(r.facts)), questions: JSON.parse(String(r.questions)), builtAt: String(r.built_at) } : null;
+  }
+
+  async function storiesById(): Promise<Map<string, ProfileStory>> {
+    return new Map((profile ? await profile.stories() : []).map((s) => [s.id, s]));
+  }
+
+  /** The sheet as shown: each story looked up in the Master profile now, so one it doesn't have reads "No story yet". */
+  async function prepSheetOf(applicationId: string): Promise<PrepSheet | null> {
+    const sheet = prepRow(applicationId);
+    if (!sheet) return null;
+    const stories = await storiesById();
+    return {
+      applicationId, facts: sheet.facts, builtAt: sheet.builtAt,
+      questions: sheet.questions.map((q) => ({
+        id: q.id, requirement: q.requirement, question: q.question,
+        story: (q.storyId && stories.get(q.storyId)) || null,
+        yourStory: q.yourStory ? { text: q.yourStory.text, addedAt: q.yourStory.addedAt } : null,
+        practised: q.practised,
+      })),
+    };
+  }
+
+  async function buildPrepSheet(applicationId: string): Promise<PrepSheet> {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    const existing = await prepSheetOf(applicationId);
+    if (existing) return existing;
+    const job = app.jobId ? await discovery.getJob(app.jobId) : null;
+    const notes = allEvents(applicationId).filter((e) => e.kind === "note" && !e.undoneAt).map((e) => e.text);
+    const storyList = profile ? await profile.stories() : [];
+    const input = {
+      company: app.company, title: app.title, postingText: (job?.postingText ?? "").slice(0, 8000),
+      requirements: (job?.requirements ?? []).map((q) => ({ text: q.text, kind: q.kind })),
+      notes, stories: storyList, language: job?.language ?? "en",
+    };
+    if (!assistant) throw new TrackerError("budget", "The prep sheet needs the AI, which isn't set up.", applicationId);
+    const estimate = assistant.estimatePrepSheetUsd(input);
+    if (spentThisMonth() + estimate > Math.max(0, aiMonthlyCapUsd ?? 0)) {
+      throw new TrackerError("budget", "This month's AI budget is used up, so the prep sheet can't be built until next month. Your stories are still in your Master profile.", applicationId);
+    }
+    let out: Awaited<ReturnType<typeof assistant.buildPrepSheet>>;
+    try {
+      out = await assistant.buildPrepSheet(input);
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) {
+        db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-prep', NULL, ?)").run(now(), month(), billed);
+      }
+      throw new TrackerError("invalid", "The prep sheet couldn't be built just now. Try again in a minute.", applicationId);
+    }
+    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-prep', NULL, ?)")
+      .run(now(), month(), Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+    const parsed = prepSheetDraftSchema.safeParse(out.sheet);
+    if (!parsed.success) throw new TrackerError("invalid", "The prep sheet came back unreadable. Try again in a minute.", applicationId);
+    const known = new Set(storyList.map((s) => s.id));
+    // A fact can only be from the posting or the notes when there is one; otherwise it's to check.
+    const facts = parsed.data.facts.filter((f) => f.text.trim()).map((f) => ({
+      text: f.text.trim(),
+      tag: (f.source === "posting" && !input.postingText.trim()) || (f.source === "notes" && !notes.length) ? "unverified" as const : f.source,
+    }));
+    const questions: StoredQuestion[] = parsed.data.questions.filter((q) => q.question.trim()).map((q, i) => ({
+      id: `q${i + 1}`, requirement: q.requirement.trim(), question: q.question.trim(),
+      // Never a story the Master profile doesn't have: an unknown id is "No story yet".
+      storyId: q.storyId && known.has(q.storyId) ? q.storyId : null,
+      practised: false, yourStory: null,
+    }));
+    db.prepare("INSERT INTO prep_sheet (application_id, facts, questions, model, built_at) VALUES (?, ?, ?, ?, ?)")
+      .run(applicationId, JSON.stringify(facts), JSON.stringify(questions), out.model, now());
+    return (await prepSheetOf(applicationId))!;
+  }
+
+  function changeQuestion(applicationId: string, questionId: string, change: (q: StoredQuestion) => void) {
+    const sheet = prepRow(applicationId);
+    if (!sheet) throw new TrackerError("not-found", "There's no prep sheet for this Application yet.", applicationId);
+    const q = sheet.questions.find((x) => x.id === questionId);
+    if (!q) throw new TrackerError("not-found", "There's no such question on the prep sheet.", applicationId);
+    change(q);
+    db.prepare("UPDATE prep_sheet SET questions = ? WHERE application_id = ?").run(JSON.stringify(sheet.questions), applicationId);
+    return q;
+  }
+
+  async function markPractised(applicationId: string, questionId: string, practised: boolean) {
+    changeQuestion(applicationId, questionId, (q) => { q.practised = practised === true; });
+    return (await prepSheetOf(applicationId))!;
+  }
+
+  async function addPrepStory(applicationId: string, questionId: string, text: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    const story = text.trim();
+    if (!story) throw new TrackerError("invalid", "Write the story first: what happened, what you did, how it turned out.", applicationId);
+    const q = prepRow(applicationId)?.questions.find((x) => x.id === questionId);
+    if (!q) throw new TrackerError("not-found", "There's no such question on the prep sheet.", applicationId);
+    const piece = profile
+      ? await profile.addUnconfirmedPiece({ text: story, source: `Prep sheet for ${app.title} at ${app.company}: "${q.question}"` })
+      : null;
+    changeQuestion(applicationId, questionId, (x) => { x.yourStory = { text: story, addedAt: now(), pieceId: piece?.id ?? null }; });
+    return (await prepSheetOf(applicationId))!;
   }
 
   // ---------- Email matching (spec #24 "Matching rules", ADR 0004) ----------
@@ -1511,7 +1928,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
    * Files an email on an Application as an Event, moving its Status when `move` and the kind's Status
    * is forward from where it stands. Returns the Event and whether it moved.
    */
-  function fileEmail(applicationId: string, m: MailMessage, kind: EmailKind | null, target: Status | null, move: boolean, cause: EventCause) {
+  function fileEmail(applicationId: string, m: MailMessage, kind: EmailKind | null, target: Status | null, move: boolean, cause: EventCause, invite: InvitedInterview | null = null) {
     const app = row(applicationId)!;
     const from = app.status as Status;
     const moves = move && target !== null && isForward(from, target);
@@ -1520,6 +1937,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const text = moves
       ? `${what}: moved to ${statusName(target!)}`
       : target && move && !isForward(from, target) ? `${what}, filed: it's ${statusName(from)} already, so the Status stays` : `${what}, filed`;
+    // An invitation's interview details, pre-filled from what the email says (editable on the page);
+    // recorded just before the email's own Event, so the email leads the timeline.
+    if (kind === "interview-invitation") interviewFromEmail(applicationId, m, invite);
     const event = addEvent({
       applicationId, kind: "email", cause, from: moves ? from : null, to: moves ? target : null, text, undoes: null,
       emailId: m.id, emailKind: kind,
@@ -1560,12 +1980,16 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     }
     if (apps.length !== 1) return null;
     const app = apps[0]!;
-    const f = currentFollowUp(app);
     const sentOn = sofiaDay(m.receivedAt);
-    if (!f || f.kind !== "nudge" || f.state !== "pending" || !(f.dueOn <= sentOn || f.snoozedTo)) return null;
+    const sentAt = m.receivedAt.toISOString();
+    // A thank-you note whose interview has ended comes first; then the stage's nudge or check-in once due.
+    const thanks = thankYousOf(app).find((x) => x.state === "pending" && !!x.readyAt && x.readyAt <= sentAt);
+    const stage = currentFollowUp(app);
+    const f = thanks ?? (stage && (stage.kind === "nudge" || stage.kind === "check-in") && stage.state === "pending" && (stage.dueOn <= sentOn || stage.snoozedTo) ? stage : null);
+    if (!f) return null;
     addEvent({
       applicationId: f.applicationId, kind: "follow-up-sent", cause: "email", from: null, to: null,
-      text: "Follow-up sent: apply-kit saw your sent copy", undoes: null, followUpId: f.id, emailId: m.id, emailKind: null,
+      text: `${followUpWords[f.kind].sent}: apply-kit saw your sent copy`, undoes: null, followUpId: f.id, emailId: m.id, emailKind: null,
     });
     return f.applicationId;
   }
@@ -1583,9 +2007,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
     const { c, by, model } = await classify(m);
     db.prepare(
-      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(m.id, by, c?.kind ?? null, c?.confidence ?? null, c?.company ?? null, c?.jobTitle ?? null, c?.stage ?? null, c?.language ?? null, c?.summary ?? null, model, now());
+      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at, interview)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      m.id, by, c?.kind ?? null, c?.confidence ?? null, c?.company ?? null, c?.jobTitle ?? null, c?.stage ?? null, c?.language ?? null, c?.summary ?? null, model, now(),
+      c?.interview ? JSON.stringify(c.interview) : null,
+    );
 
     const candidates = signalsFor(m, c);
     const match = uniqueMatch(candidates);
@@ -1602,7 +2029,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const file = (move: boolean) => {
       db.exec("BEGIN");
       try {
-        const { moved } = fileEmail(match!.applicationId, m, c?.kind ?? null, target, move, "email");
+        const { moved } = fileEmail(match!.applicationId, m, c?.kind ?? null, target, move, "email", c?.interview ?? null);
         decide(m.id, { state: "matched", applicationId: match!.applicationId, signals: texts(match!), how: "auto" });
         db.exec("COMMIT");
         return moved ? ("moved" as const) : ("filed" as const);
@@ -1741,7 +2168,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         } else {
           applicationId = createFromEmail(m, { company: str(cls?.company), title: str(cls?.job_title) });
         }
-        const { event } = fileEmail(applicationId, m, kind, target, answer.move === true, "you");
+        const invite = cls?.interview ? invitedInterviewSchema.safeParse(JSON.parse(String(cls.interview))) : null;
+        const { event } = fileEmail(applicationId, m, kind, target, answer.move === true, "you", invite?.success ? invite.data : null);
         decide(emailId, { state: "matched", applicationId, signals: ["You matched it."], how: "you" });
         teach(applicationId);
         result = { application: summary(applicationId), event };
@@ -1819,12 +2247,19 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     needsYou,
     followUp: followUpDraft,
     saveFollowUpText,
-    markFollowUpSent: async (id) => followUpEvent(id, "follow-up-sent", (f) => (f.kind === "nudge" ? "Follow-up sent" : "Note to self done")),
-    skipFollowUp: async (id) => followUpEvent(id, "follow-up-skipped", (f) => (f.kind === "nudge" ? "No follow-up this time" : "No note this time")),
+    markFollowUpSent: async (id) => followUpEvent(id, "follow-up-sent", (f) => followUpWords[f.kind].sent),
+    skipFollowUp: async (id) => followUpEvent(id, "follow-up-skipped", (f) => followUpWords[f.kind].skipped),
     snoozeFollowUp: async (id) => {
       const to = addDays(today(), followUpSettings().snoozeDays);
-      return followUpEvent(id, "follow-up-snoozed", (f) => `${f.kind === "nudge" ? "Follow-up" : "Note to self"} snoozed to ${dayWords(to)}`, to);
+      return followUpEvent(id, "follow-up-snoozed", (f) => `${followUpWords[f.kind].name} snoozed to ${dayWords(to)}`, to);
     },
+    saveFollowUpTopic,
+    setInterview,
+    interviewIcs: async (id) => icsOf(id),
+    prepSheet: async (id) => prepSheetOf(id),
+    buildPrepSheet,
+    markPractised,
+    addPrepStory,
     followUpSettings: async () => followUpSettings(),
     saveFollowUpSettings: async (input) => {
       const settings = parseFollowUpSettings(input);
@@ -1853,7 +2288,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     findJobs,
     stats: async () => {
       const mail = mailbox();
-      return computeStats(db, today(), mail.state === "failing" || mail.state === "not-connected" ? mail.since : null);
+      return computeStats(db, today(), mail.state === "failing" || mail.state === "not-connected" ? mail.since : null, now());
     },
   };
 }
@@ -1877,6 +2312,14 @@ function sixMonthsBefore(day: string): string {
   back.setUTCDate(Math.min(d, last));
   return back.toISOString().slice(0, 10);
 }
+
+/** How follow-ups are named on the timeline. */
+const followUpWords: Record<FollowUpKind, { name: string; sent: string; skipped: string }> = {
+  nudge: { name: "Follow-up", sent: "Follow-up sent", skipped: "No follow-up this time" },
+  "offer-note": { name: "Note to self", sent: "Note to self done", skipped: "No note this time" },
+  "thank-you": { name: "Thank-you note", sent: "Thank-you note sent", skipped: "No thank-you note this time" },
+  "check-in": { name: "Check-in", sent: "Check-in sent", skipped: "No check-in this time" },
+};
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** "Tue 6 Oct" for 2026-10-06. */

@@ -52,8 +52,32 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 export const daysWord = (n: number) => plural(n, "day");
 export const wordsWord = (n: number) => plural(n, "word");
 
-/** "Follow-up" or "Note to self". */
-export const followUpName = (kind: FollowUpKind) => (kind === "nudge" ? "Follow-up" : "Note to self");
+const followUpNames: Record<FollowUpKind, string> = { nudge: "Follow-up", "offer-note": "Note to self", "thank-you": "Thank-you note", "check-in": "Check-in" };
+/** "Follow-up", "Note to self", "Thank-you note" or "Check-in". */
+export const followUpName = (kind: FollowUpKind) => followUpNames[kind];
+
+/** Whether the follow-up is a message the user sends (not a note to self). */
+export const isMessage = (kind: FollowUpKind) => kind !== "offer-note";
+
+/** "14:00" of an ISO time, in Sofia. */
+export const sofiaClock = (iso: string) => clockTime(new Date(iso));
+
+/** "due today by 16:00", "due tomorrow by 16:00", "overdue since …": a thank-you note's deadline (Sofia time). */
+export function dueByWords(dueAt: string): string {
+  const day = todaySofia(new Date(dueAt));
+  const today = todaySofia();
+  if (Date.parse(dueAt) < Date.now()) return `was due ${day === today ? "today" : weekDay(day)} by ${sofiaClock(dueAt)}`;
+  if (day === today) return `due today by ${sofiaClock(dueAt)}`;
+  return `due by ${weekDay(day)}, ${sofiaClock(dueAt)}`;
+}
+
+/** "Thu 15 Oct, 14:00–15:00 Sofia time" for an interview, in its own time zone; "Time not agreed yet" without one. */
+export function interviewWhen(i: { start: string | null; end: string | null; timeZone: string }): string {
+  if (!i.start) return "Time not agreed yet";
+  const zone = `${(i.timeZone.split("/").at(-1) ?? i.timeZone).replace(/_/g, " ")} time`;
+  const end = i.end && i.end.slice(0, 10) === i.start.slice(0, 10) ? `–${i.end.slice(11, 16)}` : "";
+  return `${weekDay(i.start.slice(0, 10))}, ${i.start.slice(11, 16)}${end} ${zone}`;
+}
 
 /** When a follow-up is due, in words: "due today", "due since Fri 9 Oct", or "Wed 14 Oct". */
 export function dueWords(dueOn: string): string {
@@ -67,6 +91,8 @@ export function dueWords(dueOn: string): string {
 export function nextWords(next: NextUp): { text: string; due: boolean } | null {
   if (!next) return null;
   if (next.kind === "no-reply") return { text: `No reply for ${daysWord(next.days)}`, due: false };
+  if (next.kind === "interview") return { text: `Interview ${interviewWhen({ start: next.start, end: null, timeZone: next.timeZone })}`, due: false };
+  if (next.dueAt) return { text: `${followUpName(next.followUpKind)} ${dueByWords(next.dueAt)}`, due: next.due };
   return { text: `${followUpName(next.followUpKind)} ${dueWords(next.dueOn)}`, due: next.due };
 }
 const clockTime = (d: Date) => d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Sofia" });
