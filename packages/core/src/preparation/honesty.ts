@@ -7,13 +7,14 @@
 //   belong to the role it sits under.
 // - Skills: every skill listed is a skill piece; a line names nothing (a tool, an employer) that
 //   isn't somewhere in the profile.
-// - Numbers: every number is in the cited pieces, within the rounding their number source allows;
-//   years of experience are at most what the cited roles' dates add up to.
+// - Numbers: every number is in the cited pieces, within the rounding their number source allows and
+//   keeping the piece's hedge (not "30%" or "over 30%" for "nearly 30%", see `keepsHedge`); years of
+//   experience are at most what the cited roles' dates add up to.
 // - Soft rule: a "stronger" claim is a near-the-line edit. It is held back (the piece's wording is
 //   used) and becomes a flag for Kris to decide (#64): the stronger draft is never offered, the
 //   writer's honest wording is, once it passes the hard rules, and so is Kris's own (checkWording).
 import type { TailoredCv, TailoredLine } from "../writing/writer.ts";
-import { closest, quantities, within } from "./numbers.ts";
+import { closest, exactly, quantities, within } from "./numbers.ts";
 import type { NumberSource, ProfilePiece } from "./profile.ts";
 
 export interface HonestyProfile {
@@ -182,7 +183,7 @@ function lineProblems(line: TailoredLine, ctx: Context): HonestyProblem[] {
     const backed = pieces.some((p) => {
       const source = closest(q, quantities(p.text, { source: true }));
       if (!source) return false;
-      return roundingRules[p.numberSource ?? "none"] === "favourable" ? within(q, source) : Math.abs(q.value - source.value) < 1e-9;
+      return roundingRules[p.numberSource ?? "none"] === "favourable" ? within(q, source) : exactly(q, source);
     });
     if (!backed) problems.push({ rule: "number", message: `says "${q.raw}", which its piece doesn't back` });
   }

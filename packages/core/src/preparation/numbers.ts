@@ -6,15 +6,37 @@
 
 export type QuantityKind = "proportion" | "count";
 
+/**
+ * Which way a hedge points: "nearly 30%" and "up to 30%" say the number is at most 30% ("below"),
+ * "over 30%" says more ("above"), "about 30%" is rounding either way ("around").
+ */
+export type HedgeDirection = "below" | "around" | "above";
+
 export interface Quantity {
   kind: QuantityKind;
   value: number;
   /** The words as written, with a hedge before them ("about a third", "over 20"). */
   raw: string;
   index: number;
+  /** The hedge before the number, if there is one. */
+  hedge: { direction: HedgeDirection; words: string } | null;
 }
 
-const hedge = String.raw`(?:(?:about|around|roughly|nearly|almost|approximately|over|more than|under|less than|up to|около|над|почти|близо)\s+)?`;
+const hedges: Record<HedgeDirection, string[]> = {
+  below: ["nearly", "almost", "under", "less than", "up to", "почти", "близо"],
+  around: ["about", "around", "roughly", "approximately", "около"],
+  above: ["over", "more than", "над"],
+};
+const hedgeWords = Object.values(hedges).flat().sort((a, b) => b.length - a.length).map((w) => w.replace(/ /g, String.raw`\s+`)).join("|");
+const hedge = String.raw`(?:(?:${hedgeWords})\s+)?`;
+const leadingHedge = new RegExp(String.raw`^(${hedgeWords})\s+`, "iu");
+
+function hedgeOf(raw: string): Quantity["hedge"] {
+  const words = leadingHedge.exec(raw)?.[1]?.toLowerCase().replace(/\s+/g, " ");
+  if (!words) return null;
+  const direction = (Object.keys(hedges) as HedgeDirection[]).find((d) => hedges[d].includes(words))!;
+  return { direction, words };
+}
 const fractions: Record<string, number> = {
   "a half": 0.5, half: 0.5, "one half": 0.5,
   "a third": 1 / 3, "one third": 1 / 3, "two thirds": 2 / 3,
@@ -58,25 +80,43 @@ export function quantities(text: string, { source = false }: { source?: boolean 
   const found: Quantity[] = [];
   for (const m of text.matchAll(source ? sourceWords : claimWords)) {
     const word = m[1]!.toLowerCase();
-    found.push({ kind: "count", value: countWords[word] ?? oneWords[word]!, raw: m[0].trim(), index: m.index });
+    found.push({ kind: "count", value: countWords[word] ?? oneWords[word]!, raw: m[0].trim(), index: m.index, hedge: hedgeOf(m[0]) });
   }
   for (const m of text.matchAll(pattern)) {
     const raw = m[0];
     const { digits, sep, k: thousands, percent, words } = m.groups!;
     if (words) {
-      found.push({ kind: "proportion", value: fractions[words.toLowerCase().replace(/[\s-]+/g, " ")]!, raw: raw.trim(), index: m.index });
+      found.push({ kind: "proportion", value: fractions[words.toLowerCase().replace(/[\s-]+/g, " ")]!, raw: raw.trim(), index: m.index, hedge: hedgeOf(raw) });
       continue;
     }
     const n = Number(sep ? digits!.split(sep).join("") : digits!.replace(",", ".")) * (thousands ? 1000 : 1);
     if (!percent && !thousands && /^\d{4}$/.test(digits!) && n >= 1950 && n <= 2099 && isDate(text.slice(0, m.index), text.slice(m.index + raw.length))) continue;
-    found.push({ kind: percent ? "proportion" : "count", value: percent ? n / 100 : n, raw: raw.trim(), index: m.index });
+    found.push({ kind: percent ? "proportion" : "count", value: percent ? n / 100 : n, raw: raw.trim(), index: m.index, hedge: hedgeOf(raw) });
   }
   return found.sort((a, b) => a.index - b.index);
 }
 
-/** Favourable but plausible rounding: within a tenth of the source's number ("about a third" → 30% or 35%, not 50%). */
+/**
+ * A claim keeps its source's hedge, or a weaker one; it never makes the number stronger:
+ * - a source hedged below ("nearly 30%", "up to 30%") stays hedged below: not "30%", "about 30%" or "over 30%";
+ * - a claim hedged above ("over 30%") needs a source hedged above too.
+ * Rounding hedges ("about", "around") may be dropped or added: favourable rounding (`within`)
+ * already allows that much ("about a third" → 35%). Hedging a bare number ("30%" → "nearly 30%") is weaker, so allowed.
+ */
+export function keepsHedge(claim: Quantity, source: Quantity): boolean {
+  if (source.hedge?.direction === "below" && claim.hedge?.direction !== "below") return false;
+  if (claim.hedge?.direction === "above" && source.hedge?.direction !== "above") return false;
+  return true;
+}
+
+/** Favourable but plausible rounding: within a tenth of the source's number ("about a third" → 30% or 35%, not 50%), keeping its hedge. */
 export function within(claim: Quantity, source: Quantity): boolean {
-  return claim.kind === source.kind && Math.abs(claim.value - source.value) <= source.value * 0.1 + 1e-9;
+  return claim.kind === source.kind && Math.abs(claim.value - source.value) <= source.value * 0.1 + 1e-9 && keepsHedge(claim, source);
+}
+
+/** Stated exactly as the source has it: the same number, keeping its hedge. */
+export function exactly(claim: Quantity, source: Quantity): boolean {
+  return claim.kind === source.kind && Math.abs(claim.value - source.value) < 1e-9 && keepsHedge(claim, source);
 }
 
 /** The source's number closest to a claim of the same kind, if it has any. */
@@ -85,5 +125,5 @@ export function closest(claim: Quantity, source: Quantity[]): Quantity | null {
   return same.sort((a, b) => Math.abs(a.value - claim.value) - Math.abs(b.value - claim.value))[0] ?? null;
 }
 
-/** "33%" for a third; the way a proportion reads as a whole percentage. */
-export const asPercent = (q: Quantity) => `${Math.round(q.value * 100)}%`;
+/** "33%" for a third; the way a proportion reads as a whole percentage, keeping a hedge that points one way ("nearly 33%"). */
+export const asPercent = (q: Quantity) => `${q.hedge && q.hedge.direction !== "around" ? `${q.hedge.words} ` : ""}${Math.round(q.value * 100)}%`;

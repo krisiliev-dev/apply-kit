@@ -244,6 +244,8 @@ describe("numbers as people write them (review fixes)", () => {
       piece({ id: "regions", kind: "achievement", belongsTo: "analyst", text: "Served customers in 2 regions.", numberSource: "measured" }),
       piece({ id: "users", kind: "achievement", belongsTo: "analyst", text: "Rolled out phishing training to 1,500 users.", numberSource: "measured" }),
       piece({ id: "onboarded", kind: "achievement", belongsTo: "analyst", text: "Onboarded 200 customers to the alert portal.", numberSource: "measured" }),
+      piece({ id: "nearly", kind: "achievement", belongsTo: "analyst", text: "Cut phishing clicks by nearly 30%.", numberSource: "measured" }),
+      piece({ id: "bare", kind: "achievement", belongsTo: "analyst", text: "Cut duplicate tickets by 30%.", numberSource: "measured" }),
       piece({ id: "respond", kind: "achievement", belongsTo: "analyst", text: "Cut the time to respond to 2,5 hours.", numberSource: "told" }),
     ],
   };
@@ -266,5 +268,22 @@ describe("numbers as people write them (review fixes)", () => {
       "Onboarded 200 customers to the alert portal, 2024 г.",
       "През 2024 onboarded 200 customers to the alert portal",
     ]) expect(checkWording(dated, ["onboarded"], counted), dated).toEqual([]);
+  });
+
+  it.each([
+    ["drops \"nearly\"", "Cut phishing clicks by 30%", "nearly", "30%"],
+    ["turns \"nearly\" into \"over\"", "Cut phishing clicks by over 30%", "nearly", "over 30%"],
+    ["turns \"nearly\" into \"about\"", "Cut phishing clicks by about 30%", "nearly", "about 30%"],
+    ["adds \"over\" to a bare number", "Cut duplicate tickets by over 30%", "bare", "over 30%"],
+  ])("refuses a number that %s: the claim is stronger than its source", (_, text, id, raw) => {
+    expect(checkWording(text, [id], counted)).toEqual([{ rule: "number", message: `says "${raw}", which its piece doesn't back` }]);
+  });
+
+  it.each([
+    ["keeps the source's hedge", "Cut phishing clicks by almost 30%", "nearly"],
+    ["hedges a bare number", "Cut duplicate tickets by about 30%", "bare"],
+    ["hedges a bare number downwards", "Cut duplicate tickets by nearly 30%", "bare"],
+  ])("allows a number that %s", (_, text, id) => {
+    expect(checkWording(text, [id], counted)).toEqual([]);
   });
 });
