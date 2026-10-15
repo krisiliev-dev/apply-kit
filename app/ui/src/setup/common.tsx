@@ -6,6 +6,12 @@ import { Icon } from "../icons.tsx";
 
 export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 export const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+export const usd = (n: number) => `$${n.toFixed(2)}`;
+/** The day this month's AI budget resets: "1 Nov". */
+export function resetDay(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y!, m!, 1)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+}
 
 /** Moves between Setup's steps without a page load; Back and Forward work as usual. */
 export type Go = (path: string) => void;
@@ -53,7 +59,7 @@ export function Steps({ current, reading = false, imported = null }: {
   const steps: { step: SetupStep; label: string; sub: (state: "done" | "current" | "upcoming") => string }[] = [
     { step: "import", label: "Import", sub: (s) => (s === "current" ? (reading ? "Reading…" : "Old CVs, LinkedIn") : s === "done" && imported != null ? plural(imported, "piece", "pieces") : "Old CVs, LinkedIn") },
     { step: "review", label: "Check drafts", sub: (s) => (!c || c.pieces === 0 ? "Confirm or fix" : s === "current" ? `${c.confirmed} of ${c.pieces}` : s === "done" ? `${c.confirmed} confirmed` : "Confirm or fix") },
-    { step: "interview", label: "Interview", sub: (s) => (s === "done" ? "Coach coming later" : "About 15 min") },
+    { step: "interview", label: "Interview", sub: (s) => (s === "done" ? "With the coach" : "About 15 min") },
     { step: "search", label: "Your search", sub: () => "Check defaults" },
   ];
   return (

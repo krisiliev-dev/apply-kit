@@ -3,7 +3,7 @@
 // to one records it, so /setup opens where Kris stopped ("Welcome back"), with the same counts.
 // This file holds the router and phase A, import (states "A · Import", "Reading files", "Partial ·
 // one file unreadable" and "AI cap reached"): old CVs, the LinkedIn export and links become drafted
-// pieces, checkable as each file finishes. The coach interview is a placeholder until it's built.
+// pieces, checkable as each file finishes. Phase B, the coach interview, is in Interview.tsx.
 import type { HealthSummary, ImportInputProblem, ImportItem, ImportMerge, ImportStatus, SetupProgress, SetupStep, UnreadableAction } from "@apply-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
@@ -11,8 +11,9 @@ import {
 } from "../api.ts";
 import { Icon } from "../icons.tsx";
 import { CheckDrafts } from "./CheckDrafts.tsx";
-import { Done, InterviewPlaceholder, Returning, SkipSetup, YourSearch } from "./Finish.tsx";
-import { message, plural, SetupContext, stepPath, Steps, useNavLink, useSetup, type Go, type SetupContextValue } from "./common.tsx";
+import { Done, Returning, SkipSetup, YourSearch } from "./Finish.tsx";
+import { Interview } from "./Interview.tsx";
+import { message, plural, resetDay, usd, SetupContext, stepPath, Steps, useNavLink, useSetup, type Go, type SetupContextValue } from "./common.tsx";
 
 const POLL_MS = 1_000;
 const stepOf = (path: string) => (/^\/setup\/(import|review|interview|search|done)$/.exec(path)?.[1] ?? null) as SetupStep | null;
@@ -68,7 +69,7 @@ export function SetupPage({ onHealth }: { onHealth: (h: HealthSummary) => void }
   let view;
   if (error) view = <div className="banner error" role="alert"><span className="text"><b>Couldn't load setup.</b> {error}</span></div>;
   else if (step === "review") view = <CheckDrafts imported={imported} />;
-  else if (step === "interview") view = <InterviewPlaceholder imported={imported} />;
+  else if (step === "interview") view = <Interview imported={imported} />;
   else if (step === "search") view = <YourSearch imported={imported} />;
   else if (step === "done") view = <Done />;
   else if (step === "import") view = <ImportStep onImported={setImported} />;
@@ -293,12 +294,7 @@ function ImportForm({ onStarted, onBack }: { onStarted: (s: ImportStatus) => voi
 // ---------- Reading, partial, cap reached ----------
 
 const secondsLabel = (s: number) => (s < 60 ? `about ${s} s left` : `about ${Math.round(s / 60)} min left`);
-const usd = (n: number) => `$${n.toFixed(2)}`;
 /** The first day of the next month, when the budget resets: "1 Nov". */
-function resetDay(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(Date.UTC(y!, m!, 1)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-}
 
 function ImportRunView({ status, onStatus, announce, onImportMore }: {
   status: ImportStatus;

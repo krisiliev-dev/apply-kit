@@ -345,6 +345,10 @@ h2[tabindex="-1"]:focus { outline: none }
 @media (min-width: 961px) and (min-height: 820px) { .setup .side { position: sticky; top: 96px } }
 .setup .privacy ul, .setup .next ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
 .setup .links { display: grid; gap: var(--s-4) }
+.setup .scope { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0; padding: 0; list-style: none }
+.setup .composer { display: grid; gap: var(--s-3) }
+.setup .msg { overflow-wrap: anywhere; white-space: pre-wrap }
+.setup .piece fieldset { border: 0; margin: 0; padding: 0; min-width: 0 }
 .setup .pk-steps a[aria-disabled="true"] { color: var(--ink-3); cursor: default }
 .setup .pk-steps a[aria-disabled="true"]:hover { border-color: var(--rule) }
 .setup .merges { margin-top: var(--s-4); font-size: var(--fs-small) }

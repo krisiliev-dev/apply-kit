@@ -1,34 +1,10 @@
-// The rest of Setup (hi-fi: onboarding.html): the Interview step's placeholder until the coach
-// exists, "Your search" (the search settings, filled from the profile), "Done" (the summary and the
+// The rest of Setup (hi-fi: onboarding.html): "Your search" (the search settings, filled from the profile), "Done" (the summary and the
 // "keeps learning" note), and "Welcome back" for Kris returning mid-setup, with "Skip setup".
 import type { SearchSettings, SearchSuggestion, SetupStep, SetupSummary } from "@apply-kit/core";
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { fetchSearchSuggestion, fetchSetupSummary, saveSearchSettings, setSetupStep, skipSetup } from "../api.ts";
 import { angleLabel } from "../profile/common.tsx";
 import { message, plural, stepPath, Steps, useNavLink, useSetup, whenLabel } from "./common.tsx";
-
-export function InterviewPlaceholder({ imported }: { imported: number | null }) {
-  const { progress } = useSetup();
-  const nav = useNavLink();
-  const toCheck = progress?.counts.toCheck ?? 0;
-  return (
-    <div className="stack">
-      <Steps current="interview" imported={imported} />
-      <div className="head">
-        <h1 id="setup-h" tabIndex={-1}>Interview with the coach</h1>
-        <p className="muted">The coach only writes down what you tell it. It checks what was imported, asks about gaps in your timeline and about skills you likely have but never wrote down.</p>
-      </div>
-      <div className="empty">
-        <h2>The coach isn't here yet</h2>
-        <p>It arrives with a later part of the app. Nothing is lost by going on: {toCheck > 0 ? `the ${plural(toCheck, "piece", "pieces")} you haven't checked will be the first things it asks about.` : "it will start from your checked profile."}</p>
-        <div className="row">
-          <a className="btn primary" href={stepPath.search} onClick={nav}>Continue to your search</a>
-          <a className="btn ghost" href={stepPath.review} onClick={nav}>Back to checking</a>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const months = (n: number) => {
   const y = Math.floor(n / 12);
