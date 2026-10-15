@@ -201,7 +201,8 @@ describe("Approve", () => {
 
     const waiting = t.preparation.approveStep(pkg.id, "answers");
     expect(waiting).toMatchObject({ approved: false, blockedBy: "answers", reason: "1 answer needs you: salary" });
-    expect(waiting.package.steps.map((s) => s.state)).toEqual(["done", "done", "done", "current", "upcoming"]);
+    // The ATS check ran on the approved CV (a stand-in PDF a parser can't read as a CV).
+    expect(waiting.package.steps.map((s) => s.state)).toEqual(["done", "done", "done", "current", "flagged"]);
 
     t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3400");
     const approved = t.preparation.approveStep(pkg.id, "answers");

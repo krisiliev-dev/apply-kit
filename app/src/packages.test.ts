@@ -32,6 +32,29 @@ describe("packages folder", () => {
       .toEqual(["Mira_Petrova_CV_Kestrel_Payments.pdf", "Mira_Petrova_Cover_Letter_Kestrel.pdf"]);
   });
 
+  it("freezes an approved file in packages/<id>/v<version>/, never rewrites it, and copies it to the Packages folder", async () => {
+    const dataDir = freshDir();
+    const packagesDir = join(freshDir(), "apply-kit Packages");
+    const folder = createPackageFolder(dataDir, packagesDir);
+
+    const frozen = await folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF approved"));
+
+    expect(frozen).toEqual({ path: "packages/p1/v1/Mira_Petrova_CV_Kestrel.pdf", copy: join(packagesDir, "Mira_Petrova_CV_Kestrel.pdf") });
+    expect(new TextDecoder().decode((await folder.read(frozen.path))!)).toBe("%PDF approved");
+    expect(readFileSync(frozen.copy!, "utf8")).toBe("%PDF approved");
+    await expect(folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF changed"))).rejects.toThrow();
+    // A new draft never touches the frozen file.
+    await folder.saveDraft("p1", "cv", "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF draft"));
+    expect(new TextDecoder().decode((await folder.read(frozen.path))!)).toBe("%PDF approved");
+  });
+
+  it("still freezes when the Packages folder can't be written, with no copy", async () => {
+    const dataDir = freshDir();
+    const folder = createPackageFolder(dataDir, "/dev/null/apply-kit Packages");
+
+    expect(await folder.freeze("p1", 2, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF"))).toEqual({ path: "packages/p1/v2/Mira_Petrova_CV_Kestrel.pdf", copy: null });
+  });
+
   it("refuses a package id or file name that would leave the package's folder", async () => {
     const folder = createPackageFolder(freshDir());
 

@@ -376,6 +376,16 @@ export interface PreparationEngine {
    * resting only on profile pieces (returned), honesty-checked and within the monthly cap.
    */
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
+
+  // ---------- The ATS check and approval (#67) ----------
+
+  /**
+   * "Approve package", step 5's Approve: only when every step is approved and the ATS check passes,
+   * or Kris accepts its failing checks knowingly. The CV and letter PDFs are frozen by SHA-256 (and
+   * copied to the Packages folder) as the next approved version, which never changes after. Editing
+   * any part afterwards reopens its step and the package needs approving again.
+   */
+  approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
 }
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
@@ -486,6 +496,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     redraftScreeningAnswer: (id, questionId) => packages.redraftAnswer(id, questionId),
     saveScreeningAnswerToBank: (id, questionId) => packages.saveAnswerToBank(id, questionId),
     draftAnswer: (id, request) => packages.draftAnswer(id, request),
+    approvePackage: (id, options) => packages.approvePackage(id, options),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });

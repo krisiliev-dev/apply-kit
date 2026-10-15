@@ -31,7 +31,7 @@ function service(uiDir = "/nonexistent/") {
       get: async (sha256) => stored.get(sha256) ?? null,
       remove: async (sha256) => { stored.delete(sha256); },
     },
-    packages: { saveDraft: async () => noFiles(), read: async () => null },
+    packages: { saveDraft: async () => noFiles(), freeze: async () => noFiles(), read: async () => null },
   });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
@@ -377,7 +377,7 @@ describe("developer route: the demo documents", () => {
       renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
       pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
       files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
-      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), read: async () => null },
+      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), freeze: async (id, v, name) => ({ path: `packages/${id}/v${v}/${name}`, copy: null }), read: async () => null },
     });
     const scheduler = { status: () => ({}) } as unknown as Scheduler;
     const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });

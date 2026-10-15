@@ -537,6 +537,24 @@ const migrations: string[] = [
    );
    ALTER TABLE package ADD COLUMN letter_draft INTEGER;
    ALTER TABLE package ADD COLUMN letter_file TEXT;`,
+  // #67: approving a package freezes it as a version: the files (by SHA-256, in packages/<id>/v<n>/)
+  // and what Apply and Track read, as JSON that never changes. Editing a part afterwards reopens it
+  // (approved_version back to NULL) and the next approval is the next version. A version is marked
+  // submitted once, when Track records the submission. Failing ATS checks Kris accepted knowingly,
+  // and contact facts she gave the ATS fix for this package only, sit on the package.
+  `CREATE TABLE package_version (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     version INTEGER NOT NULL,
+     approved_at TEXT NOT NULL,
+     snapshot TEXT NOT NULL,
+     submitted_at TEXT,
+     submitted_via TEXT,
+     portal_url TEXT,
+     PRIMARY KEY (package_id, version)
+   );
+   ALTER TABLE package ADD COLUMN approved_version INTEGER;
+   ALTER TABLE package ADD COLUMN ats_accepted TEXT NOT NULL DEFAULT '[]';
+   ALTER TABLE package ADD COLUMN contact_fix TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

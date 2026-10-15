@@ -103,3 +103,35 @@ describe("the ATS check (step 5)", () => {
     expect(pkg.ats!.lines.every((l) => l.lost === null)).toBe(true);
   });
 });
+
+describe("approving the package", () => {
+  it("waits while a check fails, naming it, until Kris accepts the failing check knowingly", async () => {
+    const t = mira();
+    // Python is in the profile, but only on the developer angle: this security CV doesn't print it.
+    t.preparation.savePiece({ kind: "skill", text: "Python", tags: ["scripting"], angles: ["developer"] });
+    const pkg = await upToAts(t, kestrelJob({ requirements: [{ text: "Incident response" }, { text: "Python", category: "skill" }] }));
+
+    expect(pkg.ats!.checks.find((c) => c.check === "keywords")).toMatchObject({ passed: false, problems: ["Posting keyword not found: Python"] });
+    expect(pkg.steps[4]).toMatchObject({ state: "current", sub: "1 check fails", blocked: "1 check fails: posting keywords found. Fix it, or approve knowing it fails." });
+    const refused = await t.preparation.approvePackage(pkg.id);
+    expect(refused).toMatchObject({ approved: false, blockedBy: "ats", reason: "1 check fails: posting keywords found. Fix it, or approve knowing it fails." });
+
+    const approved = await t.preparation.approvePackage(pkg.id, { acceptFailingChecks: true });
+
+    expect(approved).toMatchObject({ approved: true, package: { ats: { accepted: ["keywords"] }, chip: { kind: "ready", label: "Package ready" } } });
+    expect(approved.package.steps.every((s) => s.approvedAt !== null)).toBe(true);
+  });
+
+  it("counts a gap Kris chose to leave out as a deliberate pass, with the reason", async () => {
+    const t = mira();
+    const job = kestrelJob({ requirements: [{ text: "Incident response" }, { text: "Kubernetes", category: "skill" }] });
+    const pkg = await started(t, job);
+    const gap = pkg.cvVersion!.flags.find((f) => f.kind === "gap")!;
+    await t.preparation.decideFlag(pkg.id, gap.id, { option: "leave-out" });
+
+    const ready = await upToAts(t, job);
+
+    expect(ready.ats!.checks.find((c) => c.check === "keywords")).toMatchObject({ passed: true, notes: ["Kubernetes: a deliberate gap, left out"] });
+    expect(await t.preparation.approvePackage(ready.id)).toMatchObject({ approved: true });
+  });
+});
