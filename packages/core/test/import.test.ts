@@ -128,14 +128,17 @@ describe("near-duplicates across files", () => {
     ]);
   });
 
-  it("keeps achievements with different numbers apart, however alike their words", async () => {
+  it("never merges achievements with different numbers, however alike their words: it flags them with both versions", async () => {
     const half: DraftedPieces = { pieces: [{ kind: "achievement", text: "Cut false positives by half by tuning Splunk detection rules.", quote: "Cut false positives by half by tuning Splunk detection rules.", entry: null, role: null }] };
     const writer = fakeWriter({ draftPieces: (input: ImportedText) => (input.fileName === "old.txt" ? half : mira2025) });
     const old = { fileName: "old.txt", bytes: new TextEncoder().encode("Cut false positives by half by tuning Splunk detection rules.") };
 
     const t = await imported({ files: [cv2025, old] }, { writer });
 
-    expect(t.preparation.listPieces({ kind: "achievement", search: "false positives" }).groups.flatMap((g) => g.pieces)).toHaveLength(2);
+    const pieces = t.preparation.listPieces({ kind: "achievement", search: "false positives" }).groups.flatMap((g) => g.pieces);
+    expect(pieces.map((p) => [p.status, p.dispute?.versions.map((v) => v.text)])).toEqual([
+      ["flagged", ["Cut false positives by about a third by tuning Splunk detection rules.", "Cut false positives by half by tuning Splunk detection rules."]],
+    ]);
   });
 });
 

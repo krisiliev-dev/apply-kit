@@ -7,7 +7,7 @@
 import { parse as parseHtml } from "node-html-parser";
 import type { BudgetInfo } from "../budget.ts";
 import type { DraftedPieces } from "../writing/writer.ts";
-import { isNearDuplicate } from "./duplicates.ts";
+import { disagrees, isNearDuplicate } from "./duplicates.ts";
 import { docxText, fileTypeOf, pdfPlainText, plainText, quoteIsIn, type ImportFileType } from "./extract.ts";
 import { linkedInPieces } from "./linkedin.ts";
 import type { PreparationDeps } from "./ports.ts";
@@ -406,7 +406,15 @@ export function createImportStore(deps: PreparationDeps, profile: ProfileStore):
       const entry = p.kind === "role" || p.kind === "education" ? p.entry : null;
       const draft = { kind: p.kind, text: p.text.trim(), entry };
       const belongsTo = !entry && p.role !== null ? (ids.get(p.role) ?? null) : null;
-      const twin = profile.all().find((existing) => isNearDuplicate(draft, existing));
+      // Another source says it differently: the drafted piece already there waits for Kris to pick the true version.
+      const rival = profile.all().find((existing) => existing.status !== "confirmed" && disagrees(draft, existing));
+      if (rival) {
+        ids.set(i, rival.id);
+        profile.dispute(rival.id, { from: item.name, quote: p.quote, text: draft.text, entry });
+        continue;
+      }
+      // A discarded piece stays discarded when another file repeats it.
+      const twin = profile.everything().find((existing) => isNearDuplicate(draft, existing));
       if (twin) {
         ids.set(i, twin.id);
         merged++;
@@ -505,14 +513,15 @@ export function createImportStore(deps: PreparationDeps, profile: ProfileStore):
 
     merges(id) {
       return db.prepare("SELECT m.*, p.id AS pid FROM import_merge m JOIN profile_piece p ON p.id = m.piece_id WHERE m.import_id = ? ORDER BY m.id").all(id)
-        .map((m) => {
-          const piece = profile.get(String(m.pid))!;
-          return {
+        .flatMap((m) => {
+          const piece = profile.get(String(m.pid));
+          if (!piece) return [];
+          return [{
             pieceId: piece.id,
             piece: piece.entry ? `${piece.entry.title}, ${piece.entry.organisation}` : piece.text,
             kept: piece.source,
             merged: { from: String(m.source_from), quote: m.source_quote == null ? null : String(m.source_quote), text: String(m.text) },
-          };
+          }];
         });
     },
   };

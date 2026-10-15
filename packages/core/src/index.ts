@@ -64,7 +64,7 @@ export type {
 export { pieceKinds, numberSources, entryLabel, unattachedGroupLabel, maxAchievementLength } from "./preparation/profile.ts";
 export type {
   ProfilePiece, PieceKind, PieceStatus, NumberSource, PieceEntry, PieceSource, PieceInput, PieceOrigin, PieceField, PieceFix,
-  PieceProblem, SavePieceResult, PieceQuery, PieceGroup, PieceList, DeletedPiece, ProfileSummary,
+  PieceProblem, SavePieceResult, PieceQuery, PieceGroup, PieceList, DeletedPiece, ProfileSummary, PieceDispute, PieceVersion, DisputeChoice,
 } from "./preparation/profile.ts";
 export { answerLanguages, answerCategories, answerKinds, answerModes, languageOf, minMatchConfidence, answerPageSize } from "./preparation/answers.ts";
 export type {
@@ -72,6 +72,8 @@ export type {
   AnswerSource, PortalEdit, PortalEditInput, AnswerChange, AnswerQuery, AnswerList, AnswerField, AnswerProblem, SaveAnswerResult, AnswerFill, AnswerMatch,
 } from "./preparation/answers.ts";
 export { angleRules } from "./preparation/angles.ts";
+export { setupSteps, draftFilters } from "./preparation/setup.ts";
+export type { SetupStep, SetupProgress, DraftFilter, DraftCounts, DraftGroup, DraftsToCheck, ConfirmGroupResult } from "./preparation/setup.ts";
 export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleResult, AngleProblem } from "./preparation/angles.ts";
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {

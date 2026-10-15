@@ -10,7 +10,8 @@ import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, ty
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
-import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
+import { createSetupStore, experienceOf, maxYearsFor, type ConfirmGroupResult, type DraftFilter, type DraftsToCheck, type SearchSuggestion, type SetupProgress, type SetupStep, type SetupSummary } from "./setup.ts";
+import { createProfileStore, type DisputeChoice, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
 export interface ProfileExport {
@@ -104,6 +105,32 @@ export interface PreparationEngine {
   resolveUnreadable(itemId: string, choice: UnreadableChoice): Promise<ResolveResult>;
   /** Every source an import merged into a piece already there ("See merges"). */
   importMerges(id: string): ImportMerge[];
+  // ---------- Setup (#55): check drafts, resume, search and done ----------
+
+  /** The check-drafts list: pieces under the filter grouped by role, with the filter counts. */
+  draftsToCheck(show?: DraftFilter): DraftsToCheck;
+  /** "Confirm N unflagged": confirms a role's unconfirmed pieces; flagged ones are never confirmed in bulk. */
+  confirmDrafts(groupId: string): ConfirmGroupResult;
+  /** Kris picked the version that's true of a piece whose sources disagree, or left it to the coach interview. */
+  resolveDispute(id: string, choice: DisputeChoice): SavePieceResult;
+  /** A drafted piece is wrong: it leaves the profile, and can be restored from Discarded. Null if there's no such piece. */
+  discardPiece(id: string): ProfilePiece | null;
+  restorePiece(id: string): ProfilePiece | null;
+  /** Undoes a Confirm: the piece waits to be checked again. */
+  unconfirmPiece(id: string): ProfilePiece | null;
+  /** Where Kris is in setup (or stopped), with the counts, so Setup reopens there. */
+  setupProgress(): SetupProgress;
+  setSetupStep(step: SetupStep): SetupProgress;
+  /** "Skip setup": a quick start; Setup stays where it was, to come back to. */
+  skipSetup(): SetupProgress;
+  /**
+   * "Your search": the search settings Kris saved, or, until she saves any, the defaults with the
+   * years asked filled from her role dates; and the experience they were read from.
+   */
+  searchSuggestion(): SearchSuggestion;
+  /** Setup's finish: the pieces, the angles (and the thinnest), and the answer bank. */
+  setupSummary(): SetupSummary;
+
   /** One piece, for editing; null once it's deleted. */
   piece(id: string): ProfilePiece | null;
   /** The master profile grouped by role (roles, then education, then pieces tied to neither), filtered. */
@@ -168,11 +195,15 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const imports = createImportStore(deps, profile);
   const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
   const answers = createAnswerStore(deps);
-  /** The salary floor in Kris's search settings (the discovery engine keeps them in the same database). */
-  const salaryFloor = () => {
+  const setup = createSetupStore({ db: deps.db, clock: deps.clock, profile });
+  /** A change made while checking drafts counts as Kris being in Setup. */
+  const touched = <T>(value: T): T => { setup.touch(); return value; };
+  /** Kris's search settings, once she saved any (the discovery engine keeps them in the same database). */
+  const savedSettings = () => {
     const stored = deps.db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
-    return (stored ? (JSON.parse(String(stored.value)) as SearchSettings) : defaultSearchSettings).minMonthlySalaryEur || null;
+    return stored ? (JSON.parse(String(stored.value)) as SearchSettings) : null;
   };
+  const salaryFloor = () => (savedSettings() ?? defaultSearchSettings).minMonthlySalaryEur || null;
   const seedAnswers = () => answers.seed(defaultAnswers(contact.get(), salaryFloor()));
   seedAnswers();
 
@@ -205,7 +236,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     closestAngle: (posting) => angles.closest(posting),
     savePiece: (input, origin) => profile.save(input, origin),
     deletePiece: (id) => profile.remove(id),
-    confirmPiece: (id) => profile.confirm(id),
+    confirmPiece: (id) => touched(profile.confirm(id)),
     startImport: (input) => imports.start(input),
     importStatus: (id) => imports.status(id),
     cancelImport: (id) => imports.cancel(id),
@@ -213,6 +244,32 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     resolveUnreadable: (itemId, choice) => imports.resolve(itemId, choice),
     importMerges: (id) => imports.merges(id),
     piece: (id) => profile.get(id),
+    draftsToCheck: (show) => setup.drafts(show),
+    confirmDrafts: (groupId) => setup.confirmGroup(groupId),
+    resolveDispute: (id, choice) => touched(profile.resolveDispute(id, choice)),
+    discardPiece: (id) => touched(profile.discard(id)),
+    restorePiece: (id) => touched(profile.restore(id)),
+    unconfirmPiece: (id) => touched(profile.unconfirm(id)),
+    setupProgress: () => setup.progress(),
+    setSetupStep: (step) => setup.goTo(step),
+    skipSetup: () => setup.skip(),
+    searchSuggestion() {
+      const saved = savedSettings();
+      const experience = experienceOf(profile.all(), deps.clock.now());
+      if (saved) return { settings: saved, saved: true, experience };
+      const base = defaultSearchSettings;
+      const maxYearsRequired = experience ? maxYearsFor(experience) : base.dealbreakers.maxYearsRequired;
+      return { settings: { ...base, dealbreakers: { ...base.dealbreakers, maxYearsRequired } }, saved: false, experience };
+    },
+    setupSummary() {
+      const views = angles.list();
+      const thinnest = views.reduce((a, b) => (b.available < a.available ? b : a), views[0]!);
+      return {
+        pieces: setup.progress().counts,
+        angles: { count: views.length, thinnest: thinnest?.label ?? null },
+        answerBank: answers.list().counts.all,
+      };
+    },
     listPieces: (query) => profile.list(query),
     profileSummary() {
       const s = profile.summary();

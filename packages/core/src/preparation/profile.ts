@@ -59,9 +59,30 @@ export interface ProfilePiece {
   alsoFrom: PieceSource[];
   /** Read by text recognition from a scan, which misreads: check it against the original. Cleared on Confirm. */
   checkThis: boolean;
+  /** Set while the sources it came from disagree (the piece is flagged until Kris picks a version). */
+  dispute: PieceDispute | null;
   createdAt: string;
   updatedAt: string;
 }
+
+/** One source's version of a piece its sources disagree about. */
+export interface PieceVersion {
+  from: string;
+  quote: string | null;
+  /** How that source words it (an achievement or skill), or the role's or education's facts. */
+  text: string;
+  entry: PieceEntry | null;
+}
+
+/** Sources that disagree about a piece: each version, the piece's own first. */
+export interface PieceDispute {
+  versions: PieceVersion[];
+  /** Kris passed the question to the coach interview instead of picking now. */
+  askCoach: boolean;
+}
+
+/** What Kris decided about a piece whose sources disagree: one version (its index) is true, or ask in the interview. */
+export type DisputeChoice = { version: number } | { askCoach: true };
 
 /** A new piece (no id) or an edit of one (its id). The source and status are kept on edit. */
 export interface PieceInput {
@@ -159,6 +180,21 @@ export function entryLabel(e: PieceEntry): string {
 
 export interface ProfileStore {
   save(input: PieceInput, origin?: PieceOrigin): SavePieceResult;
+  /** Another source words a drafted piece differently: the piece is flagged with every version, until Kris picks one. */
+  dispute(id: string, version: PieceVersion): void;
+  /** Kris picked the true version (it becomes the piece, unconfirmed and no longer flagged), or passed it to the coach. */
+  resolveDispute(id: string, choice: DisputeChoice): SavePieceResult;
+  /** Kris said a drafted piece is wrong: it leaves the profile but can be restored. */
+  discard(id: string): ProfilePiece | null;
+  restore(id: string): ProfilePiece | null;
+  /** Discarded pieces, oldest first. */
+  discarded(): ProfilePiece[];
+  /** Undoes a Confirm: the piece waits to be checked again. */
+  unconfirm(id: string): ProfilePiece | null;
+  /** Every piece, discarded ones too (import merges a repeat into a discarded piece, so it stays discarded). */
+  everything(): ProfilePiece[];
+  /** These pieces grouped by role, as the list groups them (a discarded role still heads its pieces). */
+  grouped(pieces: ProfilePiece[]): PieceGroup[];
   /** Kris checked the piece: it becomes confirmed, once it passes every check a confirmed piece must. */
   confirm(id: string): SavePieceResult;
   get(id: string): ProfilePiece | null;
@@ -189,15 +225,20 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     alsoFrom: db.prepare("SELECT source_from, source_quote FROM import_merge WHERE piece_id = ? ORDER BY id").all(String(r.id))
       .map((m) => ({ from: String(m.source_from), quote: m.source_quote == null ? null : String(m.source_quote) })),
     checkThis: Number(r.check_this ?? 0) === 1,
+    dispute: r.dispute == null ? null : (JSON.parse(String(r.dispute)) as PieceDispute),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   });
 
   const get = (id: string) => {
-    const r = db.prepare("SELECT * FROM profile_piece WHERE id = ?").get(id);
+    const r = db.prepare("SELECT * FROM profile_piece WHERE id = ? AND discarded_at IS NULL").get(id);
     return r ? rowToPiece(r) : null;
   };
-  const all = () => db.prepare("SELECT * FROM profile_piece ORDER BY rowid").all().map(rowToPiece);
+  const all = () => db.prepare("SELECT * FROM profile_piece WHERE discarded_at IS NULL ORDER BY rowid").all().map(rowToPiece);
+  const discardedPiece = (id: string) => {
+    const r = db.prepare("SELECT * FROM profile_piece WHERE id = ? AND discarded_at IS NOT NULL").get(id);
+    return r ? rowToPiece(r) : null;
+  };
 
   function save(input: PieceInput, origin?: PieceOrigin): SavePieceResult {
     const before = input.id ? get(input.id) : null;
@@ -216,6 +257,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
       source: before?.source ?? (origin ? { from: origin.from, quote: origin.quote } : handSource),
       alsoFrom: before?.alsoFrom ?? [],
       checkThis: before?.checkThis ?? origin?.checkThis ?? false,
+      dispute: before?.dispute ?? null,
       createdAt: before?.createdAt ?? clock.now().toISOString(),
       updatedAt: clock.now().toISOString(),
     };
@@ -230,22 +272,25 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
 
   function write(piece: ProfilePiece) {
     db.prepare(
-      `INSERT INTO profile_piece (id, kind, text, entry, belongs_to, tags, angles, number_source, status, source_from, source_quote, check_this, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO profile_piece (id, kind, text, entry, belongs_to, tags, angles, number_source, status, source_from, source_quote, check_this, dispute, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET kind = excluded.kind, text = excluded.text, entry = excluded.entry,
          belongs_to = excluded.belongs_to, tags = excluded.tags, angles = excluded.angles,
-         number_source = excluded.number_source, status = excluded.status, check_this = excluded.check_this,
+         number_source = excluded.number_source, status = excluded.status, source_from = excluded.source_from,
+         source_quote = excluded.source_quote, check_this = excluded.check_this, dispute = excluded.dispute,
          updated_at = excluded.updated_at`,
     ).run(
       piece.id, piece.kind, piece.text, piece.entry ? JSON.stringify(piece.entry) : null, piece.belongsTo,
       JSON.stringify(piece.tags), JSON.stringify(piece.angles), piece.numberSource, piece.status,
-      piece.source.from, piece.source.quote, piece.checkThis ? 1 : 0, piece.createdAt, piece.updatedAt,
+      piece.source.from, piece.source.quote, piece.checkThis ? 1 : 0, piece.dispute ? JSON.stringify(piece.dispute) : null,
+      piece.createdAt, piece.updatedAt,
     );
   }
 
   function confirm(id: string): SavePieceResult {
     const before = get(id);
     if (!before) return { saved: false, problems: [{ field: "kind", message: "This piece no longer exists. It may have been deleted.", fixes: [] }] };
+    if (before.dispute) return { saved: false, problems: [{ field: "text", message: "Your sources disagree about this piece. Pick the version that's true first.", fixes: [] }] };
     const piece: ProfilePiece = { ...before, status: "confirmed", checkThis: false, updatedAt: clock.now().toISOString() };
     const problems = [...required(piece, { ...piece }, true), ...check(piece, true)];
     if (problems.length > 0) return { saved: false, problems };
@@ -260,16 +305,20 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     const byKind = Object.fromEntries(pieceKinds.map((k) => [k, matching.filter((p) => p.kind === k).length])) as Record<PieceKind, number>;
     const shown = matching.filter((p) => !query.kind || p.kind === query.kind);
 
+    return { groups: grouped(shown, heads), total: pieces.length, confirmed: pieces.filter((p) => p.status === "confirmed").length, byKind };
+  }
+
+  /** Pieces grouped under their role or education (roles first, current first), then the ones tied to none. */
+  function grouped(shown: ProfilePiece[], heads = new Map(everything().filter((p) => p.entry).map((p) => [p.id, p]))): PieceGroup[] {
     const groupOf = (p: ProfilePiece) => (p.entry ? p.id : p.belongsTo && heads.has(p.belongsTo) ? p.belongsTo : "none");
     const order = [...heads.values()].sort(byEntry).map((h) => h.id).concat("none");
-    const groups = order
+    return order
       .map((id) => ({
         id,
         label: id === "none" ? unattachedGroupLabel : entryLabel(heads.get(id)!.entry!),
         pieces: shown.filter((p) => groupOf(p) === id).sort(inGroup),
       }))
       .filter((g) => g.pieces.length > 0);
-    return { groups, total: pieces.length, confirmed: pieces.filter((p) => p.status === "confirmed").length, byKind };
   }
 
   function remove(id: string): DeletedPiece {
@@ -288,7 +337,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
   }
 
   function summary(): ProfileSummary {
-    const rows = db.prepare("SELECT status, COUNT(*) AS n FROM profile_piece GROUP BY status").all();
+    const rows = db.prepare("SELECT status, COUNT(*) AS n FROM profile_piece WHERE discarded_at IS NULL GROUP BY status").all();
     const count = (status: PieceStatus) => Number(rows.find((r) => r.status === status)?.n ?? 0);
     const needsYou = { masterProfile: count("unconfirmed") + count("flagged"), angles: 0, answerBank: 0, voice: 0 };
     return {
@@ -299,7 +348,61 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     };
   }
 
-  return { save, confirm, get, all, list, remove, summary };
+  function dispute(id: string, version: PieceVersion) {
+    const before = get(id);
+    if (!before || before.status === "confirmed") return;
+    const own: PieceVersion = { from: before.source.from, quote: before.source.quote, text: before.text, entry: before.entry };
+    const versions = before.dispute?.versions ?? [own];
+    if (versions.some((v) => v.from === version.from && v.quote === version.quote)) return;
+    write({ ...before, status: "flagged", dispute: { versions: [...versions, version], askCoach: false }, updatedAt: clock.now().toISOString() });
+  }
+
+  function resolveDispute(id: string, choice: DisputeChoice): SavePieceResult {
+    const before = get(id);
+    const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });
+    if (!before) return refuse("This piece no longer exists. It may have been deleted.");
+    if (!before.dispute) return refuse("Your sources don't disagree about this piece any more.");
+    if ("askCoach" in choice) {
+      const piece = { ...before, dispute: { ...before.dispute, askCoach: true }, updatedAt: clock.now().toISOString() };
+      write(piece);
+      return { saved: true, piece };
+    }
+    const v = before.dispute.versions[choice.version];
+    if (!v) return refuse("That isn't one of the versions.");
+    // The picked version becomes the piece, a drafted one Kris confirms like any other.
+    const picked: ProfilePiece = {
+      ...before, text: v.text, entry: v.entry, source: { from: v.from, quote: v.quote }, status: "unconfirmed", dispute: null,
+      numberSource: quantities(v.text).length > 0 ? before.numberSource : null, updatedAt: clock.now().toISOString(),
+    };
+    write(picked);
+    return { saved: true, piece: picked };
+  }
+
+  function discard(id: string) {
+    const piece = get(id);
+    if (!piece) return null;
+    db.prepare("UPDATE profile_piece SET discarded_at = ?, updated_at = ? WHERE id = ?").run(clock.now().toISOString(), clock.now().toISOString(), id);
+    return piece;
+  }
+
+  function restore(id: string) {
+    if (!discardedPiece(id)) return null;
+    db.prepare("UPDATE profile_piece SET discarded_at = NULL, updated_at = ? WHERE id = ?").run(clock.now().toISOString(), id);
+    return get(id);
+  }
+
+  function unconfirm(id: string) {
+    const piece = get(id);
+    if (!piece || piece.status !== "confirmed") return piece;
+    const back = { ...piece, status: "unconfirmed" as const, updatedAt: clock.now().toISOString() };
+    write(back);
+    return back;
+  }
+
+  const discarded = () => db.prepare("SELECT * FROM profile_piece WHERE discarded_at IS NOT NULL ORDER BY rowid").all().map(rowToPiece);
+  const everything = () => db.prepare("SELECT * FROM profile_piece ORDER BY rowid").all().map(rowToPiece);
+
+  return { save, confirm, get, all, list, remove, summary, dispute, resolveDispute, discard, restore, discarded, unconfirm, everything, grouped };
 }
 
 /** What every piece needs before it can be saved: its text, or a role's or education's facts. */
