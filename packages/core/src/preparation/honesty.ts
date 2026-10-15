@@ -9,8 +9,9 @@
 //   isn't somewhere in the profile.
 // - Numbers: every number is in the cited pieces, within the rounding their number source allows;
 //   years of experience are at most what the cited roles' dates add up to.
-// - Soft rule: a "stronger" claim is a near-the-line edit. Until flags let Kris decide one (#64),
-//   it is held back and the piece's wording is used.
+// - Soft rule: a "stronger" claim is a near-the-line edit. It is held back (the piece's wording is
+//   used) and becomes a flag for Kris to decide (#64): the stronger draft is never offered, the
+//   writer's honest wording is, once it passes the hard rules, and so is Kris's own (checkWording).
 import type { TailoredCv, TailoredLine } from "../writing/writer.ts";
 import { closest, quantities, within } from "./numbers.ts";
 import type { NumberSource, ProfilePiece } from "./profile.ts";
@@ -40,7 +41,17 @@ export interface ValidatedLine {
   pieceIds: string[];
   /** Why it changed from the profile ("" when it didn't, or when it fell back). */
   why: string;
-  kept: { reason: "failed" | "near-the-line"; draft: string; problems: HonestyProblem[] } | null;
+  kept:
+    | { reason: "failed"; draft: string; problems: HonestyProblem[] }
+    | { reason: "near-the-line"; draft: string; problems: HonestyProblem[]; /** The writer's honest wording, when it passes the hard rules. */ honest: string | null }
+    | null;
+}
+
+/** A stronger summary held back for Kris's decision (the angle's summary stays meanwhile). */
+export interface HeldSummary {
+  draft: string;
+  honest: string | null;
+  pieceIds: string[];
 }
 
 export interface ValidatedCv {
@@ -58,6 +69,7 @@ export interface ValidatedCv {
   caught: Record<HonestyRule, number>;
   /** Stronger wordings held back for Kris's decision. */
   heldBack: number;
+  heldSummary: HeldSummary | null;
 }
 
 const norm = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim().replace(/[.;]$/, "").toLowerCase();
@@ -177,13 +189,34 @@ function roleProblems(role: TailoredCv["roles"][number], entry: NonNullable<Prof
   return changed;
 }
 
-export function validateCv(output: TailoredCv, profile: HonestyProfile): ValidatedCv {
+function contextOf(profile: HonestyProfile): Context {
   const usable = new Map(profile.pieces.filter((p) => p.status === "confirmed" || profile.packagePieces?.includes(p.id)).map((p) => [p.id, p]));
   const vocabulary = [
     ...[...usable.values()].flatMap((p) => [p.text, ...p.tags, ...(p.entry ? [p.entry.title, p.entry.organisation, p.entry.city ?? ""] : [])]),
     ...(profile.alsoNamed ?? []),
   ].join("\n").toLowerCase();
-  const ctx: Context = { usable, vocabulary, now: profile.now };
+  return { usable, vocabulary, now: profile.now };
+}
+
+/**
+ * The hard rules for one wording Kris (or the writer) offers for a line relying on these pieces:
+ * every problem, finishing "The wording …". Empty when it can be used.
+ */
+export function checkWording(text: string, pieceIds: readonly string[], profile: HonestyProfile): HonestyProblem[] {
+  if (!text.trim()) return [{ rule: "citation", message: "is empty" }];
+  return lineProblems({ text: text.trim(), pieceIds: [...pieceIds], claim: "reworded", why: "", honest: null }, contextOf(profile));
+}
+
+/** The writer's honest wording for a stronger line: offered only when it passes and is neither the piece's words nor the draft's. */
+function honestOf(line: TailoredLine, fallback: string | null, ctx: Context): string | null {
+  const honest = line.honest?.trim();
+  if (!honest || norm(honest) === norm(line.text) || (fallback !== null && norm(honest) === norm(fallback))) return null;
+  return lineProblems({ ...line, text: honest }, ctx).length === 0 ? honest : null;
+}
+
+export function validateCv(output: TailoredCv, profile: HonestyProfile): ValidatedCv {
+  const ctx = contextOf(profile);
+  const { usable } = ctx;
   const notes = output.notes.map((n) => n.trim()).filter(Boolean);
   const caught: Record<HonestyRule, number> = { role: 0, skill: 0, number: 0, citation: 0 };
   let heldBack = 0;
@@ -207,7 +240,10 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
       if (role !== null && fallback) {
         heldBack += 1;
         notes.push(`Held back a stronger wording for "${quoteOf(lineText(fallback))}": your profile's words are used until you decide.`);
-        return { text: lineText(fallback), pieceIds: [fallback.id], why: "", kept: { reason: "near-the-line", draft: line.text.trim(), problems: [] } };
+        return {
+          text: lineText(fallback), pieceIds: [fallback.id], why: "",
+          kept: { reason: "near-the-line", draft: line.text.trim(), problems: [], honest: honestOf(line, lineText(fallback), ctx) },
+        };
       }
     }
     if (own.length === 0) {
@@ -242,12 +278,14 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
   const summaryProblems = lineProblems(output.summary, ctx);
   const summaryPieces = output.summary.pieceIds.filter((id) => usable.has(id));
   let summary: ValidatedLine | null = null;
+  let heldSummary: HeldSummary | null = null;
   if (summaryProblems.length || summaryPieces.length === 0) {
     for (const p of summaryProblems) caught[p.rule] += 1;
     if (summaryPieces.length === 0 && !summaryProblems.some((p) => p.rule === "citation")) caught.citation += 1;
     notes.push(`Kept your angle's summary: the draft ${summaryProblems[0]?.message ?? "cites no piece from your profile"}.`);
   } else if (output.summary.claim === "stronger") {
     heldBack += 1;
+    heldSummary = { draft: output.summary.text.trim(), honest: honestOf(output.summary, null, ctx), pieceIds: summaryPieces };
     notes.push("Held back a stronger summary: your angle's summary is used until you decide.");
   } else {
     summary = { text: output.summary.text.trim(), pieceIds: summaryPieces, why: output.summary.why.trim(), kept: null };
@@ -268,5 +306,5 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
     .map((e) => ({ requirement: e.requirement, pieceIds: [...new Set(e.pieceIds.filter((id) => usable.has(id)))] }))
     .filter((e) => e.pieceIds.length > 0);
 
-  return { summary, roles, skills, evidence, notes, caught, heldBack };
+  return { summary, roles, skills, evidence, notes, caught, heldBack, heldSummary };
 }

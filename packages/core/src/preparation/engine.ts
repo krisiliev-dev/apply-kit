@@ -33,7 +33,7 @@ import type { DocumentToRender } from "../documents/content.ts";
 import { demoDocument, demoFileName, type DemoOptions } from "../documents/demo.ts";
 import type { PdfText, PreparationDeps } from "./ports.ts";
 import {
-  createPackageStore, type ApproveResult, type ChangeResult, type PackageChip, type PackageJob, type PackageStep, type PackageView,
+  createPackageStore, type ApproveResult, type ChangeResult, type FlagChoice, type LearnedPiece, type PackageChip, type PackageJob, type PackageStep, type PackageView,
   type PrepareStatus, type StartPackageResult,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
@@ -315,6 +315,27 @@ export interface PreparationEngine {
   fitCv(id: string, choiceId: string): Promise<ChangeResult>;
   /** The CV's current draft PDF, for the preview and the draft download. */
   packageCv(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
+
+  // ---------- Flags, gap questions and learned pieces (#64) ----------
+
+  /**
+   * Kris's decision on a flag of the CV version: one of its options (none is pre-selected, and the
+   * stronger wording is never one), or her own wording, checked against the profile first. A
+   * wording is printed on the CV; an approved CV step reopens. A decision can be changed.
+   */
+  decideFlag(id: string, flagId: string, choice: FlagChoice): Promise<ChangeResult>;
+  /**
+   * "I have experience the profile doesn't know about": Kris's answer to a gap's question goes to
+   * the coach, which writes a piece from it. The piece waits in Profile, unconfirmed and used only
+   * in this package; the line drafted from it comes back as a new flag before the CV changes.
+   */
+  answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
+  /** Profile › Learned during packages: pieces learned from answers in packages, waiting for Kris, newest first. */
+  learnedPieces(): LearnedPiece[];
+  /** A near-the-line learned piece: its suggested honest version becomes the piece, confirmed. */
+  keepHonestVersion(pieceId: string): SavePieceResult;
+  /** "Confirm the N unflagged": confirms the learned pieces that aren't near the line, never the ones that are. */
+  confirmLearnedPieces(): { confirmed: number; refused: { pieceId: string; message: string }[] };
 }
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
@@ -369,6 +390,8 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const packages = createPackageStore({
     ...deps,
     pieces: () => profile.all(),
+    savePiece: (input, origin) => profile.save(input, origin),
+    skipped: () => interview.skipped(),
     contact: () => contact.get(),
     closestAngle: (posting) => angles.closest(posting),
     draftDocument,
@@ -404,6 +427,28 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     redoCvChange: (id, changeId) => packages.redoChange(id, changeId),
     fitCv: (id, choiceId) => packages.fitCv(id, choiceId),
     packageCv: (id) => packages.cvFile(id),
+    decideFlag: (id, flagId, choice) => packages.decideFlag(id, flagId, choice),
+    answerGap: (id, flagId, answer) => packages.answerGap(id, flagId, answer),
+    learnedPieces: () => packages.learned(),
+    keepHonestVersion(pieceId) {
+      const learned = packages.learned().find((l) => l.piece.id === pieceId);
+      const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });
+      if (!learned?.nearTheLine?.honest) return refuse("There's no suggested honest version for this piece.");
+      const p = learned.piece;
+      const revised = profile.revise(p.id, { id: p.id, kind: p.kind, text: learned.nearTheLine.honest, entry: p.entry, belongsTo: p.belongsTo, tags: p.tags, angles: p.angles, numberSource: p.numberSource }, { ...p.source, status: "unconfirmed" });
+      return revised.saved ? profile.confirm(p.id) : revised;
+    },
+    confirmLearnedPieces() {
+      let confirmed = 0;
+      const refused: { pieceId: string; message: string }[] = [];
+      for (const l of packages.learned()) {
+        if (l.piece.status !== "unconfirmed") continue;
+        const r = profile.confirm(l.piece.id);
+        if (r.saved) confirmed++;
+        else refused.push({ pieceId: l.piece.id, message: r.problems[0]!.message });
+      }
+      return { confirmed, refused };
+    },
     budget: () => deps.budget.info(),
     draftDocument,
     demoDocument: (options) => draftDocument({ packageId: "demo", document: demoDocument(options), fileName: demoFileName }),
@@ -452,7 +497,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     profileSummary() {
       const s = profile.summary();
       const needsYou = { ...s.needsYou, answerBank: answers.needsYou() };
-      return { ...s, needsYou, needsYouTotal: Object.values(needsYou).reduce((a, b) => a + b, 0) };
+      return { ...s, needsYou, needsYouTotal: Object.values(needsYou).reduce((a, b) => a + b, 0), learned: packages.learned().length };
     },
     saveAnswer: (input, origin) => answers.save(input, origin),
     answer: (id) => answers.get(id),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateCv, type HonestyProfile, type ProfilePiece, type TailoredCv, type TailoredLine } from "../src/index.ts";
+import { checkWording, validateCv, type HonestyProfile, type ProfilePiece, type TailoredCv, type TailoredLine } from "../src/index.ts";
 
 // The honesty validator (spec #51, ticket #63): every line the writer returns is held to the master
 // profile, whatever the model says about its own claims. Tables of recorded-style outputs; made-up
@@ -27,7 +27,7 @@ const pieces: ProfilePiece[] = [
 ];
 const profile: HonestyProfile = { pieces, alsoNamed: ["Kestrel Payments"], now: new Date(at) };
 
-const line = (text: string, pieceIds: string[], claim: TailoredLine["claim"] = "reworded"): TailoredLine => ({ text, pieceIds, claim, why: "" });
+const line = (text: string, pieceIds: string[], claim: TailoredLine["claim"] = "reworded", honest: string | null = null): TailoredLine => ({ text, pieceIds, claim, why: "", honest });
 const analystRole = (bullets: TailoredLine[], facts: Partial<TailoredCv["roles"][number]> = {}): TailoredCv["roles"][number] => ({
   pieceId: "analyst", title: "Security Analyst", employer: "Northwind Bank", start: "2022-03", end: null, bullets, why: "", ...facts,
 });
@@ -119,14 +119,48 @@ describe("lines: every claim traces to the pieces it cites", () => {
     expect(v.caught).toMatchObject({ citation: 1, role: 1 });
   });
 
-  it("holds back a stronger wording for Kris's decision, using the piece's own words", () => {
-    const v = bulletsOf([line("Led detection engineering: 30 rules that cut false alerts by about a third", ["detections"], "stronger")]);
+  it("holds back a stronger wording for Kris's decision, using the piece's own words, with the writer's honest wording", () => {
+    const v = bulletsOf([line("Led detection engineering: 30 rules that cut false alerts by about a third", ["detections"], "stronger", "Wrote 30 detection rules for the SOC that cut false alerts by about a third")]);
     expect(v.roles[0]!.bullets[0]).toEqual({
       text: "Wrote 30 detection rules that cut false alerts by about a third", pieceIds: ["detections"], why: "",
-      kept: { reason: "near-the-line", draft: "Led detection engineering: 30 rules that cut false alerts by about a third", problems: [] },
+      kept: {
+        reason: "near-the-line", draft: "Led detection engineering: 30 rules that cut false alerts by about a third", problems: [],
+        honest: "Wrote 30 detection rules for the SOC that cut false alerts by about a third",
+      },
     });
     expect(v.heldBack).toBe(1);
     expect(v.notes).toEqual(["Held back a stronger wording for \"Wrote 30 detection rules that cut false alerts by about a…\": your profile's words are used until you decide."]);
+  });
+
+  it.each([
+    ["breaks a hard rule", "Wrote 45 detection rules that cut false alerts by about a third"],
+    ["is the piece's own wording", "Wrote 30 detection rules that cut false alerts by about a third."],
+    ["is the stronger draft again", "Led detection engineering: 30 rules that cut false alerts by about a third"],
+  ])("never offers an honest wording that %s", (_, honest) => {
+    const v = bulletsOf([line("Led detection engineering: 30 rules that cut false alerts by about a third", ["detections"], "stronger", honest)]);
+    expect(v.roles[0]!.bullets[0]!.kept).toMatchObject({ reason: "near-the-line", honest: null });
+  });
+});
+
+describe("Kris's own wording (#64)", () => {
+  it("passes a wording that keeps to the pieces it relies on", () => {
+    expect(checkWording("Wrote 30 Wazuh detection rules, cutting false alerts by about a third", ["detections"], profile)).toEqual([]);
+  });
+
+  it.each([
+    ["a number its pieces don't back", "Wrote 60 detection rules", "number", "says \"60\", which its piece doesn't back"],
+    ["a name that isn't in the profile", "Wrote 30 detection rules in Splunk", "skill", "names \"Splunk\", which isn't in your profile"],
+  ])("refuses %s, saying why", (_, text, rule, message) => {
+    expect(checkWording(text, ["detections"], profile)).toEqual([{ rule, message }]);
+  });
+
+  it("refuses an empty wording", () => {
+    expect(checkWording("  ", ["detections"], profile)).toEqual([{ rule: "citation", message: "is empty" }]);
+  });
+
+  it("uses an unconfirmed piece learned in this package, and only then", () => {
+    expect(checkWording("Hardened Kubernetes clusters", ["draft"], profile)).toEqual(expect.arrayContaining([expect.objectContaining({ rule: "citation" })]));
+    expect(checkWording("Hardened Kubernetes clusters", ["draft"], { ...profile, packagePieces: ["draft"] })).toEqual([]);
   });
 });
 
@@ -137,6 +171,13 @@ describe("the summary", () => {
     const over = validateCv(output({ summary: line("Security analyst with 6+ years in security operations.", ["analyst"]) }), profile);
     expect(over.summary).toBeNull();
     expect(over.notes).toEqual(["Kept your angle's summary: the draft says \"6+ years\", which its piece doesn't back."]);
+  });
+
+  it("holds back a stronger summary for Kris's decision, with the writer's honest wording", () => {
+    const v = validateCv(output({ summary: line("Detection engineering lead at a bank.", ["detections"], "stronger", "Security analyst who writes detection rules at a bank.") }), profile);
+    expect(v.summary).toBeNull();
+    expect(v.heldSummary).toEqual({ draft: "Detection engineering lead at a bank.", honest: "Security analyst who writes detection rules at a bank.", pieceIds: ["detections"] });
+    expect(v.heldBack).toBe(1);
   });
 });
 

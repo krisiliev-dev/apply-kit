@@ -427,3 +427,5 @@ h2[tabindex="-1"]:focus { outline: none }
 .package-page .cv-lines ul { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
 .package-page legend:focus { outline: 2px solid var(--focus); outline-offset: 2px }
 .package-page legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
+/* Profile › Learned during packages (#64): a near-the-line piece's choice, as in the hi-fi */
+.piece fieldset legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }

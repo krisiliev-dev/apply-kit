@@ -78,12 +78,17 @@ export interface TailorCvInput {
   }[];
 }
 
-/** One line of a tailored CV: its words, the piece ids it relies on, how its claim compares to them, and why it changed ("" when it didn't). */
+/**
+ * One line of a tailored CV: its words, the piece ids it relies on, how its claim compares to them,
+ * and why it changed ("" when it didn't). A "stronger" line also gives the wording that keeps to
+ * what its pieces state (`honest`), for Kris to choose instead; null otherwise.
+ */
 const tailoredLine = z.object({
   text: z.string(),
   pieceIds: z.array(z.string()),
   claim: z.enum(["as-written", "reworded", "stronger"]),
   why: z.string(),
+  honest: z.string().nullable(),
 });
 export type TailoredLine = z.infer<typeof tailoredLine>;
 

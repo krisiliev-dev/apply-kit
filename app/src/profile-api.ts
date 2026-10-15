@@ -43,6 +43,20 @@ export function mountProfileApi(app: Hono, preparation: PreparationEngine): void
     return result.deleted ? c.json(result) : c.json({ error: "No such piece. It may have been deleted already." }, 404);
   });
 
+  // Profile › Learned during packages (#64): pieces from answers in packages, waiting for Kris.
+  app.get("/api/profile/learned", (c) => c.json(preparation.learnedPieces()));
+  // "Confirm the N unflagged": never a near-the-line piece.
+  app.post("/api/profile/learned/confirm", (c) => {
+    if (!jsonOnly(c)) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return c.json(preparation.confirmLearnedPieces());
+  });
+  // A near-the-line learned piece: keep its suggested honest version (confirmed).
+  app.post("/api/profile/learned/:id/honest", (c) => {
+    if (!jsonOnly(c)) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    const result = preparation.keepHonestVersion(c.req.param("id"));
+    return c.json(result, result.saved ? 200 : 422);
+  });
+
   app.get("/api/profile/angles", (c) => c.json(preparation.angles()));
 
   // { summary?, leads? }: a new summary line, a new lead order (piece ids), or both.
