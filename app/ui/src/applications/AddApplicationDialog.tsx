@@ -6,6 +6,7 @@ import type { AddApplicationResult, AddField, ApplicationSummary, JobChoice, Sta
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { addApplication, findJobsToApply } from "../api.ts";
 import { longDay, shortDay, statusLabel, todaySofia } from "./words.ts";
+import { applicationHref } from "./markers.tsx";
 
 /** Statuses an Application can be added in. Accepted goes through the offer step instead. */
 const addable: Status[] = ["applied", "screening", "interviewing", "offer", "rejected", "withdrawn"];
@@ -235,10 +236,10 @@ export function AddApplicationDialog({ chosen, onAdded, onCancel, onOpenExisting
           <div className="banner info" role="alert">
             <span className="text">{existing.message} Nothing was added.</span>
             <a
-              className="btn sm" id={id("existing")} href={`/applications#app-${encodeURIComponent(existing.application.id)}`}
+              className="btn sm" id={id("existing")} href={applicationHref(existing.application.id)}
               onClick={(e) => { if (onOpenExisting) { e.preventDefault(); close(() => onOpenExisting(existing.application)); } }}
             >
-              Open it in Applications
+              Open that application
             </a>
           </div>
         )}

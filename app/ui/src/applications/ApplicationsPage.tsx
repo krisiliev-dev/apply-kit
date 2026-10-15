@@ -204,7 +204,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     });
   }, [all, focusApplication]);
 
-  // A link to one Application (#app-<id>), as "Add application" gives when one is already open.
+  // An older link to one Application in the list (#app-<id>): revealed and highlighted there.
   useEffect(() => {
     const fromHash = () => {
       const m = /^#app-(.+)$/.exec(window.location.hash);
