@@ -2,8 +2,11 @@
 // interface. Fake clock (starts Mon 12 Oct 2026, 10:30 in Sofia), in-memory database, a fake Track
 // assistant answering with recorded outputs and a fake Master profile. Made-up people and companies.
 import { describe, expect, it } from "vitest";
-import { createTracker, type Status } from "../src/index.ts";
-import { createTestEngine } from "./harness.ts";
+import {
+  createTracker, type EmailClassification, type MasterProfile, type PrepSheetDraft, type PrepSheetInput, type ProfileStory, type Status,
+  type TrackAssistant, type Tracker as TrackerApi,
+} from "../src/index.ts";
+import { createTestEngine, fakeClock, fakeMailbox, loadFixture, mailMessage } from "./harness.ts";
 
 const day = 24 * 60 * 60 * 1000;
 
@@ -146,5 +149,104 @@ describe("the interview as a calendar file (.ics)", () => {
 
     const { interview: none } = await tracker.setInterview(id, { ...at("2026-11-02T10:00"), start: null });
     expect(await tracker.interviewIcs(none.id)).toBeNull();
+  });
+});
+
+type Recorded = { email: Parameters<typeof mailMessage>[0]; classification: EmailClassification };
+const recorded = (JSON.parse(loadFixture("track-mail/emails.json")) as { emails: Record<string, Recorded> }).emails;
+
+/** The fake Track assistant: recorded classifications per Message-ID, and the given prep sheet output. */
+function fakeAssistant(prep: (input: PrepSheetInput) => PrepSheetDraft = () => ({ facts: [], questions: [] }), costUsd = 0.001) {
+  const byId = new Map(Object.values(recorded).map((r) => [r.email.id, r.classification]));
+  const prepCalls: PrepSheetInput[] = [];
+  const assistant: TrackAssistant = {
+    estimateClassifyUsd: () => costUsd,
+    async classify(input) {
+      const classification = byId.get(input.messageId);
+      if (!classification) throw new Error(`no recorded classification for ${input.messageId}`);
+      return { classification, costUsd, model: "fake/track-assistant" };
+    },
+    estimatePrepSheetUsd: () => costUsd,
+    async buildPrepSheet(input) {
+      prepCalls.push(input);
+      return { sheet: prep(input), costUsd, model: "fake/track-assistant" };
+    },
+  };
+  return { assistant, prepCalls };
+}
+
+/** A Master profile held in memory: its confirmed stories, and the unconfirmed pieces handed to it. */
+function fakeProfile(stories: ProfileStory[]) {
+  const added: { text: string; source: string }[] = [];
+  const profile: MasterProfile = {
+    stories: async () => stories,
+    async addUnconfirmedPiece(piece) { added.push(piece); return { id: `piece-${added.length}` }; },
+  };
+  return { profile, added };
+}
+
+/** Discover and Track on one database and one mailbox read per check, as the service wires them. */
+function withMail({ cap = 10, prep, stories = [] }: { cap?: number; prep?: (input: PrepSheetInput) => PrepSheetDraft; stories?: ProfileStory[] } = {}) {
+  const clock = fakeClock();
+  const mailbox = fakeMailbox(clock);
+  const ai = fakeAssistant(prep);
+  const me = fakeProfile(stories);
+  let tracker: TrackerApi | null = null;
+  const t = createTestEngine({ clock, mailReader: mailbox, aiMonthlyCapUsd: cap, onMailStored: (emails) => tracker!.processMail(emails) });
+  tracker = createTracker({ db: t.deps.db, clock, discovery: t.engine, assistant: ai.assistant, aiMonthlyCapUsd: cap, profile: me.profile });
+  const receive = async (iso: string, ...names: string[]) => {
+    for (const n of names) mailbox.deliver(mailMessage(recorded[n]!.email));
+    clock.set(iso);
+    await t.engine.checkAll();
+  };
+  return { ...t, clock, tracker: tracker as TrackerApi, ai, me, receive };
+}
+
+describe("interview details from the invite email", () => {
+  it("are pre-filled from a confidently matched invitation, shown as read from the invite email", async () => {
+    const { tracker, receive } = withMail();
+    const id = await add(tracker as Tracker, { company: "Varna Trust Bank", title: "Специалист информационна сигурност", status: "applied" });
+
+    await receive("2026-10-13T06:00:00Z", "bulgarian-call");
+
+    const app = (await tracker.get(id))!;
+    expect(app.status).toBe("screening");
+    expect(app.interviews).toEqual([expect.objectContaining({
+      start: "2026-10-15T10:00", timeZone: "Europe/Sofia", startAt: "2026-10-15T07:00:00.000Z", endAt: "2026-10-15T08:00:00.000Z",
+      format: "phone", people: ["Галина Иванова"], round: "Short phone call",
+      readFrom: expect.objectContaining({ emailId: "<call-1@varnatrust.example>", subject: "Покана за телефонен разговор" }),
+    })]);
+    expect(app.timeline.map((e) => `${e.kind}:${e.cause}`).slice(0, 2)).toEqual(["email:email", "interview:email"]);
+    expect(app.nextStep).toMatchObject({ kind: "interview", text: "Interview Thu 15 Oct, 10:00 Sofia time" });
+  });
+
+  it("come with an invitation you match yourself, in the time zone it names; editing them makes them yours", async () => {
+    const { tracker, receive } = withMail();
+    const id = await add(tracker as Tracker, { company: "Ostwind Cloud", title: "Cloud Security Engineer", status: "screening" });
+
+    await receive("2026-10-16T09:00:00Z", "second-invitation");
+    await tracker.answerEmail("<inv-2@nimbus-cloud.example>", { choice: "application", applicationId: id, move: true });
+
+    const [interview] = (await tracker.get(id))!.interviews;
+    expect(interview).toMatchObject({
+      start: "2026-10-20T14:00", end: "2026-10-20T15:00", timeZone: "Europe/Berlin", startAt: "2026-10-20T12:00:00.000Z",
+      round: "Technical interview", notes: "The email says 14:00 CET.", readFrom: { subject: "Next round: technical interview" }, editedAt: null,
+    });
+
+    await tracker.setInterview(id, { ...interview!, interviewId: interview!.id, people: ["Ivo Marinov", "Dara Kim"] });
+
+    expect((await tracker.get(id))!.interviews[0]).toMatchObject({ people: ["Ivo Marinov", "Dara Kim"], readFrom: null, editedAt: "2026-10-16T09:00:00.000Z" });
+  });
+
+  it("an invitation without a time gives an interview to fill in, and no thank-you note", async () => {
+    const { tracker, receive, clock } = withMail();
+    const id = await add(tracker as Tracker, { company: "Northwind Labs", title: "Security Engineer", status: "applied", contact: "northwind-labs.example" });
+
+    await receive("2026-10-14T12:00:00Z", "late-screening-invitation");
+    await clock.advance(5 * day);
+
+    const app = (await tracker.get(id))!;
+    expect(app.interviews).toEqual([expect.objectContaining({ start: null, startAt: null, people: ["Mira Petrova"], round: "20-minute intro call" })]);
+    expect(app.thankYous).toEqual([]);
   });
 });
