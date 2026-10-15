@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PackageJob, PieceInput, TailoredCv } from "../src/index.ts";
+import type { CoachTurn, CoachTurnInput, PackageJob, PieceInput, TailoredCv, WriterRequest } from "../src/index.ts";
 import { memoryDb } from "./harness.ts";
 import { createTestPreparation, fakeRenderer, fakeWriter, recordedTailoredCv } from "./preparation-harness.ts";
 
@@ -17,10 +17,10 @@ function recordedFor(ids: Record<string, string>, edit: (cv: TailoredCv) => void
 }
 
 /** Mira Petrova's made-up master profile: one security role with results, a skill and a degree. */
-function miraProfile(options: Parameters<typeof createTestPreparation>[0] & { tailor?: (cv: TailoredCv) => void } = {}) {
+function miraProfile(options: Parameters<typeof createTestPreparation>[0] & { tailor?: (cv: TailoredCv) => void; coach?: (input: CoachTurnInput, ids: Record<string, string>) => CoachTurn } = {}) {
   const ids: Record<string, string> = {};
-  const { tailor, ...rest } = options;
-  const t = createTestPreparation({ writer: fakeWriter({ tailorCv: () => recordedFor(ids, tailor) }), ...rest });
+  const { tailor, coach, ...rest } = options;
+  const t = createTestPreparation({ writer: fakeWriter({ tailorCv: () => recordedFor(ids, tailor), coachTurn: coach && ((input) => coach(input, ids)) }), ...rest });
   const save = (key: string, input: PieceInput) => {
     const r = t.preparation.savePiece(input);
     if (!r.saved) throw new Error(`${key}: ${r.problems[0]!.message}`);
@@ -711,5 +711,215 @@ describe("near-the-line flags (#64)", () => {
     expect(pkg.cvVersion!.honesty.find((c) => c.state === "line")).toEqual({
       id: `flag:${pkg.cvVersion!.flags[0]!.id}`, state: "line", label: "Near-the-line edit: \"Led detection engineering: 30 rules that cut false alerts…\"", detail: "Decide it above.",
     });
+  });
+});
+
+/** Kestrel's posting asking for Kubernetes security, which Mira's profile has no evidence for, and a preferred CISSP. */
+const kubernetesJob = (overrides: Partial<PackageJob> = {}) => kestrelJob({
+  requirements: [
+    { text: "Incident response", kind: "required", category: "skill" },
+    { text: "Kubernetes security", kind: "required", category: "skill" },
+    { text: "CISSP", kind: "preferred", category: "certificate" },
+  ],
+  ...overrides,
+});
+
+const kubernetesAnswer = "At Northwind I locked down our Kubernetes test cluster with network policies, once.";
+
+/** The coach writes one achievement under the analyst role from Kris's answer (`text` is its wording). */
+const coachWrites = (text = "Locked down a Kubernetes test cluster with network policies", claim: "as-said" | "stronger" = "as-said", honest: string | null = null) =>
+  (input: CoachTurnInput, ids: Record<string, string>): CoachTurn => ({
+    reply: "Thanks, I'll write that down.", ask: "", followUp: false, answer: null,
+    pieces: [{
+      turn: input.asked!.lines.at(-1)!.id, updates: null, kind: "achievement", text, entry: null, role: ids.analyst!, tags: ["Kubernetes"],
+      angles: ["security"], numberSource: null, claim, honest,
+    }],
+  });
+
+/** What the writer was asked to tailor from, for the last CV it wrote. */
+const lastTailorInput = (t: ReturnType<typeof miraProfile>) => {
+  const calls = (t.writer as unknown as { calls: WriterRequest[] }).calls.filter((c) => c.task === "tailor-cv");
+  return calls.at(-1)!.input as { pieces: { id: string }[] };
+};
+
+describe("gap flags and gap questions (#64)", () => {
+  it("a required item with no evidence is a gap flag with three options, none pre-selected; a preferred one is never a gap", async () => {
+    const t = miraProfile();
+
+    const pkg = await started(t, kubernetesJob());
+
+    expect(pkg.cvVersion!.flags).toEqual([{
+      id: expect.any(String), kind: "gap", requirement: 1,
+      title: "Kubernetes security gap",
+      heading: "Kubernetes security is required and your profile has no evidence for it.",
+      detail: "Gaps are never covered up: it stays off the CV unless you have real experience to add.",
+      piece: null, draft: null, notOffered: null, ownWording: false, answer: null, decision: null,
+      options: [
+        { id: "letter", label: "Name it in the cover letter as something to learn", holdsUp: "One honest sentence; interviewers tend to ask about a gap anyway." },
+        { id: "leave-out", label: "Leave it out of both", holdsUp: "The CV and letter don't mention it. You'll likely be asked in the interview." },
+        { id: "experience", label: "I have experience the profile doesn't know about", holdsUp: expect.stringContaining("comes back here as a flag for you to approve") },
+      ],
+      question: { text: "What did you do with Kubernetes security?", help: "Where, when and what you did. \"Once, in a side project\" is a fine answer." },
+    }]);
+  });
+
+  it("naming the gap in the letter decides it, and the decision carries into the package's decisions", async () => {
+    const t = miraProfile();
+    const pkg = await started(t, kubernetesJob());
+    const gap = pkg.cvVersion!.flags[0]!;
+    t.preparation.approveStep(pkg.id, "target");
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({
+      approved: false, flagId: gap.id, reason: "The CV can't be approved yet: 1 flag is still open. Kubernetes security has no evidence in your profile. Choose how to handle the gap.",
+    });
+
+    const r = await t.preparation.decideFlag(pkg.id, gap.id, { option: "letter" });
+
+    expect(r.package.cvVersion!.decisions).toEqual([{ flagId: gap.id, title: "Kubernetes security gap", decision: "Named in the cover letter as something to learn", at: expect.any(String) }]);
+    expect(r.package.cvVersion!.honesty.find((c) => c.id === "gap:1")).toMatchObject({ detail: "Left off the CV. You chose: named in the cover letter as something to learn." });
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: true });
+  });
+
+  it("a gap answer becomes an unconfirmed piece for this package, and its line comes back as a new flag before the CV changes", async () => {
+    const t = miraProfile({ coach: coachWrites() });
+    const pkg = await started(t, kubernetesJob());
+    const gap = pkg.cvVersion!.flags[0]!;
+    const before = await printedCv(t, pkg.id);
+
+    const r = await t.preparation.answerGap(pkg.id, gap.id, kubernetesAnswer);
+
+    expect(r).toMatchObject({ changed: true });
+    const coachCall = (t.writer as unknown as { calls: WriterRequest[] }).calls.find((c) => c.task === "coach-turn")!;
+    expect(coachCall.input).toMatchObject({ asked: { topic: { kind: "skill", skill: "Kubernetes security" }, lines: [{ who: "coach", text: "What did you do with Kubernetes security?" }, { who: "you", text: kubernetesAnswer }] }, next: null });
+    const [decided, learned] = r.package.cvVersion!.flags;
+    expect(decided).toMatchObject({ id: gap.id, answer: kubernetesAnswer, decision: { option: "experience", label: `Told the coach: "${kubernetesAnswer.slice(0, 57).replace(/ \S*$/, "")}…"` } });
+    expect(learned).toMatchObject({
+      kind: "learned", requirement: 1, title: "New line for Kubernetes security", decision: null, ownWording: true,
+      options: [
+        { id: "use", label: "Locked down a Kubernetes test cluster with network policies", holdsUp: expect.any(String) },
+        { id: "leave-out", label: "Don't use it on this CV", holdsUp: expect.any(String) },
+      ],
+    });
+    // The CV hasn't changed: the line waits for Kris's decision, and the step can't be approved.
+    expect(await printedCv(t, pkg.id)).toBe(before);
+    t.preparation.approveStep(pkg.id, "target");
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: false, flagId: learned!.id });
+    // The piece waits in Profile, unconfirmed, with the question and Kris's own answer.
+    expect(t.preparation.learnedPieces()).toEqual([{
+      piece: expect.objectContaining({ text: "Locked down a Kubernetes test cluster with network policies", status: "unconfirmed", source: { from: "Kestrel Payments package", quote: kubernetesAnswer } }),
+      packageId: pkg.id, jobId: "job-kestrel", job: "Security Engineer at Kestrel Payments", company: "Kestrel Payments",
+      question: "What did you do with Kubernetes security?", answer: kubernetesAnswer, learnedAt: expect.any(String), nearTheLine: null,
+    }]);
+    expect(t.preparation.profileSummary()).toMatchObject({ learned: 1 });
+  });
+
+  it("using the line adds it to this CV; the piece stays out of every other package until it's confirmed in Profile", async () => {
+    const t = miraProfile({ coach: coachWrites() });
+    const pkg = await started(t, kubernetesJob());
+    const r0 = await t.preparation.answerGap(pkg.id, pkg.cvVersion!.flags[0]!.id, kubernetesAnswer);
+    const learned = r0.package.cvVersion!.flags[1]!;
+
+    const r = await t.preparation.decideFlag(pkg.id, learned.id, { option: "use" });
+
+    expect(r.package.cvVersion!.roles[0]!.bullets.map((b) => b.text)).toContain("Locked down a Kubernetes test cluster with network policies");
+    expect(await printedCv(t, pkg.id)).toContain("Locked down a Kubernetes test cluster with network policies");
+    expect(r.package.cvVersion!.changes.at(-1)).toMatchObject({ origin: "decision", label: "Bullet added from your answer", flagId: learned.id });
+    const pieceId = t.preparation.learnedPieces()[0]!.piece.id;
+    expect(r.package.cvVersion!.evidence[1]!.pieces.map((p) => p.id)).toContain(pieceId);
+
+    // Another job's package can't use it while it's unconfirmed.
+    await started(t, kubernetesJob({ id: "job-halden", company: "Halden Systems" }));
+    expect(lastTailorInput(t).pieces.map((p) => p.id)).not.toContain(pieceId);
+
+    // Confirmed in Profile, it's in the master profile for the next package.
+    expect(t.preparation.confirmPiece(pieceId)).toMatchObject({ saved: true });
+    expect(t.preparation.learnedPieces()).toEqual([]);
+    const next = await started(t, kubernetesJob({ id: "job-orbital", company: "Orbital Pay" }));
+    expect(lastTailorInput(t).pieces.map((p) => p.id)).toContain(pieceId);
+    expect(next.cvVersion!.flags.some((f) => f.kind === "gap")).toBe(false);
+  });
+
+  it("discarding a learned piece in Profile never changes the package it was used in", async () => {
+    const t = miraProfile({ coach: coachWrites() });
+    const pkg = await started(t, kubernetesJob());
+    const r0 = await t.preparation.answerGap(pkg.id, pkg.cvVersion!.flags[0]!.id, kubernetesAnswer);
+    await t.preparation.decideFlag(pkg.id, r0.package.cvVersion!.flags[1]!.id, { option: "use" });
+    const printed = await printedCv(t, pkg.id);
+
+    t.preparation.discardPiece(t.preparation.learnedPieces()[0]!.piece.id);
+
+    expect(await printedCv(t, pkg.id)).toBe(printed);
+    expect(t.preparation.package(pkg.id)!.cvVersion!.roles[0]!.bullets.map((b) => b.text)).toContain("Locked down a Kubernetes test cluster with network policies");
+    expect(t.preparation.learnedPieces()).toEqual([]);
+  });
+
+  it("deciding the gap another way drops the line from the answer; the piece still waits in Profile", async () => {
+    const t = miraProfile({ coach: coachWrites() });
+    const pkg = await started(t, kubernetesJob());
+    const gap = pkg.cvVersion!.flags[0]!;
+    const r0 = await t.preparation.answerGap(pkg.id, gap.id, kubernetesAnswer);
+    await t.preparation.decideFlag(pkg.id, r0.package.cvVersion!.flags[1]!.id, { option: "use" });
+
+    const r = await t.preparation.decideFlag(pkg.id, gap.id, { option: "leave-out" });
+
+    expect(r.package.cvVersion!.flags.map((f) => f.kind)).toEqual(["gap"]);
+    expect(await printedCv(t, pkg.id)).not.toContain("Kubernetes test cluster");
+    expect(t.preparation.learnedPieces()).toHaveLength(1);
+  });
+
+  it("an answer the coach couldn't write a line from leaves the gap open", async () => {
+    const t = miraProfile({ coach: () => ({ reply: "", ask: "", followUp: false, answer: null, pieces: [] }) });
+    const pkg = await started(t, kubernetesJob());
+    const gap = pkg.cvVersion!.flags[0]!;
+    expect(await t.preparation.answerGap(pkg.id, gap.id, "  ")).toMatchObject({ changed: false, reason: "Say what you did first. A short answer is fine." });
+
+    const r = await t.preparation.answerGap(pkg.id, gap.id, "Not really, I read about it.");
+
+    expect(r).toMatchObject({ changed: false, reason: "The coach couldn't write a line from that answer that keeps to your words. Add where and what you did, or choose another option." });
+    expect(r.package.cvVersion!.flags).toEqual([expect.objectContaining({ id: gap.id, answer: "Not really, I read about it.", decision: null })]);
+  });
+});
+
+describe("Profile › Learned during packages (#64)", () => {
+  /** The coach words Mira's answer more strongly than she did, with the wording that keeps to it. */
+  async function nearTheLineAnswer() {
+    const t = miraProfile({ coach: coachWrites("Led the hardening of the bank's Kubernetes clusters", "stronger", "Locked down a Kubernetes test cluster with network policies") });
+    const pkg = await started(t, kubernetesJob());
+    const r = await t.preparation.answerGap(pkg.id, pkg.cvVersion!.flags[0]!.id, kubernetesAnswer);
+    return { t, pkg: r.package };
+  }
+
+  it("a learned piece that says more than the answer is flagged, with the honest version offered and the stronger one never", async () => {
+    const { t, pkg } = await nearTheLineAnswer();
+
+    expect(pkg.cvVersion!.flags[1]).toMatchObject({
+      kind: "learned",
+      options: [{ id: "use", label: "Locked down a Kubernetes test cluster with network policies" }, { id: "leave-out" }],
+      notOffered: "\"Led the hardening of the bank's Kubernetes clusters\" isn't offered: it says more than your answer did.",
+    });
+    expect(t.preparation.learnedPieces()[0]).toMatchObject({
+      piece: { status: "flagged", text: "Led the hardening of the bank's Kubernetes clusters" },
+      nearTheLine: { honest: "Locked down a Kubernetes test cluster with network policies", stronger: "Led the hardening of the bank's Kubernetes clusters" },
+    });
+  });
+
+  it("is never bulk-confirmed; keeping its honest version confirms it", async () => {
+    const { t } = await nearTheLineAnswer();
+    const pieceId = t.preparation.learnedPieces()[0]!.piece.id;
+
+    expect(t.preparation.confirmLearnedPieces()).toEqual({ confirmed: 0, refused: [] });
+    expect(t.preparation.piece(pieceId)).toMatchObject({ status: "flagged" });
+
+    expect(t.preparation.keepHonestVersion(pieceId)).toMatchObject({ saved: true, piece: { status: "confirmed", text: "Locked down a Kubernetes test cluster with network policies" } });
+    expect(t.preparation.learnedPieces()).toEqual([]);
+  });
+
+  it("Confirm the unflagged confirms the others in one go", async () => {
+    const t = miraProfile({ coach: coachWrites() });
+    const pkg = await started(t, kubernetesJob());
+    await t.preparation.answerGap(pkg.id, pkg.cvVersion!.flags[0]!.id, kubernetesAnswer);
+
+    expect(t.preparation.confirmLearnedPieces()).toEqual({ confirmed: 1, refused: [] });
+    expect(t.preparation.learnedPieces()).toEqual([]);
+    expect(t.preparation.profileSummary()).toMatchObject({ learned: 0 });
   });
 });

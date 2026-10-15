@@ -205,6 +205,8 @@ describe("what Profile needs from Kris", () => {
       confirmed: 1,
       needsYou: { masterProfile: 2, angles: 0, answerBank: 0, voice: 0 },
       needsYouTotal: 2,
+      // Pieces saved with a package's name aren't learned during packages: only a gap answer makes one.
+      learned: 0,
     });
   });
 
@@ -212,7 +214,7 @@ describe("what Profile needs from Kris", () => {
     const t = createTestPreparation();
 
     expect(t.preparation.profileSummary()).toEqual({
-      pieces: 0, confirmed: 0, needsYou: { masterProfile: 0, angles: 0, answerBank: 0, voice: 0 }, needsYouTotal: 0,
+      pieces: 0, confirmed: 0, needsYou: { masterProfile: 0, angles: 0, answerBank: 0, voice: 0 }, needsYouTotal: 0, learned: 0,
     });
   });
 });

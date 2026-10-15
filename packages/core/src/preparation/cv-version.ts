@@ -232,7 +232,9 @@ export function flagView(f: CvFlag, requirement: string | null): CvFlagView {
   }
 }
 
-const lowerFirst = (s: string) => (/^\p{Lu}\p{Ll}/u.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+/** Common words a requirement or label starts with, lower-cased inside a sentence; names ("Kubernetes") keep their capital. */
+const plainFirst = /^(experience|knowledge|understanding|familiarity|strong|proven|solid|good|excellent|working|professional|ability|hands-on|named|used|left|kept|told|your)\b/i;
+const lowerFirst = (s: string) => (plainFirst.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
 /** Why the step can't be approved while this flag is open, after "The CV can't be approved yet: N flags are still open." */
 export function openReason(f: CvFlag, requirement: string | null): string {

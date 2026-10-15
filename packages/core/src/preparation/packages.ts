@@ -22,7 +22,7 @@ import {
   applyChanges, decisionsOf, deriveChanges, flagView, honestyChecks, keepTwoPages, offers, openReason, placesOnCv, tightenChange, tightenChoices,
   type CvChange, type CvFlag, type CvFlagView, type CvLineView, type CvPlan, type CvVersionState, type EvidenceRow, type HonestyCheckView, type PieceLink, type TightenChoice,
 } from "./cv-version.ts";
-import { checkWording, quoteOf, validateCv, type HonestyProfile } from "./honesty.ts";
+import { checkWording, validateCv, type HonestyProfile } from "./honesty.ts";
 import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview.ts";
 import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder } from "./ports.ts";
