@@ -26,7 +26,7 @@ export type {
   ExtractedWorkAuthorisation, ExtractedRemote, ExtractedSalary, ExtractionInput, ExtractionResult,
 } from "./extraction/facts.ts";
 export type { FeedRequirement, RequirementStatus, RequirementEvidence, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening, FactAnswer } from "./extraction/reading.ts";
-export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, AlertEmail, Settings } from "./ports.ts";
+export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, MailMessage, MailAttachment, AlertEmail, Settings } from "./ports.ts";
 export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext, EmailAlertAdapter } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";
 export { jobPostingsFromLd } from "./capture/jsonld.ts";
@@ -49,6 +49,13 @@ export type { ExpectedFacts, EvaluationCase } from "./evaluation/labels.ts";
 export { scoreCase, similarity, TEXT_MATCH } from "./evaluation/score.ts";
 export type { CaseScore, ListScore } from "./evaluation/score.ts";
 export { runEvaluation } from "./evaluation/run.ts";
+export { blindSheet, readVerdicts, formatTailoringReport } from "./evaluation/tailoring-sheet.ts";
+export type { BlindKey, Verdict, VerdictReading, ReportInfo as TailoringReportInfo } from "./evaluation/tailoring-sheet.ts";
+export { runTailoringEvaluation, tailoringProfileSchema, tailoringSetSchema, tailoringQuestionSchema, jobOf, estimatePackageUsd } from "./evaluation/tailoring.ts";
+export type {
+  TailoringProfile, TailoringSet, TailoringQuestion, TailoringCase, TailoringModel, TailoringEngine, TailoringOptions, TailoringReport,
+  PackageResult, ModelSummary, FlagResult as TailoringFlag, StockPhrase, AnswerResult as TailoringAnswer,
+} from "./evaluation/tailoring.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
 export { createAiBudget } from "./budget.ts";
 export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcome } from "./budget.ts";
@@ -63,7 +70,7 @@ export type { TailorCvInput, TailoredCv, TailoredLine } from "./writing/writer.t
 export { writtenLetterSchema } from "./writing/writer.ts";
 export type { WriteLetterInput, WrittenLetter } from "./writing/writer.ts";
 export { checkWording, validateCv } from "./preparation/honesty.ts";
-export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
+export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, RejectedLine, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts, PrepareForApply, PrepareForTrack } from "./preparation/engine.ts";
 export type {
@@ -126,3 +133,25 @@ export { cvSections, sectionTitles, formatDate, formatRange, formatLetterDate, l
 export type { CvSection } from "./documents/labels.ts";
 export { demoDocument } from "./documents/demo.ts";
 export type { DemoOptions } from "./documents/demo.ts";
+export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, TrackerError, rejectionReasons, monthlyEurOf } from "./tracker.ts";
+export type {
+  Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
+  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact as ApplicationContact, TargetPosting, AttachedCv, AttachCvInput,
+  NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft, UpcomingInterview,
+  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView,
+} from "./tracker.ts";
+export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
+export { trackPortsFrom } from "./track-prepare.ts";
+export type {
+  DraftInput, DraftKind, DraftOutput, FollowUp, FollowUpDraftText, FollowUpKind, FollowUpSettings, MasterProfile, ProfileEvidence,
+} from "./follow-ups.ts";
+export { interviewFormats, invitedInterviewSchema, prepSheetDraftSchema, zonedToInstant, instantToLocal, isTimeZone } from "./interviews.ts";
+export type {
+  Interview, InterviewInput, InterviewFormat, InvitedInterview, PrepSheet, PrepQuestion, PrepSheetDraft, PrepSheetInput, ProfileStory, FactTag,
+} from "./interviews.ts";
+export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";
+export { draftOutputSchema, emailKinds, emailClassificationSchema, highConfidence } from "./track-mail.ts";
+export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } from "./track-mail.ts";
+export type {
+  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
+} from "./tracker.ts";

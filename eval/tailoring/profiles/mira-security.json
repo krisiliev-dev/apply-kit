@@ -1,0 +1,37 @@
+{
+  "id": "mira-security",
+  "fictional": true,
+  "about": "Made-up junior security analyst at a bank, three years in, moving towards detection engineering.",
+  "contact": {
+    "nameLatin": "Mira Petrova", "nameCyrillic": "Мира Петрова", "email": "mira.petrova@example.com", "phone": "+359 88 000 0175",
+    "city": "Sofia", "country": "Bulgaria", "links": ["https://mira-petrova.example.com"]
+  },
+  "angles": [
+    { "angle": "security", "summary": "Security analyst at a bank who writes detection rules and handles incidents end to end." },
+    { "angle": "developer", "summary": "Writes Python tooling that takes the repetitive work out of security operations." }
+  ],
+  "pieces": [
+    { "key": "analyst", "kind": "role", "text": "Second-line analyst in the bank's security operations centre.", "entry": { "title": "Security Analyst", "organisation": "Northwind Bank", "city": "Sofia", "start": "2023-03", "end": null }, "tags": ["SOC"], "angles": ["security"] },
+    { "key": "detections", "kind": "achievement", "text": "Wrote 30 detection rules in Wazuh that cut false alerts by about a third.", "belongsTo": "analyst", "tags": ["SIEM", "detection engineering"], "angles": ["security"], "numberSource": "measured" },
+    { "key": "phishing", "kind": "achievement", "text": "Took part in the response to a phishing campaign against the claims team and wrote its timeline.", "belongsTo": "analyst", "tags": ["incident response"], "angles": ["security"] },
+    { "key": "enrich", "kind": "achievement", "text": "Built a Python script that adds asset owners to alerts, saving about 10 minutes per ticket.", "belongsTo": "analyst", "tags": ["automation", "Python"], "angles": ["security", "developer"], "numberSource": "estimate" },
+    { "key": "vulns", "kind": "achievement", "text": "Triaged monthly vulnerability scan results and tracked fixes with the server team.", "belongsTo": "analyst", "tags": ["vulnerability management"], "angles": ["security"] },
+    { "key": "intern", "kind": "role", "text": "Summer internship on the IT helpdesk.", "entry": { "title": "IT Support Intern", "organisation": "Varna Telecom", "city": "Varna", "start": "2022-06", "end": "2022-09" }, "angles": ["security", "developer"] },
+    { "key": "laptops", "kind": "achievement", "text": "Set up and enrolled 120 laptops for the new call centre.", "belongsTo": "intern", "tags": ["endpoint management"], "angles": ["security"], "numberSource": "measured" },
+    { "key": "degree", "kind": "education", "text": "", "entry": { "title": "BSc Computer Science", "organisation": "Danube Institute of Technology", "city": "Ruse", "start": "2019-09", "end": "2023-06" }, "angles": ["security", "developer"] },
+    { "key": "ctf", "kind": "achievement", "text": "Placed 4th of 38 teams in the university's capture-the-flag contest.", "belongsTo": "degree", "tags": ["CTF"], "angles": ["security"], "numberSource": "measured" },
+    { "key": "wazuh", "kind": "skill", "text": "Wazuh", "tags": ["SIEM"], "angles": ["security"] },
+    { "key": "python", "kind": "skill", "text": "Python", "tags": ["scripting"], "angles": ["security", "developer"] },
+    { "key": "owasp", "kind": "skill", "text": "OWASP Top 10", "tags": ["web security"], "numberSource": "told", "angles": ["security"] },
+    { "key": "linux", "kind": "skill", "text": "Linux", "angles": ["security", "developer"] },
+    { "key": "english", "kind": "skill", "text": "English (C1)", "tags": ["language"], "angles": ["security", "developer"] }
+  ],
+  "answers": [
+    { "question": "Right to work in Bulgaria", "wordings": ["Do you have the right to work in this country?"], "versions": { "en": "Yes", "bg": "Да" }, "kind": "yes-no" },
+    { "question": "Notice period", "wordings": ["What is your notice period?"], "versions": { "en": "1 month", "bg": "1 месец" } }
+  ],
+  "voice": [
+    { "fileName": "mira-note-to-team.txt", "text": "Quick one before the weekend. The new rule for impossible travel fired twice today and both were real VPN switches, so I've added the office ranges to the allow list. If it fires again on Monday, ping me and I'll look first thing. I'd rather tune it down than have us ignore it." },
+    { "fileName": "mira-blog-intro.txt", "text": "I didn't plan to end up in security. I liked fixing things on the helpdesk, and at some point I noticed I cared more about why a laptop got infected than about reimaging it. That question is still the part of the job I enjoy most." }
+  ]
+}

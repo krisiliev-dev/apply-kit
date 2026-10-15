@@ -1,0 +1,196 @@
+{
+  "_about": "Recorded synthetic emails for Track's email matching. Every company, person and address is made up. Each email carries the classification the fake Track assistant returns for it (recorded output), or null when the assistant was never asked. The sent-* emails are the user's own sent copies, BCC'd to the job mailbox (the BCC isn't in the headers).",
+  "emails": {
+    "greenhouse-confirmation": {
+      "email": {
+        "id": "<conf-1.northwind@us.greenhouse-mail.io>",
+        "from": "Northwind Labs <no-reply@us.greenhouse-mail.io>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Thank you for applying to Northwind Labs",
+        "receivedAt": "2026-10-12T06:40:00Z",
+        "text": "Hi Alex,\n\nThank you for your interest in Northwind Labs! We received your application for the Security Engineer role and our team will review it shortly.\n\nBest,\nNorthwind Labs Recruiting"
+      },
+      "classification": {
+        "kind": "confirmation", "confidence": 0.97, "company": "Northwind Labs", "jobTitle": "Security Engineer",
+        "stage": null, "language": "en", "summary": null
+      }
+    },
+    "rejection": {
+      "email": {
+        "id": "<rej-1@northwind-labs.example>",
+        "from": "Mira Petrova <mira.petrova@northwind-labs.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Your application for Security Engineer",
+        "receivedAt": "2026-10-14T09:12:00Z",
+        "text": "Dear Alex,\n\nThank you for applying for the Security Engineer position at Northwind Labs. After careful review, we have decided to move forward with other candidates whose experience more closely matches our needs.\n\nKind regards,\nMira Petrova\nTalent team, Northwind Labs"
+      },
+      "classification": {
+        "kind": "rejection", "confidence": 0.95, "company": "Northwind Labs", "jobTitle": "Security Engineer",
+        "stage": null, "language": "en", "summary": null
+      }
+    },
+    "late-screening-invitation": {
+      "email": {
+        "id": "<screen-1@northwind-labs.example>",
+        "from": "Mira Petrova <mira.petrova@northwind-labs.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Security Engineer: a short call?",
+        "receivedAt": "2026-10-14T11:00:00Z",
+        "text": "Hi Alex,\n\nThanks for applying for the Security Engineer role at Northwind Labs. Could we have a 20-minute intro call this week?\n\nMira"
+      },
+      "classification": {
+        "kind": "interview-invitation", "confidence": 0.93, "company": "Northwind Labs", "jobTitle": "Security Engineer",
+        "stage": "screening", "language": "en", "summary": null,
+        "interview": { "start": null, "end": null, "timeZone": null, "format": "video", "place": null, "people": ["Mira Petrova"], "round": "20-minute intro call", "notes": "No time yet: she asks for one this week." }
+      }
+    },
+    "unsure-invitation": {
+      "email": {
+        "id": "<inv-1@nimbus-cloud.example>",
+        "from": "Nina Doe <talent@nimbus-cloud.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Interview invitation",
+        "receivedAt": "2026-10-13T09:14:00Z",
+        "text": "Hi Alex, thanks for your interest in the Platform Security role. We'd love to invite you to a 45-minute video interview. Could you share a few times that work next week?\n\nNina Doe, Talent"
+      },
+      "classification": {
+        "kind": "interview-invitation", "confidence": 0.55, "company": "Nimbus", "jobTitle": "Platform Security",
+        "stage": "interview", "language": "en", "summary": null
+      }
+    },
+    "second-invitation": {
+      "email": {
+        "id": "<inv-2@nimbus-cloud.example>",
+        "from": "Nina Doe <talent@nimbus-cloud.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Next round: technical interview",
+        "receivedAt": "2026-10-16T08:00:00Z",
+        "text": "Hi Alex, the team enjoyed talking to you. We'd like to invite you to a technical interview with two engineers on Tuesday at 14:00 CET.\n\nNina"
+      },
+      "classification": {
+        "kind": "interview-invitation", "confidence": 0.92, "company": null, "jobTitle": null,
+        "stage": "interview", "language": "en", "summary": null,
+        "interview": { "start": "2026-10-20T14:00", "end": "2026-10-20T15:00", "timeZone": "Europe/Berlin", "format": "video", "place": null, "people": ["Two engineers from the team"], "round": "Technical interview", "notes": "The email says 14:00 CET." }
+      }
+    },
+    "bulgarian-call": {
+      "email": {
+        "id": "<call-1@varnatrust.example>",
+        "from": "Галина Иванова <careers@varnatrust.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Покана за телефонен разговор",
+        "receivedAt": "2026-10-13T05:40:00Z",
+        "text": "Здравейте, Алекс! Благодарим Ви за проявения интерес към позицията „Специалист информационна сигурност“. Бихме искали да проведем кратък телефонен разговор с Вас. Удобно ли Ви е в четвъртък, 15 октомври, от 10:00 ч.?\n\nГалина Иванова, Варна Тръст Банк"
+      },
+      "classification": {
+        "kind": "interview-invitation", "confidence": 0.9, "company": "Варна Тръст Банк", "jobTitle": "Специалист информационна сигурност",
+        "stage": "screening", "language": "bg",
+        "summary": "Thanks you for applying for IT Security Specialist and asks for a short phone call on Thu 15 Oct at 10:00.",
+        "interview": { "start": "2026-10-15T10:00", "end": null, "timeZone": "Europe/Sofia", "format": "phone", "place": null, "people": ["Галина Иванова"], "round": "Short phone call", "notes": null }
+      }
+    },
+    "thread-reply": {
+      "email": {
+        "id": "<re-1@talentbridge.example>",
+        "from": "Alex Stone <alex.stone@talentbridge.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Re: Thank you for applying to Northwind Labs",
+        "receivedAt": "2026-10-15T10:30:00Z",
+        "inReplyTo": "<conf-1.northwind@us.greenhouse-mail.io>",
+        "references": ["<conf-1.northwind@us.greenhouse-mail.io>"],
+        "text": "Hi Alex, I'm the recruiter helping Northwind Labs with this search. Could you send your notice period and salary expectations?\n\nAlex Stone, TalentBridge"
+      },
+      "classification": {
+        "kind": "info-request", "confidence": 0.9, "company": "Northwind Labs", "jobTitle": null,
+        "stage": null, "language": "en", "summary": null
+      }
+    },
+    "recruiter-new-domain": {
+      "email": {
+        "id": "<info-1@hireloop.example>",
+        "from": "Sam Doe <sam@hireloop.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Backend Engineer (Go): a few questions",
+        "receivedAt": "2026-10-13T12:00:00Z",
+        "text": "Hello, I'm recruiting for the Backend Engineer (Go) role you applied to. Are you open to a hybrid setup in Sofia?\n\nSam"
+      },
+      "classification": {
+        "kind": "info-request", "confidence": 0.88, "company": null, "jobTitle": "Backend Engineer (Go)",
+        "stage": null, "language": "en", "summary": null
+      }
+    },
+    "offer": {
+      "email": {
+        "id": "<offer-1@varnatrust.example>",
+        "from": "Галина Иванова <careers@varnatrust.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "Предложение за работа",
+        "receivedAt": "2026-10-20T08:00:00Z",
+        "text": "Здравейте, Алекс! Радваме се да Ви предложим позицията „Специалист информационна сигурност“. Подробностите са в приложения файл.",
+        "attachments": [{ "name": "predlozhenie.pdf", "type": "application/pdf" }]
+      },
+      "classification": {
+        "kind": "offer", "confidence": 0.94, "company": "Варна Тръст Банк", "jobTitle": "Специалист информационна сигурност",
+        "stage": null, "language": "bg", "summary": "Offers you the IT Security Specialist position; the details are in the attached PDF."
+      }
+    },
+    "newsletter": {
+      "email": {
+        "id": "<news-1@devweekly.example>",
+        "from": "Dev Weekly <hello@devweekly.example>",
+        "to": ["sample.jobs@example.com"],
+        "subject": "This week in backend",
+        "receivedAt": "2026-10-13T07:00:00Z",
+        "text": "Five links about Go generics and one about Postgres."
+      },
+      "classification": {
+        "kind": "other", "confidence": 0.9, "company": null, "jobTitle": null,
+        "stage": null, "language": "en", "summary": null
+      }
+    },
+    "sent-nudge": {
+      "email": {
+        "id": "<sent-1@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["Mira Petrova <mira.petrova@northwind-labs.example>"],
+        "subject": "Security Engineer: following up",
+        "receivedAt": "2026-10-13T08:05:00Z",
+        "text": "I applied for the Security Engineer role on 5 October and I'm still keen on it. I'm free for a call any weekday this month.\n\nAlex"
+      },
+      "classification": null
+    },
+    "sent-nudge-unnamed": {
+      "email": {
+        "id": "<sent-2@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["talent@nimbus-cloud.example"],
+        "subject": "Following up on my application",
+        "receivedAt": "2026-10-13T08:10:00Z",
+        "text": "I applied a week ago and wanted to say I'm still interested. Happy to talk any time.\n\nAlex"
+      },
+      "classification": null
+    },
+    "sent-nudge-titled": {
+      "email": {
+        "id": "<sent-3@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["talent@nimbus-cloud.example"],
+        "subject": "Re: Platform Engineer application",
+        "receivedAt": "2026-10-13T08:20:00Z",
+        "text": "Following up on my application for the Platform Engineer role. Still very interested.\n\nAlex"
+      },
+      "classification": null
+    },
+    "sent-to-a-friend": {
+      "email": {
+        "id": "<sent-4@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["sam.friend@example.org"],
+        "subject": "Security Engineer: following up",
+        "receivedAt": "2026-10-13T08:30:00Z",
+        "text": "Could you read my follow-up note before I send it?"
+      },
+      "classification": null
+    }
+  }
+}

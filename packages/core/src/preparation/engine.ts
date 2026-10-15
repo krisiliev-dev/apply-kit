@@ -14,7 +14,10 @@ import { createSetupStore, experienceOf, maxYearsFor, type ConfirmGroupResult, t
 import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceEditInput, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
 import { createInterviewStore, type FinishInterviewResult, type InterviewChange, type InterviewView, type SkippedQuestion } from "./interview.ts";
 import type { Angle } from "../fit/angles.ts";
-import { createProfileStore, type DisputeChoice, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
+import { matchEvidence } from "../fit/evidence.ts";
+import type { ProfileEvidence } from "../follow-ups.ts";
+import type { ProfileStory } from "../interviews.ts";
+import { createProfileStore, entryLabel, type DisputeChoice, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
 export interface ProfileExport {
@@ -438,12 +441,19 @@ export interface PreparationEngine {
   approvedWithoutApplication(): ApprovedPackage[];
   /** A piece from another feature (an interview story): an unconfirmed achievement waiting in Profile, with its source. */
   addUnconfirmedPiece(piece: { text: string; source: string }): { id: string };
+  /**
+   * The confirmed pieces that bear on a posting's requirements (labels as read), in Kris's words with
+   * where each sits in the profile: what Track's follow-up drafts may draw on, numbers included.
+   */
+  profileEvidence(input: { requirements: string[]; language: string }): ProfileEvidence[];
+  /** Kris's true stories for Track's prep sheet: the confirmed achievements, with the role they belong to. */
+  profileStories(): ProfileStory[];
 }
 
 /** What Track reads from Prepare: the package as sent, approved packages not yet submitted, adding a piece, and the voice. */
 export type PrepareForTrack = Pick<PreparationEngine,
   | "packageSnapshot" | "approvedWithoutApplication" | "packageFile" | "markPackageSubmitted" | "undoPackageSubmitted"
-  | "addUnconfirmedPiece" | "voiceContext" | "recordVoiceEdit"
+  | "addUnconfirmedPiece" | "profileEvidence" | "profileStories" | "voiceContext" | "recordVoiceEdit"
 >;
 
 /**
@@ -583,6 +593,33 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
       const saved = profile.save({ kind: "achievement", text }, { from: source, quote: text, status: "unconfirmed" });
       if (!saved.saved) throw new Error(saved.problems[0]!.message);
       return { id: saved.piece.id };
+    },
+    profileEvidence({ requirements }) {
+      const all = profile.all();
+      const byId = new Map(all.map((p) => [p.id, p]));
+      const now = deps.clock.now();
+      const used = new Set<string>();
+      const out: ProfileEvidence[] = [];
+      for (const text of requirements) {
+        for (const { id } of matchEvidence({ text, kind: "required", category: "skill" }, all, now).pieces) {
+          const p = byId.get(id);
+          if (!p || used.has(id)) continue;
+          used.add(id);
+          const role = p.entry ? null : p.belongsTo ? byId.get(p.belongsTo) : null;
+          out.push(p.entry
+            ? { text: entryLabel(p.entry), origin: "Master profile" }
+            : { text: p.text, origin: role?.entry ? entryLabel(role.entry) : "Master profile" });
+        }
+      }
+      return out;
+    },
+    profileStories() {
+      const all = profile.all();
+      const byId = new Map(all.map((p) => [p.id, p]));
+      return all.filter((p) => p.kind === "achievement" && p.status === "confirmed").map((p) => {
+        const entry = p.belongsTo ? byId.get(p.belongsTo)?.entry : null;
+        return { id: p.id, text: p.text, where: entry ? `${entry.organisation} · ${entry.start.slice(0, 4)}` : null };
+      });
     },
     profileForApply() {
       const c = contact.get();

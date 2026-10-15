@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Application · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../../../app/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../app/ui/src/styles/components.css">
+<link rel="stylesheet" href="track.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · Application</span>
+  <a href="index.html">All hi-fi screens</a>
+  <a href="applications.html">Applications list</a>
+  <div class="states" role="group" aria-label="Show state"></div>
+</div>
+
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
+    <nav class="nav" aria-label="Main">
+      <a href="feed.html">Feed</a>
+      <a href="applications.html" aria-current="page">Applications<span class="badge" aria-hidden="true">4</span><span class="sr-only">, 4 need you</span></a>
+      <a href="../wireframes/profile.html">Profile</a>
+      <a href="sources.html">Settings</a>
+    </nav>
+    <span class="grow"></span>
+    <a class="health" href="sources.html"><i aria-hidden="true"></i><span>All sources working · mail read 07:30</span></a>
+  </header>
+
+  <main class="main" id="main" tabindex="-1">
+
+    <!-- ================= WAITING ================= -->
+    <section data-state="waiting" data-state-name="Applied · waiting" class="stack" style="gap:var(--s-6)">
+      <div data-head="ardent"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step">
+            <span class="kicker">NEXT STEP</span>
+            <h2>Wait for a reply. Follow-up due Wed 14 Oct.</h2>
+            <p class="muted mini">That's 7 days after applying (change the default in Settings). A draft will be ready that morning. If Ardent Labs replies first, the follow-up is cancelled.</p>
+            <div class="row"><button class="btn sm" type="button">Change date</button><button class="btn ghost sm" type="button">Draft it now</button></div>
+          </div>
+          <div data-timeline="ardent"></div>
+        </div>
+        <div class="col" data-side="ardent"></div>
+      </div>
+    </section>
+
+    <!-- ================= FOLLOW-UP DUE ================= -->
+    <section data-state="followup" data-state-name="Follow-up due" class="stack" style="gap:var(--s-6)">
+      <div data-head="tidewater"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step ask">
+            <span class="kicker">FOLLOW-UP DUE TODAY · 7 DAYS AFTER APPLYING</span>
+            <h2>No reply in 7 days. Here's a short nudge to send from your own mail.</h2>
+            <div class="field">
+              <label for="fu-text">Draft · body only, edit freely</label>
+              <textarea class="input" id="fu-text">I applied for the Application Security Engineer role on 6 October and wanted to say I'm still very interested. Your posting's focus on threat-modelling new payment features stood out: at Velora I ran threat-modelling sessions for our card-payment services and turned the findings into 40 tracked fixes, so it's work I'd enjoy doing again. I'm happy to share more about it, and I'm free for a call any weekday this month.</textarea>
+              <span class="help">84 words · to careers@tidewaterpay.eu, as a reply to their confirmation email · "40 tracked fixes" comes from your Master profile · edits teach your voice</span>
+            </div>
+            <div class="draft-acts"><button class="btn primary" type="button" data-copy>Copy text</button><a class="btn" href="mailto:careers@tidewaterpay.eu?subject=Re%3A%20Application%20received">Open in Mail</a><span class="grow"></span><button class="btn" type="button" data-sent="Tidewater Pay">Mark sent</button><button class="btn ghost" type="button" data-snooze>Snooze 3 days</button></div>
+            <p class="never">apply-kit never sends mail. "Mark sent" logs an Event. If you skip it and BCC'd the job mailbox, the next mail read spots your message and marks it for you.</p>
+          </div>
+          <div data-timeline="tidewater"></div>
+        </div>
+        <div class="col" data-side="tidewater"></div>
+      </div>
+    </section>
+
+    <!-- ================= NO AI BUDGET ================= -->
+    <section data-state="no-ai" data-state-name="Follow-up · AI budget out" class="stack" style="gap:var(--s-6)">
+      <div class="banner warning"><span class="text"><b>No draft this time: this month's AI budget ($10) ran out on Fri 9 Oct.</b> It resets on Sun 1 Nov. Everything else works, and the points below make writing this one quick.</span><a class="btn sm" href="sources.html">Budget settings</a></div>
+      <div data-head="tidewater"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step ask">
+            <span class="kicker">FOLLOW-UP DUE TODAY</span>
+            <h2>Write a short nudge (70–110 words works well)</h2>
+            <div class="stack"><span class="mini" style="font-weight:600">Points to cover, from this Application</span>
+              <ul class="outline"><li>Applied for Application Security Engineer on Tue 6 Oct; still interested.</li><li>One detail from the posting: "threat-model new payment features with product teams".</li><li>Your matching evidence: Velora threat-modelling sessions, 40 tracked fixes (Master profile).</li><li>Offer a call; no pressure.</li></ul></div>
+            <div class="field"><label for="own-text">Your follow-up</label><span class="help">Kept as you type. What you write here also teaches your voice.</span><textarea class="input" id="own-text" style="min-height:140px"></textarea><span class="help" aria-live="polite" id="own-count">0 words</span></div>
+            <div class="draft-acts"><button class="btn primary" type="button" data-copy>Copy text</button><a class="btn" href="mailto:careers@tidewaterpay.eu">Open in Mail</a><span class="grow"></span><button class="btn" type="button" data-sent="Tidewater Pay">Mark sent</button><button class="btn ghost" type="button" data-snooze>Snooze 3 days</button></div>
+          </div>
+          <div data-timeline="tidewater"></div>
+        </div>
+        <div class="col" data-side="tidewater"></div>
+      </div>
+    </section>
+
+    <!-- ================= MOVED BY EMAIL ================= -->
+    <section data-state="moved" data-state-name="Moved by email" class="stack" style="gap:var(--s-6)">
+      <div class="banner success" id="moved-banner"><span class="text"><b>Moved Applied → Screening by an email today at 08:40.</b> It matched on 3 signals, listed below.</span><button class="btn sm" type="button" id="looks-right">Looks right</button><button class="btn sm" type="button" id="undo-move">Undo</button></div>
+      <div data-head="varna"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head"><h2>The email that moved it</h2><span class="meta">today 08:40 · in Bulgarian</span></div>
+            <div class="quote"><span class="where">Галина Петрова &lt;careers@varnatrust.bg&gt; · Покана за телефонен разговор</span><span lang="bg">"Здравейте, Крис! Благодарим Ви за проявения интерес към позицията „Специалист информационна сигурност“. Бихме искали да проведем кратък телефонен разговор с Вас. Удобно ли Ви е в четвъртък, 15 октомври, от 10:00 ч.?"</span><span class="tr">In English: thanks you for applying for IT Security Specialist and asks for a short phone call on Thu 15 Oct at 10:00.</span></div>
+            <div class="stack" style="gap:var(--s-2)"><span class="mini" style="font-weight:600">Why it matched</span>
+              <ul class="signals"><li>The sender's domain is the target posting's domain (varnatrust.bg).</li><li>It names the job, in Bulgarian: "Специалист информационна сигурност".</li><li>It's your only Application with Varna Trust Bank.</li></ul></div>
+            <p class="meta">Undo puts the Status back to Applied, restores its follow-up, and keeps the email on the timeline marked "not a Status change". The matcher learns from it.</p>
+          </div>
+          <div class="panel next-step">
+            <span class="kicker">NEXT STEP</span>
+            <h2>Reply to confirm the call: Thu 15 Oct, 10:00</h2>
+            <p class="muted mini">You reply from your own mail. A thank-you note comes due within 24 hours of the call.</p>
+            <div class="row"><a class="btn sm" href="#" download>Add to calendar (.ics)</a><a class="btn ghost sm" href="#">Open email in Mail</a><button class="btn ghost sm" type="button">Call time is different…</button></div>
+          </div>
+          <div data-timeline="varna"></div>
+        </div>
+        <div class="col" data-side="varna"></div>
+      </div>
+    </section>
+
+    <!-- ================= INTERVIEW + PREP SHEET ================= -->
+    <section data-state="interview" data-state-name="Interview · prep sheet" class="stack" style="gap:var(--s-6)">
+      <div data-head="medora"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step">
+            <span class="kicker">NEXT STEP · INTERVIEW</span>
+            <h2>Thu 15 Oct, 14:00–15:00 Sofia time</h2>
+            <dl class="kv"><dt>Format</dt><dd>Video call, Google Meet. The link is in the invite email.</dd><dt>With</dt><dd>Mara Ivanova, Engineering Manager · Teo Lindqvist, Senior Engineer</dd><dt>Round</dt><dd>1 of 2: technical conversation, then a take-home (from the email)</dd><dt>Time zone</dt><dd>Teo is in Stockholm, one hour behind.</dd></dl>
+            <p class="meta">Read from the invite email. Check it against the email itself.</p>
+            <div class="row"><a class="btn sm" href="#" download>Add to calendar (.ics)</a><a class="btn ghost sm" href="#">Open invite email</a><button class="btn ghost sm" type="button">Edit details</button></div>
+            <p class="mini muted">After the call: a thank-you draft is ready at 15:00 and due by <b>Fri 16 Oct, 14:00</b> (within 24 hours).</p>
+          </div>
+          <article class="panel prep" aria-labelledby="prep-h">
+            <div class="sec-head"><h2 id="prep-h">Prep sheet</h2><span class="meta">Light prep, not coaching · from the posting, your notes and your Master profile</span></div>
+            <div class="stack"><span class="mini" style="font-weight:600">Company facts</span>
+              <ul class="facts-list">
+                <li>About 120 people, remote-first across EU time zones. <span class="tag">[posting]</span></li>
+                <li>Booking and records software for private clinics: React, Node, Postgres. <span class="tag">[posting]</span></li>
+                <li>Teams of 4–5 "own features end to end, from idea to on-call". <span class="tag">[posting]</span></li>
+                <li>Raised a Series B in 2025. <span class="tag">[unverified]</span></li>
+                <li>You liked that the posting lists salary and has no whiteboard round. <span class="tag">[your notes]</span></li>
+              </ul></div>
+            <div class="sec-head"><span class="mini" style="font-weight:600">Likely questions · 8</span><span class="chip met">6 have a story</span><span class="chip gap">2 to prepare</span></div>
+            <div class="table-wrap"><table class="table" aria-label="Likely questions with your stories">
+              <thead><tr><th scope="col">Requirement</th><th scope="col">Likely question</th><th scope="col">Your story</th><th scope="col">Practised</th></tr></thead>
+              <tbody data-prep></tbody>
+            </table></div>
+            <p class="meta">When no true story exists, the sheet says so and never writes one for you. Answers you add here go into your Master profile after you confirm them.</p>
+          </article>
+          <div data-timeline="medora"></div>
+        </div>
+        <div class="col" data-side="medora"></div>
+      </div>
+    </section>
+
+    <!-- ================= THANK-YOU DUE ================= -->
+    <section data-state="thanks" data-state-name="Thank-you due" class="stack" style="gap:var(--s-6)">
+      <div data-head="ostwind"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step ask">
+            <span class="kicker">THANK-YOU NOTE · DUE TODAY BY 16:00 · 24 HOURS AFTER THE INTERVIEW</span>
+            <h2>Thank Ivo Marinov for yesterday's interview</h2>
+            <div class="field"><label for="ty-topic">One thing you discussed <span class="meta">(makes the note specific)</span></label><input class="input" id="ty-topic" value="How I'd catch IAM drift between Terraform and the live AWS accounts"></div>
+            <div class="field"><label for="ty-text">Draft · body only, edit freely</label>
+              <textarea class="input" id="ty-text">Thank you for the conversation yesterday. I enjoyed the question about catching IAM drift between Terraform and the live accounts; it's the kind of problem I like, and it made me want to try the scheduled drift check we sketched against a real account. I came away more interested in the role and in how your platform team works, and I'm happy to go deeper on anything we touched on.</textarea>
+              <span class="help">71 words · to ivo.marinov@ostwind.cloud · nothing here is from outside your notes and the interview topic you gave</span></div>
+            <div class="draft-acts"><button class="btn primary" type="button" data-copy>Copy text</button><a class="btn" href="mailto:ivo.marinov@ostwind.cloud?subject=Thank%20you">Open in Mail</a><span class="grow"></span><button class="btn" type="button" data-sent="Ostwind Cloud">Mark sent</button><button class="btn ghost" type="button" data-skip>No note this time</button></div>
+          </div>
+          <div class="panel"><div class="field"><label for="ty-notes">Notes from the interview <span class="meta">(only you see these)</span></label><textarea class="input" id="ty-notes" style="min-height:96px">Round 1 of 2. Ivo asked about IAM drift and on-call. Next: system design with the platform lead, they'll write within a week.</textarea></div></div>
+          <div data-timeline="ostwind"></div>
+        </div>
+        <div class="col" data-side="ostwind"></div>
+      </div>
+    </section>
+
+    <!-- ================= OFFER ================= -->
+    <section data-state="offer" data-state-name="Offer received" class="stack" style="gap:var(--s-6)">
+      <p class="meta">Illustrative: Ardent Labs two weeks on, Wed 28 Oct, after round 2.</p>
+      <div data-head="ardent-offer"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step ask">
+            <span class="kicker">OFFER · RESPOND BY FRI 6 NOV, 18:00 · 9 DAYS</span>
+            <h2>Decide when you're ready. apply-kit records it; you reply to them.</h2>
+            <div class="stack" style="gap:var(--s-2)"><span class="mini" style="font-weight:600">Note to self (due tomorrow)</span>
+              <ul class="outline"><li>One question to answer: is the 2-nights-a-month shift rotation fixed or negotiable?</li><li>One action: ask HR for the written contract before deciding.</li></ul></div>
+            <div class="row"><a class="btn primary" href="#accept">I accepted this offer…</a><button class="btn" type="button" data-open="decline-dlg">I declined it…</button></div>
+            <p class="meta">Accepting moves this to Accepted and then offers polite withdrawal drafts for your other open Applications. Declining moves it to Withdrawn (reason: declined offer).</p>
+          </div>
+          <div class="panel">
+            <div class="sec-head"><h2>Offer details</h2><span class="meta">Pre-filled from the offer email · check against the written offer</span></div>
+            <div class="field-row">
+              <div class="field"><label for="of-base">Base salary</label><input class="input" id="of-base" value="€3,100 gross / month"><span class="help">Your floor is €2,450 (Profile). This is above it.</span></div>
+              <div class="field"><label for="of-start">Start date</label><input class="input" id="of-start" type="date" value="2026-12-01"></div>
+              <div class="field"><label for="of-pattern">Work pattern</label><input class="input" id="of-pattern" value="Hybrid, 2 days in Sofia office; 2 night shifts a month"></div>
+              <div class="field"><label for="of-contract">Contract</label><input class="input" id="of-contract" value="Permanent, 6-month probation"></div>
+            </div>
+            <div class="row"><button class="btn sm" type="button">Save details</button></div>
+          </div>
+          <div class="banner info"><span class="text"><b>Comparing and negotiating offers isn't part of this version.</b> apply-kit records the offer so nothing is lost; weighing it is up to you.</span></div>
+          <div data-timeline="ardent-offer"></div>
+        </div>
+        <div class="col" data-side="ardent"></div>
+      </div>
+    </section>
+
+    <!-- ================= ACCEPTED → WITHDRAW OTHERS ================= -->
+    <section data-state="accept" data-state-name="Accepted · withdraw others" class="stack" style="gap:var(--s-6)">
+      <div data-head="ardent-accepted"></div>
+      <div class="scrim">
+        <div class="inline-dlg" role="dialog" aria-modal="false" aria-labelledby="wd-title">
+          <div class="body">
+            <div class="dlg-head"><div class="stack" style="gap:var(--s-1)"><span class="meta">Accepted · Detection Engineer at Ardent Labs</span><h2 id="wd-title" tabindex="-1">Withdraw from your other applications?</h2></div></div>
+            <p class="muted mini">You have 5 open Applications. A short, polite note to each frees their time and keeps the door open. Keep any open you like, send each note from your own mail, and press "Mark sent"; only then does it move to Withdrawn.</p>
+            <ul class="wd" data-wd></ul>
+            <div class="dlg-foot"><a class="btn primary" href="#offer">Done for now</a><span class="grow"></span><span class="meta">Unsent ones wait in Needs you as "Withdrawal to send"</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= REJECTED ================= -->
+    <section data-state="rejected" data-state-name="Rejected" class="stack" style="gap:var(--s-6)">
+      <div data-head="pixelmoor"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head"><h2>Rejected yesterday · form letter, no interview</h2></div>
+            <div class="quote"><span class="where">people@pixelmoor.design · Mon 12 Oct 17:05</span><span>"Thank you for your interest in Pixelmoor. After careful review, we've decided to move forward with candidates whose experience more closely matches our current needs…"</span></div>
+            <form class="stack" style="gap:var(--s-4)">
+              <div class="field"><label for="lesson">One-line lesson <span class="meta">(optional)</span></label><span class="help">Specific to this one. Lines like "tailor your CV" don't count.</span><input class="input" id="lesson" placeholder="e.g. They wanted a shipped design system, not components"></div>
+              <fieldset><legend>Likely reason <span class="meta">(optional, a guess for form letters)</span></legend>
+                <div class="chips">
+                  <label class="check"><input type="radio" name="why"> Experience: asked 3+ years, you have 2</label>
+                  <label class="check"><input type="radio" name="why"> Missing skill or certificate</label>
+                  <label class="check"><input type="radio" name="why"> Location or remote terms</label>
+                  <label class="check"><input type="radio" name="why"> Salary</label>
+                  <label class="check"><input type="radio" name="why"> No reason given</label>
+                </div>
+                <span class="help">Nothing is pre-selected. The fit check flagged "3+ years" as a stretch, if that helps.</span>
+              </fieldset>
+              <div class="row"><button class="btn" type="button">Save</button><a class="btn ghost" href="#">Not a rejection? Undo</a></div>
+            </form>
+          </div>
+          <div class="panel">
+            <h2>What this changes in Stats</h2>
+            <dl class="kv"><dt>Response rate</dt><dd>Up, not down: a rejection is a reply. Now 7 of 28.</dd><dt>Design angle</dt><dd>1 of 4 replied, 0 interviews. Too few to tell yet.</dd></dl>
+          </div>
+          <div data-timeline="pixelmoor"></div>
+        </div>
+        <div class="col" data-side="pixelmoor"></div>
+      </div>
+    </section>
+
+    <!-- ================= ADDED BY HAND ================= -->
+    <section data-state="manual" data-state-name="Added by hand" class="stack" style="gap:var(--s-6)">
+      <div data-head="fennel"></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel next-step">
+            <span class="kicker">NEXT STEP</span>
+            <h2>Wait for a reply. Follow-up due Fri 16 Oct.</h2>
+            <p class="muted mini">Replies from fennel.studio are matched to this Application. Add a recruiter's address if they write from somewhere else.</p>
+            <div class="row"><button class="btn sm" type="button">Add a contact address</button><button class="btn ghost sm" type="button">Change date</button></div>
+          </div>
+          <div data-timeline="fennel"></div>
+        </div>
+        <div class="col" data-side="fennel"></div>
+      </div>
+    </section>
+
+    <!-- ================= LOADING ================= -->
+    <section data-state="loading" data-state-name="Loading" class="stack" style="gap:var(--s-6)" aria-busy="true">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="applications.html">Applications</a><span aria-hidden="true">/</span><span>Loading…</span></nav>
+      <div class="app-head" aria-hidden="true"><span class="skel w40" style="height:32px"></span><span class="skel w60"></span><span class="skel w80" style="height:24px"></span></div>
+      <p class="sr-only" role="status">Loading the application…</p>
+      <div class="cols"><div class="col"><div class="panel" aria-hidden="true"><span class="skel w30"></span><span class="skel w80"></span><span class="skel w60"></span></div><div class="panel" aria-hidden="true"><span class="skel w20"></span><span class="skel w90"></span><span class="skel w90"></span><span class="skel w80"></span></div></div><div class="col"><div class="panel" aria-hidden="true"><span class="skel w40"></span><span class="skel tall"></span></div></div></div>
+    </section>
+
+    <!-- ================= NOT FOUND ================= -->
+    <section data-state="missing" data-state-name="Not found" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="applications.html">Applications</a><span aria-hidden="true">/</span><span aria-current="page">Not found</span></nav>
+      <div class="empty" style="border-style:solid">
+        <h1>This application doesn't exist any more</h1>
+        <p>It was probably merged into another Application when you matched an email to it, or the link is from an old backup. Applications are never deleted by apply-kit itself.</p>
+        <div class="row"><a class="btn primary" href="applications.html">All applications</a><a class="btn" href="applications.html#many">Search applications</a></div>
+      </div>
+    </section>
+
+    <aside class="panel" aria-label="Design notes" style="background:var(--surface-sunken);box-shadow:none">
+      <h2>Design notes</h2>
+      <ul class="mini muted" style="margin:0;padding-left:var(--s-6);display:grid;gap:var(--s-2)">
+        <li><b>Focal point:</b> the Next step box answers "what now?" in every state; it gets the pink edge when it needs the user today.</li>
+        <li><b>Stepper:</b> Applied → Screening → Interviewing → Offer → Accepted as steps; Rejected and Withdrawn sit after "or" as a branch. The select beside it is the manual override (an Event "by you", undoable).</li>
+        <li><b>Every Event names its cause:</b> by email, by you, or by apply-kit (schedule, source checks).</li>
+        <li><b>Follow-ups:</b> nudge 7 days after Applied with no reply, thank-you within 24 hours of an interview, check-in 7 days after the last interview with no news, offer note to self after 1 day. A reply or Status change cancels a pending nudge. Never chases twice for the same stage on its own.</li>
+        <li><b>Package as sent</b> is read-only: CV PDF, cover letter and answers exactly as approved, and where it was submitted.</li>
+      </ul>
+    </aside>
+  </main>
+</div>
+
+<!-- decline dialog -->
+<dialog class="dlg" id="decline-dlg" aria-labelledby="dc-title">
+  <form method="dialog">
+    <div class="dlg-head"><h2 id="dc-title" tabindex="-1">Declined the Ardent Labs offer?</h2><button class="btn ghost sm x" type="button" data-dismiss aria-label="Close">✕</button></div>
+    <p class="muted mini">The Application moves to Withdrawn with the reason "declined offer". A short, gracious reply is below if you haven't written one; send it from your own mail.</p>
+    <div class="field"><label for="dc-text">Draft · optional</label><textarea class="input" id="dc-text" autofocus style="min-height:120px">Thank you for the offer for the Detection Engineer role, and for the time your team spent with me. After a lot of thought I've decided to decline. I enjoyed the conversations, especially about your detection pipeline, and I hope our paths cross again.</textarea></div>
+    <div class="dlg-foot"><button class="btn primary" type="button" data-declined>Mark declined</button><button class="btn" type="button" data-copy>Copy text</button><span class="grow"></span><button class="btn ghost" type="button" data-dismiss>Cancel</button></div>
+  </form>
+</dialog>
+
+<script src="track.js"></script>
+<script>
+(function () {
+  const { $, $$, esc, announce, toast, init } = window.Track;
+  const ic = {
+    check: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    email: '<svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1.5" y="2.5" width="9" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="m2 3.2 4 3 4-3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    you: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="4" r="2.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M2 10.5c.6-2 2.1-3 4-3s3.4 1 4 3" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>',
+    app: '<svg viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M6 3.5V6l1.8 1.2" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  };
+  const by = k => `<span class="by ${k === "apply-kit" ? "app" : k}">${ic[k === "apply-kit" ? "app" : k]}by ${k}</span>`;
+  const STEPS = ["Applied", "Screening", "Interviewing", "Offer", "Accepted"];
+
+  // ---------- applications (fictional) ----------
+  const A = {
+    ardent: { t: "Detection Engineer", c: "Ardent Labs", s: "Applied", meta: ["Applied Wed 7 Oct", "Sofia · hybrid", "via ardentlabs.recruitee.com"], angle: "Security",
+      events: [["Wed 7 Oct 18:02", "Email matched", "\"Application received: Detection Engineer\", jobs@ardentlabs.eu", "email", "Status unchanged (already Applied)"], ["Wed 7 Oct 17:48", "Submitted → Applied", "Recruitee, filled by the extension", "you"], ["Wed 7 Oct 17:20", "Package approved", "Security angle · ATS check passed", "you"]] },
+    "ardent-offer": { t: "Detection Engineer", c: "Ardent Labs", s: "Offer", skipped: ["Screening"], meta: ["Applied Wed 7 Oct", "Offer Wed 28 Oct"], angle: "Security",
+      events: [["Wed 28 Oct 16:40", "Interviewing → Offer", "Offer letter from lea.hristova@ardentlabs.eu (PDF kept)", "email"], ["Mon 26 Oct 18:10", "Note", "\"Round 2 went well. They asked a lot about KQL.\"", "you"], ["Wed 14 Oct 09:20", "Applied → Interviewing", "Interview invite matched · follow-up cancelled", "email"], ["Wed 7 Oct 17:48", "Submitted → Applied", "Recruitee, filled by the extension", "you"]] },
+    "ardent-accepted": { t: "Detection Engineer", c: "Ardent Labs", s: "Accepted", skipped: ["Screening"], meta: ["Accepted Thu 29 Oct", "Starts Tue 1 Dec"], angle: "Security", events: [] },
+    tidewater: { t: "Application Security Engineer", c: "Tidewater Pay", s: "Applied", meta: ["Applied Tue 6 Oct", "Remote · EU", "via tidewaterpay.greenhouse.io"], angle: "Security",
+      events: [["Today 07:00", "Follow-up came due", "Draft written by apply-kit", "apply-kit"], ["Fri 9 Oct", "Posting closed", "Closed on Tidewater's career page. That's normal after applications close and says nothing about you. A saved copy is kept.", "apply-kit"], ["Tue 6 Oct 19:12", "Email matched", "\"Application received: Application Security Engineer\", careers@tidewaterpay.eu", "email", "Status unchanged"], ["Tue 6 Oct 19:03", "Submitted → Applied", "Greenhouse, filled by the extension", "you"]] },
+    varna: { t: "IT Security Specialist", orig: "Специалист информационна сигурност", c: "Varna Trust Bank", s: "Screening", meta: ["Applied Tue 6 Oct", "Sofia · on-site", "via the bank's careers form"], angle: "Security", lang: "Bulgarian package",
+      events: [["Today 08:40", "Applied → Screening", "Post-apply follow-up (due today) cancelled", "email", "undo"], ["Today 08:40", "Email matched", "\"Покана за телефонен разговор\", careers@varnatrust.bg", "email"], ["Tue 6 Oct 12:15", "Submitted → Applied", "The bank's own careers form, Bulgarian CV", "you"]] },
+    medora: { t: "Full-stack Engineer (React, Node)", c: "Medora", s: "Interviewing", skipped: ["Screening"], meta: ["Applied Mon 28 Sep", "Remote · EU", "via jobs.ashbyhq.com/medora"], angle: "Developer",
+      events: [["Fri 9 Oct 09:12", "Applied → Interviewing", "Post-apply follow-up cancelled", "email", "undo"], ["Fri 9 Oct 09:12", "Email matched", "\"Interview: Full-stack Engineer\", mara@medora.health", "email"], ["Mon 28 Sep 10:30", "Submitted → Applied", "Ashby", "you"]] },
+    ostwind: { t: "Cloud Security Engineer", c: "Ostwind Cloud", s: "Interviewing", meta: ["Applied Tue 22 Sep", "Remote · EU", "via ostwind.teamtailor.com"], angle: "Security",
+      events: [["Mon 12 Oct 16:00", "Interview held", "Round 1 of 2 with Ivo Marinov · thank-you note due within 24 hours", "apply-kit"], ["Tue 6 Oct 11:30", "Interview time confirmed", "\"Re: Interview slots\", ivo.marinov@ostwind.cloud", "email"], ["Fri 2 Oct 14:05", "Screening → Interviewing", "Invite matched", "email"], ["Tue 22 Sep 20:41", "Submitted → Applied", "Teamtailor", "you"]] },
+    pixelmoor: { t: "UI Designer", c: "Pixelmoor", s: "Rejected", meta: ["Applied Thu 1 Oct", "Rejected Mon 12 Oct"], angle: "Design",
+      events: [["Mon 12 Oct 17:05", "Applied → Rejected", "Pending follow-up cancelled", "email", "undo"], ["Thu 8 Oct 08:30", "Follow-up marked sent", "", "you"], ["Thu 1 Oct 14:20", "Submitted → Applied", "Teamtailor, with portfolio link", "you"]] },
+    fennel: { t: "UX Engineer", c: "Fennel Studio", s: "Applied", meta: ["Applied Fri 9 Oct", "Remote · EU", "added by hand"], angle: "Design", manual: true,
+      events: [["Fri 9 Oct 21:14", "Added by hand", "Applied on the company's site outside apply-kit · Job \"UX Engineer\" from your Feed linked", "you"]] },
+  };
+
+  const head = k => {
+    const a = A[k], closed = a.s === "Rejected" || a.s === "Withdrawn";
+    const i = STEPS.indexOf(a.s);
+    const steps = STEPS.map((s, n) => {
+      const skip = (a.skipped || []).includes(s);
+      const cls = skip ? "skipped" : closed ? (n === 0 ? "done" : "") : n < i ? "done" : n === i ? `now${s === "Offer" || s === "Accepted" ? " win" : ""}` : "";
+      return `<li class="${cls}"${n === i && !closed ? ' aria-current="step"' : ""}><span class="dot">${cls.startsWith("done") || cls.startsWith("now") ? ic.check : ""}</span>${s}${cls.startsWith("done") ? '<span class="sr-only"> (done)</span>' : skip ? '<span class="sr-only"> (skipped)</span>' : ""}</li>`;
+    }).join("");
+    const branch = ["Rejected", "Withdrawn"].map(s => `<span class="status ${s.toLowerCase()}${a.s === s ? " is-current" : ""}"${a.s === s ? ' aria-current="step"' : ""}><i></i>${s}${a.s === s ? '<span class="sr-only"> (current)</span>' : ""}</span>`).join("");
+    const sel = `<div class="set"><label for="st-${k}">Status</label><select class="input" id="st-${k}" data-status data-was="${a.s}">${[...STEPS, "Rejected", "Withdrawn"].map(s => `<option${s === a.s ? " selected" : ""}>${s}</option>`).join("")}</select></div>`;
+    return `<nav class="crumbs" aria-label="Breadcrumb"><a href="applications.html">Applications</a><span aria-hidden="true">/</span><span aria-current="page">${esc(a.t)}</span></nav>
+      <div class="app-head">
+        <h1>${esc(a.t)}${a.orig ? `<span class="meta" lang="bg" style="display:block;font-family:var(--font-text);font-size:var(--fs-title);font-weight:500;letter-spacing:0;margin-top:var(--s-2)">${esc(a.orig)}</span>` : ""}</h1>
+        <div class="app-meta"><b>${esc(a.c)}</b>${a.meta.map(m => `<span>${esc(m)}</span>`).join("")}<span class="chip neutral">${a.angle} angle</span>${a.lang ? `<span class="chip neutral">${a.lang}</span>` : ""}<a class="mini" href="job.html">Job page</a></div>
+        <div class="stepper" role="group" aria-label="Status: ${a.s}"><ol aria-label="Status steps">${steps}</ol><span class="or">or</span><span class="branch">${branch}</span>${sel}</div>
+      </div>`;
+  };
+
+  const timeline = k => {
+    const ev = A[k].events; if (!ev.length) return "";
+    return `<section class="panel" aria-labelledby="tl-${k}"><div class="sec-head"><h2 id="tl-${k}">Timeline</h2><span class="grow"></span><button class="btn sm" type="button" data-note>Add note</button></div>
+      <ol class="timeline">${ev.map(([t, what, detail, who, extra]) => `<li><time>${t}</time><div class="ev"><div class="line"><b>${esc(what)}</b>${by(who)}${extra === "undo" ? '<button class="btn ghost sm" type="button" data-undo-ev>Undo</button>' : extra ? `<span class="meta">${esc(extra)}</span>` : ""}</div>${detail ? `<span class="muted">${esc(detail)}</span>` : ""}</div></li>`).join("")}</ol></section>`;
+  };
+
+  const thumb = `<span class="doc-thumb" aria-hidden="true"><i class="h"></i><i></i><i class="s"></i><i></i><i></i><i class="s"></i><i></i><i></i><i class="s"></i></span>`;
+  const side = k => {
+    const a = A[k];
+    const pkg = a.manual
+      ? `<div class="panel"><h2>What you sent</h2><p class="muted mini">Applied outside apply-kit, so there's no Package. Attach the CV you sent if you'd like it shown here and counted under "CV version" in What's working.</p><div class="row"><button class="btn sm" type="button">Attach CV (PDF)…</button><button class="btn ghost sm" type="button">Pick a CV version</button></div></div>`
+      : `<div class="panel"><div class="sec-head"><h2>Package as sent</h2><span class="meta">Read-only</span></div>
+          <div class="pkg">
+            <div class="item"><span class="row" style="flex-wrap:nowrap;align-items:flex-start">${thumb}<span><b>CV · ${a.angle} v3</b><br><span class="meta">1 page · ${a.lang ? "Bulgarian" : "English"} · ATS check passed</span></span></span><a class="btn sm" href="../wireframes/package.html">View as sent</a></div>
+            <div class="item"><span><b>Cover letter</b><br><span class="meta">212 words</span></span><a class="btn ghost sm" href="../wireframes/package.html">Read</a></div>
+            <div class="item"><span><b>Screening answers</b><br><span class="meta">6 answers · 2 from your answer bank</span></span><a class="btn ghost sm" href="../wireframes/package.html">Read</a></div>
+            <div class="item"><span><b>Submitted to</b><br><span class="meta">${esc(a.meta[2]?.replace("via ", "") || "the company's portal")}</span></span><a class="btn ghost sm" href="#">Open portal</a></div>
+          </div></div>`;
+    return pkg + `<div class="panel"><h2>Target posting</h2><p class="mini muted">${esc(a.t)} · ${esc(a.c)}</p><div class="row"><a class="btn ghost sm" href="job.html">Job page</a><a class="btn ghost sm" href="#">Saved copy</a></div></div>
+      <div class="panel"><h2>Contacts</h2><p class="mini muted">Mail from these is matched here:</p><ul class="facts-list"><li>${esc(a.c.toLowerCase().replace(/\s+/g, ""))} domain</li>${k === "medora" ? "<li>mara@medora.health</li>" : ""}</ul><button class="btn ghost sm" type="button" style="justify-self:start">Add address</button></div>`;
+  };
+
+  const prep = [
+    ["TypeScript, 2+ yrs", "\"Walk me through a codebase you made safer with TypeScript.\"", "Velora dashboard: moved 40k lines to strict TS", "profile · Velora 2023", true],
+    ["React + Node", "\"How did you split a feature between the frontend and the API?\"", "Booking widget plus Express endpoint", "profile · Velora 2024", true],
+    ["Owns features end to end", "\"Tell me about something you took from idea to production.\"", "Shift-swap side project, 300 users", "profile · side projects", false],
+    ["Remote collaboration", "\"How do you keep your work visible on a remote team?\"", "Weekly written updates at Velora", "profile", false],
+    ["Health data (nice to have)", "\"How would you keep patient data out of logs?\"", "Log redaction rules from your SOC work", "profile · security angle", false],
+    ["Why Medora", "\"Why us, and why now?\"", "Remote-first, clinic software, small teams", "your notes", false],
+    ["Postgres (preferred)", "\"Tell me about a slow query you tracked down.\"", null, "", false],
+    ["Testing (preferred)", "\"How do you decide what to test?\"", null, "", false],
+  ];
+  const prepRows = () => prep.map(([r, q, s, src, done], i) => `<tr${s ? "" : ' class="gap-row"'}><td>${esc(r)}</td><td>${esc(q)}</td><td>${s ? `${esc(s)} <span class="tag">[${src}]</span>` : `<span class="chip gap">No story yet</span><div class="meta">Prepare one from real work, or say honestly how you'd approach it.</div><button class="btn ghost sm" type="button">Add a story</button>`}</td><td><label class="sr-only" for="pr-${i}">Practised: ${esc(q)}</label><input type="checkbox" id="pr-${i}"${done ? " checked" : ""}></td></tr>`).join("");
+
+  const wd = [
+    ["Full-stack Engineer (React, Node)", "Medora", "Interviewing", "mara@medora.health", "Thank you for the interviews and the time your team has given me. I've accepted another offer, so I'd like to withdraw from the Full-stack Engineer process. I enjoyed our conversations about clinic software and hope our paths cross again."],
+    ["Cloud Security Engineer", "Ostwind Cloud", "Interviewing", "ivo.marinov@ostwind.cloud", "Thank you for the conversations so far. I've accepted another offer and would like to withdraw from the Cloud Security Engineer process. I appreciated the discussion about IAM drift, and I wish you and the platform team well."],
+    ["IT Security Specialist", "Varna Trust Bank", "Interviewing", "careers@varnatrust.bg", "Благодаря Ви за отделеното време и за разговорите досега. Приех друго предложение и оттеглям кандидатурата си за позицията „Специалист информационна сигурност“. Пожелавам Ви успех."],
+    ["Backend Engineer (Node.js)", "Rilo Freight", "Screening", "talent@rilofreight.com", "Thank you for the call last week. I've accepted another offer, so I'd like to withdraw my application for the Backend Engineer role. Best of luck with the search."],
+    ["Platform Engineer", "Velta Logistics", "Applied", "jobs@velta.eu", "I applied for the Platform Engineer role on 8 October. I've since accepted another offer, so please withdraw my application. Thank you for your time."],
+  ];
+  const wdList = () => wd.map(([t, c, s, to, body], i) => `<li>
+      <div class="top"><span><b>${esc(t)}</b> · ${esc(c)}</span><span class="status ${s.toLowerCase()}"><i></i>${s}</span><span class="grow"></span><span class="meta">to ${esc(to)}</span></div>
+      <label class="sr-only" for="wdt-${i}">Withdrawal note to ${esc(c)}</label><textarea class="input" id="wdt-${i}"${i === 2 ? ' lang="bg"' : ""}>${esc(body)}</textarea>
+      <div class="draft-acts"><button class="btn sm" type="button" data-copy>Copy text</button><a class="btn ghost sm" href="mailto:${to}">Open in Mail</a><span class="grow"></span><button class="btn ghost sm" type="button" data-keep>Keep this one open</button><button class="btn sm" type="button" data-wd-sent="${esc(c)}">Mark sent · Withdrawn</button></div>
+    </li>`).join("");
+
+  // ---------- render ----------
+  $$("[data-head]").forEach(el => el.innerHTML = head(el.dataset.head));
+  $$("[data-timeline]").forEach(el => el.innerHTML = timeline(el.dataset.timeline));
+  $$("[data-side]").forEach(el => el.innerHTML = side(el.dataset.side));
+  $$("[data-prep]").forEach(el => el.innerHTML = prepRows());
+  $$("[data-wd]").forEach(el => el.innerHTML = wdList());
+
+  // ---------- interactions ----------
+  document.addEventListener("click", e => {
+    const t = e.target;
+    if (t.closest("[data-copy]")) { const b = t.closest("[data-copy]"); b.textContent = "Copied"; announce("Copied. Paste it into your mail, then press Mark sent."); setTimeout(() => b.textContent = "Copy text", 3000); return; }
+    const s = t.closest("[data-sent]"); if (s) { const p = s.closest(".next-step"); p.hidden = true; toast(`Marked sent · logged on the timeline. ${esc(s.dataset.sent)} won't be chased again for this stage.`, () => { p.hidden = false; announce("Undone. The follow-up is due again."); }, null); return; }
+    if (t.closest("[data-snooze]")) { toast("Snoozed · due again Fri 16 Oct", () => announce("Snooze undone.")); return; }
+    if (t.closest("[data-skip]")) { toast("No thank-you note for this interview", () => announce("Undone.")); return; }
+    if (t.closest("#looks-right")) { $("#moved-banner").hidden = true; announce("Thanks. The banner is gone; the email stays on the timeline."); return; }
+    if (t.closest("#undo-move") || t.closest("[data-undo-ev]")) { toast("Back to Applied · the email stays on the timeline marked \"not a Status change\"", () => announce("Screening again.")); return; }
+    const w = t.closest("[data-wd-sent]"); if (w) { const li = w.closest("li"); li.classList.add("is-sent"); w.disabled = true; w.textContent = "Withdrawn"; toast(`${esc(w.dataset.wdSent)} → Withdrawn · logged by you`, () => { li.classList.remove("is-sent"); w.disabled = false; w.textContent = "Mark sent · Withdrawn"; }, w); return; }
+    if (t.closest("[data-declined]")) { $("#decline-dlg").close(); toast("Ardent Labs → Withdrawn (declined offer)", () => announce("Back to Offer.")); return; }
+    if (t.closest("[data-keep]")) { const li = t.closest("li"); li.hidden = true; toast("Kept open · no withdrawal for this one", () => { li.hidden = false; }); return; }
+    if (t.closest("[data-note]")) { announce("Note field opened."); return; }
+  });
+  document.addEventListener("change", e => {
+    const sel = e.target.closest("[data-status]"); if (!sel) return;
+    const was = sel.dataset.was, now = sel.value;
+    if (now === "Accepted") { location.hash = "accept"; return; }
+    toast(`${was} → ${now} · logged by you`, () => { sel.value = was; sel.focus(); announce(`Back to ${was}.`); }, sel);
+  });
+  $("#own-text")?.addEventListener("input", e => { const n = e.target.value.trim().split(/\s+/).filter(Boolean).length; $("#own-count").textContent = `${n} words${n > 110 ? " · longer than usual" : ""}`; });
+
+  init();
+})();
+</script>
+</body>
+</html>

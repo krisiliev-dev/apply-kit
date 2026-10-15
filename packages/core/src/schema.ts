@@ -445,14 +445,14 @@ const migrations: string[] = [
      updated_at TEXT NOT NULL,
      finished_at TEXT
    );`,
-  // #57: the coach interview. One interview per scope ("setup", or "angle:<angle>" for a thin angle):
+  // #57: the coach interview (table coach_interview; `interview` is Track's job interviews). One interview per scope ("setup", or "angle:<angle>" for a thin angle):
   // the question it's on, whether it's paused or finished, and the last failure (with when it tries
   // again) or that it waits for the budget. Questions keep their topic (JSON) and how they ended
   // (answered, "I don't remember", skipped: skipped ones come back in packages). Turns are the
   // transcript; Kris's answer is saved before it's sent (sent = 0), so a timeout loses nothing.
   // Items are what the interview wrote (a piece, new or updated with its earlier version, or a
   // standard answer), each citing the turn it came from, until Kris finishes (settled_at).
-  `CREATE TABLE interview (
+  `CREATE TABLE coach_interview (
      id TEXT PRIMARY KEY,
      angle TEXT,
      current_key TEXT,
@@ -555,6 +555,217 @@ const migrations: string[] = [
    ALTER TABLE package ADD COLUMN approved_version INTEGER;
    ALTER TABLE package ADD COLUMN ats_accepted TEXT NOT NULL DEFAULT '[]';
    ALTER TABLE package ADD COLUMN contact_fix TEXT;`,
+  // #25: the mail store (ADR 0004). Every email in the job mailbox once, by Message-ID, read once per
+  // check and shared by Discover's alert Sources and Track. Recipients, thread headers and attachment
+  // names (never contents) are kept as JSON lists. A read records the time it looked back to, so the
+  // next one starts from the last good read that filled the store, minus a day.
+  `CREATE TABLE mail_message (
+     id TEXT PRIMARY KEY,
+     from_header TEXT NOT NULL,
+     to_list TEXT NOT NULL,
+     cc_list TEXT NOT NULL,
+     subject TEXT NOT NULL,
+     received_at TEXT NOT NULL,
+     html TEXT NOT NULL,
+     text TEXT NOT NULL,
+     in_reply_to TEXT,
+     reference_list TEXT NOT NULL,
+     attachments TEXT NOT NULL,
+     stored_at TEXT NOT NULL
+   );
+   CREATE INDEX mail_message_received ON mail_message(received_at);
+   ALTER TABLE mailbox_read ADD COLUMN since TEXT;`,
+  // Track #26: Applications (owned by the tracker), their append-only Events (each with its cause;
+  // undo marks an Event undone and records the reversal as its own Event), and the addresses or
+  // domains whose mail belongs to each. `job_id` is null only for one added by hand without a Job.
+  `CREATE TABLE application (
+     id TEXT PRIMARY KEY,
+     job_id TEXT REFERENCES job(id),
+     company TEXT NOT NULL,
+     title TEXT NOT NULL,
+     status TEXT NOT NULL,
+     applied_on TEXT NOT NULL,
+     created_how TEXT NOT NULL,
+     created_at TEXT NOT NULL,
+     posting_url TEXT,
+     portal_url TEXT,
+     package_id TEXT,
+     angle TEXT,
+     source TEXT NOT NULL,
+     cv_version TEXT,
+     language TEXT,
+     removed_at TEXT
+   );
+   CREATE INDEX application_job ON application(job_id);
+   CREATE TABLE application_event (
+     id TEXT PRIMARY KEY,
+     application_id TEXT NOT NULL REFERENCES application(id),
+     at TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     cause TEXT NOT NULL,
+     from_status TEXT,
+     to_status TEXT,
+     text TEXT NOT NULL,
+     undoes TEXT REFERENCES application_event(id),
+     undone_at TEXT
+   );
+   CREATE INDEX application_event_app ON application_event(application_id);
+   CREATE TABLE application_contact (
+     application_id TEXT NOT NULL REFERENCES application(id),
+     value TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     added_at TEXT NOT NULL,
+     PRIMARY KEY (application_id, value)
+   );`,
+  // Track #27: the CV attached to an Application added by hand (no Package), kept locally as sent.
+  // Its label is the Application's CV version (application.cv_version).
+  `CREATE TABLE application_cv (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     file_name TEXT NOT NULL,
+     label TEXT NOT NULL,
+     bytes BLOB NOT NULL,
+     attached_at TEXT NOT NULL
+   );`,
+  // Track #29: follow-ups. One per stage of an Application, tied to the Event that began the stage
+  // (`started_by`), so a Status change leaves it behind and undoing that change brings it back. Its
+  // state (sent, skipped, snoozed) comes from the Events that name it (`follow_up_id`; a snooze keeps
+  // the day in `due_on`). The text is kept as the user types it. The delays are settings (one row).
+  `CREATE TABLE follow_up (
+     id TEXT PRIMARY KEY,
+     application_id TEXT NOT NULL REFERENCES application(id),
+     kind TEXT NOT NULL,
+     stage TEXT NOT NULL,
+     started_by TEXT NOT NULL REFERENCES application_event(id),
+     anchor_on TEXT NOT NULL,
+     text TEXT NOT NULL DEFAULT '',
+     text_saved_at TEXT,
+     created_at TEXT NOT NULL,
+     UNIQUE (started_by, kind)
+   );
+   CREATE INDEX follow_up_app ON follow_up(application_id);
+   ALTER TABLE application_event ADD COLUMN follow_up_id TEXT REFERENCES follow_up(id);
+   ALTER TABLE application_event ADD COLUMN due_on TEXT;
+   CREATE TABLE track_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     value TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );`,
+  // Track #31: email matching. Each stored email is classified once (by the Track assistant, by rules
+  // when the AI budget is out, or not at all) and decided once: matched to an Application (with the
+  // signals it matched on), waiting as "Email to match" (with the candidates and why), not about an
+  // application, or left alone (job alerts, the user's own sent copies, unrelated mail). The user's
+  // answers become sender rules (an address, or a domain that isn't a shared mail provider; a null
+  // Application means "not about an application"). An Event caused by an email names it.
+  `CREATE TABLE email_classification (
+     email_id TEXT PRIMARY KEY REFERENCES mail_message(id),
+     by TEXT NOT NULL,
+     kind TEXT,
+     confidence REAL,
+     company TEXT,
+     job_title TEXT,
+     stage TEXT,
+     language TEXT,
+     summary TEXT,
+     model TEXT,
+     classified_at TEXT NOT NULL
+   );
+   CREATE TABLE email_match (
+     email_id TEXT PRIMARY KEY REFERENCES mail_message(id),
+     state TEXT NOT NULL,
+     application_id TEXT REFERENCES application(id),
+     signals TEXT NOT NULL DEFAULT '[]',
+     candidates TEXT NOT NULL DEFAULT '[]',
+     reason TEXT,
+     how TEXT,
+     decided_at TEXT NOT NULL,
+     confirmed_at TEXT
+   );
+   CREATE INDEX email_match_state ON email_match(state);
+   CREATE TABLE sender_rule (
+     sender TEXT PRIMARY KEY,
+     kind TEXT NOT NULL,
+     application_id TEXT REFERENCES application(id),
+     created_at TEXT NOT NULL
+   );
+   ALTER TABLE application_event ADD COLUMN email_id TEXT;
+   ALTER TABLE application_event ADD COLUMN email_kind TEXT;`,
+  // Track #36: visits to Applications, for "Since your last visit". A visit lasts while the page is
+  // opened again within 30 minutes; `since` is where the visit before it ended.
+  `CREATE TABLE track_visit (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     started_at TEXT NOT NULL,
+     seen_at TEXT NOT NULL,
+     since TEXT
+   );`,
+  // Track #32: a follow-up's draft from the Track assistant (kept once made, with the Master profile
+  // origin of each number in it), and when what the user sent went to Prepare's voice as an edit
+  // (once per follow-up; the voice itself is Prepare's, #59).
+  `ALTER TABLE follow_up ADD COLUMN draft_text TEXT;
+   ALTER TABLE follow_up ADD COLUMN draft_language TEXT;
+   ALTER TABLE follow_up ADD COLUMN draft_numbers TEXT;
+   ALTER TABLE follow_up ADD COLUMN draft_model TEXT;
+   ALTER TABLE follow_up ADD COLUMN drafted_at TEXT;
+   ALTER TABLE follow_up ADD COLUMN voice_edit_at TEXT;`,
+  // Track #33: interviews (local time plus IANA time zone, with the instants beside them; the invite
+  // email they were read from until edited), the details an invite's classification read, thank-you
+  // notes and check-ins tied to an interview (a follow-up's `interview_id`; the topic the user gives),
+  // and the prep sheet (built once per Application; practised marks and the user's own stories kept
+  // in its questions).
+  `CREATE TABLE interview (
+     id TEXT PRIMARY KEY,
+     application_id TEXT NOT NULL REFERENCES application(id),
+     created_by TEXT NOT NULL REFERENCES application_event(id),
+     start_local TEXT,
+     end_local TEXT,
+     time_zone TEXT NOT NULL,
+     start_at TEXT,
+     end_at TEXT,
+     format TEXT,
+     place TEXT,
+     people TEXT NOT NULL DEFAULT '[]',
+     round TEXT,
+     notes TEXT,
+     email_id TEXT,
+     edited_at TEXT,
+     created_at TEXT NOT NULL
+   );
+   CREATE INDEX interview_app ON interview(application_id);
+   ALTER TABLE email_classification ADD COLUMN interview TEXT;
+   ALTER TABLE follow_up ADD COLUMN interview_id TEXT REFERENCES interview(id);
+   ALTER TABLE follow_up ADD COLUMN topic TEXT NOT NULL DEFAULT '';
+   ALTER TABLE application_event ADD COLUMN interview_id TEXT;
+   CREATE TABLE prep_sheet (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     facts TEXT NOT NULL,
+     questions TEXT NOT NULL,
+     model TEXT,
+     built_at TEXT NOT NULL
+   );`,
+  // Track #34: offers and closing. A withdrawal is a follow-up on another open Application, offered
+  // by the Event that accepted an offer (`accepted_by`); it stands while that Event does. A Status
+  // Event may carry a reason ("declined offer"). Offer details are pre-filled from the offer email
+  // (its reading keeps them) until the user saves their own; a rejection keeps an optional lesson and
+  // likely reason.
+  `ALTER TABLE follow_up ADD COLUMN accepted_by TEXT REFERENCES application_event(id);
+   ALTER TABLE application_event ADD COLUMN reason TEXT;
+   ALTER TABLE email_classification ADD COLUMN offer TEXT;
+   CREATE TABLE offer_details (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     base_salary TEXT,
+     start_date TEXT,
+     work_pattern TEXT,
+     contract TEXT,
+     other TEXT,
+     from_email TEXT,
+     saved_by TEXT NOT NULL,
+     saved_at TEXT NOT NULL
+   );
+   CREATE TABLE rejection_note (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     lesson TEXT,
+     reason TEXT,
+     saved_at TEXT NOT NULL
+   );`,
   // #68: switching a package's language keeps the drafts and decisions it had in the language it
   // leaves (the CV version, the screening answers, the letter draft shown and the parts' states, as
   // JSON), so switching back brings them back without the model. Each letter draft knows its language.

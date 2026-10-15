@@ -49,3 +49,6 @@ personal/
 
 # Extraction evaluation reports (pnpm eval:extraction)
 eval/extraction/reports/
+
+# Tailoring evaluation runs (pnpm eval:tailoring): reports, blind sheets and PDFs
+eval/tailoring/reports/
