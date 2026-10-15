@@ -55,7 +55,7 @@ export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcom
 export { draftedPiecesSchema, learnedVoiceSchema } from "./writing/writer.ts";
 export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces, LearnedVoice, VoiceLearningInput } from "./writing/writer.ts";
 export { VOICE_EXCERPT_WORDS } from "./preparation/voice.ts";
-export type { VoiceView, VoiceSample, VoiceSampleFile, VoiceSampleKind, VoiceSampleProblem, VoiceRule, VoiceLanguage } from "./preparation/voice.ts";
+export type { VoiceView, VoiceSample, VoiceSampleFile, VoiceSampleKind, VoiceSampleProblem, VoiceRule, VoiceLanguage, VoiceSend, VoiceLearning } from "./preparation/voice.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft } from "./preparation/engine.ts";
 export type { ProfileExport } from "./preparation/engine.ts";

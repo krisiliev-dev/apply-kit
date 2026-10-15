@@ -10,7 +10,7 @@ import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, ty
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
-import { createVoiceStore, type VoiceSample, type VoiceSampleFile, type VoiceView } from "./voice.ts";
+import { createVoiceStore, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -170,6 +170,15 @@ export interface PreparationEngine {
    * text read here. One that can't be read says why and how to fix it; the others still count.
    */
   addVoiceSamples(files: VoiceSampleFile[]): Promise<VoiceSample[]>;
+  /**
+   * Learns voice rules from what's new (unread parts of samples, edits not yet learned from), within
+   * the monthly budget. No call sends more than VOICE_EXCERPT_WORDS words of Kris's writing, and each
+   * call's excerpts are recorded. The service runs it after samples are added and periodically;
+   * a run already going is joined, not started twice.
+   */
+  learnVoice(): Promise<VoiceLearning>;
+  /** Every call that sent Kris's writing to the model, newest first, with exactly what it sent. */
+  voiceSends(): VoiceSend[];
 }
 
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
@@ -242,6 +251,8 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     answerHistory: (id) => answers.history(id),
     voice: () => voice.view(),
     addVoiceSamples: (files) => voice.add(files),
+    learnVoice: () => voice.learn(),
+    voiceSends: () => voice.sends(),
     contact: () => contact.get(),
     saveContact(details) {
       const result = contact.save(details);

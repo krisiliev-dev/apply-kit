@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createTestPreparation, fakePdf, scannedPdf, type TestPreparationOptions } from "./preparation-harness.ts";
+import type { LearnedVoice, SentExcerpt, VoiceLearningInput } from "../src/index.ts";
+import { createTestPreparation, fakePdf, fakeWriter, scannedPdf, type FakeWriter, type TestPreparationOptions } from "./preparation-harness.ts";
 import { docx } from "./zip.ts";
 
 // Voice (ticket #59): samples of Kris's own writing, the voice rules learned from them and from
@@ -18,7 +19,13 @@ const orbitalLetter = [
 
 const aboutPage = "I build small tools that make noisy systems quieter. Most of my work is reading logs nobody reads and deciding what matters.";
 
-export async function withSamples(options: TestPreparationOptions = {}) {
+/** A long made-up sample (Alex Doe's blog post): 30 numbered sentences of 9 words, 270 words in all. */
+const longPost = Array.from({ length: 30 }, (_, i) => `Note ${i + 1}: the night shift reads the queue first.`).join(" ");
+
+const words = (excerpts: SentExcerpt[]) => excerpts.reduce((n, e) => n + e.text.split(/\s+/).filter(Boolean).length, 0);
+const learnCalls = (writer: FakeWriter) => writer.calls.filter((c) => c.task === "learn-voice").map((c) => c.input as VoiceLearningInput);
+
+async function withSamples(options: TestPreparationOptions = {}) {
   const t = createTestPreparation(options);
   const added = await t.preparation.addVoiceSamples([
     { fileName: "cover-letter-orbital-2023.docx", bytes: docx(orbitalLetter.split("\n\n")) },
@@ -46,5 +53,49 @@ describe("voice samples", () => {
       ["scan.pdf", "writing", 0, null, "This PDF is a scan, with no text to read. Export it again with its text, or as DOCX or TXT; the other samples still count."],
       ["letter-varna.pdf", "cover-letter", 11, "en", null],
     ]);
+  });
+});
+
+describe("learning the voice", () => {
+  it("sends no call more than the excerpt limit of Kris's writing, reads every sample in turn, and records each call's excerpts", async () => {
+    const writer = fakeWriter();
+    const t = await withSamples({ writer });
+    await t.preparation.addVoiceSamples([{ fileName: "blog-post.txt", bytes: text(longPost) }]);
+
+    await t.preparation.learnVoice();
+
+    const calls = learnCalls(writer);
+    expect(calls.length).toBeGreaterThan(2);
+    for (const call of calls) expect(words(call.excerpts)).toBeLessThanOrEqual(150);
+    // Every sentence of every sample was read once, across the calls.
+    const sent = calls.flatMap((c) => c.excerpts).map((e) => e.text).join(" ");
+    for (let i = 1; i <= 30; i++) expect(sent).toContain(`Note ${i}: the night shift reads the queue first.`);
+    expect(sent).toContain("Your night shift loses an hour every time a parcel scan fails.");
+    expect(sent).toContain("Most of my work is reading logs nobody reads and deciding what matters.");
+    // What each call sent is on record, as sent.
+    expect(t.preparation.voiceSends().filter((s) => s.purpose === "learn-voice").map((s) => s.excerpts).reverse()).toEqual(calls.map((c) => c.excerpts));
+
+    // Read once: learning again sends nothing.
+    await t.preparation.learnVoice();
+    expect(learnCalls(writer)).toHaveLength(calls.length);
+  });
+
+  it("shows the rules learned with their evidence, and what they were learned from", async () => {
+    const learned = (input: VoiceLearningInput): LearnedVoice => ({
+      rules: [
+        { id: null, text: "Opens with the company's problem, not with you", evidence: "cover-letter-orbital-2023", language: null, sources: [input.excerpts[0]!.source] },
+        { id: null, text: "Signs off \"Kind regards\"", evidence: "1 of 2 samples", language: "en", sources: [input.excerpts[0]!.source] },
+      ],
+    });
+    const t = await withSamples({ writer: fakeWriter({ learnVoice: learned }) });
+
+    await t.preparation.learnVoice();
+
+    const voice = t.preparation.voice();
+    expect(voice.rules.map((r) => [r.text, r.evidence, r.language, r.samples])).toEqual([
+      ["Opens with the company's problem, not with you", "cover-letter-orbital-2023", null, 1],
+      ["Signs off \"Kind regards\"", "1 of 2 samples", "en", 1],
+    ]);
+    expect(voice.learnedFrom).toEqual({ samples: 2, edits: 0 });
   });
 });
