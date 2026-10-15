@@ -76,11 +76,11 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .frow .v { grid-column: 1; font-size: var(--fs-caption); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
 .frow .chip { grid-column: 2; grid-row: 1 / span 2 }
 .frow .why2 { grid-column: 1 / -1; font-size: var(--fs-caption); color: var(--ink-3) }
-.ask { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 0 var(--s-4); padding: var(--s-4) var(--s-4) var(--s-4) var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
-.ask::before { content: ""; border-radius: 2px; background: var(--bloom) }
-.ask > div { display: grid; gap: var(--s-3); min-width: 0 }
-.ask .q { font-weight: 600; font-size: var(--fs-small); overflow-wrap: anywhere }
-.basis { font-size: var(--fs-caption); color: var(--ink-2); border-left: 2px solid var(--rule); padding-left: var(--s-3) }
+.need { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 0 var(--s-4); padding: var(--s-4) var(--s-4) var(--s-4) var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.need::before { content: ""; border-radius: 2px; background: var(--bloom) }
+.need > div { display: grid; gap: var(--s-3); min-width: 0 }
+.need .q { font-weight: 600; font-size: var(--fs-small); overflow-wrap: anywhere }
+.basis { font-size: var(--fs-caption); color: var(--ink-2); overflow-wrap: anywhere; border-left: 2px solid var(--rule); padding-left: var(--s-3) }
 .sp .undo { justify-self: start }
 .sp fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-2); min-width: 0 }
 .sp legend { padding: 0; font-weight: 600; font-size: var(--fs-small); margin-bottom: var(--s-2) }

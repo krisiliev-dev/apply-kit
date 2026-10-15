@@ -467,7 +467,7 @@ function filled(f: { tabId: number; ctx: HTMLElement; reading: PageReading; answ
     toldF6 = true;
   };
   const chip = (tone: string, icon: string, text: string) => h("span", { class: `chip ${tone}` }, svg(icon), text);
-  const needs = rows.filter((r) => r.outcome === "needs-you").map((r) => h("div", { class: "ask", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
+  const needs = rows.filter((r) => r.outcome === "needs-you").map((r) => h("div", { class: "need", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
     h("p", { class: "q" }, r.label),
     r.why && h("p", { class: "basis" }, r.why),
     h("div", { class: "row" }, button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
