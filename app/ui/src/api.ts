@@ -442,6 +442,9 @@ export const setTargetPosting = async (id: string, postingId: string): Promise<C
 export const setPackageLanguage = async (id: string, language: DocumentLanguage): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/language`, { language }));
 export const setPackagePhoto = async (id: string, on: boolean): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/photo`, { on }));
 export const stopGenerating = async (id: string): Promise<PackageView> => json(await postJson(`${packagePath(id)}/stop`));
+export const undoCvChange = async (id: string, changeId: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/changes/${encodeURIComponent(changeId)}/undo`));
+export const redoCvChange = async (id: string, changeId: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/changes/${encodeURIComponent(changeId)}/redo`));
+export const fitCv = async (id: string, choice: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/fit`, { choice }));
 export const retryPart = async (id: string, part: PackageStep): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/parts/${part}/retry`));
 
 /** The CV's draft PDF; `version` (its SHA-256) makes a re-printed CV load afresh. */
