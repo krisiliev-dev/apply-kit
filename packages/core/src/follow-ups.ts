@@ -5,8 +5,13 @@
 // The tracker owns their state; this module holds the types, the delays (settings) and the outline:
 // plain points from the Application and its posting, with no model call.
 
-/** nudge: a short follow-up email after a quiet stage. offer-note: a note to self about an offer. */
-export type FollowUpKind = "nudge" | "offer-note";
+/**
+ * nudge: a short follow-up email after a quiet stage. offer-note: a note to self about an offer.
+ * withdrawal: a polite note withdrawing another open Application after accepting an offer (marking it
+ * sent moves that Application to Withdrawn). decline: the optional reply declining an offer (a draft
+ * only: it never comes due).
+ */
+export type FollowUpKind = "nudge" | "offer-note" | "withdrawal" | "decline";
 
 /** A follow-up as Needs you and the Application page show it. */
 export interface FollowUp {
@@ -79,7 +84,7 @@ export interface OutlineInput {
   company: string;
   /** The day its stage began, in words ("Tue 6 Oct"). */
   since: string;
-  stage: "applied" | "screening" | "offer";
+  stage: "applied" | "screening" | "interviewing" | "offer";
   /** One requirement or line from the posting, when its Job was read; null otherwise. */
   postingDetail: string | null;
   /** The latest note the user wrote on the Application, or null. */
@@ -91,6 +96,20 @@ export interface OutlineInput {
  * user (their Master profile), so the outline names where to take them from and never invents one.
  */
 export function outlineOf(i: OutlineInput): string[] {
+  if (i.kind === "withdrawal") {
+    return [
+      `Thank them for their time on ${i.title}${i.stage === "applied" ? "" : " and the conversations so far"}.`,
+      "Say you've accepted another offer and withdraw from the process. No need to name the company.",
+      "Keep the door open in one line.",
+    ];
+  }
+  if (i.kind === "decline") {
+    return [
+      `Thank them for the offer for ${i.title} and for the time their team spent with you.`,
+      "Say you've decided to decline. A reason is optional; keep it short if you give one.",
+      "One warm line about the conversations; keep the door open.",
+    ];
+  }
   if (i.kind === "offer-note") {
     return [
       `The offer from ${i.company} for ${i.title} came ${i.since}. When do they need your answer?`,
@@ -114,13 +133,15 @@ export function outlineOf(i: OutlineInput): string[] {
 // ---------- Drafts (Track #32; spec #24 "Draft rules") ----------
 
 /**
- * The messages the Track assistant drafts. Only the nudge so far: thank-you notes, check-ins,
- * withdrawals and declines join with their tickets. A note to self is never drafted (its outline is it).
+ * The messages the Track assistant drafts: the nudge, the withdrawal after accepting an offer, and
+ * the reply declining one. A note to self is never drafted (its outline is it).
  */
-export type DraftKind = "nudge";
+export type DraftKind = "nudge" | "withdrawal" | "decline";
 
 /** The length that works well, in words, per kind (spec "Draft rules"). */
-export const draftWords: Record<DraftKind, { min: number; max: number }> = { nudge: { min: 70, max: 110 } };
+export const draftWords: Record<DraftKind, { min: number; max: number }> = {
+  nudge: { min: 70, max: 110 }, withdrawal: { min: 30, max: 70 }, decline: { min: 40, max: 80 },
+};
 
 /**
  * Phrases a draft must never use (docs/knowledge/application-tactics.md: the follow-up draft rules
@@ -165,9 +186,9 @@ export interface DraftInput {
   kind: DraftKind;
   company: string;
   title: string;
-  /** The day the stage began, in words ("Mon 5 Oct"), and the stage. */
+  /** The day the stage began, in words ("Mon 5 Oct"), and the stage (for a withdrawal: where that Application stands). */
   since: string;
-  stage: "applied" | "screening";
+  stage: "applied" | "screening" | "interviewing" | "offer";
   /** Whole days with no reply. */
   daysQuiet: number;
   /** The posting's requirements as read (English labels), most important first; empty when it wasn't read. */

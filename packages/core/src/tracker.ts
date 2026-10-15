@@ -61,6 +61,8 @@ export interface ApplicationEvent {
   emailKind: EmailKind | null;
   /** For what was done with a follow-up: which one. */
   followUpId: string | null;
+  /** Why, for a Status change that has one ("declined offer", "accepted another offer"); else null. */
+  reason: string | null;
 }
 
 export type FollowUpEventKind = "follow-up-sent" | "follow-up-skipped" | "follow-up-snoozed";
@@ -486,6 +488,22 @@ export interface FollowUpDraft {
   snoozeDays: number;
 }
 
+/**
+ * A withdrawal offered after accepting an offer: a polite note to another open Application. Pending
+ * until the user marks it sent (that Application then moves to Withdrawn) or keeps it open (skipped).
+ */
+export interface Withdrawal {
+  followUp: FollowUp;
+  application: ApplicationSummary;
+}
+
+/** The withdrawals of the offer accepted: still to send and sent (kept-open ones leave the list). */
+export interface Withdrawals {
+  /** The Application whose offer was accepted, or null when none stands. */
+  accepted: ApplicationSummary | null;
+  items: Withdrawal[];
+}
+
 /** A Status change an email made, for "Since your last visit". */
 export interface EmailChange {
   applicationId: string;
@@ -578,6 +596,13 @@ export interface Tracker {
   /** Saves the follow-up delays. Pending follow-ups follow the new delays. Throws with a plain message when invalid. */
   saveFollowUpSettings(settings: unknown): Promise<FollowUpSettings>;
   /**
+   * "I accepted this offer…" (and Accepted from any Status select): moves it to Accepted, by you and
+   * undoable, and offers a withdrawal for every other open Application. Throws a TrackerError when refused.
+   */
+  acceptOffer(applicationId: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent; withdrawals: Withdrawal[] }>;
+  /** The withdrawals of the offer accepted (still to send, and sent), for the withdrawal dialog. */
+  withdrawals(): Promise<Withdrawals>;
+  /**
    * Classifies and matches every stored email not decided yet (run after each mailbox read; the
    * engine passes what it just stored). A confident unique match of a Status-changing kind moves the
    * Status forward (or to Rejected) as an Event by email; anything doubtful waits as Email to match.
@@ -658,7 +683,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       kind: r.kind as ApplicationEvent["kind"], cause: r.cause as EventCause,
       from: str(r.from_status) as Status | null, to: str(r.to_status) as Status | null,
       text: String(r.text), undoes: str(r.undoes), undoneAt: str(r.undone_at), followUpId: str(r.follow_up_id),
-      emailId: str(r.email_id), emailKind: str(r.email_kind) as EmailKind | null,
+      emailId: str(r.email_id), emailKind: str(r.email_kind) as EmailKind | null, reason: str(r.reason),
     };
   }
 
@@ -701,14 +726,14 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return r ? summaryOf(r) : null;
   }
 
-  type NewEvent = Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "followUpId" | "emailId" | "emailKind">
-    & { followUpId?: string; dueOn?: string; emailId?: string | null; emailKind?: EmailKind | null };
+  type NewEvent = Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "followUpId" | "emailId" | "emailKind" | "reason">
+    & { followUpId?: string; dueOn?: string; emailId?: string | null; emailKind?: EmailKind | null; reason?: string | null };
   function addEvent(e: NewEvent): ApplicationEvent {
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on, email_id, email_kind)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null, e.emailId ?? null, e.emailKind ?? null);
+      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on, email_id, email_kind, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null, e.emailId ?? null, e.emailKind ?? null, e.reason ?? null);
     return eventOf(db.prepare("SELECT * FROM application_event WHERE id = ?").get(id)!);
   }
 
@@ -1155,16 +1180,18 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   function followUpOf(r: Row): FollowUp {
     const events = db.prepare("SELECT * FROM application_event WHERE follow_up_id = ? AND undone_at IS NULL AND kind != 'undo' ORDER BY at, rowid")
       .all(String(r.id));
-    const done = events.filter((e) => e.kind === "follow-up-sent" || e.kind === "follow-up-skipped").at(-1);
+    // A withdrawal marked sent is the Status change to Withdrawn itself (one Event, one Undo).
+    const done = events.filter((e) => e.kind === "follow-up-sent" || e.kind === "follow-up-skipped" || e.kind === "status").at(-1);
     const snoozedTo = str(events.filter((e) => e.kind === "follow-up-snoozed").at(-1)?.due_on);
     const kind = r.kind as FollowUpKind;
     const s = followUpSettings();
     const anchorOn = String(r.anchor_on);
+    const delay = kind === "nudge" ? s.nudgeAfterDays : kind === "offer-note" ? s.offerNoteAfterDays : 0;
     return {
       id: String(r.id), applicationId: String(r.application_id), kind, anchorOn,
-      dueOn: snoozedTo ?? addDays(anchorOn, kind === "nudge" ? s.nudgeAfterDays : s.offerNoteAfterDays),
+      dueOn: snoozedTo ?? addDays(anchorOn, delay),
       snoozedTo,
-      state: done ? (done.kind === "follow-up-sent" ? "sent" : "skipped") : "pending",
+      state: done ? (done.kind === "follow-up-skipped" ? "skipped" : "sent") : "pending",
       doneAt: done ? String(done.at) : null,
       doneBy: done ? (done.cause === "email" ? "email" : "you") : null,
       text: String(r.text),
@@ -1206,13 +1233,91 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return f.kind === "nudge" ? { kind: "no-reply", days: daysBetween(f.anchorOn, today()) } : null;
   }
 
+  // ---------- offers and closing (#34) ----------
+
+  /** The Event still standing that accepted an offer, on an Application still Accepted; null when none. */
+  function standingAccept(): ApplicationEvent | null {
+    const r = db.prepare(
+      `SELECT e.* FROM application_event e JOIN application a ON a.id = e.application_id
+       WHERE e.kind = 'status' AND e.to_status = 'accepted' AND e.undone_at IS NULL AND a.removed_at IS NULL AND a.status = 'accepted'
+       ORDER BY e.at DESC, e.rowid DESC LIMIT 1`,
+    ).get();
+    return r ? eventOf(r) : null;
+  }
+
+  /** The withdrawals the standing accept offered: still to send, and sent (kept-open ones and those closed since are left out). */
+  function withdrawalList(): Withdrawals {
+    const accept = standingAccept();
+    if (!accept) return { accepted: null, items: [] };
+    const items = db.prepare("SELECT * FROM follow_up WHERE kind = 'withdrawal' AND accepted_by = ? ORDER BY created_at, rowid").all(accept.id)
+      .flatMap((r) => {
+        const application = summary(String(r.application_id));
+        const followUp = followUpOf(r);
+        if (!application || followUp.state === "skipped" || (followUp.state === "pending" && isClosed(application.status))) return [];
+        return [{ followUp, application }];
+      });
+    return { accepted: summary(accept.applicationId), items };
+  }
+
+  /** The withdrawal standing for an Application (pending, sent or kept open), or null. */
+  function withdrawalOf(applicationId: string): FollowUp | null {
+    const accept = standingAccept();
+    if (!accept) return null;
+    const r = db.prepare("SELECT * FROM follow_up WHERE kind = 'withdrawal' AND accepted_by = ? AND application_id = ?").get(accept.id, applicationId);
+    return r ? followUpOf(r) : null;
+  }
+
+  async function acceptOffer(applicationId: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status === "accepted") throw new TrackerError("unchanged", "It is already Accepted.", applicationId);
+    if (isClosed(app.status) && app.jobId) {
+      const open = openOnJob(app.jobId);
+      if (open) throw new TrackerError("already-open", `${open.title} at ${open.company} already has an open Application.`, open.id);
+    }
+    db.exec("BEGIN");
+    try {
+      db.prepare("UPDATE application SET status = 'accepted' WHERE id = ?").run(applicationId);
+      const event = addEvent({ applicationId, kind: "status", cause: "you", from: app.status, to: "accepted", text: "Accepted the offer", undoes: null });
+      // Every other open Application gets a withdrawal, tied to its current stage and to this accept.
+      const others = db.prepare(
+        "SELECT * FROM application WHERE removed_at IS NULL AND id != ? AND status NOT IN ('rejected', 'withdrawn', 'accepted')",
+      ).all(applicationId);
+      for (const r of others) {
+        const start = stageStart(String(r.id))!;
+        const existing = db.prepare("SELECT id FROM follow_up WHERE started_by = ? AND kind = 'withdrawal'").get(start.id);
+        if (existing) {
+          db.prepare("UPDATE follow_up SET accepted_by = ?, anchor_on = ? WHERE id = ?").run(event.id, today(), String(existing.id));
+        } else {
+          db.prepare(
+            "INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at, accepted_by) VALUES (?, ?, 'withdrawal', ?, ?, ?, ?, ?)",
+          ).run(randomUUID(), String(r.id), String(r.status), start.id, today(), now(), event.id);
+        }
+      }
+      db.exec("COMMIT");
+      return { application: summary(applicationId)!, event, withdrawals: withdrawalList().items };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
   async function needsYou(): Promise<NeedsYou> {
     const day = today();
     const soon = addDays(day, comingUpDays);
     const items: NeedsYouEntry[] = [];
     const comingUp: ComingUp[] = [];
     const apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL AND status NOT IN ('rejected', 'withdrawn')").all();
+    const withdrawals = withdrawalList().items;
+    for (const w of withdrawals) {
+      const f = w.followUp;
+      const application = { id: w.application.id, title: w.application.title, company: w.application.company, status: w.application.status, appliedOn: w.application.appliedOn };
+      if (f.state === "pending") items.push({ followUp: f, application, done: false });
+      else if (f.doneAt && sofiaDay(new Date(f.doneAt)) === day) items.push({ followUp: f, application, done: true });
+    }
     for (const r of apps) {
+      // While its withdrawal waits to be sent, an Application's own follow-up is held back.
+      if (withdrawals.some((w) => w.application.id === String(r.id) && w.followUp.state === "pending")) continue;
       const f = currentFollowUp(r);
       if (!f) continue;
       const application = { id: String(r.id), title: String(r.title), company: String(r.company), status: r.status as Status, appliedOn: String(r.applied_on) };
@@ -1244,7 +1349,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     const app = r ? row(String(r.application_id)) : undefined;
     if (!r || !app) throw new TrackerError("not-found", "There's no such follow-up.");
-    const f = currentFollowUp(app);
+    if (r.kind === "decline") throw new TrackerError("invalid", "A reply declining an offer isn't tracked; decline the offer instead.", String(app.id));
+    const f = r.kind === "withdrawal" ? withdrawalOf(String(app.id)) : currentFollowUp(app);
     if (f?.id !== followUpId) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this follow-up no longer applies.", String(app.id));
     }
@@ -1255,6 +1361,24 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const { f, app } = actionable(followUpId);
     if (f.state !== "pending") {
       throw new TrackerError("unchanged", f.state === "sent" ? "It's marked sent already." : "It was skipped already.", String(app.id));
+    }
+    if (f.kind === "withdrawal" && kind === "follow-up-sent") {
+      // Marked sent, a withdrawal is the move to Withdrawn: one Event, so one Undo puts both back.
+      const from = app.status as Status;
+      if (isClosed(from)) throw new TrackerError("changed-since", `It's ${statusName(from)} already.`, String(app.id));
+      db.exec("BEGIN");
+      try {
+        db.prepare("UPDATE application SET status = 'withdrawn' WHERE id = ?").run(f.applicationId);
+        const event = addEvent({
+          applicationId: f.applicationId, kind: "status", cause: "you", from, to: "withdrawn", text: "Withdrawal sent: moved to Withdrawn",
+          undoes: null, followUpId, reason: "accepted another offer",
+        });
+        db.exec("COMMIT");
+        return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!), event };
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
     }
     const event = addEvent({ applicationId: f.applicationId, kind, cause: "you", from: null, to: null, text: words(f), undoes: null, followUpId, dueOn });
     return { followUp: actionable(followUpId).f, event };
@@ -1820,7 +1944,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     followUp: followUpDraft,
     saveFollowUpText,
     markFollowUpSent: async (id) => followUpEvent(id, "follow-up-sent", (f) => (f.kind === "nudge" ? "Follow-up sent" : "Note to self done")),
-    skipFollowUp: async (id) => followUpEvent(id, "follow-up-skipped", (f) => (f.kind === "nudge" ? "No follow-up this time" : "No note this time")),
+    skipFollowUp: async (id) => followUpEvent(id, "follow-up-skipped", (f) => (
+      f.kind === "nudge" ? "No follow-up this time" : f.kind === "withdrawal" ? "Kept open: no withdrawal" : "No note this time")),
     snoozeFollowUp: async (id) => {
       const to = addDays(today(), followUpSettings().snoozeDays);
       return followUpEvent(id, "follow-up-snoozed", (f) => `${f.kind === "nudge" ? "Follow-up" : "Note to self"} snoozed to ${dayWords(to)}`, to);
@@ -1834,6 +1959,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       ).run(JSON.stringify(settings), now());
       return settings;
     },
+    acceptOffer,
+    withdrawals: async () => withdrawalList(),
     processMail,
     emailsToMatch,
     answerEmail,

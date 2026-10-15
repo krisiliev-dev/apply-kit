@@ -391,6 +391,31 @@ const migrations: string[] = [
      language TEXT,
      saved_at TEXT NOT NULL
    );`,
+  // Track #34: offers and closing. A withdrawal is a follow-up on another open Application, offered
+  // by the Event that accepted an offer (`accepted_by`); it stands while that Event does. A Status
+  // Event may carry a reason ("declined offer"). Offer details are pre-filled from the offer email
+  // (its reading keeps them) until the user saves their own; a rejection keeps an optional lesson and
+  // likely reason.
+  `ALTER TABLE follow_up ADD COLUMN accepted_by TEXT REFERENCES application_event(id);
+   ALTER TABLE application_event ADD COLUMN reason TEXT;
+   ALTER TABLE email_classification ADD COLUMN offer TEXT;
+   CREATE TABLE offer_details (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     base_salary TEXT,
+     start_date TEXT,
+     work_pattern TEXT,
+     contract TEXT,
+     other TEXT,
+     from_email TEXT,
+     saved_by TEXT NOT NULL,
+     saved_at TEXT NOT NULL
+   );
+   CREATE TABLE rejection_note (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     lesson TEXT,
+     reason TEXT,
+     saved_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
