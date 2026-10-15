@@ -1,9 +1,11 @@
 // The real Track assistant: the same OpenRouter setup as extraction (DeepSeek V4.1 Flash, pinned
 // non-China hosts that don't store or train on prompts, schema-validated output). Only the minimum
-// of an email goes out: sender, subject, date and its text (trimmed); never attachments.
+// of an email goes out: sender, subject, date and its text (trimmed); never attachments. A draft gets
+// the Application, the posting's requirements, the Master profile pieces that bear on them and short
+// voice excerpts (PRODUCT.md "Voice"); never the follow-up's id or any contact address.
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
-import { emailClassificationSchema, prepSheetDraftSchema, type ClassifyInput, type PrepSheetInput, type TrackAssistant } from "@apply-kit/core";
+import { draftOutputSchema, emailClassificationSchema, prepSheetDraftSchema, type ClassifyInput, type DraftInput, type PrepSheetInput, type TrackAssistant } from "@apply-kit/core";
 import { DEFAULT_MODEL, DEFAULT_PROVIDERS, providerRouting } from "./openrouter.ts";
 
 /** Prices the estimate assumes (the routing's max price per million tokens), and output limits. */
@@ -37,6 +39,17 @@ const prepInstructions = `You write a light interview prep sheet as JSON matchin
   given; never invent, merge or stretch a story. A null is fine and honest.
 - Write in the given language.`;
 
+const draftInstructions = `You draft a short follow-up email for a job seeker, in their voice, as JSON {"body": "..."}. Rules:
+- Body only: no subject, greeting, sign-off or name. The job seeker adds those in their own mail app.
+- Concise and warm, never fawning. Plain, declarative sentences; direct tone.
+- Mention exactly one concrete detail from the posting's requirements or the job seeker's notes.
+- Facts about the job seeker come only from the Master profile pieces given. Never invent experience.
+  Any number about them (counts, percentages, years) must be copied exactly from those pieces; if none fits, use no number.
+- Never use these phrases: {banned}.
+- Write in the language given (ISO 639-1; "bg" is Bulgarian).
+- Match the job seeker's voice from the excerpts of their own writing, if any: their sentence length, word choice, warmth.
+- Length: {min}-{max} words.`;
+
 export interface TrackAssistantOptions {
   apiKey: string;
   model?: string;
@@ -56,6 +69,18 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
   const tokens = (chars: number) => Math.ceil(chars / 2.5);
   const usd = (prompt: number, completion: number) => (prompt * PRICE.prompt + completion * PRICE.completion) / 1_000_000;
 
+  const draftSystem = (input: DraftInput) => draftInstructions
+    .replace("{banned}", input.banned.map((b) => `"${b}"`).join(", "))
+    .replace("{min}", String(input.words.min)).replace("{max}", String(input.words.max));
+  const draftPrompt = (input: DraftInput) => [
+    `Message: a ${input.kind === "nudge" ? "nudge after no reply" : input.kind}, ${input.daysQuiet} days after ${input.stage === "applied" ? "applying" : "moving to screening"} (${input.since}).`,
+    `Job: ${input.title} at ${input.company}. Language: ${input.language}.`,
+    `Posting requirements:\n${input.requirements.map((r) => `- ${r}`).join("\n") || "- (not read)"}`,
+    `The job seeker's notes:\n${input.notes.map((n) => `- ${n}`).join("\n") || "- (none)"}`,
+    `Master profile pieces:\n${input.evidence.map((e) => `- ${e.text}`).join("\n") || "- (none: use no numbers about the job seeker)"}`,
+    `Excerpts of the job seeker's own writing:\n${input.voice.map((v) => `> ${v}`).join("\n") || "> (none yet)"}`,
+  ].join("\n\n");
+  const DRAFT_OUTPUT_TOKENS = 500;
   const prepPromptFor = (input: PrepSheetInput) => JSON.stringify({
     company: input.company, title: input.title, language: input.language, requirements: input.requirements, notes: input.notes,
     stories: input.stories.map((s) => ({ id: s.id, text: s.text })), posting: input.postingText,
@@ -82,6 +107,26 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
         ? reported
         : usd(result.usage.inputTokens ?? 0, result.usage.outputTokens ?? PREP_OUTPUT_TOKENS);
       return { sheet: result.output, costUsd, model: result.response.modelId || modelId };
+    },
+    estimateDraftUsd(input) {
+      return usd(tokens(draftSystem(input).length + draftPrompt(input).length), DRAFT_OUTPUT_TOKENS);
+    },
+    async draft(input) {
+      const result = await generateText({
+        model,
+        instructions: draftSystem(input),
+        prompt: draftPrompt(input),
+        output: Output.object({ schema: draftOutputSchema, name: "follow_up_draft" }),
+        temperature: 0.4,
+        maxOutputTokens: DRAFT_OUTPUT_TOKENS,
+        maxRetries: 1,
+        timeout: TIMEOUT_MS,
+      });
+      const reported = (result.providerMetadata?.openrouter as { usage?: { cost?: unknown } } | undefined)?.usage?.cost;
+      const costUsd = typeof reported === "number" && Number.isFinite(reported)
+        ? reported
+        : usd(result.usage.inputTokens ?? 0, result.usage.outputTokens ?? DRAFT_OUTPUT_TOKENS);
+      return { draft: result.output, costUsd, model: result.response.modelId || modelId };
     },
     estimateClassifyUsd(input) {
       return usd(tokens(instructions.length + promptFor(input).length + 1_500), MAX_OUTPUT_TOKENS);

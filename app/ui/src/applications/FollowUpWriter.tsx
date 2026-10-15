@@ -1,13 +1,15 @@
-// Writing one follow-up (hi-fi: application.html "Follow-up · AI budget out", and the draft dialog in
-// applications.html "Follow-up due · draft"): the points to cover, from the Application with no model
-// call; a text area kept as typed; Copy text and Open in Mail (a mailto with recipient and subject; the
-// user sends, there is no Send button); Mark sent, Snooze and "No note this time", each undoable by
-// whoever opened it. Used inline on the Application page and in a dialog over Needs you. A thank-you
-// note asks for one thing discussed first (hi-fi application.html "Thank-you due"), which the points use.
-import type { FollowUpDraft } from "@apply-kit/core";
+// Writing one follow-up (hi-fi: application.html "Follow-up due" and "Follow-up · AI budget out", and
+// the draft dialog in applications.html "Follow-up due · draft"): the Track assistant's draft to edit
+// freely, with a help line naming where any number came from; or, with no draft (budget out, no AI, a
+// draft that broke the rules), the points to cover with no model call and the reason. The text is kept
+// as typed and teaches the user's voice. Copy text and Open in Mail (a mailto with recipient and
+// subject; the user sends, there is no Send button); Mark sent, Snooze and "No note this time", each
+// undoable by whoever opened it. Used inline on the Application page and in a dialog over Needs you.
+// A thank-you note asks for one thing discussed (hi-fi application.html "Thank-you due"), which the points use.
+import type { FollowUpDraft, NoDraft } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { fetchFollowUp, saveFollowUpText, saveFollowUpTopic } from "../api.ts";
-import { daysWord, isMessage, wordsWord } from "./words.ts";
+import { daysWord, isMessage, weekDay, wordsWord } from "./words.ts";
 
 export type FollowUpAction = "sent" | "skip" | "snooze";
 
@@ -33,7 +35,7 @@ export function useFollowUpDraft(id: string) {
   useEffect(() => {
     const ctrl = new AbortController();
     fetchFollowUp(id, ctrl.signal)
-      .then((d) => { setDraft(d); setText(d.followUp.text); setTopic(d.followUp.topic); })
+      .then((d) => { setDraft(d); setText(d.text); setTopic(d.followUp.topic); })
       .catch((err: unknown) => { if (!ctrl.signal.aborted) setError(message(err)); });
     return () => ctrl.abort();
   }, [id]);
@@ -62,16 +64,43 @@ export function useFollowUpDraft(id: string) {
   return { draft, error, text, type, flush, topic, setTopic, keepTopic };
 }
 
-const fieldLabel = { nudge: "Your follow-up", "offer-note": "Your note to self", "thank-you": "Draft · body only, edit freely", "check-in": "Your check-in" } as const;
+const fieldLabel = { nudge: "Your follow-up", "offer-note": "Your note to self", "thank-you": "Your thank-you note", "check-in": "Your check-in" } as const;
 
-export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
+/** Why there's no draft, in plain words: the banner's bold line and what follows it. */
+export function noDraftWords(n: NoDraft): { lead: string; rest: string } {
+  if (n.reason === "budget-out") {
+    return {
+      lead: `No draft this time: this month's AI budget ($${n.capUsd % 1 ? n.capUsd.toFixed(2) : n.capUsd}) ran out${n.ranOutOn ? ` on ${weekDay(n.ranOutOn)}` : ""}.`,
+      rest: `It resets on ${weekDay(n.resetsOn)}. Everything else works, and the points below make writing this one quick.`,
+    };
+  }
+  if (n.reason === "no-ai") {
+    return { lead: "No draft: AI isn't set up.", rest: "Drafts need OPENROUTER_API_KEY and AI_MONTHLY_CAP_USD in .env. The points below make writing this one quick." };
+  }
+  return { lead: "No draft this time.", rest: `The draft didn't follow the rules (${n.why}), so it isn't shown. The points below make writing this one quick.` };
+}
+
+/** The banner for a follow-up with no draft (the Application page shows it at the top, the dialog inside). */
+export function NoDraftBanner({ noDraft }: { noDraft: NoDraft }) {
+  const w = noDraftWords(noDraft);
+  return (
+    <div className="banner warning" role="status">
+      <span className="text"><b>{w.lead}</b> {w.rest}</span>
+    </div>
+  );
+}
+
+export function FollowUpWriter({ id, headingId, onAct, onAnnounce, onLoaded }: {
   id: string;
-  /** The heading above it (labels the outline). */
+  /** The heading above it (labels the group). */
   headingId?: string;
   onAct: (action: FollowUpAction, draft: FollowUpDraft) => void;
   onAnnounce: (message: string) => void;
+  /** Told once it is loaded; when given, the caller shows the no-draft banner (else it is shown here). */
+  onLoaded?: (draft: FollowUpDraft) => void;
 }) {
   const { draft, error, text, type, flush, topic, setTopic, keepTopic } = useFollowUpDraft(id);
+  useEffect(() => { if (draft) onLoaded?.(draft); }, [draft, onLoaded]);
   const fieldId = useId();
   const topicId = useId();
   const helpId = useId();
@@ -92,14 +121,11 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
   };
   const act = (action: FollowUpAction) => { flush(); onAct(action, draft); };
 
+  const d = draft.draft;
+  const numbers = d?.numbers.map((n) => `"${n.quote}" comes from your Master profile (${n.origin})`).join(" · ");
   return (
     <div className="stack follow-up" role="group" style={{ gap: "var(--s-5)" }} aria-labelledby={headingId}>
-      <div className="stack" style={{ gap: "var(--s-2)" }}>
-        <span className="mini" style={{ fontWeight: 600 }} id={outlineId}>Points to cover, from this Application</span>
-        <ul className="outline" aria-labelledby={outlineId}>
-          {draft.outline.map((p) => <li key={p} lang={langOf(p)}>{p}</li>)}
-        </ul>
-      </div>
+      {draft.noDraft && !onLoaded && <NoDraftBanner noDraft={draft.noDraft} />}
       {kind === "thank-you" && (
         <div className="field">
           <label htmlFor={topicId}>One thing you discussed <span className="meta">(makes the note specific)</span></label>
@@ -107,18 +133,30 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); keepTopic(); } }} lang={langOf(topic)} />
         </div>
       )}
+      {!d && (
+        <div className="stack" style={{ gap: "var(--s-2)" }}>
+          <span className="mini" style={{ fontWeight: 600 }} id={outlineId}>Points to cover, from this Application</span>
+          <ul className="outline" aria-labelledby={outlineId}>
+            {draft.outline.map((p) => <li key={p} lang={langOf(p)}>{p}</li>)}
+          </ul>
+        </div>
+      )}
       <div className="field">
-        <label htmlFor={fieldId}>{fieldLabel[kind]}</label>
-        <span className="help" id={helpId}>
-          {nudge ? "Kept as you type. Body only: your mail app adds the greeting line and signature you use." : "Kept as you type. Only you see it."}
-        </span>
+        <label htmlFor={fieldId}>{d ? "Draft · body only, edit freely" : fieldLabel[kind]}</label>
+        {!d && (
+          <span className="help" id={helpId}>
+            {nudge ? "Kept as you type. What you write here also teaches your voice. Body only: your mail app adds the greeting and signature." : "Kept as you type. Only you see it."}
+          </span>
+        )}
         <textarea
           className="input" id={fieldId} value={text} onChange={(e) => type(e.target.value)} onBlur={flush}
-          style={{ minHeight: "140px" }} aria-describedby={`${helpId} ${countId}`} lang={langOf(text)}
+          aria-describedby={`${d ? "" : `${helpId} `}${countId}`} lang={langOf(text) ?? (d?.language === "bg" ? "bg" : undefined)}
         />
         <span className="help" id={countId} aria-live="polite">
-          {wordsWord(words)}{draft.words && ` · ${draft.words.min}–${draft.words.max} works well`}
+          {wordsWord(words)}{draft.words && !d && ` · ${draft.words.min}–${draft.words.max} works well`}
           {draft.mail && ` · to ${draft.mail.to ?? "the recruiter (add their address under Contacts)"}`}
+          {numbers && ` · ${numbers}`}
+          {d && " · kept as you type; edits teach your voice"}
         </span>
       </div>
       <div className="draft-acts">
@@ -131,7 +169,7 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce }: {
       </div>
       <p className="never">
         {nudge
-          ? `apply-kit never sends mail. Copy the text or open it in Mail and send it yourself, then press "Mark sent": it logs an Event and stops this follow-up.`
+          ? `apply-kit never sends mail. Copy the text or open it in Mail and send it yourself, then press "Mark sent": it logs an Event and stops this follow-up. If you BCC the job mailbox, apply-kit notices the sent copy and marks it for you.`
           : `A note for you only. "Mark done" logs it on the timeline.`}
       </p>
     </div>

@@ -215,16 +215,6 @@ export interface PrepSheetInput {
   language: string;
 }
 
-/**
- * The Master profile, as Track needs it (the contract with Prepare, spec #51): its true stories, and
- * adding an unconfirmed profile piece from another feature (an interview story), with its source.
- */
-export interface MasterProfile {
-  /** Confirmed stories only. */
-  stories(): Promise<ProfileStory[]>;
-  addUnconfirmedPiece(piece: { text: string; source: string }): Promise<{ id: string }>;
-}
-
 /** One likely question on the prep sheet. */
 export interface PrepQuestion {
   id: string;

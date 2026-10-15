@@ -332,9 +332,9 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     <FollowUpDialog
       entries={writing.entries}
       index={writing.index}
-      onIndex={(index) => setWriting((w) => (w ? { ...w, index } : w))}
       onAct={(action) => { actOn(writing.entries[writing.index]!, action).catch(() => {}); }}
-      onClose={() => { const o = writing.opener; setWriting(null); requestAnimationFrame(() => o.focus()); }}
+      onNext={() => setWriting({ ...writing, index: Math.min(writing.index + 1, writing.entries.length - 1) })}
+      onClose={() => { const o = writing.opener; setWriting(null); requestAnimationFrame(() => (o.isConnected ? o : document.getElementById("ny-h"))?.focus()); }}
       onAnnounce={toaster.announce}
     />
   );
@@ -465,8 +465,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         </div>
       ) : needs && (
         <NeedsYouSection
-          needs={needs} onWrite={(entries, opener) => setWriting({ entries, index: 0, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
-          onSnoozeAll={(entries) => { snoozeAll(entries).catch(() => {}); }}
+          needs={needs} onWrite={(entry, opener) => setWriting({ entries: [entry], index: 0, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
+          onReview={(entries, opener) => setWriting({ entries, index: 0, opener })} onSnoozeAll={(entries) => { snoozeAll(entries).catch(() => {}); }}
           emails={<EmailToMatchItems emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />}
         />
       )}

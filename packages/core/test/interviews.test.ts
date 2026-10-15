@@ -166,6 +166,8 @@ function fakeAssistant(prep: (input: PrepSheetInput) => PrepSheetDraft = () => (
       if (!classification) throw new Error(`no recorded classification for ${input.messageId}`);
       return { classification, costUsd, model: "fake/track-assistant" };
     },
+    estimateDraftUsd: () => costUsd,
+    draft: async () => { throw new Error("no drafts in these tests"); },
     estimatePrepSheetUsd: () => costUsd,
     async buildPrepSheet(input) {
       prepCalls.push(input);
@@ -179,6 +181,7 @@ function fakeAssistant(prep: (input: PrepSheetInput) => PrepSheetDraft = () => (
 function fakeProfile(stories: ProfileStory[]) {
   const added: { text: string; source: string }[] = [];
   const profile: MasterProfile = {
+    evidence: async () => [],
     stories: async () => stories,
     async addUnconfirmedPiece(piece) { added.push(piece); return { id: `piece-${added.length}` }; },
   };
@@ -193,13 +196,20 @@ function withMail({ cap = 10, prep, stories = [] }: { cap?: number; prep?: (inpu
   const me = fakeProfile(stories);
   let tracker: TrackerApi | null = null;
   const t = createTestEngine({ clock, mailReader: mailbox, aiMonthlyCapUsd: cap, onMailStored: (emails) => tracker!.processMail(emails) });
-  tracker = createTracker({ db: t.deps.db, clock, discovery: t.engine, assistant: ai.assistant, aiMonthlyCapUsd: cap, profile: me.profile });
+  tracker = createTracker({
+    db: t.deps.db, clock, discovery: t.engine, assistant: ai.assistant, aiMonthlyCapUsd: cap, profile: me.profile, ownAddresses: ["sample.jobs@example.com"],
+  });
   const receive = async (iso: string, ...names: string[]) => {
     for (const n of names) mailbox.deliver(mailMessage(recorded[n]!.email));
     clock.set(iso);
     await t.engine.checkAll();
   };
-  return { ...t, clock, tracker: tracker as TrackerApi, ai, me, receive };
+  const deliver = async (iso: string, email: Parameters<typeof mailMessage>[0]) => {
+    mailbox.deliver(mailMessage(email));
+    clock.set(iso);
+    await t.engine.checkAll();
+  };
+  return { ...t, clock, tracker: tracker as TrackerApi, ai, me, receive, deliver };
 }
 
 describe("interview details from the invite email", () => {
@@ -388,5 +398,20 @@ describe("writing a thank-you note", () => {
     const { event } = await tracker.markFollowUpSent(thanks.id);
     expect(event).toMatchObject({ kind: "follow-up-sent", text: "Thank-you note sent" });
     expect((await tracker.needsYou()).items).toEqual([expect.objectContaining({ done: true })]);
+  });
+});
+
+describe("a sent copy in the job mailbox", () => {
+  it("marks the thank-you note sent by email when it goes to the interview's contact after the interview", async () => {
+    const { tracker, deliver } = withMail();
+    const id = await add(tracker as Tracker, { company: "Ostwind Cloud", title: "Cloud Security Engineer", contact: "ivo.marinov@ostwind.example" });
+    await tracker.setInterview(id, { ...at("2026-10-12T16:00", "2026-10-12T17:00"), people: ["Ivo Marinov"] });
+
+    await deliver("2026-10-12T16:30:00Z", {
+      id: "<sent-thanks@example.com>", from: "Alex Doe <sample.jobs@example.com>", to: ["Ivo Marinov <ivo.marinov@ostwind.example>"],
+      subject: "Thank you: Cloud Security Engineer interview", receivedAt: "2026-10-12T16:20:00Z", text: "Thank you for the conversation today.",
+    });
+
+    expect((await tracker.get(id))!.thankYous[0]).toMatchObject({ state: "sent", doneBy: "email" });
   });
 });

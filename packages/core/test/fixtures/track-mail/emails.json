@@ -1,5 +1,5 @@
 {
-  "_about": "Recorded synthetic emails for Track's email matching. Every company, person and address is made up. Each email carries the classification the fake Track assistant returns for it (recorded output), or null when the assistant was never asked.",
+  "_about": "Recorded synthetic emails for Track's email matching. Every company, person and address is made up. Each email carries the classification the fake Track assistant returns for it (recorded output), or null when the assistant was never asked. The sent-* emails are the user's own sent copies, BCC'd to the job mailbox (the BCC isn't in the headers).",
   "emails": {
     "greenhouse-confirmation": {
       "email": {
@@ -147,6 +147,50 @@
         "kind": "other", "confidence": 0.9, "company": null, "jobTitle": null,
         "stage": null, "language": "en", "summary": null
       }
+    },
+    "sent-nudge": {
+      "email": {
+        "id": "<sent-1@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["Mira Petrova <mira.petrova@northwind-labs.example>"],
+        "subject": "Security Engineer: following up",
+        "receivedAt": "2026-10-13T08:05:00Z",
+        "text": "I applied for the Security Engineer role on 5 October and I'm still keen on it. I'm free for a call any weekday this month.\n\nAlex"
+      },
+      "classification": null
+    },
+    "sent-nudge-unnamed": {
+      "email": {
+        "id": "<sent-2@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["talent@nimbus-cloud.example"],
+        "subject": "Following up on my application",
+        "receivedAt": "2026-10-13T08:10:00Z",
+        "text": "I applied a week ago and wanted to say I'm still interested. Happy to talk any time.\n\nAlex"
+      },
+      "classification": null
+    },
+    "sent-nudge-titled": {
+      "email": {
+        "id": "<sent-3@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["talent@nimbus-cloud.example"],
+        "subject": "Re: Platform Engineer application",
+        "receivedAt": "2026-10-13T08:20:00Z",
+        "text": "Following up on my application for the Platform Engineer role. Still very interested.\n\nAlex"
+      },
+      "classification": null
+    },
+    "sent-to-a-friend": {
+      "email": {
+        "id": "<sent-4@mail.example.com>",
+        "from": "Alex Doe <alex.doe@example.com>",
+        "to": ["sam.friend@example.org"],
+        "subject": "Security Engineer: following up",
+        "receivedAt": "2026-10-13T08:30:00Z",
+        "text": "Could you read my follow-up note before I send it?"
+      },
+      "classification": null
     }
   }
 }

@@ -202,6 +202,7 @@ dialog.dlg::backdrop { background: color-mix(in srgb, var(--ink) 40%, transparen
 .draft-acts { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center }
 .draft-acts .grow { flex: 1 1 auto }
 .never { font-size: var(--fs-caption); color: var(--ink-3) }
+.follow-up textarea.input { min-height: calc(var(--s-10) * 2.5) }
 ul.outline { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
 
 /* ---------- history list (Job page "History with <company>") ---------- */

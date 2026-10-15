@@ -1,12 +1,13 @@
-// Needs you (hi-fi: applications.html, state Normal, and the draft dialog of "Follow-up due · draft"):
-// only what the user must do now, most urgent first, each with one primary action; things only coming
-// up as one quiet "Coming up" line. A follow-up done today stays in its place with a sunken background
-// and "Done" in its kind line (never faded). Kind lines are sentence case in the source and set in
-// capitals by CSS (TA-12). At volume, follow-ups of one kind due together are one grouped item ("6
-// follow-ups due"), still written one by one in the dialog with "Next draft" (story 58, T-08, TA-11).
-// Thank-you notes (due within 24 hours of an interview's start) and interviews in the next 7 days, each
-// with its prep sheet and .ics, sit in the same queue (#33).
-import type { FollowUpDraft, NeedsYou, NeedsYouEntry, UpcomingInterview } from "@apply-kit/core";
+// Needs you (hi-fi: applications.html, state Normal, the draft dialog of "Follow-up due · draft" and
+// "214 applications"): only what the user must do now, most urgent first, each with one primary
+// action; things only coming up as one quiet "Coming up" line. A follow-up done today stays in its
+// place with a sunken background and "Done" in its kind line (never faded). At volume, same-kind
+// follow-ups are one item ("6 follow-ups due") whose drafts the dialog steps through one by one
+// ("1 of 6", Next draft, focus to the new draft's heading); nothing is ever sent in bulk. Kind lines
+// are sentence case in the source and set in capitals by CSS (TA-12). Thank-you notes (due within 24
+// hours of an interview's start) and interviews in the next 7 days, each with its prep sheet and
+// .ics, sit in the same queue (#33).
+import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, UpcomingInterview } from "@apply-kit/core";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
 import { interviewIcsUrl } from "../api.ts";
@@ -18,6 +19,7 @@ export const itemId = (followUpId: string) => `ny-${followUpId}`;
 function why(e: NeedsYouEntry): string {
   const f = e.followUp;
   if (e.done) {
+    if (f.doneBy === "email") return `Marked sent ${eventTime(f.doneAt!)}: apply-kit saw the copy you BCC'd to the job mailbox. Logged on its timeline.`;
     const how = f.state === "sent" ? (f.kind === "offer-note" ? "Marked done" : "Marked sent") : "Skipped: no note this time";
     return `${how} ${eventTime(f.doneAt!)}. Logged on its timeline.`;
   }
@@ -28,35 +30,12 @@ function why(e: NeedsYouEntry): string {
   if (f.kind === "check-in") return `No news in ${daysWord(quiet)} since your last interview (${weekDay(f.anchorOn)}). One polite check-in; you write it and send it from your own mail.`;
   if (f.kind === "offer-note") return `The offer came ${weekDay(f.anchorOn)}. Before you decide: the deadline, one question to answer, one action. Points to cover are ready.`;
   const since = e.application.status === "applied" ? `Applied ${daysWord(quiet)} ago (${weekDay(f.anchorOn)})` : `In Screening for ${daysWord(quiet)} (since ${weekDay(f.anchorOn)})`;
-  return `${since}, no reply you've recorded. Points to cover are ready; you write it and send it from your own mail.`;
+  return `${since}, no reply you've recorded. Review the draft and send it from your own mail.`;
 }
 
-/** From this many due follow-ups of one kind on, they are one grouped item. */
-const groupFrom = 3;
-
-type Item = { one: NeedsYouEntry } | { group: NeedsYouEntry[]; done: number };
-
-/** Needs you's follow-ups, with same-kind ones grouped at volume (in place of the first of them). */
-function itemsOf(entries: NeedsYouEntry[]): Item[] {
-  const due = (k: string) => entries.filter((e) => !e.done && e.followUp.kind === k);
-  const grouped = new Set(entries.map((e) => e.followUp.kind).filter((k) => due(k).length >= groupFrom));
-  const out: Item[] = [];
-  for (const e of entries) {
-    if (!grouped.has(e.followUp.kind)) { out.push({ one: e }); continue; }
-    if (!out.some((i) => "group" in i && i.group[0]!.followUp.kind === e.followUp.kind)) {
-      out.push({ group: due(e.followUp.kind), done: entries.filter((x) => x.done && x.followUp.kind === e.followUp.kind).length });
-    }
-  }
-  return out;
-}
-
-const plurals: Record<NeedsYouEntry["followUp"]["kind"], [string, string]> = {
-  nudge: ["follow-up", "follow-ups"], "offer-note": ["note to self", "notes to self"], "thank-you": ["thank-you note", "thank-you notes"], "check-in": ["check-in", "check-ins"],
-};
-const plural = (n: number, kind: NeedsYouEntry["followUp"]["kind"]) => plurals[kind][n === 1 ? 0 : 1];
-const writeLabel: Record<NeedsYouEntry["followUp"]["kind"], string> = {
-  nudge: "Write follow-up", "offer-note": "Write note", "thank-you": "Write thank-you", "check-in": "Write check-in",
-};
+const kindPlurals = { nudge: "follow-ups", "offer-note": "notes to self", "thank-you": "thank-you notes", "check-in": "check-ins" } as const;
+const kindPlural = (g: NeedsYouGroup) => kindPlurals[g.kind];
+const writeLabel = { nudge: "Review draft", "offer-note": "Write note", "thank-you": "Write thank-you", "check-in": "Write check-in" } as const;
 
 /** An interview in the next 7 days: when, with whom, the prep sheet and the calendar file. */
 function InterviewItem({ item }: { item: UpcomingInterview }) {
@@ -80,12 +59,64 @@ function InterviewItem({ item }: { item: UpcomingInterview }) {
     </li>
   );
 }
+const numberWords = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
-export function NeedsYouSection({ needs, onWrite, onSnooze, onSnoozeAll, emails }: {
+/** "Tidewater Pay, Velta Logistics, Lumio Maps and 3 more". */
+function companiesWords(companies: string[]): string {
+  if (companies.length <= 3) return companies.join(", ").replace(/, ([^,]*)$/, " and $1");
+  return `${companies.slice(0, 3).join(", ")} and ${companies.length - 3} more`;
+}
+
+/** One item for same-kind follow-ups at volume: review their drafts one by one, or snooze them all. */
+function GroupItem({ group, entries, snoozeDays, onReview, onSnoozeAll }: {
+  group: NeedsYouGroup;
+  entries: NeedsYouEntry[];
+  snoozeDays: number;
+  onReview: (entries: NeedsYouEntry[], opener: HTMLElement) => void;
+  onSnoozeAll: (entries: NeedsYouEntry[]) => void;
+}) {
+  const due = group.followUpIds.map((id) => entries.find((e) => e.followUp.id === id)!).filter(Boolean);
+  const plural = kindPlural(group);
+  const n = group.count;
+  if (n === 0) {
+    return (
+      <li className="needs done">
+        <div className="stack" style={{ gap: "var(--s-1)" }}>
+          <span className="kind">{group.done} {plural} · Done</span>
+          <span className="why">All {numberWords[group.done] ?? group.done} done today. Each is logged on its own timeline.</span>
+        </div>
+      </li>
+    );
+  }
+  return (
+    <li className="needs">
+      <div className="stack" style={{ gap: "var(--s-1)" }}>
+        <span className="kind">{n} {plural} due{group.oldestDueOn && ` · oldest ${weekDay(group.oldestDueOn)}`}{group.done > 0 && ` · ${group.done} done today`}</span>
+        <span className="what">{companiesWords(group.companies)}</span>
+        <span className="why">
+          {group.kind === "nudge"
+            ? `You review and send each one yourself; "Next draft" moves to the following one.`
+            : "Points to cover are ready for each; \"Next draft\" moves to the following one."}
+        </span>
+      </div>
+      <div className="acts">
+        <button className="btn primary sm" type="button" onClick={(ev) => onReview(due, ev.currentTarget)}>
+          Review {n} {n === 1 ? "draft" : "drafts"}
+        </button>
+        <button className="btn sm" type="button" onClick={() => onSnoozeAll(due)}>
+          Snooze all {daysWord(snoozeDays)}<span className="sr-only">: {n} {plural}</span>
+        </button>
+      </div>
+    </li>
+  );
+}
+
+export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAll, emails }: {
   needs: NeedsYou;
-  /** Opens the dialog on `entries[0]` (one item) or on a group, written one by one. */
-  onWrite: (entries: NeedsYouEntry[], opener: HTMLElement) => void;
+  onWrite: (e: NeedsYouEntry, opener: HTMLElement) => void;
   onSnooze: (e: NeedsYouEntry) => void;
+  /** Steps through a group's drafts one by one, from the first. */
+  onReview: (entries: NeedsYouEntry[], opener: HTMLElement) => void;
   onSnoozeAll: (entries: NeedsYouEntry[]) => void;
   /** Emails to match (EmailsToMatch.tsx), first in the queue: nothing changes until the user answers. */
   emails?: ReactNode;
@@ -93,30 +124,21 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onSnoozeAll, emails 
   const coming = needs.comingUp.map((c) => `${c.company} ${followUpName(c.kind).toLowerCase()} ${weekDay(c.dueOn)}`);
   return (
     <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
-      <div className="sec-head"><h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>{needs.items.length + needs.emailsToMatch + needs.interviews.length > 1 && <span className="meta">Most urgent first</span>}</div>
+      <div className="sec-head">
+        <h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>
+        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch + needs.interviews.length > 1 && <span className="meta">Most urgent first</span>}
+      </div>
       {needs.items.length || needs.interviews.length || (emails && needs.emailsToMatch) ? (
         <ul className="needs-queue">
           {emails}
-          {itemsOf(needs.items).map((item) => {
-            if ("group" in item) {
-              const g = item.group;
-              const kind = g[0]!.followUp.kind;
-              const companies = [...new Set(g.map((e) => e.application.company))];
-              return (
-                <li key={`group-${kind}`} id={`ny-group-${kind}`} className="needs">
-                  <div className="stack" style={{ gap: "var(--s-1)" }}>
-                    <span className="kind">{g.length} {plural(g.length, kind)} due · oldest {weekDay(g[0]!.followUp.dueOn)}{item.done ? ` · ${item.done} done today` : ""}</span>
-                    <span className="what">{companies.length > 3 ? `${companies.slice(0, 3).join(", ")} and ${companies.length - 3} more` : companies.join(", ")}</span>
-                    <span className="why">Points to cover are ready for each. You write and send each one yourself; "Next draft" moves to the following one.</span>
-                  </div>
-                  <div className="acts">
-                    <button className="btn primary sm" type="button" onClick={(ev) => onWrite(g, ev.currentTarget)}>Write {g.length} {plural(g.length, kind)}</button>
-                    <button className="btn sm" type="button" onClick={() => onSnoozeAll(g)}>Snooze all {daysWord(needs.snoozeDays)}</button>
-                  </div>
-                </li>
-              );
+          {needs.items.map((e, i) => {
+            const group = needs.groups.find((g) => g.kind === e.followUp.kind);
+            if (group) {
+              // The group stands where its first item would.
+              return needs.items.findIndex((x) => x.followUp.kind === group.kind) === i
+                ? <GroupItem key={`group-${group.kind}`} group={group} entries={needs.items} snoozeDays={needs.snoozeDays} onReview={onReview} onSnoozeAll={onSnoozeAll} />
+                : null;
             }
-            const e = item.one;
             const name = followUpName(e.followUp.kind);
             return (
               <li key={e.followUp.id} id={itemId(e.followUp.id)} className={`needs${e.done ? " done" : ""}`}>
@@ -129,7 +151,7 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onSnoozeAll, emails 
                 </div>
                 {!e.done && (
                   <div className="acts">
-                    <button className="btn primary sm" type="button" onClick={(ev) => onWrite([e], ev.currentTarget)}>
+                    <button className="btn primary sm" type="button" onClick={(ev) => onWrite(e, ev.currentTarget)}>
                       {writeLabel[e.followUp.kind]}<span className="sr-only">: {e.application.company}</span>
                     </button>
                     <button className="btn sm" type="button" onClick={() => onSnooze(e)}>
@@ -158,14 +180,17 @@ const dialogTitle: Record<NeedsYouEntry["followUp"]["kind"], (company: string) =
   "thank-you": (c) => `Thank ${c} for the interview`, "check-in": (c) => `Check in with ${c}`,
 };
 
-/** The follow-up over the list: its outline and text, Copy text, Open in Mail, Mark sent, Snooze, skip. */
-export function FollowUpDialog({ entries, index, onIndex, onAct, onClose, onAnnounce }: {
-  /** One follow-up, or a group written one by one. */
+/**
+ * The follow-up over the list: its draft (or outline), Copy text, Open in Mail, Mark sent, Snooze,
+ * skip. Given several, it steps through them one by one ("1 of 6"): "Next draft" (or acting on one)
+ * moves to the following draft and focus goes to its heading; nothing is sent in bulk.
+ */
+export function FollowUpDialog({ entries, index, onAct, onNext, onClose, onAnnounce }: {
   entries: NeedsYouEntry[];
+  /** Which of them is open. */
   index: number;
-  /** "Next draft": moves to the following one. */
-  onIndex: (index: number) => void;
   onAct: (action: FollowUpAction, draft: FollowUpDraft) => void;
+  onNext: () => void;
   onClose: () => void;
   onAnnounce: (message: string) => void;
 }) {
@@ -175,23 +200,20 @@ export function FollowUpDialog({ entries, index, onIndex, onAct, onClose, onAnno
   useEffect(() => {
     const d = ref.current;
     if (d && !d.open) d.showModal();
-    document.getElementById(`${uid}-h`)?.focus();
-  }, [uid, index]);
+  }, []);
+  // Focus the heading of each draft as it opens (the first, and each "Next draft").
+  useEffect(() => { document.getElementById(`${uid}-h`)?.focus(); }, [uid, index]);
   const close = () => { ref.current?.close(); onClose(); };
-  const many = entries.length > 1;
-  const next = () => {
-    onIndex(index + 1);
-    onAnnounce(`Draft ${index + 2} of ${entries.length}.`);
-  };
   const f = entry.followUp;
   const a = entry.application;
   const quiet = daysFrom(f.anchorOn, todaySofia());
+  const more = index < entries.length - 1;
   return (
     <dialog ref={ref} className="dlg" aria-labelledby={`${uid}-h`} onCancel={(e) => { e.preventDefault(); close(); }}>
       <div className="body">
         <div className="dlg-head">
           <div className="stack" style={{ gap: "var(--s-1)" }}>
-            <span className="meta">{followUpName(f.kind)} · {many ? `${index + 1} of ${entries.length} · ` : ""}{dueWords(f.dueOn)}</span>
+            <span className="meta">{followUpName(f.kind)} · {entries.length > 1 ? `${index + 1} of ${entries.length}` : dueWords(f.dueOn)}</span>
             <h2 id={`${uid}-h`} tabIndex={-1}>{dialogTitle[f.kind](a.company)}</h2>
           </div>
           <button className="btn ghost sm x" type="button" aria-label="Close" onClick={close}>✕</button>
@@ -206,7 +228,7 @@ export function FollowUpDialog({ entries, index, onIndex, onAct, onClose, onAnno
         <FollowUpWriter key={f.id} id={f.id} headingId={`${uid}-h`} onAct={onAct} onAnnounce={onAnnounce} />
         <div className="dlg-foot">
           <span className="grow" />
-          {many && index < entries.length - 1 && <button className="btn ghost" type="button" onClick={next}>Next draft</button>}
+          {more && <button className="btn ghost" type="button" onClick={onNext}>Next draft<span className="sr-only">: {index + 2} of {entries.length}</span></button>}
           <button className="btn ghost" type="button" onClick={close}>Close</button>
         </div>
       </div>

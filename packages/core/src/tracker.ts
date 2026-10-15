@@ -8,13 +8,13 @@ import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
 import {
-  addDays, daysBetween, defaultFollowUpSettings, outlineOf, parseFollowUpSettings,
-  type FollowUp, type FollowUpKind, type FollowUpSettings,
+  addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
+  type DraftInput, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
 } from "./follow-ups.ts";
 import {
   defaultTimeZone, interviewFormats, interviewIcs, invitedInterviewSchema, isLocalTime, isTimeZone,
   prepSheetDraftSchema, zonedToInstant, zoneName,
-  type FactTag, type Interview, type InterviewInput, type InvitedInterview, type MasterProfile, type PrepSheet, type ProfileStory,
+  type FactTag, type Interview, type InterviewInput, type InvitedInterview, type PrepSheet, type ProfileStory,
 } from "./interviews.ts";
 import { normaliseCompany } from "./matching.ts";
 import { liveJobId } from "./merging.ts";
@@ -24,7 +24,7 @@ import type { Clock, MailAttachment, MailMessage, SqlDatabase } from "./ports.ts
 import { migrate } from "./schema.ts";
 import { computeStats, type TrackStats } from "./track-stats.ts";
 import {
-  baseDomain, classifyInput, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
+  baseDomain, classifyInput, draftOutputSchema, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
   isAtsDomain, isBoardDomain, isJobAlert, isSharedProvider, namesCompany, namesTitle, quoteOf, replyKinds, ruleClassify, senderOf,
   type EmailClassification, type EmailKind, type TrackAssistant,
 } from "./track-mail.ts";
@@ -443,6 +443,24 @@ export interface ComingUp {
   dueOn: string;
 }
 
+/**
+ * Same-kind follow-ups at volume ("6 follow-ups due"): shown as one item whose drafts the user steps
+ * through one by one. A kind groups once 3 or more are due or done today, and stays grouped that day.
+ */
+export interface NeedsYouGroup {
+  kind: FollowUpKind;
+  /** How many are still due. */
+  count: number;
+  /** How many were done (sent or skipped) today. */
+  done: number;
+  /** The oldest due day among those still due (null once all are done). */
+  oldestDueOn: string | null;
+  /** The companies still due, most urgent first. */
+  companies: string[];
+  /** The follow-ups still due, most urgent first: the order "Next draft" steps through. */
+  followUpIds: string[];
+}
+
 /** Needs you: what only the user can do now, most urgent first, and what is coming up soon. */
 export interface NeedsYou {
   /** How many items need the user now (the top bar's Applications badge): follow-ups due, emails to match and interviews coming up. Done ones aren't counted. */
@@ -452,17 +470,35 @@ export interface NeedsYou {
   interviews: UpcomingInterview[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
+  /** Kinds with 3 or more due (or done today): shown grouped, their items stepped through one by one. */
+  groups: NeedsYouGroup[];
   /** Due in the next 3 days, soonest first. */
   comingUp: ComingUp[];
   /** How many days "Snooze" moves one on (a setting). */
   snoozeDays: number;
 }
 
-/** A follow-up opened to write: the outline (no model call), and how to send it from the user's own mail. */
+/**
+ * Why a follow-up has no draft, so the page can say so: this month's AI budget is used up (it ran out
+ * on the day of its last spending and resets on the 1st), AI isn't set up (no key, or no monthly
+ * budget), or the draft didn't come out right (the outline stands in).
+ */
+export type NoDraft =
+  | { reason: "budget-out"; capUsd: number; ranOutOn: string | null; resetsOn: string }
+  | { reason: "no-ai" }
+  | { reason: "failed"; why: string };
+
+/** A follow-up opened to write: the draft (or why there's none), the outline, and how to send it from the user's own mail. */
 export interface FollowUpDraft {
   followUp: FollowUp;
   application: ApplicationSummary;
-  /** The points to cover, from the Application, its posting and the user's notes. */
+  /** The text to show: as the user typed it, else the draft, else empty. */
+  text: string;
+  /** The Track assistant's draft, made once within the AI budget; null for a note to self or when there's none. */
+  draft: FollowUpDraftText | null;
+  /** Why a message has no draft; null when it has one, and for a note to self. */
+  noDraft: NoDraft | null;
+  /** The points to cover, from the Application, its posting and the user's notes (no model call). */
   outline: string[];
   /** For "Open in Mail": the recipient (null when only a domain is known) and the subject. Null for a note to self. */
   mail: { to: string | null; subject: string } | null;
@@ -618,8 +654,10 @@ export interface TrackerDeps {
   aiMonthlyCapUsd?: number;
   /** The user's own addresses: mail from them is a sent copy, left for follow-ups. */
   ownAddresses?: string[];
-  /** The Master profile (Prepare): stories for the prep sheet, and where stories added there go. */
+  /** The Master profile (Prepare's): evidence for drafts, true stories for the prep sheet, and where stories added there go. */
   profile?: MasterProfile;
+  /** The user's past writing (Prepare's voice samples), beside the follow-up edits Track keeps itself. */
+  voice?: VoiceSamples;
 }
 
 const statusLabel: Record<Status, string> = {
@@ -639,6 +677,8 @@ const groupOrder: { key: GroupKey; label: string; statuses: Status[] }[] = [
 const defaultLimits: Partial<Record<GroupKey, number>> = { applied: 5, closed: 5 };
 /** The stages with a follow-up, and which. */
 const stageKinds: Partial<Record<Status, FollowUpKind>> = { applied: "nudge", screening: "nudge", offer: "offer-note" };
+/** Same-kind follow-ups group in Needs you from this many on. */
+const groupAt = 3;
 /** Follow-ups due within this many days are "Coming up". */
 const comingUpDays = 3;
 const isFollowUpEvent = (e: ApplicationEvent) => followUpEventKinds.includes(e.kind);
@@ -649,7 +689,7 @@ const movesStatus = "(kind IN ('created', 'status') OR (kind = 'email' AND to_st
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile }: TrackerDeps): Tracker {
+export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice }: TrackerDeps): Tracker {
   migrate(db);
   const now = () => clock.now().toISOString();
   const today = () => sofiaDay(clock.now());
@@ -1149,6 +1189,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
   // ---------- follow-ups ----------
 
+  /** The AI budget shared with Discover: what this month spent so far, and recording a spend. */
+  const month = () => clock.now().toISOString().slice(0, 7);
+  const spentThisMonth = () => Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
+  const spend = (task: "track-classify" | "track-draft", usd: number) =>
+    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, ?, NULL, ?)").run(now(), month(), task, usd);
+
   function followUpSettings(): FollowUpSettings {
     const r = db.prepare("SELECT value FROM track_settings WHERE id = 1").get();
     return r ? parseFollowUpSettings(JSON.parse(String(r.value))) : defaultFollowUpSettings;
@@ -1199,6 +1245,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       snoozedTo,
       state: done ? (done.kind === "follow-up-sent" ? "sent" : "skipped") : "pending",
       doneAt: done ? String(done.at) : null,
+      doneBy: done ? (done.cause === "email" ? "email" : "you") : null,
       text: String(r.text),
       interviewId: str(r.interview_id),
       dueAt: snoozedTo ? null : dueAt,
@@ -1334,8 +1381,18 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
     comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
     const emails = Number(db.prepare("SELECT COUNT(*) AS n FROM email_match WHERE state = 'to-match'").get()?.n ?? 0);
+    const groups: NeedsYouGroup[] = [];
+    for (const kind of [...new Set(items.map((i) => i.followUp.kind))]) {
+      const same = items.filter((i) => i.followUp.kind === kind);
+      if (same.length < groupAt) continue;
+      const due = same.filter((i) => !i.done);
+      groups.push({
+        kind, count: due.length, done: same.length - due.length, oldestDueOn: due[0]?.followUp.dueOn ?? null,
+        companies: due.map((i) => i.application.company), followUpIds: due.map((i) => i.followUp.id),
+      });
+    }
     return {
-      count: items.filter((i) => !i.done).length + emails + interviews.length, items, interviews, emailsToMatch: emails, comingUp,
+      count: items.filter((i) => !i.done).length + emails + interviews.length, items, groups, interviews, emailsToMatch: emails, comingUp,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -1368,16 +1425,31 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const f = followUpOf(r);
     const job = application.jobId ? await discovery.getJob(application.jobId) : null;
     const requirement = job?.requirements.find((q) => q.kind === "required") ?? job?.requirements[0];
+    const notes = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).map((e) => e.text);
+    const stage = r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied";
     const outline = outlineFor(f, application, requirement?.text ?? null);
+    let draft: FollowUpDraftText | null = null;
+    let noDraft: NoDraft | null = null;
+    if (f.kind === "nudge" && stage !== "offer") {
+      const made = await draftFor(r, {
+        followUpId, kind: "nudge", company: application.company, title: application.title, since: dayWords(f.anchorOn), stage,
+        daysQuiet: daysBetween(f.anchorOn, today()),
+        requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
+        notes, evidence: [], voice: [], language: job?.language ?? str(row(application.id)?.language) ?? "en",
+        words: draftWords.nudge, banned: bannedPhrases,
+      });
+      if ("draft" in made) draft = made.draft;
+      else noDraft = made.noDraft;
+    }
     const to = contactsOf(application.id).find((c) => c.kind === "address")?.value ?? null;
     const subject: Record<FollowUpKind, string | null> = {
       nudge: `Following up on my application: ${application.title}`, "offer-note": null,
       "thank-you": `Thank you: ${application.title} interview`, "check-in": `Checking in: ${application.title}`,
     };
     return {
-      followUp: f, application, outline,
+      followUp: f, application, text: r.text_saved_at ? f.text : (draft?.text ?? f.text), draft, noDraft, outline,
       mail: subject[f.kind] ? { to, subject: subject[f.kind]! } : null,
-      words: f.kind === "offer-note" ? null : f.kind === "thank-you" ? { min: 70, max: 130 } : { min: 70, max: 110 },
+      words: f.kind === "offer-note" ? null : f.kind === "thank-you" ? { min: 70, max: 130 } : draftWords.nudge,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -1402,10 +1474,81 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return { followUp, outline: outlineFor(followUp, application, null) };
   }
 
+  /** Drafts being made, so opening a follow-up twice at once drafts it once. */
+  const drafting = new Map<string, Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }>>();
+
+  /** The follow-up's draft: the one kept, else a new one from the assistant within the monthly budget. */
+  function draftFor(r: Row, base: DraftInput): Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }> {
+    if (r.draft_text != null) {
+      return Promise.resolve({ draft: { text: String(r.draft_text), language: String(r.draft_language ?? base.language), numbers: JSON.parse(String(r.draft_numbers ?? "[]")) } });
+    }
+    const id = String(r.id);
+    const running = drafting.get(id);
+    if (running) return running;
+    const p = makeDraft(id, base).finally(() => drafting.delete(id));
+    drafting.set(id, p);
+    return p;
+  }
+
+  async function makeDraft(followUpId: string, base: DraftInput): Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }> {
+    const cap = Math.max(0, aiMonthlyCapUsd ?? 0);
+    if (!assistant || cap === 0) return { noDraft: { reason: "no-ai" } };
+    const input: DraftInput = {
+      ...base,
+      evidence: profile ? await profile.evidence({ requirements: base.requirements, language: base.language }).catch(() => []) : [],
+      voice: await voiceExcerpts(base.language, followUpId),
+    };
+    const estimate = assistant.estimateDraftUsd(input);
+    if (spentThisMonth() + estimate > cap) return { noDraft: budgetOut(cap) };
+    let body: string;
+    let model: string;
+    try {
+      const out = await assistant.draft(input);
+      spend("track-draft", Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      body = draftOutputSchema.safeParse(out.draft).data?.body ?? "";
+      model = out.model;
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) spend("track-draft", billed);
+      return { noDraft: { reason: "failed", why: "the Track assistant didn't answer" } };
+    }
+    const checked = checkDraft(body, input);
+    if (!checked.ok) return { noDraft: { reason: "failed", why: checked.why } };
+    db.prepare("UPDATE follow_up SET draft_text = ?, draft_language = ?, draft_numbers = ?, draft_model = ?, drafted_at = ? WHERE id = ?")
+      .run(checked.draft.text, checked.draft.language, JSON.stringify(checked.draft.numbers), model, now(), followUpId);
+    return { draft: checked.draft };
+  }
+
+  /** "Ran out on" is the day of this month's last AI spending; it resets on the 1st of next month. */
+  function budgetOut(capUsd: number): NoDraft {
+    const last = db.prepare("SELECT MAX(at) AS at FROM ai_spend WHERE month = ?").get(month())?.at;
+    const d = clock.now();
+    const resetsOn = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1)).toISOString().slice(0, 10);
+    return { reason: "budget-out", capUsd, ranOutOn: last ? sofiaDay(new Date(String(last))) : null, resetsOn };
+  }
+
+  /** Short excerpts of the user's own writing: their latest follow-ups first (the posting's language first), then Prepare's samples. */
+  async function voiceExcerpts(language: string, exceptFollowUpId: string): Promise<string[]> {
+    const own = db.prepare("SELECT text, language FROM voice_sample WHERE follow_up_id != ? ORDER BY saved_at DESC LIMIT 20").all(exceptFollowUpId)
+      .sort((a, b) => Number(b.language === language) - Number(a.language === language))
+      .slice(0, 3).map((v) => excerpt(String(v.text)));
+    const more = voice ? await voice.excerpts({ language, limit: 3 }).catch(() => []) : [];
+    return [...own, ...more.map((t) => excerpt(t))].slice(0, 5);
+  }
+
   async function saveFollowUpText(followUpId: string, text: string) {
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     if (!r || !row(String(r.application_id))) throw new TrackerError("not-found", "There's no such follow-up.");
     db.prepare("UPDATE follow_up SET text = ?, text_saved_at = ? WHERE id = ?").run(text, now(), followUpId);
+    // What the user wrote or changed teaches their voice (kept locally); the draft as it came doesn't.
+    if (r.kind === "nudge") {
+      const own = text.trim() && text.trim() !== String(r.draft_text ?? "").trim();
+      if (own) {
+        db.prepare(`INSERT INTO voice_sample (follow_up_id, text, language, saved_at) VALUES (?, ?, ?, ?)
+          ON CONFLICT (follow_up_id) DO UPDATE SET text = excluded.text, language = excluded.language, saved_at = excluded.saved_at`)
+          .run(followUpId, text.trim(), str(r.draft_language) ?? (/[Ѐ-ӿ]/.test(text) ? "bg" : "en"), now());
+      } else db.prepare("DELETE FROM voice_sample WHERE follow_up_id = ?").run(followUpId);
+    }
     return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!) };
   }
 
@@ -1643,8 +1786,6 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   type Signal = { group: "thread" | "taught" | "sender" | "ats" | "title"; text: string };
   const strongGroups: Signal["group"][] = ["thread", "taught"];
 
-  const month = () => clock.now().toISOString().slice(0, 7);
-  const spentThisMonth = () => Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
   const own = new Set(ownAddresses.map((a) => a.trim().toLowerCase()).filter(Boolean));
 
   /** Reads an email with the assistant within the monthly budget; otherwise by rules (or not at all). */
@@ -1655,14 +1796,13 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       if (spentThisMonth() + estimate <= Math.max(0, aiMonthlyCapUsd ?? 0)) {
         try {
           const out = await assistant.classify(input);
-          db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-classify', NULL, ?)")
-            .run(now(), month(), Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+          spend("track-classify", Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
           const parsed = emailClassificationSchema.safeParse(out.classification);
           if (parsed.success) return { c: parsed.data, by: "assistant", model: out.model };
         } catch (err) {
           const billed = (err as { costUsd?: unknown } | null)?.costUsd;
           if (typeof billed === "number" && billed > 0) {
-            db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-classify', NULL, ?)").run(now(), month(), billed);
+            spend("track-classify", billed);
           }
         }
       }
@@ -1812,10 +1952,45 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return `${reads}, but ${domain} hasn't written before and nothing ties it to one Application. ${target ? "That's too important to guess, so nothing has changed." : "Nothing has changed."}`;
   }
 
+  /**
+   * A sent copy the user BCC'd to the job mailbox: when it went to a contact of exactly one open
+   * Application (its job title decides between several at one contact) whose follow-up was due by
+   * the day it was sent, that follow-up is marked sent, by email. Returns the Application, or null.
+   */
+  function markSentByCopy(m: MailMessage): string | null {
+    const recipients = [...m.to, ...m.cc].map((r) => senderOf({ from: r }).address).filter(Boolean);
+    if (!recipients.length) return null;
+    const isContact = (id: string) => contactsOf(id).some((k) => recipients.some((a) => k.kind === "address"
+      ? a === k.value
+      : domainOf(a) === k.value || domainOf(a).endsWith(`.${k.value}`)));
+    let apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL").all().filter((r) => !isClosed(r.status as Status) && isContact(String(r.id)));
+    if (apps.length > 1) {
+      const text = `${m.subject}\n${quoteOf(m, 4000)}`;
+      apps = apps.filter((r) => namesTitle(String(r.title), text));
+    }
+    if (apps.length !== 1) return null;
+    const app = apps[0]!;
+    const sentOn = sofiaDay(m.receivedAt);
+    const sentAt = m.receivedAt.toISOString();
+    // A thank-you note whose interview has ended comes first; then the stage's nudge or check-in once due.
+    const thanks = thankYousOf(app).find((x) => x.state === "pending" && !!x.readyAt && x.readyAt <= sentAt);
+    const stage = currentFollowUp(app);
+    const f = thanks ?? (stage && (stage.kind === "nudge" || stage.kind === "check-in") && stage.state === "pending" && (stage.dueOn <= sentOn || stage.snoozedTo) ? stage : null);
+    if (!f) return null;
+    addEvent({
+      applicationId: f.applicationId, kind: "follow-up-sent", cause: "email", from: null, to: null,
+      text: `${followUpWords[f.kind].sent}: apply-kit saw your sent copy`, undoes: null, followUpId: f.id, emailId: m.id, emailKind: null,
+    });
+    return f.applicationId;
+  }
+
   /** Decides one email. Returns what happened to it. */
   async function processOne(m: MailMessage): Promise<keyof MailProcessed> {
     const address = senderOf(m).address;
-    if (own.has(address)) { decide(m.id, { state: "left", reason: "sent-copy" }); return "left"; }
+    if (own.has(address)) {
+      decide(m.id, { state: "left", reason: "sent-copy", applicationId: markSentByCopy(m) });
+      return "left";
+    }
     if (isJobAlert(m)) { decide(m.id, { state: "left", reason: "alert" }); return "left"; }
     const rule = ruleFor(address);
     if (rule && rule.applicationId === null) { decide(m.id, { state: "not-application", reason: "taught", how: "auto" }); return "left"; }
@@ -2109,6 +2284,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 }
 
 /** The calendar day in Sofia (YYYY-MM-DD). */
+/** A short excerpt of the user's writing, as sent with a draft: the full sample stays on the laptop. */
+function excerpt(text: string, max = 400): string {
+  const t = text.replace(/\s+/g, " ").trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+
 function sofiaDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Sofia", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
