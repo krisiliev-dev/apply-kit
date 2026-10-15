@@ -3,7 +3,9 @@
 // reads back like the real template. Made-up people, companies and postings only.
 import type { PackageJob, PieceInput } from "../src/index.ts";
 import { fixtureFetch } from "./harness.ts";
-import { createTestPreparation, fakeWriter, recordedDraftAnswer, recordedLetter, recordedTailoredCv, recordedWhyAnswer, templateRenderer } from "./preparation-harness.ts";
+import {
+  createTestPreparation, fakeWriter, recordedDraftAnswer, recordedDraftAnswerBg, recordedLetter, recordedLetterBg, recordedTailoredCv, recordedTailoredCvBg, recordedWhyAnswer, templateRenderer,
+} from "./preparation-harness.ts";
 
 const kestrelQuestions = "https://boards-api.greenhouse.io/v1/boards/kestrel/jobs/4410?questions=true";
 
@@ -16,10 +18,11 @@ type Options = Parameters<typeof createTestPreparation>[0] & { phone?: string };
 /** Mira Petrova's made-up master profile and answer bank, with Kestrel's recorded form and a CV that reads like the real template. */
 export function mira({ phone = "+359 88 000 0175", ...options }: Options = {}) {
   const ids: Record<string, string> = {};
+  // The writer writes in the package's language: the Bulgarian recordings for a Bulgarian package.
   const writer = fakeWriter({
-    tailorCv: () => withIds(recordedTailoredCv, ids),
-    writeLetter: () => withIds(recordedLetter, ids),
-    draftAnswer: (input) => withIds(/^why/i.test(input.question) ? recordedWhyAnswer : recordedDraftAnswer, ids),
+    tailorCv: (input) => withIds(input.language === "bg" ? recordedTailoredCvBg : recordedTailoredCv, ids),
+    writeLetter: (input) => withIds(input.language === "bg" ? recordedLetterBg : recordedLetter, ids),
+    draftAnswer: (input) => withIds(/^why/i.test(input.question) ? recordedWhyAnswer : input.language === "bg" ? recordedDraftAnswerBg : recordedDraftAnswer, ids),
   });
   const t = createTestPreparation({ writer, renderer: templateRenderer(), fetch: fixtureFetch({ [kestrelQuestions]: "greenhouse-kestrel-4410-questions.json" }), ...options });
   const save = (key: string, input: PieceInput) => {
@@ -63,6 +66,30 @@ export function kestrelJob(overrides: Partial<PackageJob> = {}): PackageJob {
       { id: "posting-gh", site: "job-boards.greenhouse.io", url: "https://job-boards.greenhouse.io/kestrel/jobs/4410", firstSeenAt: "2026-10-10T08:00:00Z", source: { name: "Kestrel Payments", kind: "greenhouse", label: "Greenhouse", category: "ats" } },
     ],
     target: { postingId: "posting-gh" },
+    ...overrides,
+  };
+}
+
+/**
+ * A made-up Bulgarian posting (#68): Vitosha Pay's security analyst job, read from dev.bg, in
+ * Bulgarian. Its form isn't published, so the screening answers are the standard questions in Bulgarian.
+ */
+export function vitoshaJob(overrides: Partial<PackageJob> = {}): PackageJob {
+  return {
+    id: "job-vitosha",
+    title: "Анализатор по информационна сигурност",
+    titleTranslation: "Information Security Analyst",
+    company: "Vitosha Pay",
+    location: "София",
+    packageLanguage: "bg",
+    closed: null,
+    reading: { state: "read" },
+    requirements: [{ text: "Опит с SIEM системи" }, { text: "Реакция при инциденти" }, { text: "Wazuh", category: "skill" }],
+    screening: { salary: { min: 3000, max: 4000, currency: "BGN", period: "month", basis: "net" } },
+    postings: [
+      { id: "posting-devbg", site: "dev.bg", url: "https://dev.bg/company/jobads/vitosha-pay-analizator-po-sigurnost/", firstSeenAt: "2026-10-11T08:00:00Z", source: { name: "dev.bg IT security", kind: "devbg", label: "dev.bg", category: "aggregator" } },
+    ],
+    target: { postingId: "posting-devbg" },
     ...overrides,
   };
 }
