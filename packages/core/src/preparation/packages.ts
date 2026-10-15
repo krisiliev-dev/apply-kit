@@ -2137,7 +2137,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     // A translation of a bank answer goes back to that answer, as its version in this language.
     const source = a.origin === "translated" && a.bank ? deps.answers.get(a.bank.answerId) : null;
     const saved = source ? deps.answers.save(
-      { id: source.id, question: source.question, wordings: source.wordings, versions: { ...source.versions, [bankLanguage(r)]: a.text }, category: source.category, kind: source.kind, mode: source.mode, rule: source.rule },
+      { id: source.id, question: source.question, wordings: source.wordings.map((w) => w.text), versions: { ...source.versions, [bankLanguage(r)]: a.text }, category: source.category, kind: source.kind, mode: source.mode, rule: source.rule },
       { from: `${r.job.company} package`, jobId: r.jobId },
     ) : deps.answers.save(
       { question: plainQuestion(a.question), versions: { [bankLanguage(r)]: a.text }, category: "screening", kind: a.type === "select" ? "choice" : "text" },
