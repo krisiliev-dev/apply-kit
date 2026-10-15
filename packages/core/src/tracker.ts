@@ -321,7 +321,9 @@ export interface ApplicationGroup {
   label: string;
   /** Every Application in the group. */
   count: number;
-  /** The ones shown (the first `limit`). */
+  /** Where the ones shown start in the group (0 unless paged). */
+  offset: number;
+  /** The ones shown: `limit` of them from `offset`. */
   applications: ApplicationSummary[];
   /** Whether the group starts open. Closed starts collapsed (and is never deleted). */
   open: boolean;
@@ -353,6 +355,8 @@ export type StatusFilter = "open" | GroupKey;
 export interface ListQuery {
   /** How many to show per group. Applied and Closed show 5 unless asked for more; the rest show all. */
   limits?: Partial<Record<GroupKey, number>>;
+  /** Where to start in a group, for paging ("Applied 26–47 of 47"). Past the end: the last page. */
+  offsets?: Partial<Record<GroupKey, number>>;
   /** Words to find in the job, company, contacts and matched email text (every word must appear). */
   search?: string | null;
   status?: StatusFilter | null;
@@ -761,9 +765,11 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       if (g.key === "applied") members.sort((a, b) => a.appliedOn.localeCompare(b.appliedOn) || a.title.localeCompare(b.title));
       else members.sort((a, b) => b.lastEvent.at.localeCompare(a.lastEvent.at) || b.appliedOn.localeCompare(a.appliedOn));
       const limit = limits[g.key];
+      let offset = Math.max(0, Math.floor(query.offsets?.[g.key] ?? 0));
+      if (limit !== undefined && limit > 0 && offset >= members.length) offset = Math.max(0, Math.floor((members.length - 1) / limit) * limit);
       groups.push({
-        key: g.key, label: g.label, count: members.length,
-        applications: limit === undefined ? members : members.slice(0, limit),
+        key: g.key, label: g.label, count: members.length, offset,
+        applications: limit === undefined ? members.slice(offset) : members.slice(offset, offset + limit),
         open: g.key !== "closed",
         order: g.key === "applied" ? "soonest due first" : null,
       });
