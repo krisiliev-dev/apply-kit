@@ -37,7 +37,8 @@ import {
 import { checkWording, validateCv, type HonestyProfile } from "./honesty.ts";
 import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview.ts";
 import type { Contact } from "./contact.ts";
-import type { FileStore, PackageFolder } from "./ports.ts";
+import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
+import { atsStepView, postingKeywords, type AtsFixField, type AtsStepView } from "./ats-step.ts";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
 import type { DocumentDraft, DraftRequest } from "./engine.ts";
 import {
@@ -173,6 +174,9 @@ export interface CvDraftView {
   language: DocumentLanguage;
   photo: boolean;
 }
+
+/** The CV's draft as stored: its view, and the text read back from it (for the ATS step). */
+type CvDraftStored = CvDraftView & { text?: PdfText; headings?: string[] };
 
 /** A change from the master profile, as the CV step lists it. */
 export interface CvChangeView {
@@ -386,6 +390,8 @@ export interface PackageView {
   letter: LetterView | null;
   /** The screening answers, once they're written. */
   answers: ScreeningAnswersView | null;
+  /** The ATS check of the CV's PDF, once the CV is approved. */
+  ats: AtsStepView | null;
   /** What the package has cost so far, and the estimate for what's still to be written. */
   costUsd: number;
   estimate: { costUsd: number; seconds: number };
@@ -554,7 +560,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
 
   interface Row {
     id: string; jobId: string; job: PackageJob; angle: Angle; angleReason: string; language: DocumentLanguage;
-    targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftView | null;
+    targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftStored | null;
     cvVersion: CvVersionState | null; screening: ScreeningState | null; startedAt: string; stoppedAt: string | null; letterDraft: number | null; letterFile: LetterFileView | null;
   }
   interface PartRow { part: PackageStep; state: PartState; attempts: number; error: string | null; costUsd: number; output: unknown }
@@ -563,7 +569,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     id: String(r.id), jobId: String(r.job_id), job: JSON.parse(String(r.job)) as PackageJob, angle: r.angle as Angle,
     angleReason: String(r.angle_reason), language: r.language as DocumentLanguage, targetPostingId: String(r.target_posting_id),
     photo: Number(r.photo) === 1, approved: JSON.parse(String(r.approved)) as Row["approved"], reviewed: r.reviewed_at != null,
-    cvDraft: r.cv_draft == null ? null : (JSON.parse(String(r.cv_draft)) as CvDraftView),
+    cvDraft: r.cv_draft == null ? null : (JSON.parse(String(r.cv_draft)) as CvDraftStored),
     cvVersion: r.cv_version == null ? null : (JSON.parse(String(r.cv_version)) as CvVersionState),
     screening: r.screening == null ? null : (JSON.parse(String(r.screening)) as ScreeningState),
     startedAt: String(r.started_at), stoppedAt: r.stopped_at == null ? null : String(r.stopped_at),
@@ -623,8 +629,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
           : p.state === "not-written" ? "Not written: this month's AI budget would be crossed."
           : "From the target posting's form";
       }
-      case "ats":
-        return "Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed.";
+      case "ats": {
+        const checks = r.cvDraft?.ats?.checks ?? [];
+        return p.state === "done" ? `${checks.filter((c) => c.passed).length} of ${checks.length} checks pass · on this laptop`
+          : "Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed.";
+      }
     }
   };
 
@@ -733,10 +742,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       generating: isGenerating(r, ps),
       stoppedAt: r.stoppedAt,
       steps: stepsOf(r, ps),
-      cv: r.cvDraft,
+      cv: r.cvDraft && cvDraftView(r.cvDraft),
       cvVersion: cvVersionView(r),
       letter: letterView(r),
       answers: answersView(r),
+      ats: atsView(r, ps),
       costUsd: Math.round(list.reduce((n, p) => n + p.costUsd, 0) * 1e6) / 1e6,
       estimate: {
         // Each part's own task: the CV's tailoring, the letter, and a few drafted screening answers.
@@ -972,20 +982,51 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     };
   }
 
-  /** Prints the CV and keeps it as the package's draft. */
+  /**
+   * The posting keywords the ATS check looks for: the skill and certificate requirements. A gap Kris
+   * chose to name in the letter or leave out, and a preferred item she doesn't hold, are deliberate.
+   */
+  function keywordsOf(r: Row) {
+    const flags = r.cvVersion?.flags ?? [];
+    const now = clock.now();
+    return postingKeywords(r.job.requirements.map((q, i) => {
+      const decided = flags.find((f) => f.kind === "gap" && f.requirement === i)?.decision?.option;
+      const notHeld = q.kind === "preferred" && matchEvidence({ text: q.text, kind: "preferred", category: q.category ?? "other" }, deps.pieces(), now).status === "not-held";
+      const gap = decided === "letter" ? "a deliberate gap, named in the letter" : decided === "leave-out" ? "a deliberate gap, left out" : notHeld ? "preferred, and not claimed" : null;
+      return { text: q.text, category: q.category, gap };
+    }));
+  }
+
+  /** Prints the CV and keeps it as the package's draft, with the text read back for the ATS check. */
   async function renderCv(id: string): Promise<void> {
     const r = row(id)!;
+    const document = await cvDocument(r);
     const draft = await deps.draftDocument({
       packageId: id,
-      document: await cvDocument(r),
+      document,
       fileName: { name: deps.contact().nameLatin, company: r.job.company, role: r.job.title },
-      keywords: [],
+      keywords: keywordsOf(r),
     });
-    const cv: CvDraftView = {
+    const cv: CvDraftStored = {
       fileName: draft.fileName, path: draft.path, sha256: draft.sha256, size: draft.size, pages: draft.pages,
       overflow: draft.overflow, ats: draft.ats, language: r.language, photo: r.photo,
+      text: draft.text, headings: document.kind === "cv" ? document.content.experience.map((x) => `${x.title} · ${x.employer}`) : [],
     };
     db.prepare("UPDATE package SET cv_draft = ? WHERE id = ?").run(JSON.stringify(cv), id);
+  }
+
+  const cvDraftView = ({ text: _text, headings: _headings, ...view }: CvDraftStored): CvDraftView => view;
+
+  /** Contact details the CV's letterhead lacks, which the ATS check's fix asks for. */
+  function missingContact(): AtsFixField[] {
+    const c = deps.contact();
+    return [...(c.phone.trim() ? [] : ["phone" as const]), ...(c.city.trim() ? [] : ["city" as const]), ...(c.country.trim() ? [] : ["country" as const])];
+  }
+
+  /** The ATS step: shown once the CV is approved, over the CV's current PDF. */
+  function atsView(r: Row, ps: Map<PackageStep, PartRow>): AtsStepView | null {
+    if (ps.get("ats")!.state !== "done" || !r.cvDraft?.ats) return null;
+    return atsStepView({ ats: r.cvDraft.ats, text: r.cvDraft.text ?? { pages: [] }, headings: r.cvDraft.headings ?? [], missing: missingContact(), accepted: [] });
   }
 
   // ---- the cover letter (#65) ---------------------------------------------------------------
@@ -1295,6 +1336,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const from = packageSteps.indexOf(step);
     const approved = Object.fromEntries(Object.entries(r.approved).filter(([s]) => packageSteps.indexOf(s as PackageStep) < from));
     db.prepare("UPDATE package SET approved = ? WHERE id = ?").run(JSON.stringify(approved), r.id);
+    // The ATS check reads the approved CV: a CV open again waits for approval before it's checked.
+    if (from <= packageSteps.indexOf("cv")) setPart(r.id, "ats", { state: "waiting" });
   };
 
   /** Undoes (or redoes) one change, reopens the CV step and prints the CV again. */
@@ -1887,6 +1930,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (block) return { approved: false, reason: block.reason, blockedBy: block.by, flagId: block.flag ?? null, package: view(r) };
       const now = clock.now().toISOString();
       db.prepare("UPDATE package SET approved = ?, reviewed_at = COALESCE(reviewed_at, ?) WHERE id = ?").run(JSON.stringify({ ...r.approved, [step]: now }), now, id);
+      // The ATS check runs on the approved CV's PDF, on this laptop.
+      if (step === "cv") setPart(id, "ats", { state: "done", error: null });
       // The bank's answers this package uses count as used once Kris approves them.
       if (step === "answers") for (const a of r.screening?.answers ?? []) if (a.bank && a.text) deps.answers.recordUse(a.bank.answerId);
       return { approved: true, package: view(row(id)!) };
