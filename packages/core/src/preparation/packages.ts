@@ -39,7 +39,7 @@ import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview
 import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
 import { atsCheckLabel, atsStepView, postingKeywords, type AtsFixField, type AtsStepView } from "./ats-step.ts";
-import type { ApprovedPackage, CvEntryAsSent, FrozenFile, PackageForApply } from "./contracts.ts";
+import type { ApprovedPackage, CvEntryAsSent, FrozenFile, MarkSubmittedResult, PackageForApply, SubmittedVia } from "./contracts.ts";
 import { portalJobReference } from "./portal.ts";
 import { createHash } from "node:crypto";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
@@ -498,6 +498,12 @@ export interface PackageStore {
   forApply(query: { jobId: string } | { packageId: string }): PackageForApply;
   /** Every package approved now (not reopened), newest first. */
   approvedList(): ApprovedPackage[];
+  /** Track's read: the version submitted, else the one approved now; null for a draft never approved. */
+  snapshot(id: string): ApprovedPackage | null;
+  /** Approved now and never submitted. */
+  withoutApplication(): ApprovedPackage[];
+  markSubmitted(id: string, how: { via: SubmittedVia; portalUrl: string | null; at?: string }): MarkSubmittedResult;
+  undoSubmitted(id: string): ApprovedPackage | null;
   /** An approved version (the current one by default) and its frozen files. */
   version(id: string, version?: number): ApprovedPackage | null;
   /** A frozen file's bytes, exactly as approved. */
@@ -1956,6 +1962,9 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return { ...snapshot, state: submitted ? "submitted" : "approved", submitted };
   };
 
+  /** The version that was submitted (one per package: the snapshot Track shows as sent). */
+  const submittedRow = (id: string) => db.prepare("SELECT * FROM package_version WHERE package_id = ? AND submitted_at IS NOT NULL ORDER BY version DESC").get(id) ?? null;
+
   function versionOf(id: string, version: number): ApprovedPackage | null {
     const x = db.prepare("SELECT * FROM package_version WHERE package_id = ? AND version = ?").get(id, version);
     return x ? toApproved(x) : null;
@@ -2197,6 +2206,30 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     approvedList() {
       return db.prepare("SELECT v.* FROM package p JOIN package_version v ON v.package_id = p.id AND v.version = p.approved_version ORDER BY v.approved_at DESC, p.rowid DESC")
         .all().map(toApproved);
+    },
+    snapshot(id) {
+      const x = submittedRow(id);
+      if (x) return toApproved(x);
+      const r = row(id);
+      return r && r.approvedVersion !== null ? versionOf(id, r.approvedVersion) : null;
+    },
+    withoutApplication() {
+      return this.approvedList().filter((p) => !submittedRow(p.id));
+    },
+    markSubmitted(id, { via, portalUrl, at }) {
+      const done = submittedRow(id);
+      if (done) return { marked: true, alreadyMarked: true, package: toApproved(done) };
+      const r = row(id);
+      if (!r || r.approvedVersion === null) return { marked: false, reason: "Your package isn't approved yet · open it to approve" };
+      db.prepare("UPDATE package_version SET submitted_at = ?, submitted_via = ?, portal_url = ? WHERE package_id = ? AND version = ?")
+        .run(at ?? clock.now().toISOString(), via, portalUrl, id, r.approvedVersion);
+      return { marked: true, alreadyMarked: false, package: versionOf(id, r.approvedVersion)! };
+    },
+    undoSubmitted(id) {
+      const x = submittedRow(id);
+      if (!x) return null;
+      db.prepare("UPDATE package_version SET submitted_at = NULL, submitted_via = NULL, portal_url = NULL WHERE package_id = ? AND version = ?").run(id, Number(x.version));
+      return versionOf(id, Number(x.version));
     },
     version(id, version) {
       const r = row(id);

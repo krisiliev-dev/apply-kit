@@ -37,7 +37,7 @@ import {
   type PrepareStatus, type StartPackageResult,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
-import type { ApprovedPackage, FrozenFile, PackageForApply, ProfileForApply } from "./contracts.ts";
+import type { ApprovedPackage, FrozenFile, MarkSubmittedResult, PackageForApply, ProfileForApply, SubmittedVia } from "./contracts.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -405,7 +405,30 @@ export interface PreparationEngine {
   approvedPackages(): ApprovedPackage[];
   /** The master profile as a portal's form asks for it: contact details split for forms, roles, education, skills. */
   profileForApply(): ProfileForApply;
+  /**
+   * Track recorded the submission (Apply's "Mark as submitted", or the Job page's): the approved
+   * version becomes "submitted", once. A second mark returns the first with `alreadyMarked`; a draft
+   * is refused. Later edits make a new version; the submitted one never changes.
+   */
+  markPackageSubmitted(id: string, how: { via: SubmittedVia; portalUrl: string | null; at?: string }): MarkSubmittedResult;
+  /** Undoes the mark (Apply's Undo): the version is approved again, waiting for an Application. Null if it wasn't marked. */
+  undoPackageSubmitted(id: string): ApprovedPackage | null;
+
+  // ---------- The contract for Track (#35; docs/contracts.md) ----------
+
+  /** The package as sent: the version submitted, else the one approved now. Null for a package never approved. Never changes once submitted. */
+  packageSnapshot(id: string): ApprovedPackage | null;
+  /** Packages approved and not marked submitted: a confirmation email for one becomes a Needs-you question in Track. */
+  approvedWithoutApplication(): ApprovedPackage[];
+  /** A piece from another feature (an interview story): an unconfirmed achievement waiting in Profile, with its source. */
+  addUnconfirmedPiece(piece: { text: string; source: string }): { id: string };
 }
+
+/** What Track reads from Prepare: the package as sent, approved packages not yet submitted, adding a piece, and the voice. */
+export type PrepareForTrack = Pick<PreparationEngine,
+  | "packageSnapshot" | "approvedWithoutApplication" | "packageFile" | "markPackageSubmitted" | "undoPackageSubmitted"
+  | "addUnconfirmedPiece" | "voiceContext" | "recordVoiceEdit"
+>;
 
 /**
  * What Apply's fill engine reads from Prepare (read-only, except adding to the answer bank):
@@ -414,7 +437,7 @@ export interface PreparationEngine {
  */
 export type PrepareForApply = Pick<PreparationEngine,
   | "profileForApply" | "packageForApply" | "approvedPackages" | "packageFile"
-  | "findAnswer" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit" | "draftAnswer"
+  | "findAnswer" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit" | "draftAnswer" | "markPackageSubmitted" | "undoPackageSubmitted"
 >;
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
@@ -529,6 +552,15 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     packageFile: (id, which, version) => packages.frozenFile(id, which, version),
     packageForApply: (query) => packages.forApply(query),
     approvedPackages: () => packages.approvedList(),
+    markPackageSubmitted: (id, how) => packages.markSubmitted(id, how),
+    undoPackageSubmitted: (id) => packages.undoSubmitted(id),
+    packageSnapshot: (id) => packages.snapshot(id),
+    approvedWithoutApplication: () => packages.withoutApplication(),
+    addUnconfirmedPiece({ text, source }) {
+      const saved = profile.save({ kind: "achievement", text }, { from: source, quote: text, status: "unconfirmed" });
+      if (!saved.saved) throw new Error(saved.problems[0]!.message);
+      return { id: saved.piece.id };
+    },
     profileForApply() {
       const c = contact.get();
       const words = c.nameLatin.trim().split(/\s+/).filter(Boolean);

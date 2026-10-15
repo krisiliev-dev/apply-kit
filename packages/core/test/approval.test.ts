@@ -244,3 +244,63 @@ describe("what Apply reads (#38, #39, #41)", () => {
     });
   });
 });
+
+describe("what Track reads (#35)", () => {
+  it("marking a package submitted makes it submitted once; a second mark returns the first", async () => {
+    const t = mira();
+    const pkg = await approved(t);
+    expect(t.preparation.approvedWithoutApplication().map((p) => p.id)).toEqual([pkg.id]);
+    await t.clock.advance(60_000);
+
+    const marked = t.preparation.markPackageSubmitted(pkg.id, { via: "extension", portalUrl: "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation" });
+    await t.clock.advance(60_000);
+    const again = t.preparation.markPackageSubmitted(pkg.id, { via: "app", portalUrl: null });
+
+    const submitted = { at: "2026-10-12T07:31:00.000Z", via: "extension", portalUrl: "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation" };
+    expect(marked).toMatchObject({ marked: true, alreadyMarked: false, package: { state: "submitted", submitted } });
+    expect(again).toMatchObject({ marked: true, alreadyMarked: true, package: { submitted } });
+    expect(t.preparation.approvedWithoutApplication()).toEqual([]);
+    expect(t.preparation.packageSnapshot(pkg.id)).toMatchObject({ version: 1, state: "submitted", submitted });
+  });
+
+  it("refuses to mark a draft submitted", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(t.preparation.markPackageSubmitted(pkg.id, { via: "app", portalUrl: null })).toEqual({ marked: false, reason: "Your package isn't approved yet · open it to approve" });
+    expect(t.preparation.packageSnapshot(pkg.id)).toBeNull();
+  });
+
+  it("the snapshot of a submitted package never changes: later edits make a new version", async () => {
+    const t = mira();
+    const pkg = await approved(t);
+    t.preparation.markPackageSubmitted(pkg.id, { via: "extension", portalUrl: null });
+    const sent = t.preparation.packageSnapshot(pkg.id)!;
+
+    t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3600");
+    t.preparation.approveStep(pkg.id, "answers");
+    const v2 = await t.preparation.approvePackage(pkg.id);
+
+    expect(v2).toMatchObject({ approved: true, package: { approved: { version: 2, state: "approved" } } });
+    expect(t.preparation.packageSnapshot(pkg.id)).toEqual(sent);
+    expect(sent.answers).toContainEqual({ question: "What are your salary expectations? (gross monthly, EUR)", answer: "3400" });
+    expect(await t.preparation.packageFile(pkg.id, "cv", sent.version)).toMatchObject({ sha256: sent.cv.file.sha256 });
+  });
+
+  it("undoing the mark makes the package approved again, waiting for an Application", async () => {
+    const t = mira();
+    const pkg = await approved(t);
+    t.preparation.markPackageSubmitted(pkg.id, { via: "extension", portalUrl: null });
+
+    expect(t.preparation.undoPackageSubmitted(pkg.id)).toMatchObject({ state: "approved", submitted: null });
+    expect(t.preparation.approvedWithoutApplication().map((p) => p.id)).toEqual([pkg.id]);
+  });
+
+  it("adds an unconfirmed piece from another feature, with its source, waiting in Profile", () => {
+    const t = mira();
+
+    const added = t.preparation.addUnconfirmedPiece({ text: "Led the post-incident review after a card-testing attack.", source: "Prep sheet for Security Engineer at Kestrel Payments" });
+
+    expect(t.preparation.piece(added.id)).toMatchObject({ kind: "achievement", status: "unconfirmed", source: { from: "Prep sheet for Security Engineer at Kestrel Payments" } });
+  });
+});
