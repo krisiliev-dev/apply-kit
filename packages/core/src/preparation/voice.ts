@@ -3,6 +3,7 @@
 // store, its text in the database); every call that carries Kris's writing sends at most
 // VOICE_EXCERPT_WORDS words of it, and each call's excerpts are recorded so they can be shown.
 import { docxText, fileTypeOf, pdfPlainText, plainText } from "./extract.ts";
+import { isFileReferenced } from "./file-references.ts";
 import type { PreparationDeps } from "./ports.ts";
 import type { LearnedVoice, SentExcerpt, VoiceLearningInput } from "../writing/writer.ts";
 import { ZipError } from "./zip.ts";
@@ -454,11 +455,7 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     if (!row) return false;
     db.prepare("DELETE FROM voice_sample WHERE id = ?").run(id);
     const sha = String(row.sha256);
-    const stillUsed =
-      db.prepare("SELECT 1 AS x FROM voice_sample WHERE sha256 = ?").get(sha) ??
-      db.prepare("SELECT 1 AS x FROM import_item WHERE sha256 = ?").get(sha) ??
-      db.prepare("SELECT 1 AS x FROM profile_contact WHERE photo_sha256 = ?").get(sha);
-    if (!stillUsed) await deps.files.remove(sha);
+    if (!isFileReferenced(db, sha)) await deps.files.remove(sha);
     return true;
   }
 

@@ -4,7 +4,11 @@
 import type { Clock, SqlDatabase } from "./ports.ts";
 import type { WriterTask } from "./writing/writer.ts";
 
-/** This month's AI spending against the cap. Once reached, unread Postings show as unscreened. */
+/**
+ * This month's AI spending against the cap. Once reached, unread Postings show as unscreened. It is
+ * reached when the spending meets the cap or a posting read (extraction) was refused this month: a
+ * refused writer call (a big import, say) only says that call didn't fit, and smaller reads still may.
+ */
 export interface BudgetInfo {
   /** Calendar month the spending counts towards (UTC), e.g. "2026-10". */
   month: string;
@@ -55,8 +59,8 @@ export function createAiBudget({ db, clock, capUsd }: AiBudgetDeps): AiBudget {
   const cap = () => Math.max(0, capUsd ?? 0);
   /** Estimated cost of the calls running right now, held against the cap until each one is billed. */
   let reservedUsd = 0;
-  /** The month in which a call was last refused because it would have crossed the cap. */
-  let refusedInMonth: string | null = null;
+  /** The month in which a posting read was last refused because it would have crossed the cap. */
+  let extractionRefusedInMonth: string | null = null;
 
   const book = (charge: AiCharge, costUsd: number) => {
     db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, ?, ?, ?)").run(
@@ -68,14 +72,14 @@ export function createAiBudget({ db, clock, capUsd }: AiBudgetDeps): AiBudget {
     info() {
       const spentUsd = Math.round(spentThisMonth() * 1e6) / 1e6;
       const capUsd = cap();
-      return { month: month(), capUsd, spentUsd, reached: capUsd <= 0 || spentUsd >= capUsd || refusedInMonth === month() };
+      return { month: month(), capUsd, spentUsd, reached: capUsd <= 0 || spentUsd >= capUsd || extractionRefusedInMonth === month() };
     },
 
     async call(charge, run) {
       const estimate = charge.estimateUsd;
       // Checked and reserved before the first await (see `call`).
       if (spentThisMonth() + reservedUsd + estimate > cap()) {
-        refusedInMonth = month();
+        if (charge.task === "extraction") extractionRefusedInMonth = month();
         return { refused: true };
       }
       reservedUsd += estimate;
