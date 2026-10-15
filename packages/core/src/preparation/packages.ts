@@ -34,7 +34,7 @@ import {
   applyChanges, decisionsOf, deriveChanges, flagView, honestyChecks, keepTwoPages, offers, openReason, placesOnCv, tightenChange, tightenChoices,
   type CvChange, type CvFlag, type CvFlagView, type CvLineView, type CvPlan, type CvVersionState, type EvidenceRow, type HonestyCheckView, type PieceLink, type TightenChoice,
 } from "./cv-version.ts";
-import { checkWording, validateCv, type HonestyProfile } from "./honesty.ts";
+import { checkWording, quoteOf, validateCv, type HonestyProfile } from "./honesty.ts";
 import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview.ts";
 import type { Contact, ContactDetails, SaveContactResult } from "./contact.ts";
 import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
@@ -252,6 +252,8 @@ export interface LetterView {
   /** The draft shown (the one approved and printed), from 1, and how many there are. Earlier ones are kept. */
   draft: number;
   drafts: number;
+  /** The draft's language: drafts written before a language switch stay, each in its own. */
+  language: DocumentLanguage;
   /** Written by the writer, or by Kris herself ("Write it myself"). */
   origin: "writer" | "own";
   /** What Kris asked this draft for; null for the first. */
@@ -321,7 +323,7 @@ export interface ScreeningAnswerView {
   options: string[];
   limit: AnswerLimit;
   origin: ScreeningOrigin;
-  /** The origin as its chip says it: "Answer bank", "Answer bank · adapted", "New draft", "New · from your sources", "Needs you", "Translated · check it". */
+  /** The origin as its chip says it: "Answer bank", "Answer bank · adapted", "New draft", "New · from your sources", "Needs you", "Answer bank · translated". */
   label: string;
   text: string;
   words: number;
@@ -369,6 +371,22 @@ export interface DraftAnswerRequest {
   maxWords?: number | null;
 }
 
+/**
+ * A language the package can be in. Switching rewrites the CV, the letter and the answers together
+ * (at about `costUsd`), keeping the current drafts and decisions; switching back to a language whose
+ * drafts are kept brings them back without the model.
+ */
+export interface LanguageOption {
+  language: DocumentLanguage;
+  current: boolean;
+  /** The posting's own language. */
+  fromPosting: boolean;
+  /** What switching to it would cost now: nothing for the current one, or when its drafts are kept. */
+  costUsd: number;
+  /** The drafts kept from when the package was last in this language; null when there are none. */
+  kept: { at: string; letterDrafts: number; decisions: number; answers: number } | null;
+}
+
 export interface PackageView {
   id: string;
   jobId: string;
@@ -378,6 +396,8 @@ export interface PackageView {
   language: DocumentLanguage;
   /** The posting's own language, which the package started in. */
   postingLanguage: DocumentLanguage;
+  /** English and Bulgarian, with what switching costs and the drafts kept in the other one. */
+  languageOptions: LanguageOption[];
   angle: { angle: Angle; label: string; reason: string };
   targetPostingId: string;
   targetOptions: TargetOption[];
@@ -774,6 +794,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       startedAt: r.startedAt,
       language: r.language,
       postingLanguage: r.job.packageLanguage,
+      languageOptions: languageOptions(r),
       angle: { angle: r.angle, label: angleLabel[r.angle], reason: r.angleReason },
       targetPostingId: r.targetPostingId,
       targetOptions: r.job.postings.map((p) => ({ postingId: p.id, site: p.site, url: p.url, recommended: p.id === recommended, consequence: consequence(p) }))
@@ -864,7 +885,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   const planOf = (r: Row): CvPlan => applyChanges(baseline(r), r.cvVersion?.changes ?? []);
 
   /** The letterhead the CV and the letter share: Kris's name for the language, the current title, the contact details. */
-  function letterheadOf(r: Row): Letterhead {
+  function letterheadOf(r: Row, language: DocumentLanguage = r.language): Letterhead {
     const plan = planOf(r);
     const pieces = byId();
     const contact = deps.contact();
@@ -872,7 +893,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     // Facts Kris gave the ATS fix for this package only fill what the profile lacks.
     const fix = r.contactFix;
     return {
-      name: r.language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin,
+      name: language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin,
       headline: first?.title ?? "",
       location: [contact.city || fix.city, contact.country || fix.country].filter(Boolean).join(", ") || undefined,
       email: contact.email,
@@ -958,6 +979,47 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       flags,
     };
     db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
+    // Written again after a language switch: the decisions Kris made in the other language carry over.
+    if (!r.cvVersion) carryDecisions(id);
+  }
+
+  /**
+   * After a language switch, the decisions on the flags of the CV just left carry over to the same
+   * flag (same kind, requirement, line and pieces): the option Kris chose, in the new language's
+   * words. Kris's own wording (and a line from her answer) was in the other language: she decides
+   * again, and a note says so.
+   */
+  function carryDecisions(id: string): void {
+    const r = row(id)!;
+    const left = db.prepare("SELECT language, state FROM package_language WHERE package_id = ? AND language != ? ORDER BY kept_at DESC LIMIT 1").get(id, r.language);
+    const before = left ? (JSON.parse(String(left.state)) as KeptLanguage).cvVersion?.flags?.filter((f) => f.decision) ?? [] : [];
+    if (!before.length || !r.cvVersion) return;
+    const from = languageName(left!.language as DocumentLanguage);
+    const key = (f: CvFlag) => JSON.stringify([f.kind, f.requirement, f.place, [...f.pieceIds].sort()]);
+    const notes: string[] = [];
+    let carried = 0;
+    const decided: { flag: CvFlag; option: string; text: string | null }[] = [];
+    const flags = (r.cvVersion.flags ?? []).map((f) => {
+      const o = before.find((x) => key(x) === key(f));
+      if (!o?.decision) return f;
+      const option = o.decision.option;
+      const text = option === "letter" || option === "leave-out" ? null : option === "profile" ? f.piece : option === "honest" ? f.honest : undefined;
+      if (text === undefined || (option !== "letter" && option !== "leave-out" && !text)) {
+        const line = o.piece ?? requirementText(r, o) ?? "a line";
+        notes.push(option === "own"
+          ? `Decide again: your own wording for "${quoteOf(line)}" was in ${from}.`
+          : `Decide again: "${quoteOf(line)}" was decided in ${from}.`);
+        return f;
+      }
+      carried += 1;
+      decided.push({ flag: f, option, text });
+      return { ...f, decision: { option, text, at: o.decision.at } };
+    });
+    if (carried) notes.unshift(`Kept ${carried === 1 ? "1 decision" : `${carried} decisions`} from your ${from} draft.`);
+    saveVersion(id, { ...r.cvVersion, flags, notes: [...r.cvVersion.notes, ...notes] });
+    const now = row(id)!;
+    const changes = decided.map((d) => decisionChange(now, d.flag, d.option, d.text)).filter((c): c is CvChange => c !== null);
+    saveVersion(id, { ...now.cvVersion!, changes: [...now.cvVersion!.changes, ...changes] });
   }
 
   /** What a piece says, as far as a CV line can tell: its words and its facts. */
@@ -1145,12 +1207,15 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   interface LetterRow {
     number: number; origin: "writer" | "own"; instruction: string | null; written: LetterDraft | null; content: LetterDraft;
     excerpts: SentExcerpt[]; voiceEditId: string | null; costUsd: number; createdAt: string; editedAt: string | null;
+    /** Null for a draft kept from before drafts knew their language: the package's. */
+    language: DocumentLanguage | null;
   }
   const toLetter = (x: Record<string, unknown>): LetterRow => ({
     number: Number(x.number), origin: x.origin as LetterRow["origin"], instruction: x.instruction == null ? null : String(x.instruction),
     written: x.written == null ? null : (JSON.parse(String(x.written)) as LetterDraft), content: JSON.parse(String(x.content)) as LetterDraft,
     excerpts: JSON.parse(String(x.excerpts)) as SentExcerpt[], voiceEditId: x.voice_edit_id == null ? null : String(x.voice_edit_id),
     costUsd: Number(x.cost_usd), createdAt: String(x.created_at), editedAt: x.edited_at == null ? null : String(x.edited_at),
+    language: x.language == null ? null : (x.language as DocumentLanguage),
   });
   const letters = (id: string) => db.prepare("SELECT * FROM package_letter WHERE package_id = ? ORDER BY number").all(id).map(toLetter);
   const letterOf = (id: string, n: number | null) => {
@@ -1158,14 +1223,17 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return x ? toLetter(x) : null;
   };
   const currentLetter = (r: Row) => letterOf(r.id, r.letterDraft);
+  /** The language a letter draft is written in. */
+  const letterLanguage = (r: Row, l: LetterRow): DocumentLanguage => l.language ?? r.language;
+  const languageName = (l: DocumentLanguage) => (l === "bg" ? "Bulgarian" : "English");
 
   /** Keeps a new draft (earlier ones stay) and shows it. */
-  function addLetter(id: string, draft: Omit<LetterRow, "number" | "voiceEditId" | "createdAt" | "editedAt">): number {
+  function addLetter(id: string, draft: Omit<LetterRow, "number" | "voiceEditId" | "createdAt" | "editedAt" | "language">): number {
     const n = Number(db.prepare("SELECT COALESCE(MAX(number), 0) + 1 AS n FROM package_letter WHERE package_id = ?").get(id)!.n);
     db.prepare(
-      `INSERT INTO package_letter (package_id, number, origin, instruction, written, content, excerpts, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, n, draft.origin, draft.instruction, draft.written && JSON.stringify(draft.written), JSON.stringify(draft.content), JSON.stringify(draft.excerpts), draft.costUsd, clock.now().toISOString());
+      `INSERT INTO package_letter (package_id, number, origin, instruction, written, content, excerpts, cost_usd, created_at, language)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, n, draft.origin, draft.instruction, draft.written && JSON.stringify(draft.written), JSON.stringify(draft.content), JSON.stringify(draft.excerpts), draft.costUsd, clock.now().toISOString(), row(id)!.language);
     db.prepare("UPDATE package SET letter_draft = ? WHERE id = ?").run(n, id);
     return n;
   }
@@ -1200,7 +1268,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const leftOut = flags.filter((f) => f.kind === "gap" && f.decision?.option === "leave-out").map((f) => requirementText(r, f)).filter((t): t is string => !!t);
     // Besides the profile, the letter may name the company, the role and what the posting asks for (gaps only as gaps).
     const alsoNamed = [r.job.company, r.job.title, ...r.job.requirements.filter((_, i) => !gapAt.has(i)).map((q) => q.text)];
-    return checkLetter(l.content, { profile: { ...honestyProfile(r), alsoNamed }, decisions, named: namedGaps(r), leftOut, language: r.language });
+    return checkLetter(l.content, { profile: { ...honestyProfile(r), alsoNamed }, decisions, named: namedGaps(r), leftOut, language: letterLanguage(r, l) });
   }
 
   /** Why the letter can't be approved: no draft, an empty one, a check's problem, or more than one page. */
@@ -1208,6 +1276,10 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const l = currentLetter(r);
     if (!l) return { reason: "There's no cover letter to approve yet.", by: "letter" };
     if (bodyWords(l.content) === 0) return { reason: "The letter is empty. Write it, or ask for a draft.", by: "letter" };
+    // One language per package: a draft kept from before a switch is there to read, not to send.
+    if (letterLanguage(r, l) !== r.language) {
+      return { reason: `Draft ${l.number} is in ${languageName(letterLanguage(r, l))} and the package is in ${languageName(r.language)}. Show ${r.language === "en" ? "an" : "a"} ${languageName(r.language)} draft, or ask for a new one.`, by: "letter" };
+    }
     const problem = letterChecks(r, l).find((c) => c.state === "problem");
     if (problem) return { reason: `The cover letter can't be approved yet: ${problem.because}`, by: "letter" };
     const file = r.letterFile?.draft === l.number ? r.letterFile : null;
@@ -1242,6 +1314,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return {
       draft: l.number,
       drafts: letters(r.id).length,
+      language: letterLanguage(r, l),
       origin: l.origin,
       instruction: l.instruction,
       text: letterText(l.content),
@@ -1263,11 +1336,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   }
 
   /** The letter through its template: the CV's letterhead, the date, recipient and "Re:" line from the job, and Kris's words. */
-  function letterDocument(r: Row, d: LetterDraft): DocumentToRender {
-    const letterhead = letterheadOf(r);
+  function letterDocument(r: Row, d: LetterDraft, language: DocumentLanguage): DocumentToRender {
+    const letterhead = letterheadOf(r, language);
     return {
       kind: "cover-letter",
-      language: r.language,
+      language,
       title: `${letterhead.name} · Cover letter · ${r.job.company}`,
       content: {
         letterhead,
@@ -1288,7 +1361,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     if (!l) return;
     const draft = await deps.draftDocument({
       packageId: id,
-      document: letterDocument(r, l.content),
+      document: letterDocument(r, l.content, letterLanguage(r, l)),
       fileName: { name: deps.contact().nameLatin, company: r.job.company, role: r.job.title },
     });
     const file: LetterFileView = { fileName: draft.fileName, path: draft.path, sha256: draft.sha256, size: draft.size, pages: draft.pages, overflow: draft.overflow, draft: l.number };
@@ -1451,6 +1524,80 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     // The ATS check reads the approved CV: a CV open again waits for approval before it's checked.
     if (from <= packageSteps.indexOf("cv")) setPart(r.id, "ats", { state: "waiting" });
   };
+
+  // ---- the package's language (#68) -----------------------------------------------------------
+
+  /** What a package keeps of a language it leaves: its drafts and decisions, and how far each part got. */
+  interface KeptLanguage {
+    cvVersion: CvVersionState | null;
+    screening: ScreeningState | null;
+    letterDraft: number | null;
+    parts: Record<string, { state: PartState; error: string | null }>;
+  }
+
+  const keptIn = (id: string, language: DocumentLanguage): { state: KeptLanguage; at: string } | null => {
+    const x = db.prepare("SELECT state, kept_at FROM package_language WHERE package_id = ? AND language = ?").get(id, language);
+    return x ? { state: JSON.parse(String(x.state)) as KeptLanguage, at: String(x.kept_at) } : null;
+  };
+
+  /** Keeps the package's drafts and decisions in its current language, replacing what was kept from it before. */
+  function keepLanguage(r: Row): void {
+    const ps = parts(r.id);
+    const state: KeptLanguage = {
+      cvVersion: r.cvVersion, screening: r.screening, letterDraft: r.letterDraft,
+      parts: Object.fromEntries(modelParts.map((p) => [p, { state: ps.get(p)!.state, error: ps.get(p)!.error }])),
+    };
+    db.prepare(
+      `INSERT INTO package_language (package_id, language, state, kept_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(package_id, language) DO UPDATE SET state = excluded.state, kept_at = excluded.kept_at`,
+    ).run(r.id, r.language, JSON.stringify(state), clock.now().toISOString());
+  }
+
+  function languageOptions(r: Row): LanguageOption[] {
+    return (["en", "bg"] as const).map((language) => {
+      const current = language === r.language;
+      const kept = current ? null : keptIn(r.id, language);
+      const rewrite = { ...r, language };
+      return {
+        language, current, fromPosting: language === r.job.packageLanguage,
+        costUsd: current || kept ? 0 : Math.round(modelParts.reduce((n, p) => n + estimateOf(rewrite, p), 0) * 1e6) / 1e6,
+        kept: kept && {
+          at: kept.at,
+          letterDrafts: letters(r.id).filter((l) => letterLanguage(r, l) === language).length,
+          decisions: (kept.state.cvVersion?.flags ?? []).filter((f) => f.decision).length,
+          answers: (kept.state.screening?.answers ?? []).filter((a) => a.yours).length,
+        },
+      };
+    });
+  }
+
+  /**
+   * Switches the package's language. What it has now is kept; drafts kept in the new language come
+   * back without the model, otherwise the CV, the letter and the answers are written again in it,
+   * together, so the package never mixes languages. The approved steps reopen.
+   */
+  async function setLanguage(id: string, language: DocumentLanguage): Promise<ChangeResult> {
+    const r = mustGet(id);
+    if (language === r.language) return { changed: true, package: view(r) };
+    if (isGenerating(r, parts(id))) {
+      return { changed: false, reason: "The package is still being written. Switch the language once it's done, or stop generating first.", package: view(r) };
+    }
+    keepLanguage(r);
+    const kept = keptIn(id, language)?.state ?? null;
+    db.prepare("UPDATE package SET language = ?, cv_version = ?, cv_draft = NULL, screening = ?, letter_draft = ?, letter_file = NULL, stopped_at = NULL WHERE id = ?").run(
+      language, kept?.cvVersion ? JSON.stringify(kept.cvVersion) : null, kept?.screening ? JSON.stringify(kept.screening) : null, kept?.letterDraft ?? null, id,
+    );
+    reopenFrom(r, "target");
+    if (!kept) {
+      for (const part of modelParts) setPart(id, part, { state: "waiting", error: null });
+      generate(id);
+      return { changed: true, package: view(row(id)!) };
+    }
+    for (const part of modelParts) setPart(id, part, kept.parts[part] ?? { state: "waiting", error: null });
+    if (kept.cvVersion && kept.parts.cv?.state === "done") await renderCv(id);
+    if (kept.letterDraft !== null) await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
 
   /** Undoes (or redoes) one change, reopens the CV step and prints the CV again. */
   async function toggleChange(id: string, changeId: string, undone: boolean): Promise<ChangeResult> {
@@ -1893,7 +2040,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   }
 
   const originLabel = (a: ScreeningAnswer): string =>
-    a.origin === "bank" ? "Answer bank" : a.origin === "adapted" ? "Answer bank · adapted" : a.origin === "translated" ? "Translated · check it"
+    a.origin === "bank" ? "Answer bank" : a.origin === "adapted" ? "Answer bank · adapted" : a.origin === "translated" ? "Answer bank · translated"
       : a.origin === "needs-you" ? "Needs you" : a.heard ? "New · from your sources" : "New draft";
 
   function answersView(r: Row): ScreeningAnswersView | null {
@@ -1987,7 +2134,12 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     if (a.origin === "bank" || a.origin === "adapted" || a.heard) return refuse("This answer comes from your answer bank or your sources already.");
     if (a.savedTo) return refuse("It's in your answer bank already.");
     if (!a.text) return refuse("Answer it first.");
-    const saved = deps.answers.save(
+    // A translation of a bank answer goes back to that answer, as its version in this language.
+    const source = a.origin === "translated" && a.bank ? deps.answers.get(a.bank.answerId) : null;
+    const saved = source ? deps.answers.save(
+      { id: source.id, question: source.question, wordings: source.wordings.map((w) => w.text), versions: { ...source.versions, [bankLanguage(r)]: a.text }, category: source.category, kind: source.kind, mode: source.mode, rule: source.rule },
+      { from: `${r.job.company} package`, jobId: r.jobId },
+    ) : deps.answers.save(
       { question: plainQuestion(a.question), versions: { [bankLanguage(r)]: a.text }, category: "screening", kind: a.type === "select" ? "choice" : "text" },
       { from: `${r.job.company} package`, jobId: r.jobId },
     );
@@ -2198,18 +2350,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       return { changed: true, package: view(row(id)!) };
     },
 
-    async setLanguage(id, language) {
-      const r = mustGet(id);
-      if (language !== r.language) {
-        db.prepare("UPDATE package SET language = ? WHERE id = ?").run(language, id);
-        reopenFrom(r, "target");
-        // The CV is printed again in the new language, and the answers written again in it.
-        if (parts(id).get("cv")!.state === "done") await renderCv(id);
-        if (currentLetter(row(id)!)) await renderLetter(id);
-        rewriteAnswers(id);
-      }
-      return { changed: true, package: view(row(id)!) };
-    },
+    setLanguage,
 
     async setPhoto(id, on) {
       const r = mustGet(id);

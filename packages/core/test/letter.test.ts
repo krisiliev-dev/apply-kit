@@ -404,11 +404,12 @@ describe("when the letter can't be written", () => {
 });
 
 describe("switching the package's language", () => {
-  it("prints the letter again with the Bulgarian letterhead", async () => {
+  it("writes a new draft with the Bulgarian letterhead (#68)", async () => {
     const t = await mira();
     const pkg = await started(t);
 
     await t.preparation.setPackageLanguage(pkg.id, "bg");
+    await t.preparation.packageSettled(pkg.id);
 
     expect(printed<LetterContent>((await t.preparation.packageLetter(pkg.id))!.pdf).letterhead.name).toBe("Мира Петрова");
   });

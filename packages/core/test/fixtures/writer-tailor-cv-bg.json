@@ -1,0 +1,29 @@
+{
+  "summary": {
+    "text": "Анализатор по сигурност в банка, който пише правила за откриване в SIEM и провежда реакцията при инциденти.",
+    "pieceIds": ["piece-detections", "piece-phishing"],
+    "claim": "reworded",
+    "why": "Започва със SIEM, първото изискване в обявата.",
+    "honest": null
+  },
+  "roles": [
+    {
+      "pieceId": "piece-analyst",
+      "title": "Security Analyst",
+      "employer": "Northwind Bank",
+      "start": "2022-03",
+      "end": null,
+      "bullets": [
+        { "text": "Проведох реакцията при фишинг кампания срещу екипа по искове", "pieceIds": ["piece-phishing"], "claim": "reworded", "why": "Терминът от обявата за същата работа.", "honest": null },
+        { "text": "Написах 30 правила за откриване, които намалиха фалшивите сигнали с една четвърт", "pieceIds": ["piece-detections"], "claim": "as-written", "why": "", "honest": null }
+      ],
+      "why": "Реакцията при инциденти е първа: обявата я търси по име."
+    }
+  ],
+  "skills": [{ "text": "Wazuh", "pieceIds": ["piece-wazuh"] }],
+  "evidence": [
+    { "requirement": 0, "pieceIds": ["piece-detections", "piece-wazuh"] },
+    { "requirement": 1, "pieceIds": ["piece-phishing"] }
+  ],
+  "notes": ["Започнах с реакцията при инциденти и работата със SIEM, двете неща, които обявата търси."]
+}

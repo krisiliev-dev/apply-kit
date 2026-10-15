@@ -25,6 +25,11 @@ export const recordedDraftAnswer: DraftedAnswer = draftedAnswerSchema.parse(JSON
 /** What the writer drafted for "Why Kestrel Payments?": written for that company. */
 export const recordedWhyAnswer: DraftedAnswer = draftedAnswerSchema.parse(JSON.parse(loadFixture("writer-draft-answer-why.json")));
 
+/** The same three, as the writer wrote them for a Bulgarian package (#68): Bulgarian words, tool and employer names in Latin script. */
+export const recordedTailoredCvBg: TailoredCv = tailoredCvSchema.parse(JSON.parse(loadFixture("writer-tailor-cv-bg.json")));
+export const recordedLetterBg: WrittenLetter = writtenLetterSchema.parse(JSON.parse(loadFixture("writer-letter-bg.json")));
+export const recordedDraftAnswerBg: DraftedAnswer = draftedAnswerSchema.parse(JSON.parse(loadFixture("writer-draft-answer-bg.json")));
+
 /** A recorded output, an error to throw (it may carry a billed `costUsd`), or a function of the input (which may wait). */
 type Recorded<I, O> = O | Error | ((input: I) => O | Error | Promise<O | Error>);
 
