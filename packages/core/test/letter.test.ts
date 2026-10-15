@@ -265,3 +265,53 @@ describe("drafts", () => {
     });
   });
 });
+
+describe("editing the letter", () => {
+  const opener = "Every false alert in a payments SOC costs an analyst's time, and every missed one can cost a merchant.";
+  const mine = "Your analysts lose an hour a night to noisy alerts.";
+
+  it("saves Kris's text; a sentence she changed is hers (no longer highlighted), and the edit is voice evidence", async () => {
+    const t = await mira();
+    const pkg = await started(t);
+
+    const r = await t.preparation.editLetter(pkg.id, 1, pkg.letter!.text.replace(opener, mine));
+
+    expect(r.package.letter).toMatchObject({
+      draft: 1, words: 104, editedAt: "2026-10-12T07:30:00.000Z",
+      forCompany: { count: 1, where: "the first sentence of paragraph 3" },
+    });
+    expect(r.package.letter!.paragraphs[0]![0]).toEqual({ text: mine, forCompany: false });
+    expect(t.preparation.voice().edits).toMatchObject({ total: 1, waiting: 1 });
+
+    // Editing again keeps one piece of evidence for the draft, with the latest text.
+    await t.preparation.editLetter(pkg.id, 1, r.package.letter!.text.replace("Kind regards,", "Best,"));
+    expect(t.preparation.voice().edits).toMatchObject({ total: 1, waiting: 1 });
+    await t.preparation.learnVoice();
+    const sent = t.calls.filter((c) => c.task === "learn-voice").at(-1)!.input as { excerpts: { text: string }[] };
+    expect(sent.excerpts.map((e) => e.text)).toEqual([`Draft: ${opener} Kind regards,\nKris: ${mine} Best,`]);
+  });
+
+  it("isn't recorded as evidence while learning from edits is paused; the text is still saved", async () => {
+    const t = await mira();
+    const pkg = await started(t);
+    t.preparation.setVoiceLearning(false);
+
+    const r = await t.preparation.editLetter(pkg.id, 1, pkg.letter!.text.replace(opener, mine));
+
+    expect(r.package.letter!.paragraphs[0]![0]!.text).toBe(mine);
+    expect(t.preparation.voice().edits).toMatchObject({ total: 0 });
+  });
+
+  it("reopens an approved letter step, and holds Kris's own sentences to the whole profile", async () => {
+    const t = await mira();
+    const pkg = await started(t);
+    for (const step of ["target", "cv", "letter"] as const) t.preparation.approveStep(pkg.id, step);
+
+    const r = await t.preparation.editLetter(pkg.id, 1, pkg.letter!.text.replace(opener, "I cut false alerts by 90% with Splunk."));
+
+    expect(r.package.steps[2]).toMatchObject({ approvedAt: null, state: "current", sub: "1 to fix" });
+    expect(r.package.letter!.checks[0]).toMatchObject({
+      state: "problem", detail: "\"I cut false alerts by 90% with Splunk\" names \"Splunk\", which isn't in your profile; it says \"90%\", which its piece doesn't back.",
+    });
+  });
+});

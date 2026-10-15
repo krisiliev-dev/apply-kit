@@ -339,6 +339,13 @@ export interface PreparationEngine {
   redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
   /** Pages to another draft: it becomes the letter (printed, and the one approved). An approved letter step reopens. */
   showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
+  /**
+   * Kris's text for a letter draft (greeting, paragraphs and closing, separated by blank lines):
+   * saved and printed. A sentence she changed is hers (no longer highlighted, held to the whole
+   * profile). Her changes to the writer's draft are voice evidence unless learning from edits is
+   * paused. An approved letter step reopens.
+   */
+  editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
 
   /** Profile › Learned during packages: pieces learned from answers in packages, waiting for Kris, newest first. */
   learnedPieces(): LearnedPiece[];
@@ -448,6 +455,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     learnedPieces: () => packages.learned(),
     redraftLetter: (id, instruction) => packages.redraftLetter(id, instruction),
     showLetterDraft: (id, draft) => packages.showLetterDraft(id, draft),
+    editLetter: (id, draft, text) => packages.editLetter(id, draft, text),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });

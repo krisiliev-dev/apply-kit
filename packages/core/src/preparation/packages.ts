@@ -369,6 +369,8 @@ export interface PackageStore {
   redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
   /** Shows another draft: the one approved and printed. */
   showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
+  /** Kris's text for a draft: saved, printed, and recorded as voice evidence unless learning is paused. */
+  editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
   learned(): LearnedPiece[];
 }
@@ -1328,6 +1330,24 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return { changed: true, package: view(row(id)!) };
   }
 
+  async function editLetter(id: string, draft: number, text: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const l = letterOf(id, draft);
+    if (!l) return { changed: false, reason: `There's no draft ${draft}.`, package: view(r) };
+    const content = parseLetterText(text, l.content);
+    if (letterText(content) === letterText(l.content) && draft === r.letterDraft) return { changed: true, package: view(r) };
+    // Kris's changes to what the writer wrote teach the voice, kept as one piece of evidence per draft.
+    const voiceEdit = l.written
+      ? deps.voice.saveEdit({ purpose: "cover-letter", language: r.language, before: letterText(l.written), after: letterText(content), source: `package:${id}` }, l.voiceEditId)
+      : l.voiceEditId;
+    db.prepare("UPDATE package_letter SET content = ?, voice_edit_id = ?, edited_at = ? WHERE package_id = ? AND number = ?")
+      .run(JSON.stringify(content), voiceEdit, clock.now().toISOString(), id, draft);
+    db.prepare("UPDATE package SET letter_draft = ? WHERE id = ?").run(draft, id);
+    reopenFrom(r, "letter");
+    await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
   const mustGet = (id: string) => {
     const r = row(id);
     if (!r) throw new Error("No such package");
@@ -1455,6 +1475,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     learned,
     redraftLetter,
     showLetterDraft,
+    editLetter,
 
   };
 }
