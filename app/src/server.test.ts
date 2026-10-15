@@ -245,6 +245,21 @@ describe("the Applications routes", () => {
     expect(await accepted.json()).toMatchObject({ problem: "accepted" });
   });
 
+  it("searches, filters and pages the list from the query string, and records a visit", async () => {
+    const s = service();
+    for (let i = 0; i < 30; i++) {
+      await s.request("/api/applications", s.json({ job: { company: i % 2 ? "Amber Labs" : "Birch Works", title: `Job ${i}` }, appliedOn: "2026-10-09", status: "applied" }));
+    }
+
+    const amber = (await (await s.request("/api/applications?q=amber&status=open")).json()) as { matching: number; groups: { applications: unknown[] }[] };
+    expect([amber.matching, amber.groups[0]!.applications.length]).toEqual([15, 5]);
+    const paged = (await (await s.request("/api/applications?paged=1&at=applied:25")).json()) as { groups: { offset: number; applications: unknown[] }[] };
+    expect([paged.groups[0]!.offset, paged.groups[0]!.applications.length]).toEqual([25, 5]);
+
+    const visit = await s.request("/api/applications/visit", s.json({}));
+    expect(await visit.json()).toEqual({ since: null, changes: [] });
+  });
+
   it("lists emails to match, refuses an answer with no choice in words, and gives the mailbox's state", async () => {
     const s = service();
 

@@ -2,14 +2,17 @@ import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { stream } from "hono/streaming";
 import type { Context } from "hono";
-import { TrackerError, maxCvBytes } from "@apply-kit/core";
+import { TrackerError, angles, maxCvBytes } from "@apply-kit/core";
 import type {
   AddApplicationInput, CapturedPage, EmailAnswer, CoverageInput, DiscoveryEngine, FactAnswer, FeedSort, FeedView, GroupKey, Pairing, PassReason,
-  PastedPosting, Scheduler, Status, Tracker,
+  PastedPosting, Scheduler, Status, StatusFilter, Tracker, Angle,
 } from "@apply-kit/core";
 
 const views: FeedView[] = ["new", "saved", "open", "passed", "hidden"];
 const sorts: FeedSort[] = ["fit", "newest"];
+const groupKeys: GroupKey[] = ["accepted", "offer", "interviewing", "screening", "applied", "closed"];
+/** Applications groups over this many rows are paged ("Applied 1–25 of 47"). */
+const applicationPageSize = 25;
 
 export function createServer({ engine, tracker, scheduler, pairing, uiDir, port }: {
   engine: DiscoveryEngine; tracker: Tracker; scheduler: Scheduler; pairing: Pairing; uiDir: string;
@@ -328,12 +331,31 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
     return check ? c.json(check) : c.json({ error: "No such coverage check" }, 404);
   });
 
-  // Applications (Track). The list grouped by Status (?all=applied,closed shows every row of those
-  // groups), Jobs to pick when adding (?q=), and one Application in full (its page).
+  // Applications (Track). The list grouped by Status: ?all=applied,closed shows every row of those
+  // groups; ?paged=1 pages groups over 25 rows, from ?at=applied:25,closed:50; ?q= searches; ?status=
+  // (open or a group), ?angle= and ?within= (days) filter. Jobs to pick when adding (?q=), and one
+  // Application in full (its page).
   app.get("/api/applications", async (c) => {
     const all = (c.req.query("all") ?? "").split(",").filter(Boolean) as GroupKey[];
-    return c.json(await tracker.list({ limits: Object.fromEntries(all.map((k) => [k, Number.MAX_SAFE_INTEGER])) }));
+    const at = Object.fromEntries((c.req.query("at") ?? "").split(",").flatMap((p) => {
+      const [k, n] = p.split(":");
+      return k && Number(n) >= 0 ? [[k, Number(n)]] : [];
+    })) as Partial<Record<GroupKey, number>>;
+    const status = c.req.query("status");
+    const angle = c.req.query("angle");
+    const within = Number(c.req.query("within"));
+    return c.json(await tracker.list({
+      limits: Object.fromEntries(all.map((k) => [k, Number.MAX_SAFE_INTEGER])),
+      pageSize: c.req.query("paged") ? applicationPageSize : null,
+      offsets: at,
+      search: c.req.query("q") ?? null,
+      status: status === "open" || groupKeys.includes(status as GroupKey) ? (status as StatusFilter) : null,
+      angle: angles.includes(angle as Angle) ? (angle as Angle) : null,
+      appliedWithinDays: Number.isInteger(within) && within > 0 ? within : null,
+    }));
   });
+  // A visit to Applications: records it and returns "Since your last visit" (Status changes made by email).
+  app.post("/api/applications/visit", async (c) => c.json(await tracker.visit()));
   // The Stats strip: applications per week with the pace, response rate, interviews, what's working.
   app.get("/api/applications/stats", async (c) => c.json(await tracker.stats()));
   app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));

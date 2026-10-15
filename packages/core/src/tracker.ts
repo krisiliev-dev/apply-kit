@@ -357,6 +357,8 @@ export interface ListQuery {
   limits?: Partial<Record<GroupKey, number>>;
   /** Where to start in a group, for paging ("Applied 26–47 of 47"). Past the end: the last page. */
   offsets?: Partial<Record<GroupKey, number>>;
+  /** Groups with more Applications than this are paged, this many at a time from their offset (their limit doesn't apply). */
+  pageSize?: number | null;
   /** Words to find in the job, company, contacts and matched email text (every word must appear). */
   search?: string | null;
   status?: StatusFilter | null;
@@ -791,8 +793,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       // Applied: the oldest first, since its follow-up falls due soonest. The rest: latest change first.
       if (g.key === "applied") members.sort((a, b) => a.appliedOn.localeCompare(b.appliedOn) || a.title.localeCompare(b.title));
       else members.sort((a, b) => b.lastEvent.at.localeCompare(a.lastEvent.at) || b.appliedOn.localeCompare(a.appliedOn));
-      const limit = limits[g.key];
-      let offset = Math.max(0, Math.floor(query.offsets?.[g.key] ?? 0));
+      const paged = !!query.pageSize && query.pageSize > 0 && members.length > query.pageSize;
+      const limit = paged ? query.pageSize! : limits[g.key];
+      let offset = Math.max(0, Math.floor(Number(query.offsets?.[g.key] ?? 0)) || 0);
       if (limit !== undefined && limit > 0 && offset >= members.length) offset = Math.max(0, Math.floor((members.length - 1) / limit) * limit);
       groups.push({
         key: g.key, label: g.label, count: members.length, offset,

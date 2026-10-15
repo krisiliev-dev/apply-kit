@@ -124,6 +124,19 @@ describe("paging inside a group", () => {
     expect(second.groups.map((g) => [g.key, g.applications.length])).toEqual([["offer", 1], ["interviewing", 4], ["screening", 9], ["applied", 22]]);
   });
 
+  it("with a page size, pages only the groups larger than a page; smaller ones keep their first five", async () => {
+    const { tracker } = tracked();
+    await seed214(tracker);
+
+    const big = await tracker.list({ pageSize: 25, offsets: { closed: 25 } });
+
+    expect(big.groups.map((g) => [g.key, g.offset, g.applications.length, g.count])).toEqual([
+      ["offer", 0, 1, 1], ["interviewing", 0, 4, 4], ["screening", 0, 9, 9], ["applied", 0, 25, 47], ["closed", 25, 25, 153],
+    ]);
+    const few = await tracker.list({ pageSize: 25, search: "nimbus" });
+    expect(few.groups.find((g) => g.key === "closed")).toMatchObject({ count: 10, applications: { length: 5 } });
+  });
+
   it("an offset past the end shows the last page", async () => {
     const { tracker } = tracked();
     await seed214(tracker);
