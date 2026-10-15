@@ -445,6 +445,61 @@ const migrations: string[] = [
      updated_at TEXT NOT NULL,
      finished_at TEXT
    );`,
+  // #57: the coach interview. One interview per scope ("setup", or "angle:<angle>" for a thin angle):
+  // the question it's on, whether it's paused or finished, and the last failure (with when it tries
+  // again) or that it waits for the budget. Questions keep their topic (JSON) and how they ended
+  // (answered, "I don't remember", skipped: skipped ones come back in packages). Turns are the
+  // transcript; Kris's answer is saved before it's sent (sent = 0), so a timeout loses nothing.
+  // Items are what the interview wrote (a piece, new or updated with its earlier version, or a
+  // standard answer), each citing the turn it came from, until Kris finishes (settled_at).
+  `CREATE TABLE interview (
+     id TEXT PRIMARY KEY,
+     angle TEXT,
+     current_key TEXT,
+     paused_at TEXT,
+     finished_at TEXT,
+     failures INTEGER NOT NULL DEFAULT 0,
+     error TEXT,
+     retry_at TEXT,
+     waits_for_budget INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE interview_question (
+     interview_id TEXT NOT NULL,
+     key TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     topic TEXT NOT NULL,
+     state TEXT NOT NULL,
+     opened_at TEXT NOT NULL,
+     ended_at TEXT,
+     PRIMARY KEY (interview_id, key)
+   );
+   CREATE TABLE interview_turn (
+     seq INTEGER PRIMARY KEY AUTOINCREMENT,
+     id TEXT NOT NULL UNIQUE,
+     interview_id TEXT NOT NULL,
+     question_key TEXT NOT NULL,
+     who TEXT NOT NULL,
+     text TEXT NOT NULL,
+     sent INTEGER NOT NULL DEFAULT 1,
+     at TEXT NOT NULL
+   );
+   CREATE TABLE interview_item (
+     id TEXT PRIMARY KEY,
+     interview_id TEXT NOT NULL,
+     turn_id TEXT NOT NULL,
+     type TEXT NOT NULL,
+     piece_id TEXT,
+     change TEXT,
+     before TEXT,
+     near TEXT,
+     decision TEXT,
+     answer TEXT,
+     removed_at TEXT,
+     settled_at TEXT,
+     created_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

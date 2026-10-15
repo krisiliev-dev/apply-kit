@@ -197,6 +197,13 @@ export interface ProfileStore {
   grouped(pieces: ProfilePiece[]): PieceGroup[];
   /** Kris checked the piece: it becomes confirmed, once it passes every check a confirmed piece must. */
   confirm(id: string): SavePieceResult;
+  /**
+   * Rewrites a piece from a new source (the coach, from Kris's answer): its content, source and status
+   * change and a dispute ends, after the same checks as any save. A refused revision changes nothing.
+   */
+  revise(id: string, input: PieceInput, origin: PieceOrigin): SavePieceResult;
+  /** Puts a piece back exactly as it was before (undoing a revision). */
+  reinstate(piece: ProfilePiece): void;
   get(id: string): ProfilePiece | null;
   all(): ProfilePiece[];
   list(query?: PieceQuery): PieceList;
@@ -399,10 +406,20 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     return back;
   }
 
+  function revise(id: string, input: PieceInput, origin: PieceOrigin): SavePieceResult {
+    const before = get(id);
+    if (!before) return { saved: false, problems: [{ field: "kind", message: "This piece no longer exists. It may have been deleted.", fixes: [] }] };
+    // The new source and status first, so the save checks the text against the new source's words.
+    write({ ...before, source: { from: origin.from, quote: origin.quote }, status: origin.status ?? "unconfirmed", dispute: null });
+    const result = save({ ...input, id });
+    if (!result.saved) write(before);
+    return result;
+  }
+
   const discarded = () => db.prepare("SELECT * FROM profile_piece WHERE discarded_at IS NOT NULL ORDER BY rowid").all().map(rowToPiece);
   const everything = () => db.prepare("SELECT * FROM profile_piece ORDER BY rowid").all().map(rowToPiece);
 
-  return { save, confirm, get, all, list, remove, summary, dispute, resolveDispute, discard, restore, discarded, unconfirm, everything, grouped };
+  return { save, revise, reinstate: write, confirm, get, all, list, remove, summary, dispute, resolveDispute, discard, restore, discarded, unconfirm, everything, grouped };
 }
 
 /** What every piece needs before it can be saved: its text, or a role's or education's facts. */

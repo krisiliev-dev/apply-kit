@@ -3,7 +3,7 @@
 // output per task. Each task sends only the text it needs (extracted text, never files).
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import type { z } from "zod";
-import { draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
+import { coachTurnSchema, draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
 import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
@@ -43,6 +43,16 @@ const tailorCvInstructions = `You tailor Kris's CV to one job posting, as JSON m
 - "notes" explain the main choices in plain words, one per note.
 - Write in the language given ("en" English, "bg" Bulgarian); tool names stay in Latin script.`;
 
+const coachTurnInstructions = `You are the coach in Kris's setup interview: you check what was imported from old CVs, ask about gaps in the timeline, probe for skills Kris likely has but never wrote down, and collect standard answers. Answer as JSON matching the schema. Rules:
+- You write down only what Kris said. Never add a skill, number, employer, title, date or result Kris didn't say. If Kris doesn't know, write nothing.
+- "asked" is the question Kris just answered (its topic and the lines so far, Kris's answer last), or null when you only ask "next". "next" is the question after it, or null when nothing is left.
+- "reply" is one or two short sentences on Kris's answer: say what you'll write down, or "" when you only ask.
+- "ask" is one short, friendly question: a follow-up about the same topic (then "followUp": true; at most one follow-up per topic), otherwise the "next" question (or "" when "next" is null). A gap question names the months and the roles either side; a check question quotes what the source says (and each version when sources disagree).
+- Each piece cites in "turn" the id of the line of Kris's it came from (only ids of lines with "who": "you"). To change an existing piece (the one being checked, a role either side of a gap), set "updates" to its id and give the whole new piece; otherwise "updates" is null. "role" is the id of the role or education entry an achievement or skill sits under, or null.
+- An achievement is one sentence of at most 200 characters. Months are "YYYY-MM". A number keeps Kris's own wording ("about a third"); "numberSource" says where it comes from ("measured", "estimate", "told") or null when there's no number.
+- "claim" is "stronger" when a piece says more than Kris did (a stronger verb, a rounder or more precise number); then "honest" is the wording that keeps to what Kris said. Otherwise "as-said" and "honest" null.
+- For a standard question, "answer" is Kris's answer in short form, citing the line; otherwise null.`;
+
 /** What each task sends: its instructions and the prompt built from its input. */
 function promptOf(request: WriterRequest): { instructions: string; prompt: string } {
   switch (request.task) {
@@ -56,6 +66,8 @@ function promptOf(request: WriterRequest): { instructions: string; prompt: strin
     }
     case "tailor-cv":
       return { instructions: tailorCvInstructions, prompt: JSON.stringify(request.input) };
+    case "coach-turn":
+      return { instructions: coachTurnInstructions, prompt: JSON.stringify(request.input) };
   }
 }
 
@@ -92,5 +104,6 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
     draftPieces: (input) => write({ task: "draft-pieces", input }, draftedPiecesSchema, "drafted_pieces"),
     learnVoice: (input) => write({ task: "learn-voice", input }, learnedVoiceSchema, "learned_voice", input.excerpts),
     tailorCv: (input) => write({ task: "tailor-cv", input }, tailoredCvSchema, "tailored_cv"),
+    coachTurn: (input) => write({ task: "coach-turn", input }, coachTurnSchema, "coach_turn"),
   };
 }
