@@ -923,3 +923,25 @@ describe("Profile › Learned during packages (#64)", () => {
     expect(t.preparation.profileSummary()).toMatchObject({ learned: 0 });
   });
 });
+
+describe("a learned skill near the line (#64)", () => {
+  it("prints the honest wording Kris chose, never the stronger one", async () => {
+    const t = miraProfile({
+      coach: (input) => ({
+        reply: "", ask: "", followUp: false, answer: null,
+        pieces: [{ turn: input.asked!.lines.at(-1)!.id, updates: null, kind: "skill", text: "Kubernetes", entry: null, role: null, tags: [], angles: ["security"], numberSource: null, claim: "stronger", honest: "Learning: Kubernetes (k3s, one personal project)" }],
+      }),
+    });
+    const pkg = await started(t, kubernetesJob());
+    const r0 = await t.preparation.answerGap(pkg.id, pkg.cvVersion!.flags[0]!.id, "I played with k3s once for a side project.");
+    const learned = r0.package.cvVersion!.flags[1]!;
+    expect(learned.options[0]).toMatchObject({ id: "use", label: "Learning: Kubernetes (k3s, one personal project)" });
+
+    const r = await t.preparation.decideFlag(pkg.id, learned.id, { option: "use" });
+
+    expect(r.package.cvVersion!.skills.map((s) => s.text)).toEqual(["Wazuh", "Learning: Kubernetes (k3s, one personal project)"]);
+    const printed = await printedCv(t, pkg.id);
+    expect(printed).toContain("Learning: Kubernetes (k3s, one personal project)");
+    expect(printed).not.toMatch(/"Kubernetes"/);
+  });
+});

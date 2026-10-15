@@ -28,6 +28,8 @@ export interface CvPlan {
   roles: { roleId: string; bullets: PlanBullet[] }[];
   /** Skill piece ids, in order. */
   skills: string[];
+  /** A skill worded other than its piece (a learned one Kris chose an honest wording for), by piece id. */
+  skillWords?: Record<string, string>;
   /** Education piece ids, newest first. */
   education: string[];
 }
@@ -56,7 +58,7 @@ export type CvChange = ChangeBase & (
   | { kind: "order"; roleId: string; order: string[] }
   | { kind: "drop"; roleId: string; pieceIds: string[] }
   | { kind: "skills"; skills: string[] }
-  | { kind: "add-skill"; pieceId: string }
+  | { kind: "add-skill"; pieceId: string; text: string }
 );
 
 /** What a package keeps about its CV version, beside the writer's raw output. */
@@ -261,6 +263,7 @@ export function applyChanges(base: CvPlan, changes: readonly CvChange[]): CvPlan
     summary: base.summary && { ...base.summary },
     roles: base.roles.map((r) => ({ roleId: r.roleId, bullets: r.bullets.map((b) => ({ ...b })) })),
     skills: [...base.skills],
+    skillWords: { ...base.skillWords },
     education: [...base.education],
   };
   for (const c of changes) {
@@ -290,6 +293,7 @@ export function applyChanges(base: CvPlan, changes: readonly CvChange[]): CvPlan
         break;
       case "add-skill":
         if (!plan.skills.includes(c.pieceId)) plan.skills.push(c.pieceId);
+        plan.skillWords![c.pieceId] = c.text;
         break;
     }
   }

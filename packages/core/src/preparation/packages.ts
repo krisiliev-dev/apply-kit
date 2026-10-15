@@ -580,7 +580,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         end: entry!.end ? month(entry!.end) : "present",
         bullets: role.bullets.map((b) => b.text),
       })),
-      skills: plan.skills.map((id) => pieces.get(id)?.text ?? "").filter(Boolean),
+      skills: plan.skills.map((id) => plan.skillWords?.[id] ?? pieces.get(id)?.text ?? "").filter(Boolean),
       education: plan.education.map((id) => pieces.get(id)?.entry).filter((e) => !!e).map((e) => ({
         degree: e.title, school: e.organisation, start: month(e.start), end: e.end ? month(e.end) : { text: "" },
       })),
@@ -691,7 +691,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       roles: plan.roles.filter((role) => pieces.get(role.roleId)?.entry).map((role) => ({
         roleId: role.roleId, heading: entryLabel(pieces.get(role.roleId)!.entry!), bullets: role.bullets.map((b) => line(b.text, b.pieceIds)),
       })),
-      skills: plan.skills.filter((id) => pieces.has(id)).map((id) => line(pieces.get(id)!.text, [id])),
+      skills: plan.skills.filter((id) => pieces.has(id)).map((id) => line(plan.skillWords?.[id] ?? pieces.get(id)!.text, [id])),
       education: plan.education.filter((id) => pieces.get(id)?.entry).map((id) => {
         const e = pieces.get(id)!.entry!;
         return line(`${e.title} · ${e.organisation}`, [id]);
@@ -889,7 +889,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       return { ...common, kind: "summary", line: { text, pieceIds: f.pieceIds }, label: "Summary rewritten, as you decided", was: plan.summary?.text ?? null, why: "Your decision on a near-the-line edit." };
     }
     if (place.kind === "skill") {
-      return { ...common, kind: "add-skill", pieceId: place.pieceId, label: "Skill added from your answer", why: "From your answer to the gap question. Used for this job only until you confirm it in Profile." };
+      return { ...common, kind: "add-skill", pieceId: place.pieceId, text, label: "Skill added from your answer", why: "From your answer to the gap question. Used for this job only until you confirm it in Profile." };
     }
     if (f.kind === "learned") {
       const entry = byId().get(place.roleId)?.entry;
