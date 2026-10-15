@@ -4,6 +4,7 @@ import type {
   WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
   EmailAnswer, EmailToMatch, TrackMailbox, StatusFilter, Angle, SinceLastVisit,
   FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou, Interview, InterviewInput, PrepSheet,
+  Withdrawal, Withdrawals, OfferDetails, OfferView, RejectionReason, RejectionView,
 } from "@apply-kit/core";
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
@@ -396,6 +397,38 @@ export async function saveFollowUpTopic(id: string, topic: string): Promise<{ fo
   return json(await fetch(`${followUpPath(id)}/topic`, {
     method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic }),
   }));
+}
+
+// ---------- Offers and closing (Track #34) ----------
+
+const putJson = (url: string, body: unknown) => fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+/** "I accepted this offer…" (and Accepted in any Status select): Accepted, with a withdrawal to send for each other open one. */
+export async function acceptOffer(id: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent; withdrawals: Withdrawal[] }> {
+  return json(await postJson(`${applicationPath(id)}/accept`));
+}
+
+/** The withdrawals of the offer accepted: still to send, and sent. */
+export async function fetchWithdrawals(signal?: AbortSignal): Promise<Withdrawals> {
+  return json(await fetch("/api/applications/withdrawals", { signal }));
+}
+
+/** "I declined it…": Withdrawn, with the reason "declined offer". */
+export async function declineOffer(id: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(id)}/decline`));
+}
+
+/** The optional reply declining the offer, drafted in the user's voice. */
+export async function fetchDeclineDraft(id: string, signal?: AbortSignal): Promise<FollowUpDraft> {
+  return json(await fetch(`${applicationPath(id)}/decline-draft`, { signal }));
+}
+
+export async function saveOfferDetails(id: string, details: OfferDetails): Promise<{ offer: OfferView }> {
+  return json(await putJson(`${applicationPath(id)}/offer`, details));
+}
+
+export async function saveRejectionNote(id: string, note: { lesson: string | null; reason: RejectionReason | null }): Promise<{ rejection: RejectionView }> {
+  return json(await putJson(`${applicationPath(id)}/rejection`, note));
 }
 
 // ---------- Interviews and the prep sheet (Track #33) ----------

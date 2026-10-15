@@ -10,9 +10,11 @@ import type { ProfileStory } from "./interviews.ts";
  * nudge: a short follow-up email after a quiet stage. offer-note: a note to self about an offer.
  * thank-you: a note after an interview (#33), due 24 hours after its start, ready at its end.
  * check-in: a polite nudge once interviews go quiet (#33), a number of days after the last one ends.
+ * withdrawal: a polite note withdrawing another open Application after accepting an offer (#34; marking
+ * it sent moves that Application to Withdrawn). decline: the optional reply declining an offer (a draft
+ * only: it never comes due).
  */
-
-export type FollowUpKind = "nudge" | "offer-note" | "thank-you" | "check-in";
+export type FollowUpKind = "nudge" | "offer-note" | "thank-you" | "check-in" | "withdrawal" | "decline";
 
 /** A follow-up as Needs you and the Application page show it. */
 export interface FollowUp {
@@ -96,7 +98,7 @@ export interface OutlineInput {
   company: string;
   /** The day its stage began, in words ("Tue 6 Oct"). */
   since: string;
-  stage: "applied" | "screening" | "offer";
+  stage: "applied" | "screening" | "interviewing" | "offer";
   /** One requirement or line from the posting, when its Job was read; null otherwise. */
   postingDetail: string | null;
   /** The latest note the user wrote on the Application, or null. */
@@ -111,6 +113,20 @@ export interface OutlineInput {
  * user (their Master profile), so the outline names where to take them from and never invents one.
  */
 export function outlineOf(i: OutlineInput): string[] {
+  if (i.kind === "withdrawal") {
+    return [
+      `Thank them for their time on ${i.title}${i.stage === "applied" ? "" : " and the conversations so far"}.`,
+      "Say you've accepted another offer and withdraw from the process. No need to name the company.",
+      "Keep the door open in one line.",
+    ];
+  }
+  if (i.kind === "decline") {
+    return [
+      `Thank them for the offer for ${i.title} and for the time their team spent with you.`,
+      "Say you've decided to decline. A reason is optional; keep it short if you give one.",
+      "One warm line about the conversations; keep the door open.",
+    ];
+  }
   const whom = i.people?.length ? i.people.join(" and ") : null;
   if (i.kind === "thank-you") {
     return [
@@ -153,14 +169,15 @@ export function outlineOf(i: OutlineInput): string[] {
 // ---------- Drafts (Track #32; spec #24 "Draft rules") ----------
 
 /**
- * The messages the Track assistant drafts: the nudge, the thank-you note and the check-in (#33);
- * withdrawals and declines join with their ticket. A note to self is never drafted (its outline is it).
+ * The messages the Track assistant drafts: the nudge, the thank-you note and the check-in (#33), the
+ * withdrawal after accepting an offer and the reply declining one (#34). A note to self is never drafted.
  */
-export type DraftKind = "nudge" | "thank-you" | "check-in";
+export type DraftKind = "nudge" | "thank-you" | "check-in" | "withdrawal" | "decline";
 
 /** The length that works well, in words, per kind (spec "Draft rules"). */
 export const draftWords: Record<DraftKind, { min: number; max: number }> = {
   nudge: { min: 70, max: 110 }, "thank-you": { min: 70, max: 130 }, "check-in": { min: 70, max: 110 },
+  withdrawal: { min: 30, max: 70 }, decline: { min: 40, max: 80 },
 };
 
 /**
@@ -211,9 +228,9 @@ export interface DraftInput {
   kind: DraftKind;
   company: string;
   title: string;
-  /** The day the stage began (for a thank-you note or check-in: the interview's day), in words ("Mon 5 Oct"), and the stage. */
+  /** The day the stage began (for a thank-you note or check-in: the interview's day; for a withdrawal or decline: the date applied), in words ("Mon 5 Oct"), and the stage. */
   since: string;
-  stage: "applied" | "screening" | "interviewing";
+  stage: "applied" | "screening" | "interviewing" | "offer";
   /** Whole days with no reply. */
   daysQuiet: number;
   /** The posting's requirements as read (English labels), most important first; empty when it wasn't read. */

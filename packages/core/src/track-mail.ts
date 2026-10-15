@@ -32,6 +32,15 @@ export const emailClassificationSchema = z.object({
   summary: z.string().nullable(),
   /** For an invitation: the interview's time, format, people, round and notes as the email states them; null otherwise. */
   interview: invitedInterviewSchema.nullable().default(null),
+  /** For an offer: its details as the email states them (null where it doesn't); null or absent otherwise. */
+  offer: z.object({
+    baseSalary: z.string().nullable(),
+    /** YYYY-MM-DD. */
+    startDate: z.string().nullable(),
+    workPattern: z.string().nullable(),
+    contract: z.string().nullable(),
+    other: z.string().nullable(),
+  }).nullish(),
 });
 export type EmailClassification = z.infer<typeof emailClassificationSchema>;
 

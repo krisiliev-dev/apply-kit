@@ -9,16 +9,21 @@
 // moved it with the signals it matched on (and an English line for one in Bulgarian). Interviews,
 // offers and the Package as sent come with later Track tickets. Interviews (#33): the coming one in the
 // Next step box, the Interviews panel with Add interview and Edit (a dialog), the prep sheet, and a
-// thank-you note in the Next step box once an interview ends (Interviews.tsx).
+// thank-you note in the Next step box once an interview ends (Interviews.tsx). Offers and closing (#34,
+// Offer.tsx and Withdrawals.tsx): at Offer the Next step box holds the decisions and the offer details
+// sit below it; accepting (here or with Accepted in the Status select) opens the withdrawal dialog;
+// declining offers a reply first; a rejection shows its lesson, likely reason and what it changes in Stats.
 import type { ApplicationDetail, ApplicationSummary, FollowUp, FollowUpDraft, HealthSummary, Interview, MovedByEmail, NoDraft, Status, TimelineEntry } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchSources,
-  followUpAction, needsYouChanged, setApplicationStatus, undoApplicationEvent,
+  acceptOffer, declineOffer, followUpAction, needsYouChanged, setApplicationStatus, undoApplicationEvent,
 } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { By, StatusSelect } from "./ApplicationsPage.tsx";
 import { FollowUpWriter, NoDraftBanner, type FollowUpAction } from "./FollowUpWriter.tsx";
+import { AcceptedNext, OfferDetailsPanel, OfferNext, OfferNonGoal, RejectionPanel, RejectionStats } from "./Offer.tsx";
+import { DeclineDialog, WithdrawDialog } from "./Withdrawals.tsx";
 import { InterviewDialog, InterviewNext, InterviewsPanel, PrepSheetPanel, thankYouKicker } from "./Interviews.tsx";
 import { angleLabel, daysFrom, daysWord, dueWords, emailKindLabel, followUpName, longDay, statusLabel, todaySofia, weekDay } from "./words.ts";
 
@@ -47,6 +52,10 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const toaster = useToaster();
   const contactRef = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState<{ interview: Interview | null; opener: HTMLElement } | null>(null);
+  /** The withdrawal dialog: open after accepting (with the accept to undo when it closes), or reopened from the Next step box. */
+  const [withdrawing, setWithdrawing] = useState<{ from: Status; eventId: string | null } | null>(null);
+  /** The decline dialog, and the control that opened it. */
+  const [declining, setDeclining] = useState<HTMLElement | null>(null);
   /** Why the follow-up in the Next step has no draft (shown as a banner at the top), by follow-up id. */
   const [loaded, setLoaded] = useState<{ id: string; drafted: boolean; noDraft: NoDraft | null } | null>(null);
   const onDraftLoaded = useCallback((d: FollowUpDraft) => setLoaded({ id: d.followUp.id, drafted: !!d.draft, noDraft: d.noDraft }), []);
@@ -94,7 +103,60 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const { app } = load;
   const focusStatus = () => requestAnimationFrame(() => document.getElementById(`st-${app.id}`)?.focus());
 
+  /** Accepted (from the button or the Status select): the accept flow, never a silent change. */
+  async function accept(a: ApplicationSummary): Promise<boolean> {
+    try {
+      const { event } = await acceptOffer(a.id);
+      await refresh();
+      setWithdrawing({ from: a.status, eventId: event.id });
+      return true;
+    } catch (err) {
+      await refresh().catch(() => {});
+      toaster.show({ message: `Couldn't accept the offer: ${message(err)}` });
+      return false;
+    }
+  }
+
+  /** The withdrawal dialog closed: focus back to the Status control, with the accept to undo. */
+  function withdrawn() {
+    const w = withdrawing;
+    setWithdrawing(null);
+    focusStatus();
+    if (!w?.eventId) return;
+    toaster.show({
+      message: `${statusLabel[w.from]} → Accepted. Logged by you.`,
+      returnFocus: focusStatus,
+      undo: () => {
+        undoApplicationEvent(w.eventId!).then(refresh)
+          .then(() => { focusStatus(); toaster.announce(`Undone. Back to ${statusLabel[w.from]}; no withdrawals to send.`); })
+          .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+      },
+    });
+  }
+
+  async function decline() {
+    setDeclining(null);
+    try {
+      const { event } = await declineOffer(app.id);
+      await refresh();
+      focusStatus();
+      toaster.show({
+        message: "Offer → Withdrawn (declined offer). Logged by you.",
+        returnFocus: focusStatus,
+        undo: () => {
+          undoApplicationEvent(event.id).then(refresh)
+            .then(() => { focusStatus(); toaster.announce("Undone. Back to Offer."); })
+            .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+        },
+      });
+    } catch (err) {
+      await refresh().catch(() => {});
+      toaster.show({ message: `Couldn't decline: ${message(err)}` });
+    }
+  }
+
   async function changeStatus(a: ApplicationSummary, to: Status): Promise<boolean> {
+    if (to === "accepted") return accept(a);
     try {
       const { event, cancelled } = await setApplicationStatus(a.id, to);
       await refresh();
@@ -118,6 +180,12 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   }
 
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
+  const rejectedBy = app.timeline.find((t) => t.to === "rejected" && !t.undoneAt && t.undoable);
+  const undoRejection = rejectedBy ? () => {
+    undoApplicationEvent(rejectedBy.id).then(refresh)
+      .then((after) => { focusStatus(); toaster.announce(`Undone. Back to ${statusLabel[after.status]}.`); })
+      .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+  } : null;
 
   const dueId = app.nextStep.kind === "follow-up" ? app.nextStep.followUp.id : null;
   return (
@@ -128,8 +196,14 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
       <div className="cols">
         <div className="col">
           {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
-          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} drafted={loaded?.id === dueId ? loaded.drafted : null}
-            onEditInterview={(i, opener) => setEditing({ interview: i, opener })} />
+          {!app.rejection && <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} drafted={loaded?.id === dueId ? loaded.drafted : null}
+            onEditInterview={(i, opener) => setEditing({ interview: i, opener })}
+            onAccept={() => { accept(app).catch(() => {}); }} onDecline={(opener) => setDeclining(opener)}
+            onWithdrawals={() => setWithdrawing({ from: app.status, eventId: null })} />}
+          {app.offer && (app.status === "offer" || app.status === "accepted") && <OfferDetailsPanel key={app.offer.from ?? "none"} app={app} offer={app.offer} refresh={refresh} toaster={toaster} />}
+          {app.status === "offer" && <OfferNonGoal />}
+          {app.rejection && <RejectionPanel app={app} rejection={app.rejection} refresh={refresh} toaster={toaster} onUndo={undoRejection} />}
+          {app.rejection && <RejectionStats app={app} rejection={app.rejection} />}
           <PrepSheetPanel key={`${app.id}-${app.interviews.length}`} app={app} toaster={toaster} />
           <InterviewsPanel app={app} onEdit={(i, opener) => setEditing({ interview: i, opener })} onAdd={(opener) => setEditing({ interview: null, opener })} />
           <Timeline app={app} refresh={refresh} toaster={toaster} />
@@ -154,6 +228,13 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
           }}
         />
       )}
+      {withdrawing && <WithdrawDialog accepted={app} onChanged={refresh} onClose={withdrawn} />}
+      {declining && (
+        <DeclineDialog
+          application={app} onDecline={() => { decline().catch(() => {}); }} onAnnounce={toaster.announce}
+          onClose={() => { const o = declining; setDeclining(null); requestAnimationFrame(() => (o.isConnected ? o : document.getElementById(`st-${app.id}`))?.focus()); }}
+        />
+      )}
       {toaster.element}
     </section>
   );
@@ -172,7 +253,8 @@ function Head({ app, onStatus }: { app: ApplicationDetail; onStatus: (a: Applica
         <div className="app-meta">
           <b>{app.company}</b>
           <span>Applied {shortLong(app.appliedOn)}</span>
-          {app.status !== "applied" && <span>{statusLabel[app.status]} {dayOf(app.statusSince)}</span>}
+          {app.status !== "applied" && <span>{statusLabel[app.status]} {dayOf(app.statusSince)}{app.closedReason && ` · ${app.closedReason}`}</span>}
+          {app.status === "accepted" && app.offer?.details.startDate && <span>Starts {shortLong(app.offer.details.startDate)}</span>}
           {app.createdHow === "by-hand" && <span>added by hand</span>}
           {app.createdHow === "i-applied" && <span>applied without apply-kit</span>}
           {app.angle && <span className="chip neutral">{angleLabel[app.angle]} angle</span>}
@@ -209,12 +291,15 @@ function Check() {
   return <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
 }
 
-function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded, drafted, onEditInterview }: {
+function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded, drafted, onEditInterview, onAccept, onDecline, onWithdrawals }: {
   app: ApplicationDetail; onAddContact: () => void; refresh: () => Promise<ApplicationDetail>; toaster: Toaster;
   onDraftLoaded: (d: FollowUpDraft) => void;
   /** Whether the due follow-up came with a draft (null until it has loaded). */
   drafted: boolean | null;
   onEditInterview: (i: Interview, opener: HTMLElement) => void;
+  onAccept: () => void;
+  onDecline: (opener: HTMLElement) => void;
+  onWithdrawals: () => void;
 }) {
   const n = app.nextStep;
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
@@ -229,7 +314,9 @@ function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded, drafted,
       await refresh();
       focusPanel();
       toaster.show({
-        message: action === "sent" ? `Marked ${followUp.kind === "offer-note" ? "done" : "sent"} · logged on the timeline.`
+        message: followUp.kind === "withdrawal"
+          ? (action === "sent" ? "Marked sent · moved to Withdrawn. Logged by you." : "Kept open · no withdrawal for this one.")
+          : action === "sent" ? `Marked ${followUp.kind === "offer-note" ? "done" : "sent"} · logged on the timeline.`
           : action === "skip" ? `Skipped · no ${name} this time.` : `Snoozed · the ${name} is due again ${weekDay(after.dueOn)}.`,
         returnFocus: focusPanel,
         undo: () => {
@@ -244,13 +331,20 @@ function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded, drafted,
     }
   }
 
+  if (n.kind === "accepted") return <AcceptedNext app={app} withdrawals={n.withdrawals} onOpen={onWithdrawals} />;
+  if (app.status === "offer" && (n.kind !== "follow-up" || n.followUp.kind === "offer-note")) {
+    const note = n.kind === "follow-up"
+      ? <FollowUpWriter key={n.followUp.id} id={n.followUp.id} headingId="next-h" onAct={(action) => { act(n.followUp, action).catch(() => {}); }} onAnnounce={toaster.announce} onLoaded={onDraftLoaded} />
+      : null;
+    return <OfferNext app={app} note={note} onAccept={onAccept} onDecline={onDecline} />;
+  }
   if (n.kind === "interview") return <InterviewNext app={app} interview={n.interview} onEdit={onEditInterview} />;
   if (n.kind === "follow-up") {
     const fu = n.followUp;
     return (
       <div className="panel next-step ask">
         <span className="kicker">
-          {fu.kind === "thank-you" ? thankYouKicker(fu) : `${followUpName(fu.kind)} ${dueWords(fu.dueOn)}`}
+          {fu.kind === "thank-you" ? thankYouKicker(fu) : fu.kind === "withdrawal" ? followUpName(fu.kind) : `${followUpName(fu.kind)} ${dueWords(fu.dueOn)}`}
           {fu.kind === "nudge" && ` · ${daysWord(daysFrom(fu.anchorOn, fu.dueOn))} after ${app.status === "applied" ? "applying" : "moving to Screening"}`}
         </span>
         <h2 id="next-h" tabIndex={-1}>

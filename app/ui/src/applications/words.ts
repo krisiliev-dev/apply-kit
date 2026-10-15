@@ -52,8 +52,11 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 export const daysWord = (n: number) => plural(n, "day");
 export const wordsWord = (n: number) => plural(n, "word");
 
-const followUpNames: Record<FollowUpKind, string> = { nudge: "Follow-up", "offer-note": "Note to self", "thank-you": "Thank-you note", "check-in": "Check-in" };
-/** "Follow-up", "Note to self", "Thank-you note" or "Check-in". */
+const followUpNames: Record<FollowUpKind, string> = {
+  nudge: "Follow-up", "offer-note": "Note to self", "thank-you": "Thank-you note", "check-in": "Check-in",
+  withdrawal: "Withdrawal to send", decline: "Reply declining the offer",
+};
+/** "Follow-up", "Note to self", "Thank-you note", "Check-in" or "Withdrawal to send". */
 export const followUpName = (kind: FollowUpKind) => followUpNames[kind];
 
 /** Whether the follow-up is a message the user sends (not a note to self). */
@@ -92,6 +95,7 @@ export function nextWords(next: NextUp): { text: string; due: boolean } | null {
   if (!next) return null;
   if (next.kind === "no-reply") return { text: `No reply for ${daysWord(next.days)}`, due: false };
   if (next.kind === "interview") return { text: `Interview ${interviewWhen({ start: next.start, end: null, timeZone: next.timeZone })}`, due: false };
+  if (next.followUpKind === "withdrawal") return { text: followUpName("withdrawal"), due: true };
   if (next.dueAt) return { text: `${followUpName(next.followUpKind)} ${dueByWords(next.dueAt)}`, due: next.due };
   return { text: `${followUpName(next.followUpKind)} ${dueWords(next.dueOn)}`, due: next.due };
 }

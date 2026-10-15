@@ -6,7 +6,7 @@
 // Its public interface below is the testing seam (test/tracker.test.ts).
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
-import type { Angle } from "./fit/angles.ts";
+import { angleLabel, type Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
   type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
@@ -22,7 +22,7 @@ import { mailboxFix, type MailboxProblem } from "./mailbox.ts";
 import { storedMessage } from "./mail-store.ts";
 import type { Clock, MailAttachment, MailMessage, SqlDatabase } from "./ports.ts";
 import { migrate } from "./schema.ts";
-import { computeStats, type TrackStats } from "./track-stats.ts";
+import { computeStats, type TrackStats, type WorkingRow } from "./track-stats.ts";
 import {
   baseDomain, classifyInput, draftOutputSchema, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
   isAtsDomain, isBoardDomain, isJobAlert, isSharedProvider, namesCompany, namesTitle, quoteOf, replyKinds, ruleClassify, senderOf,
@@ -67,6 +67,8 @@ export interface ApplicationEvent {
   emailKind: EmailKind | null;
   /** For what was done with a follow-up: which one. */
   followUpId: string | null;
+  /** Why, for a Status change that has one ("declined offer", "accepted another offer"); else null. */
+  reason: string | null;
 }
 
 export type FollowUpEventKind = "follow-up-sent" | "follow-up-skipped" | "follow-up-snoozed";
@@ -124,7 +126,9 @@ export type NextStep =
   | { kind: "interview"; text: string; interview: Interview }
   | { kind: "wait"; text: string }
   | { kind: "note"; text: string; at: string }
-  | { kind: "closed"; text: string };
+  | { kind: "closed"; text: string }
+  /** The offer accepted: how many withdrawals are still to send. */
+  | { kind: "accepted"; text: string; withdrawals: number };
 
 /** One entry on the timeline: an Event, or something apply-kit saw (the posting closing). */
 export interface TimelineEntry {
@@ -272,6 +276,58 @@ export interface AttachCvInput {
 /** The largest CV PDF taken: 10 MB. */
 export const maxCvBytes = 10 * 1024 * 1024;
 
+/** An offer's facts, as the offer email states them or as the user saved them; null where unknown. */
+export interface OfferDetails {
+  /** As written ("€3,100 gross / month"). */
+  baseSalary: string | null;
+  /** YYYY-MM-DD. */
+  startDate: string | null;
+  workPattern: string | null;
+  contract: string | null;
+  other: string | null;
+}
+
+/** The offer on an Application's page: its details, where they came from, and the salary against the floor. */
+export interface OfferView {
+  details: OfferDetails;
+  /** "email" while pre-filled from the offer email, "you" once saved; null while there are none. */
+  from: "email" | "you" | null;
+  /** The latest offer email matched here (its letter kept as an attachment), or null. */
+  email: MatchedEmail | null;
+  /**
+   * The base salary per month in euros against the floor (the lowest acceptable monthly salary in
+   * Search settings); `unknown` when the salary can't be read as euros or leva per month or year.
+   * Null when there's no floor.
+   */
+  floor: { floorEur: number; monthlyEur: number | null; verdict: "above" | "at" | "below" | "unknown" } | null;
+}
+
+/** Likely reasons for a rejection the user may pick (a guess for form letters); none is pre-selected. */
+export const rejectionReasons = [
+  { key: "experience", label: "Experience: they asked for more years" },
+  { key: "skill", label: "Missing skill or certificate" },
+  { key: "location", label: "Location or remote terms" },
+  { key: "salary", label: "Salary" },
+  { key: "none-given", label: "No reason given" },
+] as const;
+export type RejectionReason = (typeof rejectionReasons)[number]["key"];
+
+/** A rejected Application's page: the email, the optional lesson and likely reason, and what it changes in Stats. */
+export interface RejectionView {
+  /** One line specific to this one, or null. */
+  lesson: string | null;
+  reason: RejectionReason | null;
+  reasons: { key: RejectionReason; label: string }[];
+  /** The rejection email matched here (still standing), or null when it was set by hand. */
+  email: MatchedEmail | null;
+  /**
+   * What it changes in Stats: a rejection is a reply. `counts` is whether this Application is old
+   * enough (14 days) to count in the response rate yet (`countsFrom` says when, otherwise); `angle`
+   * is its angle's row in What's working, or null.
+   */
+  stats: { replied: number; counted: number; counts: boolean; countsFrom: string | null; angle: WorkingRow | null };
+}
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
   /** When it got its current Status (the Event still standing that set it). */
@@ -296,6 +352,12 @@ export interface ApplicationDetail extends ApplicationSummary {
   timeline: TimelineEntry[];
   /** Set while the latest Status change was made by an email you haven't confirmed ("Looks right") or undone. */
   movedByEmail: MovedByEmail | null;
+  /** Why it is closed, when the Status change said ("declined offer", "accepted another offer"); else null. */
+  closedReason: string | null;
+  /** The offer, while at Offer or Accepted (or once it has details); else null. */
+  offer: OfferView | null;
+  /** While Rejected: its lesson, likely reason and what it changes in Stats; else null. */
+  rejection: RejectionView | null;
 }
 
 /** What the user gives "Add application". */
@@ -434,6 +496,17 @@ export interface UpcomingInterview {
   prep: { questions: number; withStory: number } | null;
 }
 
+/** An offer to answer, in Needs you: accept or decline it on its page when ready. */
+export interface OfferToAnswer {
+  application: Pick<ApplicationSummary, "id" | "title" | "company" | "status">;
+  /** When it got to Offer. */
+  since: string;
+  /** The offer email matched (who, when, its letter as attachments), or null when moved by hand. */
+  email: Pick<EmailSummary, "from" | "receivedAt" | "attachments"> | null;
+  /** The offer details' "Other" (often the deadline to answer), or null. */
+  other: string | null;
+}
+
 /** Something only coming up: one quiet "Coming up" line. */
 export interface ComingUp {
   applicationId: string;
@@ -468,6 +541,8 @@ export interface NeedsYou {
   items: NeedsYouEntry[];
   /** Interviews in the next 7 days, soonest first. */
   interviews: UpcomingInterview[];
+  /** Offers to answer (every Application at Offer), oldest first. */
+  offers: OfferToAnswer[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
   /** Kinds with 3 or more due (or done today): shown grouped, their items stepped through one by one. */
@@ -506,6 +581,22 @@ export interface FollowUpDraft {
   words: { min: number; max: number } | null;
   /** How many days "Snooze" moves it on (a setting). */
   snoozeDays: number;
+}
+
+/**
+ * A withdrawal offered after accepting an offer: a polite note to another open Application. Pending
+ * until the user marks it sent (that Application then moves to Withdrawn) or keeps it open (skipped).
+ */
+export interface Withdrawal {
+  followUp: FollowUp;
+  application: ApplicationSummary;
+}
+
+/** The withdrawals of the offer accepted: still to send and sent (kept-open ones leave the list). */
+export interface Withdrawals {
+  /** The Application whose offer was accepted, or null when none stands. */
+  accepted: ApplicationSummary | null;
+  items: Withdrawal[];
 }
 
 /** A Status change an email made, for "Since your last visit". */
@@ -600,6 +691,24 @@ export interface Tracker {
   /** Saves the follow-up delays. Pending follow-ups follow the new delays. Throws with a plain message when invalid. */
   saveFollowUpSettings(settings: unknown): Promise<FollowUpSettings>;
   /**
+   * "I accepted this offer…" (and Accepted from any Status select): moves it to Accepted, by you and
+   * undoable, and offers a withdrawal for every other open Application. Throws a TrackerError when refused.
+   */
+  acceptOffer(applicationId: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent; withdrawals: Withdrawal[] }>;
+  /** The withdrawals of the offer accepted (still to send, and sent), for the withdrawal dialog. */
+  withdrawals(): Promise<Withdrawals>;
+  /**
+   * "I declined it…": moves an Application at Offer to Withdrawn with the reason "declined offer", by
+   * you and undoable. Throws a TrackerError when refused.
+   */
+  declineOffer(applicationId: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent }>;
+  /** The optional reply declining an Application's offer: drafted in the user's voice, never due. Throws a TrackerError when refused. */
+  declineDraft(applicationId: string): Promise<FollowUpDraft>;
+  /** Saves the offer's details as the user checked them (empty fields are unknown). Throws a TrackerError when refused. */
+  saveOfferDetails(applicationId: string, details: Partial<OfferDetails>): Promise<{ offer: OfferView }>;
+  /** Saves a rejection's optional one-line lesson and likely reason. Throws a TrackerError when refused. */
+  saveRejectionNote(applicationId: string, note: { lesson: string | null; reason: RejectionReason | null }): Promise<{ rejection: RejectionView }>;
+  /**
    * Classifies and matches every stored email not decided yet (run after each mailbox read; the
    * engine passes what it just stored). A confident unique match of a Status-changing kind moves the
    * Status forward (or to Rejected) as an Event by email; anything doubtful waits as Email to match.
@@ -646,8 +755,8 @@ export interface Tracker {
 export interface TrackerDeps {
   db: SqlDatabase;
   clock: Clock;
-  /** Discover: Jobs are read and pasted links added through it. */
-  discovery: Pick<DiscoveryEngine, "addJobLink" | "getJob">;
+  /** Discover: Jobs are read and pasted links added through it; its Search settings hold the salary floor. */
+  discovery: Pick<DiscoveryEngine, "addJobLink" | "getJob"> & Partial<Pick<DiscoveryEngine, "getSearchSettings">>;
   /** Reads emails (classify). Without it every email is matched on rules alone. */
   assistant?: TrackAssistant;
   /** The monthly AI cap shared with Discover (AI_MONTHLY_CAP_USD). Unset or 0 means no AI spending. */
@@ -700,7 +809,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       kind: r.kind as ApplicationEvent["kind"], cause: r.cause as EventCause,
       from: str(r.from_status) as Status | null, to: str(r.to_status) as Status | null,
       text: String(r.text), undoes: str(r.undoes), undoneAt: str(r.undone_at), followUpId: str(r.follow_up_id),
-      emailId: str(r.email_id), emailKind: str(r.email_kind) as EmailKind | null,
+      emailId: str(r.email_id), emailKind: str(r.email_kind) as EmailKind | null, reason: str(r.reason),
     };
   }
 
@@ -743,14 +852,14 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return r ? summaryOf(r) : null;
   }
 
-  type NewEvent = Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "followUpId" | "emailId" | "emailKind">
-    & { followUpId?: string; dueOn?: string; emailId?: string | null; emailKind?: EmailKind | null; interviewId?: string };
+  type NewEvent = Omit<ApplicationEvent, "id" | "at" | "undoneAt" | "followUpId" | "emailId" | "emailKind" | "reason">
+    & { followUpId?: string; dueOn?: string; emailId?: string | null; emailKind?: EmailKind | null; interviewId?: string; reason?: string | null };
   function addEvent(e: NewEvent): ApplicationEvent {
     const id = randomUUID();
     db.prepare(
-      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on, email_id, email_kind, interview_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null, e.emailId ?? null, e.emailKind ?? null, e.interviewId ?? null);
+      `INSERT INTO application_event (id, application_id, at, kind, cause, from_status, to_status, text, undoes, follow_up_id, due_on, email_id, email_kind, interview_id, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, e.applicationId, now(), e.kind, e.cause, e.from, e.to, e.text, e.undoes, e.followUpId ?? null, e.dueOn ?? null, e.emailId ?? null, e.emailKind ?? null, e.interviewId ?? null, e.reason ?? null);
     return eventOf(db.prepare("SELECT * FROM application_event WHERE id = ?").get(id)!);
   }
 
@@ -1046,6 +1155,17 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
   function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[], followUp: FollowUp | null, thankYous: FollowUp[], interviews: Interview[]): NextStep {
     if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
+    if (app.status === "accepted") {
+      const left = withdrawalList().items.filter((w) => w.followUp.state === "pending").length;
+      return {
+        kind: "accepted", withdrawals: left,
+        text: `You accepted this offer. ${left ? `${left} withdrawal${left === 1 ? "" : "s"} to send.` : "Nothing left to withdraw."}`,
+      };
+    }
+    const withdrawal = withdrawalOf(app.id);
+    if (withdrawal?.state === "pending") {
+      return { kind: "follow-up", text: "You accepted another offer. Send a short, polite note withdrawing from this one, or keep it open.", followUp: withdrawal };
+    }
     const thanks = thankYous.find(isDueNow);
     if (thanks) {
       const iv = interviews.find((i) => i.id === thanks.interviewId);
@@ -1119,6 +1239,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
       nextStep: nextStepOf(app, standing, followUp, thankYous, interviews), followUp, interviews, thankYous, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
+      closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
+      offer: await offerOf(app),
+      rejection: rejectionOf(app),
     };
   }
 
@@ -1222,7 +1345,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   function followUpOf(r: Row): FollowUp {
     const events = db.prepare("SELECT * FROM application_event WHERE follow_up_id = ? AND undone_at IS NULL AND kind != 'undo' ORDER BY at, rowid")
       .all(String(r.id));
-    const done = events.filter((e) => e.kind === "follow-up-sent" || e.kind === "follow-up-skipped").at(-1);
+    // A withdrawal marked sent is the Status change to Withdrawn itself (one Event, one Undo).
+    const done = events.filter((e) => e.kind === "follow-up-sent" || e.kind === "follow-up-skipped" || e.kind === "status").at(-1);
     const snoozedTo = str(events.filter((e) => e.kind === "follow-up-snoozed").at(-1)?.due_on);
     const kind = r.kind as FollowUpKind;
     const s = followUpSettings();
@@ -1238,12 +1362,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         readyAt = iv.endAt;
       }
     }
-    const delay = kind === "nudge" ? s.nudgeAfterDays : kind === "check-in" ? s.checkInAfterDays : s.offerNoteAfterDays;
+    const delay = kind === "nudge" ? s.nudgeAfterDays : kind === "check-in" ? s.checkInAfterDays : kind === "offer-note" ? s.offerNoteAfterDays : 0;
     return {
       id: String(r.id), applicationId: String(r.application_id), kind, anchorOn,
       dueOn: snoozedTo ?? (dueAt ? sofiaDay(new Date(dueAt)) : addDays(anchorOn, delay)),
       snoozedTo,
-      state: done ? (done.kind === "follow-up-sent" ? "sent" : "skipped") : "pending",
+      state: done ? (done.kind === "follow-up-skipped" ? "skipped" : "sent") : "pending",
       doneAt: done ? String(done.at) : null,
       doneBy: done ? (done.cause === "email" ? "email" : "you") : null,
       text: String(r.text),
@@ -1339,6 +1463,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   }
 
   function nextOf(app: Row): NextUp {
+    const withdrawal = app.removed_at ? null : withdrawalOf(String(app.id));
+    if (withdrawal?.state === "pending" && !isClosed(app.status as Status)) return { kind: "follow-up", followUpKind: "withdrawal", dueOn: withdrawal.dueOn, due: true };
     const thanks = thankYousOf(app).find(isDueNow);
     if (thanks) return { kind: "follow-up", followUpKind: "thank-you", dueOn: thanks.dueOn, due: true, ...(thanks.dueAt ? { dueAt: thanks.dueAt } : {}) };
     const coming = isClosed(app.status as Status) || app.removed_at ? undefined : interviewsOf(String(app.id)).find((i) => i.startAt && i.startAt > now());
@@ -1349,17 +1475,225 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return f.kind === "nudge" ? { kind: "no-reply", days: daysBetween(f.anchorOn, today()) } : null;
   }
 
+  // ---------- offers and closing (#34) ----------
+
+  /** The Event still standing that accepted an offer, on an Application still Accepted; null when none. */
+  function standingAccept(): ApplicationEvent | null {
+    const r = db.prepare(
+      `SELECT e.* FROM application_event e JOIN application a ON a.id = e.application_id
+       WHERE e.kind = 'status' AND e.to_status = 'accepted' AND e.undone_at IS NULL AND a.removed_at IS NULL AND a.status = 'accepted'
+       ORDER BY e.at DESC, e.rowid DESC LIMIT 1`,
+    ).get();
+    return r ? eventOf(r) : null;
+  }
+
+  /** The withdrawals the standing accept offered: still to send, and sent (kept-open ones and those closed since are left out). */
+  function withdrawalList(): Withdrawals {
+    const accept = standingAccept();
+    if (!accept) return { accepted: null, items: [] };
+    const items = db.prepare("SELECT * FROM follow_up WHERE kind = 'withdrawal' AND accepted_by = ? ORDER BY created_at, rowid").all(accept.id)
+      .flatMap((r) => {
+        const application = summary(String(r.application_id));
+        const followUp = followUpOf(r);
+        if (!application || followUp.state === "skipped" || (followUp.state === "pending" && isClosed(application.status))) return [];
+        return [{ followUp, application }];
+      });
+    return { accepted: summary(accept.applicationId), items };
+  }
+
+  /** The withdrawal standing for an Application (pending, sent or kept open), or null. */
+  function withdrawalOf(applicationId: string): FollowUp | null {
+    const accept = standingAccept();
+    if (!accept) return null;
+    const r = db.prepare("SELECT * FROM follow_up WHERE kind = 'withdrawal' AND accepted_by = ? AND application_id = ?").get(accept.id, applicationId);
+    return r ? followUpOf(r) : null;
+  }
+
+  async function acceptOffer(applicationId: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status === "accepted") throw new TrackerError("unchanged", "It is already Accepted.", applicationId);
+    if (isClosed(app.status) && app.jobId) {
+      const open = openOnJob(app.jobId);
+      if (open) throw new TrackerError("already-open", `${open.title} at ${open.company} already has an open Application.`, open.id);
+    }
+    db.exec("BEGIN");
+    try {
+      db.prepare("UPDATE application SET status = 'accepted' WHERE id = ?").run(applicationId);
+      const event = addEvent({ applicationId, kind: "status", cause: "you", from: app.status, to: "accepted", text: "Accepted the offer", undoes: null });
+      // Every other open Application gets a withdrawal, tied to its current stage and to this accept.
+      const others = db.prepare(
+        "SELECT * FROM application WHERE removed_at IS NULL AND id != ? AND status NOT IN ('rejected', 'withdrawn', 'accepted')",
+      ).all(applicationId);
+      for (const r of others) {
+        const start = stageStart(String(r.id))!;
+        const existing = db.prepare("SELECT id FROM follow_up WHERE started_by = ? AND kind = 'withdrawal'").get(start.id);
+        if (existing) {
+          db.prepare("UPDATE follow_up SET accepted_by = ?, anchor_on = ? WHERE id = ?").run(event.id, today(), String(existing.id));
+        } else {
+          db.prepare(
+            "INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at, accepted_by) VALUES (?, ?, 'withdrawal', ?, ?, ?, ?, ?)",
+          ).run(randomUUID(), String(r.id), String(r.status), start.id, today(), now(), event.id);
+        }
+      }
+      db.exec("COMMIT");
+      return { application: summary(applicationId)!, event, withdrawals: withdrawalList().items };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  async function declineOffer(applicationId: string) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status !== "offer") throw new TrackerError("invalid", `Only an offer can be declined; this one is ${statusName(app.status)}.`, applicationId);
+    db.exec("BEGIN");
+    try {
+      db.prepare("UPDATE application SET status = 'withdrawn' WHERE id = ?").run(applicationId);
+      const event = addEvent({
+        applicationId, kind: "status", cause: "you", from: "offer", to: "withdrawn", text: "Declined the offer: moved to Withdrawn", undoes: null, reason: "declined offer",
+      });
+      db.exec("COMMIT");
+      return { application: summary(applicationId)!, event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  async function declineDraft(applicationId: string): Promise<FollowUpDraft> {
+    const app = row(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status !== "offer") throw new TrackerError("invalid", "Only an offer can be declined.", applicationId);
+    // One per offer: tied to the Event that made it an offer.
+    const start = stageStart(applicationId)!;
+    let r = db.prepare("SELECT * FROM follow_up WHERE started_by = ? AND kind = 'decline'").get(start.id);
+    if (!r) {
+      const id = randomUUID();
+      db.prepare("INSERT INTO follow_up (id, application_id, kind, stage, started_by, anchor_on, created_at) VALUES (?, ?, 'decline', 'offer', ?, ?, ?)")
+        .run(id, applicationId, start.id, sofiaDay(new Date(start.at)), now());
+      r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(id)!;
+    }
+    return (await followUpDraft(String(r.id)))!;
+  }
+
+  /** An offer email's details pre-fill the Application's, unless the user saved their own. */
+  function prefillOffer(applicationId: string, emailId: string) {
+    const offer = str(db.prepare("SELECT offer FROM email_classification WHERE email_id = ?").get(emailId)?.offer);
+    if (!offer) return;
+    const d = JSON.parse(offer) as OfferDetails;
+    db.prepare(
+      `INSERT INTO offer_details (application_id, base_salary, start_date, work_pattern, contract, other, from_email, saved_by, saved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'email', ?)
+       ON CONFLICT (application_id) DO UPDATE SET base_salary = excluded.base_salary, start_date = excluded.start_date, work_pattern = excluded.work_pattern,
+         contract = excluded.contract, other = excluded.other, from_email = excluded.from_email, saved_at = excluded.saved_at
+       WHERE offer_details.saved_by = 'email'`,
+    ).run(applicationId, d.baseSalary, /^\d{4}-\d{2}-\d{2}$/.test(d.startDate ?? "") ? d.startDate : null, d.workPattern, d.contract, d.other, emailId, now());
+  }
+
+  async function offerOf(app: ApplicationSummary): Promise<OfferView | null> {
+    const r = db.prepare("SELECT * FROM offer_details WHERE application_id = ?").get(app.id);
+    if (!r && app.status !== "offer" && app.status !== "accepted") return null;
+    const details: OfferDetails = {
+      baseSalary: str(r?.base_salary), startDate: str(r?.start_date), workPattern: str(r?.work_pattern), contract: str(r?.contract), other: str(r?.other),
+    };
+    const latest = db.prepare(
+      "SELECT email_id FROM application_event WHERE application_id = ? AND kind = 'email' AND email_kind = 'offer' AND undone_at IS NULL ORDER BY at DESC, rowid DESC LIMIT 1",
+    ).get(app.id);
+    const floorEur = (await discovery.getSearchSettings?.())?.minMonthlySalaryEur ?? 0;
+    const monthlyEur = monthlyEurOf(details.baseSalary);
+    return {
+      details, from: r ? (r.saved_by === "you" ? "you" : "email") : null,
+      email: latest?.email_id ? matchedEmail(String(latest.email_id)) : null,
+      floor: floorEur > 0
+        ? { floorEur, monthlyEur, verdict: monthlyEur === null ? "unknown" : monthlyEur > floorEur ? "above" : monthlyEur < floorEur ? "below" : "at" }
+        : null,
+    };
+  }
+
+  async function saveOfferDetails(applicationId: string, input: Partial<OfferDetails>) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    const r = db.prepare("SELECT * FROM offer_details WHERE application_id = ?").get(applicationId);
+    const field = (k: keyof OfferDetails, col: string): string | null => {
+      if (!(k in input) || input[k] === undefined) return str(r?.[col]);
+      const v = typeof input[k] === "string" ? input[k].trim().slice(0, 400) : "";
+      return v || null;
+    };
+    const d: OfferDetails = {
+      baseSalary: field("baseSalary", "base_salary"), startDate: field("startDate", "start_date"), workPattern: field("workPattern", "work_pattern"),
+      contract: field("contract", "contract"), other: field("other", "other"),
+    };
+    if (d.startDate && (!/^\d{4}-\d{2}-\d{2}$/.test(d.startDate) || Number.isNaN(Date.parse(d.startDate)))) {
+      throw new TrackerError("invalid", "Enter the start date as a date, or leave it empty.", applicationId);
+    }
+    db.prepare(
+      `INSERT INTO offer_details (application_id, base_salary, start_date, work_pattern, contract, other, from_email, saved_by, saved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'you', ?)
+       ON CONFLICT (application_id) DO UPDATE SET base_salary = excluded.base_salary, start_date = excluded.start_date, work_pattern = excluded.work_pattern,
+         contract = excluded.contract, other = excluded.other, saved_by = 'you', saved_at = excluded.saved_at`,
+    ).run(applicationId, d.baseSalary, d.startDate, d.workPattern, d.contract, d.other, str(r?.from_email), now());
+    return { offer: (await offerOf(app))! };
+  }
+
+  function rejectionOf(app: ApplicationSummary): RejectionView | null {
+    if (app.status !== "rejected") return null;
+    const r = db.prepare("SELECT lesson, reason FROM rejection_note WHERE application_id = ?").get(app.id);
+    const latest = db.prepare(
+      "SELECT email_id FROM application_event WHERE application_id = ? AND kind = 'email' AND email_kind = 'rejection' AND undone_at IS NULL ORDER BY at DESC, rowid DESC LIMIT 1",
+    ).get(app.id);
+    const stats = computeStats(db, today());
+    const countsFrom = addDays(app.appliedOn, 14);
+    const angle = app.angle ? stats.working.angle.find((w) => w.name === angleLabel[app.angle!]) ?? null : null;
+    return {
+      lesson: str(r?.lesson), reason: str(r?.reason) as RejectionReason | null, reasons: rejectionReasons.map((x) => ({ ...x })),
+      email: latest?.email_id ? matchedEmail(String(latest.email_id)) : null,
+      stats: {
+        replied: stats.responseRate.replied, counted: stats.responseRate.counted, counts: countsFrom <= today(),
+        countsFrom: countsFrom <= today() ? null : countsFrom, angle,
+      },
+    };
+  }
+
+  async function saveRejectionNote(applicationId: string, note: { lesson: string | null; reason: RejectionReason | null }) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status !== "rejected") throw new TrackerError("invalid", "Only a rejection has a lesson and a likely reason.", applicationId);
+    const lesson = typeof note?.lesson === "string" ? note.lesson.trim().slice(0, 300) || null : null;
+    const reason = note?.reason ?? null;
+    if (reason !== null && !rejectionReasons.some((x) => x.key === reason)) throw new TrackerError("invalid", "Choose one of the likely reasons, or none.", applicationId);
+    const plain = lesson?.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
+    if (plain && genericLessons.some((g) => plain.includes(g))) {
+      throw new TrackerError("invalid", `"${lesson}" would fit any rejection. Write what was specific to this one, or leave it empty.`, applicationId);
+    }
+    db.prepare(
+      `INSERT INTO rejection_note (application_id, lesson, reason, saved_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (application_id) DO UPDATE SET lesson = excluded.lesson, reason = excluded.reason, saved_at = excluded.saved_at`,
+    ).run(applicationId, lesson, reason, now());
+    return { rejection: rejectionOf(app)! };
+  }
+
   async function needsYou(): Promise<NeedsYou> {
     const day = today();
     const soon = addDays(day, comingUpDays);
     const items: NeedsYouEntry[] = [];
     const comingUp: ComingUp[] = [];
     const apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL AND status NOT IN ('rejected', 'withdrawn')").all();
+    const withdrawals = withdrawalList().items;
+    for (const w of withdrawals) {
+      const f = w.followUp;
+      const application = { id: w.application.id, title: w.application.title, company: w.application.company, status: w.application.status, appliedOn: w.application.appliedOn };
+      if (f.state === "pending") items.push({ followUp: f, application, done: false });
+      else if (f.doneAt && sofiaDay(new Date(f.doneAt)) === day) items.push({ followUp: f, application, done: true });
+    }
     const interviews: UpcomingInterview[] = [];
     const weekAhead = new Date(clock.now().getTime() + 7 * 24 * 60 * 60_000).toISOString();
     for (const r of apps) {
+      // While its withdrawal waits to be sent, an Application's own follow-ups are held back.
+      const withdrawing = withdrawals.some((w) => w.application.id === String(r.id) && w.followUp.state === "pending");
       const application = { id: String(r.id), title: String(r.title), company: String(r.company), status: r.status as Status, appliedOn: String(r.applied_on) };
-      for (const f of [...thankYousOf(r), currentFollowUp(r)]) {
+      for (const f of withdrawing ? [] : [...thankYousOf(r), currentFollowUp(r)]) {
         if (!f) continue;
         if (isDueNow(f)) items.push({ followUp: f, application, done: false });
         else if (f.state !== "pending" && f.doneAt && sofiaDay(new Date(f.doneAt)) === day) items.push({ followUp: f, application, done: true });
@@ -1391,8 +1725,21 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         companies: due.map((i) => i.application.company), followUpIds: due.map((i) => i.followUp.id),
       });
     }
+    const offers: OfferToAnswer[] = apps.filter((r) => r.status === "offer").map((r) => {
+      const id = String(r.id);
+      const since = stageStart(id)?.at ?? String(r.created_at);
+      const latest = db.prepare(
+        "SELECT email_id FROM application_event WHERE application_id = ? AND kind = 'email' AND email_kind = 'offer' AND undone_at IS NULL ORDER BY at DESC, rowid DESC LIMIT 1",
+      ).get(id);
+      const e = latest?.email_id ? emailSummary(String(latest.email_id)) : null;
+      return {
+        application: { id, title: String(r.title), company: String(r.company), status: "offer" as const }, since,
+        email: e ? { from: e.from, receivedAt: e.receivedAt, attachments: e.attachments } : null,
+        other: str(db.prepare("SELECT other FROM offer_details WHERE application_id = ?").get(id)?.other),
+      };
+    }).sort((a, b) => a.since.localeCompare(b.since));
     return {
-      count: items.filter((i) => !i.done).length + emails + interviews.length, items, groups, interviews, emailsToMatch: emails, comingUp,
+      count: items.filter((i) => !i.done).length + emails + interviews.length + offers.length, items, groups, interviews, offers, emailsToMatch: emails, comingUp,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -1402,7 +1749,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     const app = r ? row(String(r.application_id)) : undefined;
     if (!r || !app) throw new TrackerError("not-found", "There's no such follow-up.");
-    const f = r.kind === "thank-you" ? thankYousOf(app).find((x) => x.id === followUpId) : currentFollowUp(app);
+    if (r.kind === "decline") throw new TrackerError("invalid", "A reply declining an offer isn't tracked; decline the offer instead.", String(app.id));
+    const f = r.kind === "withdrawal" ? withdrawalOf(String(app.id))
+      : r.kind === "thank-you" ? thankYousOf(app).find((x) => x.id === followUpId) : currentFollowUp(app);
     if (f?.id !== followUpId) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this follow-up no longer applies.", String(app.id));
     }
@@ -1413,6 +1762,24 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const { f, app } = actionable(followUpId);
     if (f.state !== "pending") {
       throw new TrackerError("unchanged", f.state === "sent" ? "It's marked sent already." : "It was skipped already.", String(app.id));
+    }
+    if (f.kind === "withdrawal" && kind === "follow-up-sent") {
+      // Marked sent, a withdrawal is the move to Withdrawn: one Event, so one Undo puts both back.
+      const from = app.status as Status;
+      if (isClosed(from)) throw new TrackerError("changed-since", `It's ${statusName(from)} already.`, String(app.id));
+      db.exec("BEGIN");
+      try {
+        db.prepare("UPDATE application SET status = 'withdrawn' WHERE id = ?").run(f.applicationId);
+        const event = addEvent({
+          applicationId: f.applicationId, kind: "status", cause: "you", from, to: "withdrawn", text: "Withdrawal sent: moved to Withdrawn",
+          undoes: null, followUpId, reason: "accepted another offer",
+        });
+        db.exec("COMMIT");
+        return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!), event };
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
     }
     const event = addEvent({ applicationId: f.applicationId, kind, cause: "you", from: null, to: null, text: words(f), undoes: null, followUpId, dueOn });
     return { followUp: actionable(followUpId).f, event };
@@ -1426,22 +1793,26 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const job = application.jobId ? await discovery.getJob(application.jobId) : null;
     const requirement = job?.requirements.find((q) => q.kind === "required") ?? job?.requirements[0];
     const notes = allEvents(application.id).filter((e) => e.kind === "note" && !e.undoneAt).map((e) => e.text);
-    const stage = r.stage === "screening" ? "screening" : r.stage === "offer" ? "offer" : "applied";
+    const stage = (["screening", "interviewing", "offer"] as const).find((x) => x === r.stage) ?? "applied";
     const outline = outlineFor(f, application, requirement?.text ?? null);
     let draft: FollowUpDraftText | null = null;
     let noDraft: NoDraft | null = null;
-    // A nudge and a check-in are drafted when opened; a thank-you note once its interview ended and
-    // you gave one thing you discussed (that makes it specific).
+    // A nudge, a check-in, a withdrawal and a decline are drafted when opened; a thank-you note once
+    // its interview ended and you gave one thing you discussed (that makes it specific).
     const thanksReady = f.kind === "thank-you" && f.state === "pending" && !!f.readyAt && f.readyAt <= now() && !!f.topic.trim();
-    if ((f.kind === "nudge" && stage !== "offer") || f.kind === "check-in" || thanksReady) {
+    const closing = f.kind === "withdrawal" || f.kind === "decline";
+    if ((f.kind === "nudge" && stage !== "offer") || f.kind === "check-in" || thanksReady || closing) {
       const kind = f.kind as DraftKind;
       const iv = interviewRow(f.interviewId);
       const made = await draftFor(r, {
-        followUpId, kind, company: application.company, title: application.title, since: dayWords(f.anchorOn),
-        stage: kind === "nudge" ? (stage === "screening" ? "screening" : "applied") : "interviewing",
-        daysQuiet: daysBetween(f.anchorOn, today()),
+        followUpId, kind, company: application.company, title: application.title,
+        // A withdrawal or a decline counts from the date applied.
+        since: dayWords(closing ? application.appliedOn : f.anchorOn),
+        stage: closing ? stage : kind === "nudge" ? (stage === "screening" ? "screening" : "applied") : "interviewing",
+        daysQuiet: closing ? 0 : daysBetween(f.anchorOn, today()),
         requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
-        notes, evidence: [], voice: [], language: job?.language ?? str(row(application.id)?.language) ?? "en",
+        notes, evidence: [], voice: [],
+        language: job?.language ?? str(row(application.id)?.language) ?? (/[Ѐ-ӿ]/.test(application.title) ? "bg" : "en"),
         words: draftWords[kind], banned: bannedPhrases,
         ...(kind === "thank-you" ? { topic: f.topic.trim(), people: iv?.people ?? [] } : kind === "check-in" ? { people: iv?.people ?? [] } : {}),
       });
@@ -1452,6 +1823,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const subject: Record<FollowUpKind, string | null> = {
       nudge: `Following up on my application: ${application.title}`, "offer-note": null,
       "thank-you": `Thank you: ${application.title} interview`, "check-in": `Checking in: ${application.title}`,
+      withdrawal: `Withdrawing my application: ${application.title}`, decline: `Your offer: ${application.title}`,
     };
     return {
       followUp: f, application, text: r.text_saved_at ? f.text : (draft?.text ?? f.text), draft, noDraft, outline,
@@ -1467,7 +1839,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const iv = interviewRow(f.interviewId);
     return outlineOf({
       kind: f.kind, title: application.title, company: application.company, since: dayWords(f.anchorOn),
-      stage: r?.stage === "screening" ? "screening" : r?.stage === "offer" ? "offer" : "applied",
+      stage: (["screening", "interviewing", "offer"] as const).find((x) => x === r?.stage) ?? "applied",
       postingDetail, note, people: iv?.people ?? [], topic: f.topic,
     });
   }
@@ -1551,7 +1923,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (!r || !row(String(r.application_id))) throw new TrackerError("not-found", "There's no such follow-up.");
     db.prepare("UPDATE follow_up SET text = ?, text_saved_at = ? WHERE id = ?").run(text, now(), followUpId);
     // What the user wrote or changed teaches their voice (kept locally); the draft as it came doesn't.
-    if (r.kind === "nudge") {
+    if (r.kind !== "offer-note") {
       const own = text.trim() && text.trim() !== String(r.draft_text ?? "").trim();
       if (own) {
         db.prepare(`INSERT INTO voice_sample (follow_up_id, text, language, saved_at) VALUES (?, ?, ?, ?)
@@ -1944,6 +2316,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       applicationId, kind: "email", cause, from: moves ? from : null, to: moves ? target : null, text, undoes: null,
       emailId: m.id, emailKind: kind,
     });
+    if (kind === "offer") prefillOffer(applicationId, m.id);
     return { event, moved: moves };
   }
 
@@ -2007,11 +2380,11 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
     const { c, by, model } = await classify(m);
     db.prepare(
-      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at, interview)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at, interview, offer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       m.id, by, c?.kind ?? null, c?.confidence ?? null, c?.company ?? null, c?.jobTitle ?? null, c?.stage ?? null, c?.language ?? null, c?.summary ?? null, model, now(),
-      c?.interview ? JSON.stringify(c.interview) : null,
+      c?.interview ? JSON.stringify(c.interview) : null, c?.kind === "offer" && c.offer ? JSON.stringify(c.offer) : null,
     );
 
     const candidates = signalsFor(m, c);
@@ -2269,6 +2642,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       ).run(JSON.stringify(settings), now());
       return settings;
     },
+    acceptOffer,
+    withdrawals: async () => withdrawalList(),
+    declineOffer,
+    declineDraft,
+    saveOfferDetails,
+    saveRejectionNote,
     processMail,
     emailsToMatch,
     answerEmail,
@@ -2319,6 +2698,8 @@ const followUpWords: Record<FollowUpKind, { name: string; sent: string; skipped:
   "offer-note": { name: "Note to self", sent: "Note to self done", skipped: "No note this time" },
   "thank-you": { name: "Thank-you note", sent: "Thank-you note sent", skipped: "No thank-you note this time" },
   "check-in": { name: "Check-in", sent: "Check-in sent", skipped: "No check-in this time" },
+  withdrawal: { name: "Withdrawal", sent: "Withdrawal sent", skipped: "Kept open: no withdrawal" },
+  decline: { name: "Reply declining the offer", sent: "Reply sent", skipped: "No reply this time" },
 };
 
 const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -2333,6 +2714,34 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 function dayName(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
   return `${d} ${months[m! - 1]} ${y}`;
+}
+
+/** Lessons that would fit any rejection (docs/knowledge/application-tactics.md), so they don't count. */
+const genericLessons = ["tailor your cv", "network more", "practice behavioural questions", "practise behavioural questions", "practice behavioral questions", "apply to more jobs"];
+
+/** Leva per euro (the fixed rate). */
+const bgnPerEur = 1.95583;
+
+/**
+ * A salary as written, per month in euros: "€3,100 gross / month" is 3100, "€30,000 a year" is 2500,
+ * "4,000 лв." is 2045. The lowest figure of a range. Null when it has no figure, or its currency (euros
+ * or leva) or its period (a month unless it says a year) can't be told.
+ */
+export function monthlyEurOf(text: string | null): number | null {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  const figure = t.match(/\d[\d\s.,']*(?:\s?k\b)?/)?.[0]?.trim();
+  if (!figure) return null;
+  let digits = figure.replace(/\s?k$/, "").replace(/[\s']/g, "").replace(/[.,]$/, "");
+  if (/^\d{1,3}([.,]\d{3})+$/.test(digits)) digits = digits.replace(/[.,]/g, "");
+  else digits = digits.replace(",", ".");
+  let amount = Number(digits) * (/k$/.test(figure) ? 1000 : 1);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (/€|\beur|euro/.test(t)) { /* euros */ } else if (/лв|\bbgn\b|лева/.test(t)) amount /= bgnPerEur;
+  else return null;
+  if (/hour|час/.test(t)) return null;
+  if (/year|annual|\bp\.?\s?a\b|годишн|на година/.test(t)) amount /= 12;
+  return Math.round(amount);
 }
 
 /** A contact address or domain, normalised; "invalid" when it is neither; null when empty. */

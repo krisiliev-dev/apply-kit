@@ -48,11 +48,12 @@ export { scoreCase, similarity, TEXT_MATCH } from "./evaluation/score.ts";
 export type { CaseScore, ListScore } from "./evaluation/score.ts";
 export { runEvaluation } from "./evaluation/run.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
-export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, TrackerError } from "./tracker.ts";
+export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, TrackerError, rejectionReasons, monthlyEurOf } from "./tracker.ts";
 export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
   NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft, UpcomingInterview,
+  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView,
 } from "./tracker.ts";
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
 export type {
