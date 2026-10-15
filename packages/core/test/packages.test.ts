@@ -599,3 +599,117 @@ describe("a CV that runs onto a second page (#63)", () => {
     expect(await t.preparation.fitCv(pkg.id, "shrink-font")).toMatchObject({ changed: false, reason: "That isn't one of the ways offered to fit this CV on one page." });
   });
 });
+
+/** The writer words the detections bullet more strongly than its piece, with an honest wording beside it. */
+const strongerDetections = (cv: TailoredCv) => {
+  Object.assign(cv.roles[0]!.bullets[1]!, {
+    text: "Led detection engineering: 30 rules that cut false alerts by a quarter",
+    claim: "stronger",
+    honest: "Wrote 30 SIEM detection rules that cut false alerts by a quarter",
+    why: "The posting asks for a lead.",
+  });
+};
+
+describe("near-the-line flags (#64)", () => {
+  it("a stronger line is a flag inside its requirement: the profile's wording stays, the stronger one is never offered, nothing is pre-selected", async () => {
+    const t = miraProfile({ tailor: strongerDetections });
+
+    const pkg = await started(t);
+
+    expect(pkg.cvVersion!.flags).toEqual([{
+      id: expect.any(String), kind: "near-the-line", requirement: 0,
+      title: "Wording for \"Wrote 30 detection rules that cut false alerts by a quarter\"",
+      heading: "The draft words this more strongly than your profile backs.",
+      detail: "Your profile says \"Wrote 30 detection rules that cut false alerts by a quarter.\" Pick the wording you'd defend in an interview.",
+      piece: "Wrote 30 detection rules that cut false alerts by a quarter.",
+      draft: "Led detection engineering: 30 rules that cut false alerts by a quarter",
+      options: [
+        { id: "profile", label: "Wrote 30 detection rules that cut false alerts by a quarter", holdsUp: "Exactly your profile. Holds up to any question." },
+        { id: "honest", label: "Wrote 30 SIEM detection rules that cut false alerts by a quarter", holdsUp: "Says only what your profile backs, in the posting's words. Holds up." },
+      ],
+      ownWording: true,
+      notOffered: "\"Led detection engineering: 30 rules that cut false alerts by a quarter\" isn't offered: it claims more than your profile backs.",
+      question: null,
+      answer: null,
+      decision: null,
+    }]);
+    const printed = await printedCv(t, pkg.id);
+    expect(printed).not.toContain("Led detection engineering");
+    expect(printed).toContain("Wrote 30 detection rules that cut false alerts by a quarter");
+  });
+
+  it("a step with an open flag can't be approved, and says which flag; deciding it enables Approve", async () => {
+    const t = miraProfile({ tailor: strongerDetections });
+    const pkg = await started(t);
+    const flag = pkg.cvVersion!.flags[0]!;
+    t.preparation.approveStep(pkg.id, "target");
+
+    const blocked = t.preparation.approveStep(pkg.id, "cv");
+    expect(blocked).toMatchObject({
+      approved: false, blockedBy: "cv", flagId: flag.id,
+      reason: "The CV can't be approved yet: 1 flag is still open. The draft words \"Wrote 30 detection rules that cut false alerts by a quarter\" more strongly than your profile backs. Pick a wording you can defend in an interview.",
+    });
+    expect(blocked.package.steps[1]).toMatchObject({ state: "current", sub: "1 flag" });
+
+    const r = await t.preparation.decideFlag(pkg.id, flag.id, { option: "honest" });
+
+    expect(r).toMatchObject({ changed: true });
+    expect(r.package.cvVersion!.flags[0]!.decision).toEqual({
+      option: "honest", label: "Used \"Wrote 30 SIEM detection rules that cut false alerts by a quarter\"", text: "Wrote 30 SIEM detection rules that cut false alerts by a quarter", at: "2026-10-12T07:30:00.000Z",
+    });
+    expect(r.package.steps[1]).toMatchObject({ state: "current", sub: "Flags decided" });
+    expect(await printedCv(t, pkg.id)).toContain("Wrote 30 SIEM detection rules that cut false alerts by a quarter");
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: true });
+  });
+
+  it("Kris's own wording is checked against the profile before it's used", async () => {
+    const t = miraProfile({ tailor: strongerDetections });
+    const pkg = await started(t);
+    const flag = pkg.cvVersion!.flags[0]!;
+
+    expect(await t.preparation.decideFlag(pkg.id, flag.id, { own: "Wrote 50 detection rules in Splunk" })).toMatchObject({
+      changed: false, reason: "That wording can't be used: it names \"Splunk\", which isn't in your profile; it says \"50\", which its piece doesn't back.",
+    });
+    expect(await t.preparation.decideFlag(pkg.id, flag.id, { own: "Led detection engineering: 30 rules that cut false alerts by a quarter" })).toMatchObject({
+      changed: false, reason: "That's the wording that claims more than your profile backs. Choose another.",
+    });
+
+    const r = await t.preparation.decideFlag(pkg.id, flag.id, { own: "Wrote 30 Wazuh detection rules, cutting false alerts by a quarter" });
+    expect(r.package.cvVersion!.flags[0]!.decision).toMatchObject({ option: "own", label: "Your own wording: \"Wrote 30 Wazuh detection rules, cutting false alerts by a quarter\"" });
+    expect(r.package.cvVersion!.roles[0]!.bullets[1]!.text).toBe("Wrote 30 Wazuh detection rules, cutting false alerts by a quarter");
+  });
+
+  it("a decision can be changed; it reopens an approved CV step, and its change is undone only through the flag", async () => {
+    const t = miraProfile({ tailor: strongerDetections });
+    const pkg = await started(t);
+    const flag = pkg.cvVersion!.flags[0]!;
+    const first = await t.preparation.decideFlag(pkg.id, flag.id, { option: "honest" });
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+    const change = first.package.cvVersion!.changes.find((c) => c.flagId === flag.id)!;
+    expect(change).toMatchObject({ origin: "decision", label: "Bullet reworded, as you decided", was: "Wrote 30 detection rules that cut false alerts by a quarter", is: "Wrote 30 SIEM detection rules that cut false alerts by a quarter" });
+    expect(await t.preparation.undoCvChange(pkg.id, change.id)).toMatchObject({ changed: false, reason: "This change is a decision on a flag: change it there." });
+
+    const r = await t.preparation.decideFlag(pkg.id, flag.id, { option: "profile" });
+
+    expect(r.package.steps[1]).toMatchObject({ approvedAt: null });
+    expect(r.package.cvVersion!.changes.some((c) => c.flagId === flag.id)).toBe(false);
+    expect(r.package.cvVersion!.roles[0]!.bullets[1]!.text).toBe("Wrote 30 detection rules that cut false alerts by a quarter");
+    expect(r.package.cvVersion!.decisions).toEqual([{ flagId: flag.id, title: flag.title, decision: "Kept your profile's wording", at: "2026-10-12T07:30:00.000Z" }]);
+  });
+
+  it("refuses an option that isn't offered", async () => {
+    const t = miraProfile({ tailor: strongerDetections });
+    const pkg = await started(t);
+    expect(await t.preparation.decideFlag(pkg.id, pkg.cvVersion!.flags[0]!.id, { option: "stronger" })).toMatchObject({ changed: false, reason: "That isn't one of this flag's options." });
+    expect(await t.preparation.decideFlag(pkg.id, "flag-nope", { option: "profile" })).toMatchObject({ changed: false, reason: "That flag isn't in this CV version." });
+  });
+
+  it("the honesty summary counts the near-the-line edit while it's open", async () => {
+    const t = miraProfile({ tailor: strongerDetections });
+    const pkg = await started(t);
+    expect(pkg.cvVersion!.honesty.find((c) => c.state === "line")).toEqual({
+      id: `flag:${pkg.cvVersion!.flags[0]!.id}`, state: "line", label: "Near-the-line edit: \"Led detection engineering: 30 rules that cut false alerts…\"", detail: "Decide it above.",
+    });
+  });
+});

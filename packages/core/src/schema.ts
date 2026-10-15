@@ -503,6 +503,17 @@ const migrations: string[] = [
   // #63: the package's CV version: the changes tailoring made to the master profile's CV (each
   // undoable), how it fits one page, and what the honesty validator caught.
   `ALTER TABLE package ADD COLUMN cv_version TEXT;`,
+  // #64: pieces a package learned from Kris's answers to its gap questions: used only in that
+  // package until Kris confirms them in Profile, with the question and her original answer.
+  `CREATE TABLE package_piece (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     piece_id TEXT NOT NULL,
+     flag_id TEXT NOT NULL,
+     question TEXT NOT NULL,
+     answer TEXT NOT NULL,
+     near TEXT,
+     created_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

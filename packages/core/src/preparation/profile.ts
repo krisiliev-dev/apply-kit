@@ -157,6 +157,8 @@ export interface ProfileSummary {
   confirmed: number;
   needsYou: { masterProfile: number; angles: number; answerBank: number; voice: number };
   needsYouTotal: number;
+  /** Of the master profile's, the pieces learned during packages (Profile › Learned during packages). */
+  learned?: number;
 }
 
 /** An achievement is one sentence: this many characters at most. */

@@ -2,7 +2,10 @@
 // and every change tailoring made to it, each with what was, what is, why and its own Undo. The CV
 // is the baseline with the changes that aren't undone applied in order, so undoing any one of them
 // restores exactly what it replaced. Changes refer to pieces by id, never to positions. Also the
-// ways to tighten a CV that runs onto a second page, each one more change. Pure.
+// ways to tighten a CV that runs onto a second page, each one more change. And the flags (#64):
+// near-the-line edits, gaps and lines learned from Kris's answers, each a decision Kris makes before
+// the step can be approved; a decision that changes the CV is a change too, undone only through its
+// flag. Pure.
 import type { RequirementStatus } from "../extraction/reading.ts";
 import type { HonestyRule, ValidatedCv } from "./honesty.ts";
 import { quoteOf } from "./honesty.ts";
@@ -31,8 +34,10 @@ export interface CvPlan {
 
 interface ChangeBase {
   id: string;
-  /** From the writer's tailoring, or a way Kris chose to fit one page. */
-  origin: "tailoring" | "tightening";
+  /** From the writer's tailoring, a way Kris chose to fit one page, or Kris's decision on a flag. */
+  origin: "tailoring" | "tightening" | "decision";
+  /** The flag whose decision made it: changed only through that flag. */
+  flagId?: string;
   undone: boolean;
   /** "Summary rewritten", "Bullet moved to the top". */
   label: string;
@@ -51,6 +56,7 @@ export type CvChange = ChangeBase & (
   | { kind: "order"; roleId: string; order: string[] }
   | { kind: "drop"; roleId: string; pieceIds: string[] }
   | { kind: "skills"; skills: string[] }
+  | { kind: "add-skill"; pieceId: string }
 );
 
 /** What a package keeps about its CV version, beside the writer's raw output. */
@@ -63,6 +69,188 @@ export interface CvVersionState {
   notes: string[];
   caught: Record<HonestyRule, number>;
   heldBack: number;
+  /** Absent in CV versions written before flags (#64). */
+  flags?: CvFlag[];
+}
+
+// ---------------------------------------------------------------- flags
+
+export type FlagKind = "near-the-line" | "gap" | "learned";
+
+/** Where a flag's line is on the CV. */
+export type FlagPlace = { kind: "bullet"; roleId: string; pieceId: string } | { kind: "summary" } | { kind: "skill"; pieceId: string };
+
+/** What Kris chose, and when. `text` is the wording used, or the answer told to the coach. */
+export interface FlagDecision {
+  option: string;
+  text: string | null;
+  at: string;
+}
+
+/**
+ * Something in the CV version that needs Kris's decision before the step can be approved: a stronger
+ * line (near the line), a required item with no evidence (a gap), or a line drafted from Kris's
+ * answer to a gap question (learned). The stronger wording is kept only to say it isn't offered.
+ */
+export interface CvFlag {
+  id: string;
+  kind: FlagKind;
+  /** The posting requirement it sits inside (by index), or null. */
+  requirement: number | null;
+  /** The line it decides; null for a gap (nothing is on the CV) or a learned line with no place. */
+  place: FlagPlace | null;
+  /** The pieces the line relies on (Kris's own wording is checked against them). */
+  pieceIds: string[];
+  /** The profile's wording for the line (the angle's summary, for the summary). */
+  piece: string | null;
+  /** The stronger wording: never offered. */
+  draft: string | null;
+  /** The writer's honest wording, or the line drafted from Kris's answer. */
+  honest: string | null;
+  /** A gap's question, and Kris's answer to it. */
+  answer: string | null;
+  /** The learned flag a gap's answer produced, or the gap flag a learned one came from. */
+  related: string | null;
+  decision: FlagDecision | null;
+}
+
+export interface FlagOption {
+  id: string;
+  label: string;
+  /** How it holds up in an interview. */
+  holdsUp: string;
+}
+
+/** A flag as the CV step shows it: inside its requirement, with options none of which is pre-selected. */
+export interface CvFlagView {
+  id: string;
+  kind: FlagKind;
+  requirement: number | null;
+  /** Short, for the jump links: "Wording for "…"", "Kubernetes security gap". */
+  title: string;
+  heading: string;
+  detail: string;
+  piece: string | null;
+  draft: string | null;
+  options: FlagOption[];
+  /** "Write my own wording" is offered (checked against the profile before it's used). */
+  ownWording: boolean;
+  /** Why the stronger wording isn't among the options. */
+  notOffered: string | null;
+  /** A gap's question, for "I have experience the profile doesn't know about". */
+  question: { text: string; help: string } | null;
+  answer: string | null;
+  decision: (FlagDecision & { label: string }) | null;
+}
+
+const unquote = (s: string) => s.trim().replace(/\.$/, "");
+
+/** The options a flag offers, never the stronger wording, none chosen for Kris. */
+function optionsOf(f: CvFlag): FlagOption[] {
+  switch (f.kind) {
+    case "near-the-line":
+      return [
+        ...(f.piece ? [{ id: "profile", label: unquote(f.piece), holdsUp: f.place?.kind === "summary" ? "Your angle's summary. Holds up to any question." : "Exactly your profile. Holds up to any question." }] : []),
+        ...(f.honest ? [{ id: "honest", label: unquote(f.honest), holdsUp: "Says only what your profile backs, in the posting's words. Holds up." }] : []),
+      ];
+    case "gap":
+      return [
+        { id: "letter", label: "Name it in the cover letter as something to learn", holdsUp: "One honest sentence; interviewers tend to ask about a gap anyway." },
+        { id: "leave-out", label: "Leave it out of both", holdsUp: "The CV and letter don't mention it. You'll likely be asked in the interview." },
+        {
+          id: "experience", label: "I have experience the profile doesn't know about",
+          holdsUp: "Tell the coach. The line it drafts from your answer comes back here as a flag for you to approve, and the piece is used for this job only until you confirm it in Profile.",
+        },
+      ];
+    case "learned":
+      return [
+        ...(f.honest && f.place ? [{ id: "use", label: unquote(f.honest), holdsUp: "From your answer, used for this job only until you confirm it in Profile. Holds up if you can tell the story behind it." }] : []),
+        { id: "leave-out", label: "Don't use it on this CV", holdsUp: "The requirement stays a gap on this CV. Your answer still waits in Profile." },
+      ];
+  }
+}
+
+/** The decision in words, for the flag and the approved package's summary. */
+function decisionLabel(f: CvFlag, d: FlagDecision): string {
+  if (d.option === "own") return `Your own wording: "${d.text}"`;
+  switch (f.kind) {
+    case "near-the-line":
+      return d.option === "profile" ? "Kept your profile's wording" : `Used "${d.text}"`;
+    case "gap":
+      return d.option === "letter" ? "Named in the cover letter as something to learn"
+        : d.option === "leave-out" ? "Left out of the CV and letter"
+        : `Told the coach: "${quoteOf(d.text ?? "")}"`;
+    case "learned":
+      return d.option === "use" ? "Used the line from your answer" : "Left it off this CV";
+  }
+}
+
+/** Whether a flag offers this option ("own" for Kris's own wording). */
+export const offers = (f: CvFlag, option: string) => (option === "own" ? f.kind !== "gap" : optionsOf(f).some((o) => o.id === option));
+
+/** The flag as the CV step shows it. `requirement` names the posting requirement it sits inside. */
+export function flagView(f: CvFlag, requirement: string | null): CvFlagView {
+  const req = requirement ?? "this requirement";
+  const piece = f.piece && quoteOf(f.piece);
+  const base = { id: f.id, kind: f.kind, requirement: f.requirement, piece: f.piece, draft: f.draft, options: optionsOf(f), answer: f.answer,
+    decision: f.decision && { ...f.decision, label: decisionLabel(f, f.decision) } };
+  switch (f.kind) {
+    case "near-the-line":
+      return {
+        ...base,
+        title: f.place?.kind === "summary" ? "Summary wording" : `Wording for "${piece}"`,
+        heading: f.place?.kind === "summary" ? "The draft summary says more than your profile backs." : "The draft words this more strongly than your profile backs.",
+        detail: f.place?.kind === "summary"
+          ? "Your angle's summary is used until you decide. Pick the wording you'd defend in an interview."
+          : `Your profile says "${f.piece}" Pick the wording you'd defend in an interview.`,
+        ownWording: true,
+        notOffered: f.draft ? `"${unquote(f.draft)}" isn't offered: it claims more than your profile backs.` : null,
+        question: null,
+      };
+    case "gap":
+      return {
+        ...base,
+        title: `${req} gap`,
+        heading: `${req} is required and your profile has no evidence for it.`,
+        detail: "Gaps are never covered up: it stays off the CV unless you have real experience to add.",
+        ownWording: false,
+        notOffered: null,
+        question: { text: `What did you do with ${lowerFirst(req)}?`, help: "Where, when and what you did. \"Once, in a side project\" is a fine answer." },
+      };
+    case "learned":
+      return {
+        ...base,
+        title: `New line for ${lowerFirst(req)}`,
+        heading: f.place ? "From your answer: use this line on this CV?" : "From your answer: the coach couldn't place it on the CV.",
+        detail: f.place
+          ? `You said: "${f.answer}". The line is used for this job only until you confirm it in Profile.`
+          : `You said: "${f.answer}". It's saved in Profile, unconfirmed. Give it a role there to use it in a package.`,
+        ownWording: f.place !== null,
+        notOffered: f.draft ? `"${unquote(f.draft)}" isn't offered: it says more than your answer did.` : null,
+        question: null,
+      };
+  }
+}
+
+const lowerFirst = (s: string) => (/^\p{Lu}\p{Ll}/u.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+
+/** Why the step can't be approved while this flag is open, after "The CV can't be approved yet: N flags are still open." */
+export function openReason(f: CvFlag, requirement: string | null): string {
+  switch (f.kind) {
+    case "near-the-line":
+      return f.place?.kind === "summary"
+        ? "The draft summary still says more than your profile backs. Pick a wording you can defend in an interview."
+        : `The draft words "${quoteOf(f.piece ?? "")}" more strongly than your profile backs. Pick a wording you can defend in an interview.`;
+    case "gap":
+      return `${requirement ?? "A requirement"} has no evidence in your profile. Choose how to handle the gap.`;
+    case "learned":
+      return `The line from your answer about ${lowerFirst(requirement ?? "a requirement")} isn't decided. Use it, word it yourself, or leave it off.`;
+  }
+}
+
+/** The decisions made, in words, for the approved package's summary and the later steps. */
+export function decisionsOf(flags: readonly CvFlag[], title: (f: CvFlag) => string): { flagId: string; title: string; decision: string; at: string }[] {
+  return flags.filter((f) => f.decision).map((f) => ({ flagId: f.id, title: title(f), decision: decisionLabel(f, f.decision!), at: f.decision!.at }));
 }
 
 /** The baseline with the changes that aren't undone applied, in order. */
@@ -97,6 +285,9 @@ export function applyChanges(base: CvPlan, changes: readonly CvChange[]): CvPlan
         break;
       case "skills":
         plan.skills = [...c.skills];
+        break;
+      case "add-skill":
+        if (!plan.skills.includes(c.pieceId)) plan.skills.push(c.pieceId);
         break;
     }
   }
@@ -302,7 +493,7 @@ export interface HonestyCheckView {
   detail: string | null;
 }
 
-/** The hard rules (each ok, or fixed when the draft broke it), then preferred items left out, held-back wordings and gaps. */
+/** The hard rules (each ok, or fixed when the draft broke it), then preferred items left out, near-the-line edits and gaps. */
 export function honestyChecks(state: CvVersionState, evidence: readonly EvidenceRow[]): HonestyCheckView[] {
   const { caught } = state;
   const rule = (id: string, label: string, n: number, detail: string): HonestyCheckView =>
@@ -314,9 +505,23 @@ export function honestyChecks(state: CvVersionState, evidence: readonly Evidence
     rule("citations", "Every line links to a piece in your profile", caught.citation, `The draft had ${caught.citation} that didn't; they were left out or use your profile's wording.`),
   ];
   evidence.forEach((e, i) => { if (e.status === "not-held") out.push({ id: `not-held:${i}`, state: "ok", label: `${e.requirement} left out, not claimed`, detail: null }); });
-  if (state.heldBack) {
+  const flags = state.flags ?? [];
+  if (state.flags === undefined && state.heldBack) {
     out.push({ id: "held-back", state: "line", label: `${state.heldBack === 1 ? "1 stronger wording" : `${state.heldBack} stronger wordings`} held back`, detail: "Your profile's words are used until you decide." });
   }
-  evidence.forEach((e, i) => { if (e.status === "gap") out.push({ id: `gap:${i}`, state: "gap", label: `Gap: ${e.requirement}, no evidence in your profile`, detail: "Left off the CV." }); });
+  for (const f of flags) {
+    if (f.kind !== "near-the-line") continue;
+    out.push({
+      id: `flag:${f.id}`, state: f.decision ? "ok" : "line",
+      label: f.place?.kind === "summary" ? "Near-the-line edit: the summary" : `Near-the-line edit: "${quoteOf(f.draft ?? f.piece ?? "")}"`,
+      detail: f.decision ? `Decided: ${lowerFirst(decisionLabel(f, f.decision))}.` : "Decide it above.",
+    });
+  }
+  evidence.forEach((e, i) => {
+    if (e.status !== "gap") return;
+    const f = flags.find((x) => x.kind === "gap" && x.requirement === i);
+    const decided = f?.decision ? ` You chose: ${lowerFirst(decisionLabel(f, f.decision))}.` : "";
+    out.push({ id: `gap:${i}`, state: "gap", label: `Gap: ${e.requirement}, no evidence in your profile`, detail: `Left off the CV.${decided}` });
+  });
   return out;
 }
