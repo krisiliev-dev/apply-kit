@@ -201,3 +201,48 @@ describe("decisions on flags when the language switches", () => {
     expect(bg.cvVersion!.notes).toContain("Decide again: your own wording for \"Ran the response to a phishing campaign against the…\" was in English.");
   });
 });
+
+describe("an answer the bank has only in English, in a Bulgarian package", () => {
+  async function translatedPackage() {
+    const t = mira();
+    const saved = t.preparation.saveAnswer({ question: "Describe a security incident you handled", category: "screening", versions: { en: "I ran the response to a phishing campaign against the claims team." } });
+    if (!saved.saved) throw new Error(saved.problems[0]!.message);
+    const pkg = await started(t, kestrelJob({ packageLanguage: "bg" }));
+    return { t, pkg, bankId: saved.answer.id, q: question(pkg, "Describe a security incident") };
+  }
+
+  it("is a translated draft marked for review, never filled silently", async () => {
+    const { q } = await translatedPackage();
+
+    expect(q).toMatchObject({
+      origin: "translated", label: "Answer bank · translated", needsYou: true,
+      text: expect.stringMatching(/^В Northwind Bank проведох реакцията/), note: "Translated from your English answer: check it, then confirm.",
+    });
+  });
+
+  it("needs Kris's approval before it's in the approved package", async () => {
+    const { t, pkg, q } = await translatedPackage();
+    for (const step of ["target", "cv", "letter"] as const) expect(t.preparation.approveStep(pkg.id, step)).toMatchObject({ approved: true });
+    t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3400");
+    // The form's own options are in English: Kris chooses one.
+    t.preparation.setScreeningAnswer(pkg.id, question(pkg, "Do you have the right").id, "Yes");
+
+    expect(t.preparation.approveStep(pkg.id, "answers")).toMatchObject({ approved: false, reason: "1 answer needs you: describe a security incident you handled" });
+
+    t.preparation.setScreeningAnswer(pkg.id, q.id, q.text);
+    expect(t.preparation.approveStep(pkg.id, "answers")).toMatchObject({ approved: true });
+    const approved = await t.preparation.approvePackage(pkg.id);
+    expect(approved.approved && approved.package.approved!.answers).toContainEqual({ question: q.question, answer: q.text });
+  });
+
+  it("can be saved back to the bank as the answer's Bulgarian version", async () => {
+    const { t, pkg, bankId, q } = await translatedPackage();
+    expect(q.save).toMatchObject({ offered: true });
+
+    const r = t.preparation.saveScreeningAnswerToBank(pkg.id, q.id);
+
+    expect(r).toMatchObject({ changed: true });
+    expect(t.preparation.answer(bankId)!.versions).toEqual({ en: "I ran the response to a phishing campaign against the claims team.", bg: q.text });
+    expect(question(r.package, "Describe a security incident").save).toMatchObject({ offered: false, savedTo: bankId });
+  });
+});

@@ -323,7 +323,7 @@ export interface ScreeningAnswerView {
   options: string[];
   limit: AnswerLimit;
   origin: ScreeningOrigin;
-  /** The origin as its chip says it: "Answer bank", "Answer bank · adapted", "New draft", "New · from your sources", "Needs you", "Translated · check it". */
+  /** The origin as its chip says it: "Answer bank", "Answer bank · adapted", "New draft", "New · from your sources", "Needs you", "Answer bank · translated". */
   label: string;
   text: string;
   words: number;
@@ -2040,7 +2040,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   }
 
   const originLabel = (a: ScreeningAnswer): string =>
-    a.origin === "bank" ? "Answer bank" : a.origin === "adapted" ? "Answer bank · adapted" : a.origin === "translated" ? "Translated · check it"
+    a.origin === "bank" ? "Answer bank" : a.origin === "adapted" ? "Answer bank · adapted" : a.origin === "translated" ? "Answer bank · translated"
       : a.origin === "needs-you" ? "Needs you" : a.heard ? "New · from your sources" : "New draft";
 
   function answersView(r: Row): ScreeningAnswersView | null {
@@ -2134,7 +2134,12 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     if (a.origin === "bank" || a.origin === "adapted" || a.heard) return refuse("This answer comes from your answer bank or your sources already.");
     if (a.savedTo) return refuse("It's in your answer bank already.");
     if (!a.text) return refuse("Answer it first.");
-    const saved = deps.answers.save(
+    // A translation of a bank answer goes back to that answer, as its version in this language.
+    const source = a.origin === "translated" && a.bank ? deps.answers.get(a.bank.answerId) : null;
+    const saved = source ? deps.answers.save(
+      { id: source.id, question: source.question, wordings: source.wordings, versions: { ...source.versions, [bankLanguage(r)]: a.text }, category: source.category, kind: source.kind, mode: source.mode, rule: source.rule },
+      { from: `${r.job.company} package`, jobId: r.jobId },
+    ) : deps.answers.save(
       { question: plainQuestion(a.question), versions: { [bankLanguage(r)]: a.text }, category: "screening", kind: a.type === "select" ? "choice" : "text" },
       { from: `${r.job.company} package`, jobId: r.jobId },
     );
