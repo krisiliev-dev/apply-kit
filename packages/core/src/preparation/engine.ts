@@ -4,6 +4,9 @@
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
+import { defaultSearchSettings, type SearchSettings } from "../search-settings.ts";
+import { defaultAnswers } from "./answer-defaults.ts";
+import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, type AnswerLanguage, type AnswerList, type AnswerMatch, type AnswerQuery, type AnswerOrigin, type PortalEditInput, type SaveAnswerResult } from "./answers.ts";
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
@@ -86,6 +89,38 @@ export interface PreparationEngine {
   piece(id: string): ProfilePiece | null;
   /** The master profile grouped by role (roles, then education, then pieces tied to neither), filtered. */
   listPieces(query?: PieceQuery): PieceList;
+
+  // ---------- Answer bank (Profile, and the contract Apply #40 reads) ----------
+
+  /**
+   * Adds an answer (no id) or saves an edit to one. Profile leaves `origin` out; Apply passes where a
+   * new answer came from (the job and the portal). A refused answer comes back with its problems.
+   */
+  saveAnswer(input: AnswerInput, origin?: AnswerOrigin): SaveAnswerResult;
+  /** The answer bank's table: filtered, searched and paged, with the filter counts and the portal edits waiting for Kris. */
+  listAnswers(query?: AnswerQuery): AnswerList;
+  /** Deletes an answer and its history; false if it was already gone. Approved packages keep their answers. */
+  deleteAnswer(id: string): boolean;
+  /** One answer, for editing; null once it's deleted. */
+  answer(id: string): Answer | null;
+  /**
+   * The bank's answer to a form's question, in a language: matched on the question or any of its
+   * wordings, with how confident the match is, or null when nothing matches well enough. Only a
+   * "fill" answer carries a value; "ask each time", "leave blank" and a missing language never do.
+   */
+  findAnswer(question: string, language: AnswerLanguage): AnswerMatch | null;
+  /** Counts a use of an answer (Apply filled it, or a package used it) and remembers when. */
+  recordAnswerUse(id: string): void;
+  /**
+   * Kris changed a filled answer in a portal: it waits in Profile as "keep new or old" with both
+   * versions shown. False when there's nothing to ask (no such answer, or the same text).
+   */
+  recordPortalEdit(id: string, edit: PortalEditInput): boolean;
+  /** Keep new: the portal's version replaces the bank's, which stays in the history. Keep old: nothing changes. */
+  resolvePortalEdit(id: string, keep: "keep-new" | "keep-old"): Answer | null;
+  /** What changed in an answer and where, newest first. */
+  answerHistory(id: string): AnswerChange[];
+
   /**
    * Prints a document from its fixed template, keeps it as the package's draft of that document,
    * and reads it back: page count, overflow and (for a CV) the ATS check come from the PDF itself.
@@ -147,6 +182,14 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const profile = createProfileStore(deps);
   const contact = createContactStore(deps);
   const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
+  const answers = createAnswerStore(deps);
+  /** The salary floor in Kris's search settings (the discovery engine keeps them in the same database). */
+  const salaryFloor = () => {
+    const stored = deps.db.prepare("SELECT value FROM search_settings WHERE id = 1").get();
+    return (stored ? (JSON.parse(String(stored.value)) as SearchSettings) : defaultSearchSettings).minMonthlySalaryEur || null;
+  };
+  const seedAnswers = () => answers.seed(defaultAnswers(contact.get(), salaryFloor()));
+  seedAnswers();
 
   async function draftDocument({ packageId, document, fileName: parts, keywords }: DraftRequest): Promise<DocumentDraft> {
     const fileName = documentFileName(document.kind, parts);
@@ -200,9 +243,26 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     deletePiece: (id) => profile.remove(id),
     piece: (id) => profile.get(id),
     listPieces: (query) => profile.list(query),
-    profileSummary: () => profile.summary(),
+    profileSummary() {
+      const s = profile.summary();
+      const needsYou = { ...s.needsYou, answerBank: answers.needsYou() };
+      return { ...s, needsYou, needsYouTotal: Object.values(needsYou).reduce((a, b) => a + b, 0) };
+    },
+    saveAnswer: (input, origin) => answers.save(input, origin),
+    answer: (id) => answers.get(id),
+    deleteAnswer: (id) => answers.remove(id),
+    listAnswers: (query) => answers.list(query),
+    findAnswer: (question, language) => answers.find(question, language),
+    recordAnswerUse: (id) => answers.recordUse(id),
+    recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
+    resolvePortalEdit: (id, keep) => answers.resolvePortalEdit(id, keep),
+    answerHistory: (id) => answers.history(id),
     contact: () => contact.get(),
-    saveContact: (details) => contact.save(details),
+    saveContact(details) {
+      const result = contact.save(details);
+      if (result.saved) seedAnswers();
+      return result;
+    },
     setPhoto: (photo) => contact.setPhoto(photo),
     removePhoto: () => contact.removePhoto(),
     async exportProfile() {

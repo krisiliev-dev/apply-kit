@@ -6,6 +6,7 @@ import type {
   CapturedPage, CoverageInput, DiscoveryEngine, DocumentKind, DocumentLanguage, FactAnswer, FeedSort, FeedView, Pairing, PassReason, PastedPosting,
   PreparationEngine, Scheduler,
 } from "@apply-kit/core";
+import { mountAnswerApi } from "./answers-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
@@ -341,6 +342,8 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
 
   // Profile: the master profile's pieces, contact details, section counts and export.
   if (preparation) mountProfileApi(app, preparation);
+  // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
+  if (preparation) mountAnswerApi(app, preparation);
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

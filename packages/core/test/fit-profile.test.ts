@@ -1,0 +1,143 @@
+import { describe, expect, it } from "vitest";
+import type { ExtractedRequirement, FeedJob, PieceInput } from "../src/index.ts";
+import { defaultSearchSettings } from "../src/index.ts";
+import { cannedFacts, fakeExtractor } from "./harness.ts";
+import { createTestPreparation } from "./preparation-harness.ts";
+
+// Fit from the master profile (ticket #60), at the engine seam: both engines on one database, a
+// fake extractor with canned facts and the fake writer. No live AI. Made-up person only: Mira
+// Petrova, with fictional employers.
+
+const quote = (q: string) => ({ quote: q, translation: null });
+const requirement = (text: string, kind: "required" | "preferred", category: ExtractedRequirement["category"]): ExtractedRequirement =>
+  ({ text, kind, category, source: quote(text), confidence: 0.95 });
+
+const postingText = "3+ years in security operations. Kubernetes. CISSP preferred. English, professional.";
+const securityEngineer = cannedFacts({
+  requirements: [
+    requirement("3+ years in security operations", "required", "experience"),
+    requirement("Kubernetes", "required", "skill"),
+    requirement("CISSP", "preferred", "certificate"),
+    requirement("English, professional", "required", "language"),
+  ],
+});
+
+/** Both engines with one Greenhouse job, read; nothing is hidden (dealbreakers are tested elsewhere). */
+async function withJob() {
+  const board = {
+    jobs: [{
+      id: 1, title: "Security Engineer", absolute_url: "https://example.test/jobs/1", company_name: "Example Co",
+      location: { name: "Sofia, Bulgaria" }, first_published: "2026-10-11T09:00:00Z", content: `&lt;p&gt;${postingText}&lt;/p&gt;`,
+    }],
+  };
+  const settings = { ...defaultSearchSettings, dealbreakers: { languagesNotSpoken: [], maxYearsRequired: null, salaryBelowMinimum: false, outsideLocations: false } };
+  const t = createTestPreparation({ fetch: async () => Response.json(board), extractor: fakeExtractor({ "Security Engineer": securityEngineer }) });
+  await t.discovery.saveSearchSettings(settings);
+  await t.discovery.addSource({ kind: "greenhouse", config: "example" });
+  await t.discovery.checkAll();
+  await t.discovery.readPending();
+  const save = (input: PieceInput) => {
+    const r = t.preparation.savePiece(input);
+    if (!r.saved) throw new Error(r.problems[0]!.message);
+    return r.piece.id;
+  };
+  const feedRow = async () => (await t.discovery.queryFeed({ view: "new" })).jobs[0]!;
+  return { ...t, save, feedRow };
+}
+
+/** Mira's profile: a current security role since 2023 and a SOC internship, and English at C1. */
+function addMira(save: (input: PieceInput) => string) {
+  const analyst = save({ kind: "role", text: "", entry: { title: "Junior Security Analyst", organisation: "Orbital Bank", city: "Sofia", start: "2023-07", end: null }, angles: ["security"] });
+  save({ kind: "role", text: "", entry: { title: "SOC Intern", organisation: "Varna Telecom", city: "Varna", start: "2022-06", end: "2022-09" }, angles: ["security"] });
+  save({ kind: "achievement", belongsTo: analyst, text: "Part of the response to phishing incidents.", tags: ["incident response"], angles: ["security"] });
+  const english = save({ kind: "skill", text: "English (C1)" });
+  return { analyst, english };
+}
+
+const statuses = (job: Pick<FeedJob, "requirements">) => Object.fromEntries(job.requirements.map((r) => [r.text, r.status]));
+
+describe("Fit from the master profile", () => {
+  it("marks each requirement met, gap or not held from the master profile", async () => {
+    const t = await withJob();
+    addMira(t.save);
+
+    const row = await t.feedRow();
+
+    expect(statuses(row)).toEqual({
+      "3+ years in security operations": "met",
+      "Kubernetes": "gap",
+      "CISSP": "not-held",
+      "English, professional": "met",
+    });
+    expect(row.fit.gaps).toEqual(["Kubernetes"]);
+  });
+
+  it("makes the requirements part of Fit count, with preferred items never as gaps", async () => {
+    const t = await withJob();
+    const before = (await t.feedRow()).fit;
+    addMira(t.save);
+
+    const fit = (await t.feedRow()).fit;
+
+    const part = fit.reasons.find((r) => r.factor === "requirements")!;
+    expect(before.reasons.find((r) => r.factor === "requirements")!.score).toBeNull();
+    expect(part.score).toBeCloseTo(2 / 3);
+    expect(part.text).toBe("2 of 4 met, 1 gap, 1 preferred not held");
+    expect(fit.why).toContain("2 of 4 met, 1 gap, 1 preferred not held");
+  });
+
+  it("names the evidence on the Job page: the roles behind the years, and the gap plainly", async () => {
+    const t = await withJob();
+    addMira(t.save);
+    const id = (await t.feedRow()).id;
+
+    const job = (await t.discovery.getJob(id))!;
+
+    const evidence = Object.fromEntries(job.requirements.map((r) => [r.text, r.evidence]));
+    expect(evidence["3+ years in security operations"]).toEqual({
+      pieces: [expect.objectContaining({ label: "Orbital Bank, Junior Security Analyst 2023–present" }), expect.objectContaining({ label: "Varna Telecom, SOC Intern 2022" })],
+      note: "3 years 8 months from your role dates",
+    });
+    expect(evidence["Kubernetes"]).toEqual({ pieces: [], note: "No evidence in your master profile" });
+    expect(evidence["CISSP"]).toEqual({ pieces: [], note: "Not held: left out, not claimed. Preferred items never count as gaps" });
+  });
+
+  it("updates the affected job's statuses and Fit on the next query after a piece is edited, added or deleted", async () => {
+    const t = await withJob();
+    const { english } = addMira(t.save);
+    const first = await t.feedRow();
+
+    t.save({ id: english, kind: "skill", text: "English (B1)" });
+    const kubernetes = t.save({ kind: "skill", text: "Kubernetes", tags: ["k8s"] });
+    const second = await t.feedRow();
+    t.preparation.deletePiece(kubernetes);
+    const third = await t.feedRow();
+
+    expect(statuses(second)).toMatchObject({ "English, professional": "partly", "Kubernetes": "met" });
+    expect(second.fit.value).toBeGreaterThan(first.fit.value);
+    expect(statuses(third)).toMatchObject({ "Kubernetes": "gap" });
+    expect(third.fit.gaps).toEqual(["Kubernetes"]);
+  });
+
+  it("gives the Feed row exactly the statuses the Job page shows", async () => {
+    const t = await withJob();
+    addMira(t.save);
+    const row = await t.feedRow();
+
+    const job = (await t.discovery.getJob(row.id))!;
+
+    expect(statuses(row)).toEqual(statuses(job));
+    expect(row.fit).toEqual(job.fit);
+  });
+
+  it("leaves statuses and Fit as they were while the profile has no confirmed piece", async () => {
+    const t = await withJob();
+    const before = await t.feedRow();
+    t.preparation.savePiece({ kind: "skill", text: "Kubernetes" }, { from: "CV-2025.pdf, page 1", quote: "Kubernetes", status: "unconfirmed" });
+
+    const after = await t.feedRow();
+
+    expect(Object.values(statuses(after))).toEqual(["unknown", "unknown", "unknown", "unknown"]);
+    expect(after.fit).toEqual(before.fit);
+  });
+});
