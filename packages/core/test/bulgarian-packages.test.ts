@@ -74,3 +74,82 @@ describe("a Bulgarian posting", () => {
     ]);
   });
 });
+
+describe("switching the package's language", () => {
+  it("states what rewriting costs before Kris switches", async () => {
+    const t = mira();
+
+    const pkg = await started(t);
+
+    // The fake writer's estimate: the CV, the letter and three drafted answers at $0.002 each.
+    expect(pkg.languageOptions).toEqual([
+      { language: "en", current: true, fromPosting: true, costUsd: 0, kept: null },
+      { language: "bg", current: false, fromPosting: false, costUsd: 0.01, kept: null },
+    ]);
+  });
+
+  it("rewrites the CV, the letter and the answers together in the new language", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    const switched = await t.preparation.setPackageLanguage(pkg.id, "bg");
+
+    expect(switched).toMatchObject({ changed: true, package: { language: "bg", chip: { label: "Preparing package" } } });
+    const bg = (await t.preparation.packageSettled(pkg.id))!;
+    const cv = await readBack((await t.preparation.packageCv(pkg.id))!.pdf);
+    expect(cv).toContain("Проведох реакцията при фишинг кампания срещу екипа по искове");
+    expect(cv.filter((l) => englishTitles.includes(l) || englishDates.test(l))).toEqual([]);
+    expect(bg.letter).toMatchObject({ language: "bg", greeting: "Здравейте,", draft: 2, drafts: 2 });
+    expect(question(bg, "Describe a security incident")).toMatchObject({ origin: "new", text: expect.stringMatching(/^В Northwind Bank проведох реакцията/) });
+    const calls = (t.writer as unknown as { calls: { task: string; input: { language?: string } }[] }).calls;
+    expect(calls.filter((c) => c.task === "tailor-cv" || c.task === "write-letter").map((c) => [c.task, c.input.language])).toEqual([
+      ["tailor-cv", "en"], ["write-letter", "en"], ["tailor-cv", "bg"], ["write-letter", "bg"],
+    ]);
+  });
+
+  it("keeps the earlier drafts and decisions: switching back brings them back without the model", async () => {
+    const t = mira();
+    const pkg = await started(t);
+    const edited = `${pkg.letter!.text.replace("Kind regards,", "Best,")}`;
+    await t.preparation.editLetter(pkg.id, 1, edited);
+    t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3400");
+    await t.preparation.setPackageLanguage(pkg.id, "bg");
+    const bg = (await t.preparation.packageSettled(pkg.id))!;
+    expect(bg.languageOptions.find((o) => o.language === "en")).toMatchObject({ costUsd: 0, kept: { letterDrafts: 1 } });
+    const calls = (t.writer as unknown as { calls: unknown[] }).calls.length;
+
+    const back = await t.preparation.setPackageLanguage(pkg.id, "en");
+
+    expect((t.writer as unknown as { calls: unknown[] }).calls).toHaveLength(calls);
+    expect(back.package).toMatchObject({ language: "en", generating: false, letter: { language: "en", draft: 1, drafts: 2, closing: "Best," } });
+    expect(question(back.package, "What are your salary")).toMatchObject({ text: "3400", yours: true });
+    expect(await readBack((await t.preparation.packageCv(pkg.id))!.pdf)).toContain("Experience");
+    // The Bulgarian draft is still a page away.
+    expect((await t.preparation.showLetterDraft(pkg.id, 2)).package.letter).toMatchObject({ language: "bg", greeting: "Здравейте," });
+  });
+
+  it("never approves a letter draft in the other language", async () => {
+    const t = mira();
+    const pkg = await started(t);
+    await t.preparation.setPackageLanguage(pkg.id, "bg");
+    await t.preparation.packageSettled(pkg.id);
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+
+    await t.preparation.showLetterDraft(pkg.id, 1);
+
+    expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({
+      approved: false, reason: "Draft 1 is in English and the package is in Bulgarian. Show a Bulgarian draft, or ask for a new one.",
+    });
+  });
+
+  it("can't switch while parts are being written", async () => {
+    const t = mira();
+    const r = t.preparation.startPackage(kestrelJob());
+    if (!r.started) throw new Error(r.reason);
+
+    expect(await t.preparation.setPackageLanguage(r.package.id, "bg")).toMatchObject({
+      changed: false, reason: "The package is still being written. Switch the language once it's done, or stop generating first.",
+    });
+  });
+});

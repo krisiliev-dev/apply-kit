@@ -555,6 +555,17 @@ const migrations: string[] = [
    ALTER TABLE package ADD COLUMN approved_version INTEGER;
    ALTER TABLE package ADD COLUMN ats_accepted TEXT NOT NULL DEFAULT '[]';
    ALTER TABLE package ADD COLUMN contact_fix TEXT;`,
+  // #68: switching a package's language keeps the drafts and decisions it had in the language it
+  // leaves (the CV version, the screening answers, the letter draft shown and the parts' states, as
+  // JSON), so switching back brings them back without the model. Each letter draft knows its language.
+  `CREATE TABLE package_language (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     language TEXT NOT NULL,
+     state TEXT NOT NULL,
+     kept_at TEXT NOT NULL,
+     PRIMARY KEY (package_id, language)
+   );
+   ALTER TABLE package_letter ADD COLUMN language TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

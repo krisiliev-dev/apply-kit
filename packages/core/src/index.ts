@@ -98,7 +98,7 @@ export type { SetupStep, SetupProgress, DraftFilter, DraftCounts, DraftGroup, Dr
 export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleResult, AngleProblem } from "./preparation/angles.ts";
 export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts";
 export type {
-  PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
+  PackageJob, PackageView, LanguageOption, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
   TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult, CvChangeView, CvFit, CvVersionView, FlagChoice, LearnedPiece,
   LetterView, LetterCheckView, LetterFileView, AtsFix,
 } from "./preparation/packages.ts";
