@@ -1,12 +1,12 @@
 // Follow-up drafts in the user's voice (Track #32), at the tracker's public interface: a draft comes
 // from the Track assistant (a fake answering with recorded drafts) within the shared monthly AI budget,
 // with the posting's requirements, Master profile evidence, voice excerpts and the posting's language;
-// numbers only from the Master profile, with their origin; the outline when the budget is out; edits
-// kept as voice samples. Fake clock (Mon 12 Oct 2026, 10:30 in Sofia), in-memory database, fixture
+// numbers only from the Master profile, with their origin; the outline when the budget is out. The
+// voice is Prepare's (track-with-prepare.test.ts). Fake clock (Mon 12 Oct 2026, 10:30 in Sofia), in-memory database, fixture
 // HTTP (a synthetic Greenhouse board), no live AI.
 import { describe, expect, it } from "vitest";
 import {
-  createTracker, type DraftInput, type MasterProfile, type ProfileEvidence, type TrackAssistant, type VoiceSamples,
+  createTracker, type DraftInput, type MasterProfile, type ProfileEvidence, type TrackAssistant,
 } from "../src/index.ts";
 import { cannedFacts, createTestEngine, fakeExtractor, fixtureFetch } from "./harness.ts";
 
@@ -53,12 +53,12 @@ function fakeAssistant({ costUsd = 0.002, body = nudgeBody("Your posting's focus
   return { assistant, inputs };
 }
 
-function setup({ cap = 10, ai = fakeAssistant(), withProfile = true, voice }: { cap?: number; ai?: ReturnType<typeof fakeAssistant>; withProfile?: boolean; voice?: VoiceSamples } = {}) {
+function setup({ cap = 10, ai = fakeAssistant(), withProfile = true }: { cap?: number; ai?: ReturnType<typeof fakeAssistant>; withProfile?: boolean } = {}) {
   const extractor = fakeExtractor({ "Security Engineer": securityEngineer, "SOC Analyst L2": socAnalyst });
   const t = createTestEngine({ fetch: fixtureFetch({ [kestrelBoard]: "greenhouse-kestrel.json" }), extractor, aiMonthlyCapUsd: cap });
   const tracker = createTracker({
     db: t.deps.db, clock: t.clock, discovery: t.engine, assistant: ai.assistant, aiMonthlyCapUsd: cap,
-    profile: withProfile ? profile : undefined, voice,
+    profile: withProfile ? profile : undefined,
   });
   /** Applies to a Kestrel job (read first), 7 days ago, and returns its due nudge's id. */
   let checked = false;
@@ -193,33 +193,3 @@ describe("the AI budget", () => {
   });
 });
 
-describe("the user's voice", () => {
-  it("edits to a draft are kept as voice samples and sent, as short excerpts, with the next draft; a draft left as it came isn't", async () => {
-    const prepare: VoiceSamples = { excerpts: async () => ["A past cover letter of mine, in my words."] };
-    const { tracker, ai, applyTo } = setup({ voice: prepare });
-    const first = await applyTo("Security Engineer");
-    const fu = (await tracker.followUp(first.followUpId))!;
-    await tracker.saveFollowUpText(first.followUpId, fu.text.replace("I'm still keen on it", "it's still the role I want most"));
-    const second = await applyTo("SOC Analyst L2");
-    ai.inputs.length = 0;
-
-    await tracker.followUp(second.followUpId);
-
-    expect(ai.inputs[0]!.voice).toEqual([
-      expect.stringContaining("it's still the role I want most"),
-      "A past cover letter of mine, in my words.",
-    ]);
-  });
-
-  it("a draft saved unchanged teaches nothing", async () => {
-    const { tracker, ai, applyTo } = setup();
-    const first = await applyTo("Security Engineer");
-    const fu = (await tracker.followUp(first.followUpId))!;
-    await tracker.saveFollowUpText(first.followUpId, fu.text);
-    const second = await applyTo("SOC Analyst L2");
-
-    await tracker.followUp(second.followUpId);
-
-    expect(ai.inputs.at(-1)!.voice).toEqual([]);
-  });
-});

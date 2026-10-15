@@ -6,10 +6,11 @@
 // Its public interface below is the testing seam (test/tracker.test.ts).
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
+import type { VoiceForDrafts } from "./preparation/engine.ts";
 import { angleLabel, type Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
-  type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
+  type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile,
 } from "./follow-ups.ts";
 import {
   defaultTimeZone, interviewFormats, interviewIcs, invitedInterviewSchema, isLocalTime, isTimeZone,
@@ -765,8 +766,11 @@ export interface TrackerDeps {
   ownAddresses?: string[];
   /** The Master profile (Prepare's): evidence for drafts, true stories for the prep sheet, and where stories added there go. */
   profile?: MasterProfile;
-  /** The user's past writing (Prepare's voice samples), beside the follow-up edits Track keeps itself. */
-  voice?: VoiceSamples;
+  /**
+   * Prepare's voice: the rules and excerpts a follow-up draft is sent, and what the user changed in a
+   * draft before marking it sent, recorded as evidence to learn the voice from.
+   */
+  voice?: VoiceForDrafts;
 }
 
 const statusLabel: Record<Status, string> = {
@@ -1811,7 +1815,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         stage: closing ? stage : kind === "nudge" ? (stage === "screening" ? "screening" : "applied") : "interviewing",
         daysQuiet: closing ? 0 : daysBetween(f.anchorOn, today()),
         requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
-        notes, evidence: [], voice: [],
+        notes, evidence: [], voice: [], voiceRules: [],
         language: job?.language ?? str(row(application.id)?.language) ?? (/[Ѐ-ӿ]/.test(application.title) ? "bg" : "en"),
         words: draftWords[kind], banned: bannedPhrases,
         ...(kind === "thank-you" ? { topic: f.topic.trim(), people: iv?.people ?? [] } : kind === "check-in" ? { people: iv?.people ?? [] } : {}),
@@ -1878,7 +1882,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const input: DraftInput = {
       ...base,
       evidence: profile ? await profile.evidence({ requirements: base.requirements, language: base.language }).catch(() => []) : [],
-      voice: await voiceExcerpts(base.language, followUpId),
+      ...voiceFor(base.language),
     };
     const estimate = assistant.estimateDraftUsd(input);
     if (spentThisMonth() + estimate > cap) return { noDraft: budgetOut(cap) };
@@ -1909,29 +1913,37 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return { reason: "budget-out", capUsd, ranOutOn: last ? sofiaDay(new Date(String(last))) : null, resetsOn };
   }
 
-  /** Short excerpts of the user's own writing: their latest follow-ups first (the posting's language first), then Prepare's samples. */
-  async function voiceExcerpts(language: string, exceptFollowUpId: string): Promise<string[]> {
-    const own = db.prepare("SELECT text, language FROM follow_up_voice WHERE follow_up_id != ? ORDER BY saved_at DESC LIMIT 20").all(exceptFollowUpId)
-      .sort((a, b) => Number(b.language === language) - Number(a.language === language))
-      .slice(0, 3).map((v) => excerpt(String(v.text)));
-    const more = voice ? await voice.excerpts({ language, limit: 3 }).catch(() => []) : [];
-    return [...own, ...more.map((t) => excerpt(t))].slice(0, 5);
+  /** Prepare's voice languages; a follow-up in another language is drafted without the voice. */
+  const voiceLanguage = (language: string): "en" | "bg" | null => (language === "en" || language === "bg" ? language : null);
+
+  /** What a draft is sent to sound like the user: Prepare's voice rules and excerpts in its language (on record there as sent). */
+  function voiceFor(language: string): { voice: string[]; voiceRules: string[] } {
+    const lang = voiceLanguage(language);
+    if (!voice || !lang) return { voice: [], voiceRules: [] };
+    const context = voice.voiceContext({ language: lang, purpose: "follow-up" });
+    return { voice: context.excerpts.map((e) => e.text), voiceRules: context.rules.map((r) => r.text) };
   }
 
   async function saveFollowUpText(followUpId: string, text: string) {
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     if (!r || !row(String(r.application_id))) throw new TrackerError("not-found", "There's no such follow-up.");
     db.prepare("UPDATE follow_up SET text = ?, text_saved_at = ? WHERE id = ?").run(text, now(), followUpId);
-    // What the user wrote or changed teaches their voice (kept locally); the draft as it came doesn't.
-    if (r.kind !== "offer-note") {
-      const own = text.trim() && text.trim() !== String(r.draft_text ?? "").trim();
-      if (own) {
-        db.prepare(`INSERT INTO follow_up_voice (follow_up_id, text, language, saved_at) VALUES (?, ?, ?, ?)
-          ON CONFLICT (follow_up_id) DO UPDATE SET text = excluded.text, language = excluded.language, saved_at = excluded.saved_at`)
-          .run(followUpId, text.trim(), str(r.draft_language) ?? (/[Ѐ-ӿ]/.test(text) ? "bg" : "en"), now());
-      } else db.prepare("DELETE FROM follow_up_voice WHERE follow_up_id = ?").run(followUpId);
-    }
     return { followUp: followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!) };
+  }
+
+  /**
+   * Marked sent: what the user sent, changed from the draft (or written themselves), goes to Prepare's
+   * voice once as an edit to learn from. A draft sent as it came, or a note to self, teaches nothing.
+   */
+  function recordSentVoice(followUpId: string) {
+    const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
+    if (!voice || !r || r.kind === "offer-note" || r.voice_edit_at != null) return;
+    const after = String(r.text ?? "").trim();
+    const before = String(r.draft_text ?? "").trim();
+    const lang = voiceLanguage(str(r.draft_language) ?? (/[Ѐ-ӿ]/.test(after) ? "bg" : "en"));
+    if (!after || after === before || !lang) return;
+    const recorded = voice.recordVoiceEdit({ purpose: "follow-up", language: lang, before, after, source: `application:${String(r.application_id)}` });
+    if (recorded) db.prepare("UPDATE follow_up SET voice_edit_at = ? WHERE id = ?").run(now(), followUpId);
   }
 
   // ---------- Interviews and the prep sheet (#33) ----------
@@ -2620,7 +2632,11 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     needsYou,
     followUp: followUpDraft,
     saveFollowUpText,
-    markFollowUpSent: async (id) => followUpEvent(id, "follow-up-sent", (f) => followUpWords[f.kind].sent),
+    markFollowUpSent: async (id) => {
+      const sent = followUpEvent(id, "follow-up-sent", (f) => followUpWords[f.kind].sent);
+      recordSentVoice(id);
+      return sent;
+    },
     skipFollowUp: async (id) => followUpEvent(id, "follow-up-skipped", (f) => followUpWords[f.kind].skipped),
     snoozeFollowUp: async (id) => {
       const to = addDays(today(), followUpSettings().snoozeDays);
@@ -2673,12 +2689,6 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 }
 
 /** The calendar day in Sofia (YYYY-MM-DD). */
-/** A short excerpt of the user's writing, as sent with a draft: the full sample stays on the laptop. */
-function excerpt(text: string, max = 400): string {
-  const t = text.replace(/\s+/g, " ").trim();
-  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
-}
-
 function sofiaDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Sofia", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }

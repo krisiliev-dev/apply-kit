@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
-import { createAiBudget, createEngine, createPairing, createPreparationEngine, createScheduler, createTracker } from "@apply-kit/core";
+import { createAiBudget, createEngine, createPairing, createPreparationEngine, createScheduler, createTracker, trackPortsFrom } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
 import { createImapMailReader, readMailSettings } from "./mail.ts";
@@ -120,6 +120,8 @@ tracker = createTracker({
   // Mail from the job mailbox's own address, or from the addresses you send from, is never an
   // employer's; a copy of yours BCC'd there marks the follow-up it answers as sent.
   ownAddresses: [...(mailSettings ? [mailSettings.address] : []), ...config.myAddresses],
+  // Prepare's master profile (evidence for drafts, stories for the prep sheet) and voice, through PrepareForTrack.
+  ...trackPortsFrom(preparation),
 });
 
 const app = createServer({ engine, preparation, tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });

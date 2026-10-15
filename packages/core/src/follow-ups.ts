@@ -212,14 +212,6 @@ export interface MasterProfile {
   addUnconfirmedPiece(piece: { text: string; source: string }): Promise<{ id: string }>;
 }
 
-/**
- * The user's past writing kept on the laptop (Prepare's voice samples: past cover letters). An
- * assumed contract with Prepare; Track adds the user's own follow-up edits to what it gets here.
- * Only short excerpts are ever sent with a draft (PRODUCT.md "Voice").
- */
-export interface VoiceSamples {
-  excerpts(input: { language: string; limit: number }): Promise<string[]>;
-}
 
 /** What the Track assistant is given to draft one message. */
 export interface DraftInput {
@@ -239,8 +231,10 @@ export interface DraftInput {
   notes: string[];
   /** Master profile pieces the draft may draw on; the only source of numbers about the user. */
   evidence: ProfileEvidence[];
-  /** Short excerpts of the user's own writing, to sound like them. */
+  /** Short excerpts of the user's own writing, to sound like them (Prepare's voice samples). */
   voice: string[];
+  /** How the user writes, as Prepare's voice learned it ("Short declarative sentences"). */
+  voiceRules: string[];
   /** ISO 639-1: the posting's language ("bg" for a Bulgarian posting). */
   language: string;
   words: { min: number; max: number };

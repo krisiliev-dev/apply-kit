@@ -698,19 +698,14 @@ const migrations: string[] = [
      since TEXT
    );`,
   // Track #32: a follow-up's draft from the Track assistant (kept once made, with the Master profile
-  // origin of each number in it), and the user's own writing kept as voice samples (local only): the
-  // latest text of each follow-up they edited or wrote themselves.
+  // origin of each number in it), and when what the user sent went to Prepare's voice as an edit
+  // (once per follow-up; the voice itself is Prepare's, #59).
   `ALTER TABLE follow_up ADD COLUMN draft_text TEXT;
    ALTER TABLE follow_up ADD COLUMN draft_language TEXT;
    ALTER TABLE follow_up ADD COLUMN draft_numbers TEXT;
    ALTER TABLE follow_up ADD COLUMN draft_model TEXT;
    ALTER TABLE follow_up ADD COLUMN drafted_at TEXT;
-   CREATE TABLE follow_up_voice (
-     follow_up_id TEXT PRIMARY KEY REFERENCES follow_up(id),
-     text TEXT NOT NULL,
-     language TEXT,
-     saved_at TEXT NOT NULL
-   );`,
+   ALTER TABLE follow_up ADD COLUMN voice_edit_at TEXT;`,
   // Track #33: interviews (local time plus IANA time zone, with the instants beside them; the invite
   // email they were read from until edited), the details an invite's classification read, thank-you
   // notes and check-ins tied to an interview (a follow-up's `interview_id`; the topic the user gives),

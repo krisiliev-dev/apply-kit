@@ -78,11 +78,11 @@ const draftInput: DraftInput = {
   followUpId: "fu-secret-id", kind: "nudge", company: "Kestrel Payments", title: "Security Engineer", since: "Mon 5 Oct", stage: "applied",
   daysQuiet: 7, requirements: ["Threat modelling for payment features"], notes: [], language: "en", words: { min: 70, max: 110 }, banned: bannedPhrases,
   evidence: [{ text: "Ran threat-modelling sessions; 40 tracked fixes", origin: "Velora · Security Engineer" }],
-  voice: ["I keep things short and plain."],
+  voice: ["I keep things short and plain."], voiceRules: ["Opens with the company's problem"],
 };
 
 describe("OpenRouter Track assistant: drafts", () => {
-  it("drafts on pinned non-China hosts with the requirements, evidence, voice excerpts and banned phrases, but not the follow-up's id", async () => {
+  it("drafts on pinned non-China hosts with the requirements, evidence, voice excerpts and rules, and banned phrases, but not the follow-up's id", async () => {
     const api = fakeOpenRouter(JSON.stringify({ body: "A short nudge." }));
     const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
 
@@ -93,7 +93,7 @@ describe("OpenRouter Track assistant: drafts", () => {
     const body = api.requests[0]!;
     expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: false, ignore: CHINA_HOSTED_PROVIDERS });
     const sent = JSON.stringify(body.messages);
-    for (const part of ["Threat modelling for payment features", "40 tracked fixes", "I keep things short and plain.", "as per my previous email", "70-110 words"]) {
+    for (const part of ["Threat modelling for payment features", "40 tracked fixes", "I keep things short and plain.", "Opens with the company's problem", "as per my previous email", "70-110 words"]) {
       expect(sent).toContain(part);
     }
     expect(sent).not.toContain("fu-secret-id");

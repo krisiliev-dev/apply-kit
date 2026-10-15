@@ -54,6 +54,7 @@ const draftInstructions = `You draft a short email for a job seeker (a nudge aft
 - Never use these phrases: {banned}.
 - Write in the language given (ISO 639-1; "bg" is Bulgarian).
 - Match the job seeker's voice from the excerpts of their own writing, if any: their sentence length, word choice, warmth.
+  Follow the rules given for how they write.
 - Length: {min}-{max} words.`;
 
 export interface TrackAssistantOptions {
@@ -93,6 +94,7 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
     `The job seeker's notes:\n${input.notes.map((n) => `- ${n}`).join("\n") || "- (none)"}`,
     `Master profile pieces:\n${input.evidence.map((e) => `- ${e.text}`).join("\n") || "- (none: use no numbers about the job seeker)"}`,
     `Excerpts of the job seeker's own writing:\n${input.voice.map((v) => `> ${v}`).join("\n") || "> (none yet)"}`,
+    `How the job seeker writes:\n${input.voiceRules.map((r) => `- ${r}`).join("\n") || "- (nothing learned yet)"}`,
   ].join("\n\n");
   const DRAFT_OUTPUT_TOKENS = 500;
   const prepPromptFor = (input: PrepSheetInput) => JSON.stringify({

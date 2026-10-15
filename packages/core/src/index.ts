@@ -136,7 +136,7 @@ export type {
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
 export { trackPortsFrom } from "./track-prepare.ts";
 export type {
-  DraftInput, DraftKind, DraftOutput, FollowUp, FollowUpDraftText, FollowUpKind, FollowUpSettings, MasterProfile, ProfileEvidence, VoiceSamples,
+  DraftInput, DraftKind, DraftOutput, FollowUp, FollowUpDraftText, FollowUpKind, FollowUpSettings, MasterProfile, ProfileEvidence,
 } from "./follow-ups.ts";
 export { interviewFormats, invitedInterviewSchema, prepSheetDraftSchema, zonedToInstant, instantToLocal, isTimeZone } from "./interviews.ts";
 export type {
