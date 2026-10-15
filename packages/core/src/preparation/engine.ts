@@ -394,6 +394,12 @@ export interface PreparationEngine {
    */
   fixAts(id: string, fix: AtsFix): Promise<ChangeResult>;
   /**
+   * "Redraft these lines", for "Your profile changed since this draft": the CV's lines that use a
+   * piece changed in Profile take the piece's new wording (no model call), the CV is printed again
+   * and its step reopens. Refused for an approved package, which never changes.
+   */
+  redraftChangedLines(id: string): Promise<ChangeResult>;
+  /**
    * A frozen file of an approved version (the one approved now by default), exactly as approved:
    * its name, SHA-256, size, where it is (and its copy in the Packages folder) and its bytes. Null
    * when there's no such approved version or file. Never a draft.
@@ -561,6 +567,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     draftAnswer: (id, request) => packages.draftAnswer(id, request),
     approvePackage: (id, options) => packages.approvePackage(id, options),
     fixAts: (id, fix) => packages.fixAts(id, fix),
+    redraftChangedLines: (id) => packages.redraftChangedLines(id),
     packageFile: (id, which, version) => packages.frozenFile(id, which, version),
     packageForApply: (query) => packages.forApply(query),
     approvedPackages: () => packages.approvedList(),

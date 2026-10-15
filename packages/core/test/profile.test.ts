@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { approved, mira as miraWithPackage } from "./package-fixtures.ts";
 import { createTestPreparation, memoryFileStore } from "./preparation-harness.ts";
 
 // The master profile through the preparation engine (ticket #53). Made-up person only: Mira Petrova.
@@ -189,8 +191,20 @@ describe("deleting a piece", () => {
     ]);
   });
 
-  // Packages arrive with a later ticket; then this asserts that an approved package's files keep their SHA-256.
-  it.todo("never changes a frozen package file when a piece it used is edited or deleted");
+  it("never changes a frozen package file when a piece it used is edited or deleted", async () => {
+    const t = miraWithPackage();
+    const pkg = await approved(t);
+    const frozen = pkg.approved!.cv.file;
+    const phishing = t.preparation.piece(t.ids.phishing!)!;
+
+    t.preparation.savePiece({ id: phishing.id, kind: "achievement", text: "Ran the response to a phishing campaign against two teams.", belongsTo: phishing.belongsTo, tags: phishing.tags, angles: phishing.angles });
+    t.preparation.deletePiece(t.ids.wazuh!);
+
+    const file = await t.preparation.packageFile(pkg.id, "cv");
+    expect(file).toMatchObject({ sha256: frozen.sha256, size: frozen.size });
+    expect(createHash("sha256").update(file!.bytes).digest("hex")).toBe(frozen.sha256);
+    expect(t.preparation.package(pkg.id)!.approved).toEqual(pkg.approved);
+  });
 });
 
 describe("what Profile needs from Kris", () => {

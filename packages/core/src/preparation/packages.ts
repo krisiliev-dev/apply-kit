@@ -212,6 +212,12 @@ export interface CvVersionView {
   education: CvLineView[];
   evidence: EvidenceRow[];
   changes: CvChangeView[];
+  /**
+   * "Your profile changed since this draft": pieces this unapproved CV uses that changed (or were
+   * deleted) in Profile since it was written, and its lines that use them. Null when none did, and
+   * always for an approved package, which never changes.
+   */
+  profileChanged: { pieces: PieceLink[]; lines: string[] } | null;
   /** Every flag, in the order of the requirements they sit inside; decided ones stay with their choice. */
   flags: CvFlagView[];
   /** The decisions made so far, in words: for the approved package's summary and the later steps. */
@@ -500,6 +506,8 @@ export interface PackageStore {
   saveAnswerToBank(id: string, questionId: string): ChangeResult;
   /** The drafter, for Apply's needs-you questions: honesty-checked, citing pieces, within the limit and the monthly cap. */
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
+  /** "Redraft these lines": the lines using pieces changed in Profile take the pieces' new wording; the CV is printed again. */
+  redraftChangedLines(id: string): Promise<ChangeResult>;
   /** The ATS check's fix: the missing contact facts, saved to the master profile or used in this package only; the CV is printed again. */
   fixAts(id: string, fix: AtsFix): Promise<ChangeResult>;
   /** Approves the package (step 5's Approve) and freezes its files as the next version. */
@@ -940,6 +948,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (m?.status === "gap") flag({ kind: "gap", requirement: i, place: null, pieceIds: [], piece: null, draft: null, honest: null });
     });
     const state: CvVersionState = {
+      seen: seenNow(),
       changes: deriveChanges(base, validated, byId(), () => crypto.randomUUID()),
       keepTwoPages: false,
       evidence: validated.evidence,
@@ -949,6 +958,41 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       flags,
     };
     db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
+  }
+
+  /** What a piece says, as far as a CV line can tell: its words and its facts. */
+  const said = (p: ProfilePiece) => JSON.stringify([p.text, p.entry]);
+  const seenNow = () => Object.fromEntries(deps.pieces().map((p) => [p.id, said(p)]));
+
+  /** The lines of the CV as planned, each with the pieces it uses. */
+  function planLines(r: Row): { text: string; pieceIds: string[] }[] {
+    const plan = planOf(r);
+    const pieces = byId();
+    return [
+      ...(plan.summary ? [{ text: plan.summary.text, pieceIds: plan.summary.pieceIds }] : []),
+      ...plan.roles.flatMap((role) => {
+        const entry = pieces.get(role.roleId)?.entry;
+        return [...(entry ? [{ text: entryLabel(entry), pieceIds: [role.roleId] }] : []), ...role.bullets.map((b) => ({ text: b.text, pieceIds: b.pieceIds }))];
+      }),
+      ...plan.skills.map((sid) => ({ text: plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "", pieceIds: [sid] })),
+      ...plan.education.map((eid) => { const e = pieces.get(eid)?.entry; return { text: e ? `${e.title} · ${e.organisation}` : "", pieceIds: [eid] }; }),
+    ].filter((l) => l.text);
+  }
+
+  /** Pieces the draft CV uses that changed since it was written, and the lines that use them; null when none (or once approved). */
+  function profileChangedOf(r: Row): { ids: string[]; pieces: PieceLink[]; lines: string[] } | null {
+    const seen = r.cvVersion?.seen;
+    if (!seen || r.approvedVersion !== null) return null;
+    const now = byId();
+    const lines = planLines(r);
+    const used = new Set([...lines.flatMap((l) => l.pieceIds), ...(r.cvVersion!.changes.flatMap((c) => ("line" in c ? c.line.pieceIds : "bullet" in c ? c.bullet.pieceIds : [])))]);
+    const ids = [...used].filter((pid) => seen[pid] !== undefined && (!now.has(pid) || said(now.get(pid)!) !== seen[pid]));
+    if (!ids.length) return null;
+    return {
+      ids,
+      pieces: ids.map((pid) => (now.has(pid) ? evidenceLabel(now.get(pid)!) : { id: pid, label: "A piece you deleted" })),
+      lines: lines.filter((l) => l.pieceIds.some((pid) => ids.includes(pid))).map((l) => l.text),
+    };
   }
 
   const saveVersion = (id: string, state: CvVersionState) => db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
@@ -1010,6 +1054,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       }),
       evidence,
       changes: state.changes.map(({ id, origin, flagId, label, was, is, detail, why, undone }) => ({ id, origin, flagId: flagId ?? null, label, was, is, detail, why, undone })),
+      profileChanged: (() => { const c = profileChangedOf(r); return c && { pieces: c.pieces, lines: c.lines }; })(),
       flags: flagsOf(r),
       decisions: decisionsOf(state.flags ?? [], (f) => flagView(f, requirementText(r, f)).title),
       honesty: honestyChecks(state, evidence),
@@ -1967,6 +2012,20 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
 
   const fixAsk: Record<AtsFixField, string> = { phone: "Give your phone number, with the country code.", city: "Give the city you live in.", country: "Give the country you live in." };
 
+  async function redraftChangedLines(id: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
+    if (r.approvedVersion !== null) return refuse("This package is approved: what it sends stays as you approved it.");
+    const changed = profileChangedOf(r);
+    if (!changed || !r.cvVersion) return refuse("Nothing in your profile changed since this CV was written.");
+    // The tailoring's wording of a changed piece gives way to the piece as it is now; Kris's own decisions stay.
+    const touches = (c: CvChange) => !c.flagId && ("line" in c ? c.line.pieceIds : "bullet" in c ? c.bullet.pieceIds : []).some((pid) => changed.ids.includes(pid));
+    saveVersion(id, { ...r.cvVersion, changes: r.cvVersion.changes.filter((c) => !touches(c)), seen: seenNow() });
+    reopenFrom(r, "cv");
+    await renderCv(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
   async function fixAts(id: string, fix: AtsFix): Promise<ChangeResult> {
     const r = mustGet(id);
     const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
@@ -2237,6 +2296,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     draftAnswer,
     approvePackage,
     fixAts,
+    redraftChangedLines,
     forApply(query) {
       const r = "jobId" in query ? forJob(query.jobId) : row(query.packageId);
       if (!r) return { kind: "none" };

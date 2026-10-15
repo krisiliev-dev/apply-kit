@@ -73,6 +73,11 @@ export interface CvVersionState {
   heldBack: number;
   /** Absent in CV versions written before flags (#64). */
   flags?: CvFlag[];
+  /**
+   * What each piece said when the CV was written (or its lines redrafted), by piece id, so a later
+   * profile change to a piece it uses shows (#67). Absent in CV versions written before that.
+   */
+  seen?: Record<string, string>;
 }
 
 // ---------------------------------------------------------------- flags
