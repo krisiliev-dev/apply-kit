@@ -115,7 +115,7 @@ describe("starting a package", () => {
     expect(printed).toContain("Wrote 30 detection rules that cut false alerts by a quarter");
     expect(printed).toContain("Northwind Bank");
     expect(printed).toContain("Wazuh");
-    expect(printed).not.toContain(recordedTailoredCv.lines[1]!.text);
+    expect(printed).not.toContain(recordedTailoredCv.roles[0]!.bullets[0]!.text);
   });
 
   it("is one package per job: starting again returns the same one", async () => {

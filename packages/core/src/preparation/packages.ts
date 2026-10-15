@@ -395,7 +395,10 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       posting: { title: r.job.title, company: r.job.company, requirements: r.job.requirements.map((q) => q.text) },
       language: r.language,
       angle: { label: angleLabel[r.angle], summary: angle.angle === r.angle ? angle.summary : "" },
-      pieces: confirmed().map((p) => ({ id: p.id, kind: p.kind, text: p.text, entry: p.entry && { title: p.entry.title, organisation: p.entry.organisation, start: p.entry.start, end: p.entry.end } })),
+      pieces: confirmed().map((p) => ({
+        id: p.id, kind: p.kind, text: p.text, entry: p.entry && { title: p.entry.title, organisation: p.entry.organisation, start: p.entry.start, end: p.entry.end },
+        belongsTo: p.belongsTo, tags: p.tags, numberSource: p.numberSource,
+      })),
     };
   }
 

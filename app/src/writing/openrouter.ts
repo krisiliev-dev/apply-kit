@@ -36,10 +36,14 @@ const learnVoiceInstructions = `You learn how Kris writes, as short readable voi
 const excerptLines = (excerpts: SentExcerpt[]) => excerpts.map((e) => `[${e.source}]\n${e.text}`).join("\n\n");
 
 const tailorCvInstructions = `You tailor Kris's CV to one job posting, as JSON matching the schema, using only the profile pieces given. Rules:
-- Every line cites the ids of the pieces it relies on ("pieceIds"). Never cite an id that isn't given.
-- Never add a skill, number, employer, title or date that isn't in the cited pieces. Employers, titles and dates stay exactly as given.
-- "claim" says how the line compares to its pieces: "as-written" (the piece's own words), "reworded" (same claim, different words, e.g. the posting's term for the same thing) or "stronger" (a stronger verb or a rounder number than the piece states). Say "stronger" whenever it is.
-- The summary starts from the angle's summary line and is one or two sentences.
+- Start from the angle given: the summary leads with what the posting asks for first, in one or two sentences.
+- "roles" lists the role pieces to show, by "pieceId", with title, employer, start and end copied exactly as given. Each role's "bullets" are its achievements (pieces whose "belongsTo" is that role) in the order that fits the posting best; leave out the ones least relevant to it, and say why in the role's "why".
+- Every line cites the ids of the pieces it relies on ("pieceIds"). Never cite an id that isn't given, and never put an achievement under a role it doesn't belong to.
+- You may use the posting's term for the same thing ("alert triage" for "alert monitoring"). Never add a skill, tool, employer, number or date that isn't in the cited pieces; numbers keep the precision of their piece ("about a third" stays about a third).
+- "claim" says how the line compares to its pieces: "as-written" (the piece's own words), "reworded" (same claim, different words) or "stronger" (a stronger verb or a rounder number than the piece states). Say "stronger" whenever it is.
+- "why" says in a few plain words why a line changed ("" when it didn't).
+- "skills" lists skill pieces by their exact text, the ones the posting asks for first.
+- "evidence" names, for each posting requirement (by its index in "requirements"), the pieces that back it; leave a requirement out when nothing does.
 - "notes" explain the main choices in plain words, one per note.
 - Write in the language given ("en" English, "bg" Bulgarian); tool names stay in Latin script.`;
 

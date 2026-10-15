@@ -57,7 +57,9 @@ export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedT
 export { VOICE_EXCERPT_WORDS } from "./preparation/voice.ts";
 export type { VoiceView, VoiceSample, VoiceSampleFile, VoiceSampleKind, VoiceSampleProblem, VoiceRule, VoiceLanguage, VoiceSend, VoiceLearning, VoiceContext, VoiceContextRequest, VoiceEditInput } from "./preparation/voice.ts";
 export { tailoredCvSchema } from "./writing/writer.ts";
-export type { TailorCvInput, TailoredCv } from "./writing/writer.ts";
+export type { TailorCvInput, TailoredCv, TailoredLine } from "./writing/writer.ts";
+export { validateCv } from "./preparation/honesty.ts";
+export type { HonestyProfile, HonestyRule, HonestyProblem, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts } from "./preparation/engine.ts";
 export type { ProfileExport } from "./preparation/engine.ts";

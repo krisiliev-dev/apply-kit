@@ -69,21 +69,46 @@ export interface TailorCvInput {
   language: "en" | "bg";
   angle: { label: string; summary: string };
   /** Only confirmed pieces (and unconfirmed ones from this package); the model may cite nothing else. */
-  pieces: { id: string; kind: string; text: string; entry: { title: string; organisation: string; start: string; end: string | null } | null }[];
+  pieces: {
+    id: string; kind: string; text: string; entry: { title: string; organisation: string; start: string; end: string | null } | null;
+    /** The role an achievement sits under: its bullets stay under that role. */
+    belongsTo: string | null;
+    tags: string[];
+    numberSource: "measured" | "estimate" | "told" | null;
+  }[];
 }
 
+/** One line of a tailored CV: its words, the piece ids it relies on, how its claim compares to them, and why it changed ("" when it didn't). */
+const tailoredLine = z.object({
+  text: z.string(),
+  pieceIds: z.array(z.string()),
+  claim: z.enum(["as-written", "reworded", "stronger"]),
+  why: z.string(),
+});
+export type TailoredLine = z.infer<typeof tailoredLine>;
+
 /**
- * A tailored CV version: the summary and lines, each with the piece ids it relies on and how its
- * claim compares to them (as written, reworded, or stronger), plus tailoring notes. The honesty
- * validator (#63) checks every line before it is offered; until then the package shows the pieces as stored.
+ * A tailored CV version: the summary; the roles (by their piece id, with the facts as the model
+ * states them, so the honesty validator can hold them to the profile) and their bullets in CV order,
+ * leaving out the less relevant ones; the skills in order (matching first); the pieces used as
+ * evidence for each posting requirement (by its index); and tailoring notes. The honesty validator
+ * (preparation/honesty.ts) checks every line before it is offered.
  */
 export const tailoredCvSchema = z.object({
-  summary: z.string(),
-  lines: z.array(z.object({
-    text: z.string(),
-    pieceIds: z.array(z.string()),
-    claim: z.enum(["as-written", "reworded", "stronger"]),
+  summary: tailoredLine,
+  roles: z.array(z.object({
+    pieceId: z.string(),
+    title: z.string(),
+    employer: z.string(),
+    /** "YYYY-MM" (or "YYYY"), as the profile gives them; end null while current. */
+    start: z.string(),
+    end: z.string().nullable(),
+    bullets: z.array(tailoredLine),
+    /** Why the bullets were reordered or shortened ("" when they weren't). */
+    why: z.string(),
   })),
+  skills: z.array(z.object({ text: z.string(), pieceIds: z.array(z.string()) })),
+  evidence: z.array(z.object({ requirement: z.number().int(), pieceIds: z.array(z.string()) })),
   notes: z.array(z.string()),
 });
 export type TailoredCv = z.infer<typeof tailoredCvSchema>;
