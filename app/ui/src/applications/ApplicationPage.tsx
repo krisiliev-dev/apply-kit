@@ -3,12 +3,12 @@
 // (skipped steps struck through, derived from Events) with the Status select; the Next step box; the
 // timeline, each Event naming its cause, with Undo where it applies and Add note; and beside it
 // "What you sent" (Attach CV) for one added by hand, the target posting and the contacts.
-// When a follow-up is due, the Next step box holds it (hi-fi "Follow-up · AI budget out", without its
-// budget banner: this ticket has no drafting model, so the outline is always what's offered). When an
+// When a follow-up is due, the Next step box holds it with its draft (hi-fi "Follow-up due"), or, with
+// no draft, the outline and a banner at the top saying why (hi-fi "Follow-up · AI budget out"). When an
 // email moved the Status (state Moved by email): a banner with Looks right and Undo, and the email that
 // moved it with the signals it matched on (and an English line for one in Bulgarian). Interviews,
 // offers and the Package as sent come with later Track tickets.
-import type { ApplicationDetail, ApplicationSummary, FollowUp, HealthSummary, MovedByEmail, Status, TimelineEntry } from "@apply-kit/core";
+import type { ApplicationDetail, ApplicationSummary, FollowUp, FollowUpDraft, HealthSummary, MovedByEmail, NoDraft, Status, TimelineEntry } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
   addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchSources,
@@ -16,7 +16,7 @@ import {
 } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { By, StatusSelect } from "./ApplicationsPage.tsx";
-import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
+import { FollowUpWriter, NoDraftBanner, type FollowUpAction } from "./FollowUpWriter.tsx";
 import { angleLabel, daysFrom, daysWord, dueWords, emailKindLabel, followUpName, longDay, statusLabel, todaySofia, weekDay } from "./words.ts";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; app: ApplicationDetail };
@@ -43,6 +43,9 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
   const [attempt, setAttempt] = useState(0);
   const toaster = useToaster();
   const contactRef = useRef<HTMLButtonElement>(null);
+  /** Why the follow-up in the Next step has no draft (shown as a banner at the top), by follow-up id. */
+  const [noDraft, setNoDraft] = useState<{ id: string; noDraft: NoDraft } | null>(null);
+  const onDraftLoaded = useCallback((d: FollowUpDraft) => setNoDraft(d.noDraft ? { id: d.followUp.id, noDraft: d.noDraft } : null), []);
 
   // The top bar shows source health on every screen.
   useEffect(() => {
@@ -112,14 +115,16 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
 
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
 
+  const dueId = app.nextStep.kind === "follow-up" ? app.nextStep.followUp.id : null;
   return (
     <section className="stack app-page" style={{ gap: "var(--s-6)" }}>
+      {noDraft && noDraft.id === dueId && <NoDraftBanner noDraft={noDraft.noDraft} />}
       {app.movedByEmail && <MovedBanner moved={app.movedByEmail} refresh={refresh} toaster={toaster} onDone={focusStatus} />}
       <Head app={app} onStatus={changeStatus} />
       <div className="cols">
         <div className="col">
           {app.movedByEmail && <MovedEmail moved={app.movedByEmail} />}
-          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} />
+          <NextStep app={app} onAddContact={() => contactRef.current?.click()} refresh={refresh} toaster={toaster} onDraftLoaded={onDraftLoaded} />
           <Timeline app={app} refresh={refresh} toaster={toaster} />
         </div>
         <div className="col">
@@ -183,8 +188,9 @@ function Check() {
   return <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>;
 }
 
-function NextStep({ app, onAddContact, refresh, toaster }: {
+function NextStep({ app, onAddContact, refresh, toaster, onDraftLoaded }: {
   app: ApplicationDetail; onAddContact: () => void; refresh: () => Promise<ApplicationDetail>; toaster: Toaster;
+  onDraftLoaded: (d: FollowUpDraft) => void;
 }) {
   const n = app.nextStep;
   const byHand = app.createdHow === "by-hand" || app.createdHow === "i-applied";
@@ -220,7 +226,7 @@ function NextStep({ app, onAddContact, refresh, toaster }: {
       <div className="panel next-step ask">
         <span className="kicker">{followUpName(fu.kind)} {dueWords(fu.dueOn)}{fu.kind === "nudge" && ` · ${daysWord(daysFrom(fu.anchorOn, fu.dueOn))} after ${app.status === "applied" ? "applying" : "moving to Screening"}`}</span>
         <h2 id="next-h" tabIndex={-1}>{n.text}</h2>
-        <FollowUpWriter key={fu.id} id={fu.id} headingId="next-h" onAct={(action) => { act(fu, action).catch(() => {}); }} onAnnounce={toaster.announce} />
+        <FollowUpWriter key={fu.id} id={fu.id} headingId="next-h" onAct={(action) => { act(fu, action).catch(() => {}); }} onAnnounce={toaster.announce} onLoaded={onDraftLoaded} />
       </div>
     );
   }
@@ -244,7 +250,7 @@ function NextStep({ app, onAddContact, refresh, toaster }: {
           {f.snoozedTo
             ? "You snoozed it to then. "
             : <>That's {daysWord(daysFrom(f.anchorOn, f.dueOn))} after {app.status === "applied" ? "applying" : "moving to Screening"} (<a href="/settings/follow-ups">change the default in Settings</a>). </>}
-          Points to cover will be ready that morning. If {app.company} replies first, change the Status and the follow-up is cancelled.
+          A draft will be ready that morning. If {app.company} replies first, change the Status and the follow-up is cancelled.
         </p>
       )}
       {n.kind === "wait" && f && f.state !== "pending" && <p className="muted mini">{followUpLine}</p>}

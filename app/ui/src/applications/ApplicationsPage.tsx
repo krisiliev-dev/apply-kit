@@ -45,7 +45,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   const [linkProblem, setLinkProblem] = useState<string | null>(null);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [needs, setNeeds] = useState<NeedsYou | null>(null);
-  const [writing, setWriting] = useState<{ entry: NeedsYouEntry; opener: HTMLElement } | null>(null);
+  /** The follow-up dialog: the drafts it steps through (one, or a group's), which is open, and what opened it. */
+  const [writing, setWriting] = useState<{ entries: NeedsYouEntry[]; index: number; opener: HTMLElement } | null>(null);
   const addRef = useRef<HTMLButtonElement>(null);
   /** Where focus goes once the next list has rendered (the button it targets may be a new one). */
   const focusNext = useRef<(() => void) | null>(null);
@@ -179,16 +180,19 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   async function actOn(entry: NeedsYouEntry, action: FollowUpAction) {
     const { application: a, followUp: f } = entry;
     const name = `${a.company} ${followUpName(f.kind).toLowerCase()}`;
+    // Stepping through several drafts, acting on one moves on to the next (its heading takes focus).
+    const stepping = writing && writing.entries.length > 1 && writing.entries[writing.index]?.followUp.id === f.id && writing.index < writing.entries.length - 1
+      ? writing : null;
     try {
       const { event, followUp } = await followUpAction(f.id, action);
-      setWriting(null);
+      setWriting(stepping ? { ...stepping, index: stepping.index + 1 } : null);
       await refresh();
       // Sent or skipped, it stays in place as done; snoozed, it leaves Needs you.
       const focusAfter = () => requestAnimationFrame(() => {
         const link = document.querySelector<HTMLElement>(`#${CSS.escape(itemId(f.id))} a`);
         (action === "snooze" || !link ? document.getElementById("ny-h") : link)?.focus();
       });
-      focusAfter();
+      if (!stepping) focusAfter();
       toaster.show({
         message: action === "sent"
           ? `Marked ${f.kind === "nudge" ? "sent" : "done"} · ${name} logged on its timeline.`
@@ -231,11 +235,42 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     });
   }
 
+  /** "Snooze all": each follow-up of a group snoozed (one Event each), with one Undo for all of them. */
+  async function snoozeAll(entries: NeedsYouEntry[]) {
+    const events: string[] = [];
+    let dueOn: string | null = null;
+    try {
+      for (const e of entries) {
+        const r = await followUpAction(e.followUp.id, "snooze");
+        events.push(r.event.id);
+        dueOn = r.followUp.dueOn;
+      }
+    } catch (err) {
+      toaster.show({ message: `Couldn't snooze them all (${events.length} of ${entries.length} snoozed): ${message(err)}` });
+    }
+    await refresh().catch(() => {});
+    const focusHead = () => requestAnimationFrame(() => document.getElementById("ny-h")?.focus());
+    focusHead();
+    if (!events.length) return;
+    toaster.show({
+      message: `Snoozed ${events.length} ${events.length === 1 ? "follow-up" : "follow-ups"}${dueOn ? ` · due again ${weekDay(dueOn)}` : ""}.`,
+      returnFocus: focusHead,
+      undo: () => {
+        Promise.all(events.map((id) => undoApplicationEvent(id)))
+          .then(() => refresh())
+          .then(() => { focusHead(); toaster.announce(`Undone: ${events.length} follow-ups are due again.`); })
+          .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+      },
+    });
+  }
+
   const followUpDialog = writing && (
     <FollowUpDialog
-      entry={writing.entry}
-      onAct={(action) => { actOn(writing.entry, action).catch(() => {}); }}
-      onClose={() => { const o = writing.opener; setWriting(null); requestAnimationFrame(() => o.focus()); }}
+      entries={writing.entries}
+      index={writing.index}
+      onAct={(action) => { actOn(writing.entries[writing.index]!, action).catch(() => {}); }}
+      onNext={() => setWriting({ ...writing, index: Math.min(writing.index + 1, writing.entries.length - 1) })}
+      onClose={() => { const o = writing.opener; setWriting(null); requestAnimationFrame(() => (o.isConnected ? o : document.getElementById("ny-h"))?.focus()); }}
       onAnnounce={toaster.announce}
     />
   );
@@ -348,7 +383,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         </div>
       ) : needs && (
         <NeedsYouSection
-          needs={needs} onWrite={(entry, opener) => setWriting({ entry, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
+          needs={needs} onWrite={(entry, opener) => setWriting({ entries: [entry], index: 0, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
+          onReview={(entries, opener) => setWriting({ entries, index: 0, opener })} onSnoozeAll={(entries) => { snoozeAll(entries).catch(() => {}); }}
           emails={<EmailToMatchItems emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />}
         />
       )}
