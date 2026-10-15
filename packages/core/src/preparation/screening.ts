@@ -3,6 +3,7 @@
 // forms ask; and the pure rules behind each answer: form limits, trimming a bank answer to fit (only
 // whole sentences are removed, so no fact is ever added), salary's suggestion from the bank's rule,
 // and where the job was first seen. The package store (packages.ts) puts them together.
+// Free of Node-only imports: the UI imports its word count as "@apply-kit/core/screening".
 import { eurPer, perMonth } from "../fit/weights.ts";
 import type { AnswerLanguage } from "./answers.ts";
 
