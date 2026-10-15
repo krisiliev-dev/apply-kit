@@ -581,7 +581,7 @@ function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Pa
           {pkg.languageOptions.map((o) => (
             <label className="choice" key={o.language}>
               <input type="radio" name="lang" checked={o.current} aria-disabled={pkg.generating && !o.current ? "true" : undefined}
-                onChange={() => { if (!pkg.generating) void language(o.language); }} />
+                onChange={() => { if (pkg.generating) say("The language can be switched once the parts being written are done."); else void language(o.language); }} />
               <b>{languageName[o.language]}</b>
               <span className="muted">{languageText(o, pkg)}</span>
             </label>

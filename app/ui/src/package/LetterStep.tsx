@@ -219,7 +219,7 @@ function LetterEditor({ pkg, letter, onChange, say }: { pkg: PackageView; letter
       </div>
       {letter.language !== pkg.language && (
         <div className="banner warning" role="note">
-          <span className="text"><b>This draft is in {languageNames[letter.language]}, kept from before you switched.</b> The package is in {languageNames[pkg.language]}, so it can't be approved. Show a {languageNames[pkg.language]} draft, or ask for a new one.</span>
+          <span className="text"><b>This draft is in {languageNames[letter.language]}, kept from before you switched.</b> The package is in {languageNames[pkg.language]}, so it can't be approved. Show {pkg.language === "en" ? "an" : "a"} {languageNames[pkg.language]} draft, or ask for a new one.</span>
         </div>
       )}
       {letter.instruction && <p className="meta">Asked for: "{letter.instruction}"</p>}

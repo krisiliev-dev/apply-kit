@@ -1278,7 +1278,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     if (bodyWords(l.content) === 0) return { reason: "The letter is empty. Write it, or ask for a draft.", by: "letter" };
     // One language per package: a draft kept from before a switch is there to read, not to send.
     if (letterLanguage(r, l) !== r.language) {
-      return { reason: `Draft ${l.number} is in ${languageName(letterLanguage(r, l))} and the package is in ${languageName(r.language)}. Show a ${languageName(r.language)} draft, or ask for a new one.`, by: "letter" };
+      return { reason: `Draft ${l.number} is in ${languageName(letterLanguage(r, l))} and the package is in ${languageName(r.language)}. Show ${r.language === "en" ? "an" : "a"} ${languageName(r.language)} draft, or ask for a new one.`, by: "letter" };
     }
     const problem = letterChecks(r, l).find((c) => c.state === "problem");
     if (problem) return { reason: `The cover letter can't be approved yet: ${problem.because}`, by: "letter" };
