@@ -156,3 +156,7 @@ export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } fr
 export type {
   EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";
+export { createFillEngine, FillError } from "./fill/engine.ts";
+export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageInBrief, SessionEnd } from "./fill/engine.ts";
+export { countOutcomes } from "./fill/reading.ts";
+export type { PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, RecordedPage } from "./fill/reading.ts";
