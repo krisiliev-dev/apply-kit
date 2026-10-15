@@ -55,13 +55,19 @@ export function useFollowUpDraft(id: string) {
     timer.current = window.setTimeout(flush, 500);
   };
   /** Keeps the thank-you note's topic and takes the points built from it. */
+  // A new topic makes a new draft (the thank-you note's): it replaces the text unless you've written your own.
+  const [drafting, setDrafting] = useState(false);
   const keepTopic = () => {
     if (!draft || topic.trim() === draft.followUp.topic) return;
+    const untouched = pending.current === null && (text === "" || text === draft.draft?.text);
+    setDrafting(true);
     saveFollowUpTopic(id, topic)
-      .then((r) => setDraft((d) => (d ? { ...d, outline: r.outline, followUp: { ...d.followUp, topic: r.followUp.topic } } : d)))
-      .catch(() => {});
+      .then(() => fetchFollowUp(id))
+      .then((d) => { setDraft(d); if (untouched) setText(d.text); })
+      .catch(() => {})
+      .finally(() => setDrafting(false));
   };
-  return { draft, error, text, type, flush, topic, setTopic, keepTopic };
+  return { draft, error, text, type, flush, topic, setTopic, keepTopic, drafting };
 }
 
 const fieldLabel = { nudge: "Your follow-up", "offer-note": "Your note to self", "thank-you": "Your thank-you note", "check-in": "Your check-in" } as const;
@@ -99,7 +105,7 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce, onLoaded }: {
   /** Told once it is loaded; when given, the caller shows the no-draft banner (else it is shown here). */
   onLoaded?: (draft: FollowUpDraft) => void;
 }) {
-  const { draft, error, text, type, flush, topic, setTopic, keepTopic } = useFollowUpDraft(id);
+  const { draft, error, text, type, flush, topic, setTopic, keepTopic, drafting } = useFollowUpDraft(id);
   useEffect(() => { if (draft) onLoaded?.(draft); }, [draft, onLoaded]);
   const fieldId = useId();
   const topicId = useId();
@@ -131,6 +137,7 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce, onLoaded }: {
           <label htmlFor={topicId}>One thing you discussed <span className="meta">(makes the note specific)</span></label>
           <input className="input" id={topicId} value={topic} onChange={(e) => setTopic(e.target.value)} onBlur={keepTopic}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); keepTopic(); } }} lang={langOf(topic)} />
+          <span className="help" role="status">{drafting ? "Drafting your note from it…" : draft.draft ? "The draft below mentions it. Change it and press Enter for a new draft." : "Press Enter: a draft that mentions it is ready in a moment (within your AI budget)."}</span>
         </div>
       )}
       {!d && (

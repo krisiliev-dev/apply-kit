@@ -39,10 +39,11 @@ const prepInstructions = `You write a light interview prep sheet as JSON matchin
   given; never invent, merge or stretch a story. A null is fine and honest.
 - Write in the given language.`;
 
-const draftInstructions = `You draft a short follow-up email for a job seeker, in their voice, as JSON {"body": "..."}. Rules:
+const draftInstructions = `You draft a short email for a job seeker (a nudge after no reply, a thank-you note after an interview, or a check-in when interviews have gone quiet), in their voice, as JSON {"body": "..."}. Rules:
 - Body only: no subject, greeting, sign-off or name. The job seeker adds those in their own mail app.
 - Concise and warm, never fawning. Plain, declarative sentences; direct tone.
-- Mention exactly one concrete detail from the posting's requirements or the job seeker's notes.
+- Mention exactly one concrete detail from the posting's requirements or the job seeker's notes; for a thank-you note,
+  that detail is the topic they discussed in the interview, as given.
 - Facts about the job seeker come only from the Master profile pieces given. Never invent experience.
   Any number about them (counts, percentages, years) must be copied exactly from those pieces; if none fits, use no number.
 - Never use these phrases: {banned}.
@@ -73,7 +74,11 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
     .replace("{banned}", input.banned.map((b) => `"${b}"`).join(", "))
     .replace("{min}", String(input.words.min)).replace("{max}", String(input.words.max));
   const draftPrompt = (input: DraftInput) => [
-    `Message: a ${input.kind === "nudge" ? "nudge after no reply" : input.kind}, ${input.daysQuiet} days after ${input.stage === "applied" ? "applying" : "moving to screening"} (${input.since}).`,
+    input.kind === "thank-you"
+      ? `Message: a thank-you note after an interview on ${input.since}${input.people?.length ? ` with ${input.people.join(", ")}` : ""}. One thing discussed: ${input.topic ?? "(not given)"}.`
+      : input.kind === "check-in"
+        ? `Message: a polite check-in, ${input.daysQuiet} days after the last interview (${input.since}) with no news.`
+        : `Message: a nudge after no reply, ${input.daysQuiet} days after ${input.stage === "applied" ? "applying" : "moving to screening"} (${input.since}).`,
     `Job: ${input.title} at ${input.company}. Language: ${input.language}.`,
     `Posting requirements:\n${input.requirements.map((r) => `- ${r}`).join("\n") || "- (not read)"}`,
     `The job seeker's notes:\n${input.notes.map((n) => `- ${n}`).join("\n") || "- (none)"}`,

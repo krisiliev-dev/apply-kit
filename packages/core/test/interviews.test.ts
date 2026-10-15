@@ -3,7 +3,7 @@
 // assistant answering with recorded outputs and a fake Master profile. Made-up people and companies.
 import { describe, expect, it } from "vitest";
 import {
-  createTracker, type EmailClassification, type MasterProfile, type PrepSheetDraft, type PrepSheetInput, type ProfileStory, type Status,
+  createTracker, type DraftInput, type EmailClassification, type MasterProfile, type PrepSheetDraft, type PrepSheetInput, type ProfileStory, type Status,
   type TrackAssistant, type Tracker as TrackerApi,
 } from "../src/index.ts";
 import { createTestEngine, fakeClock, fakeMailbox, loadFixture, mailMessage } from "./harness.ts";
@@ -156,9 +156,12 @@ type Recorded = { email: Parameters<typeof mailMessage>[0]; classification: Emai
 const recorded = (JSON.parse(loadFixture("track-mail/emails.json")) as { emails: Record<string, Recorded> }).emails;
 
 /** The fake Track assistant: recorded classifications per Message-ID, and the given prep sheet output. */
+const thanksBody = "Thank you for the conversation about the role today. I enjoyed the question about catching IAM drift between Terraform and the live accounts; it is the kind of problem I like working on, and it made me want to try the scheduled drift check we sketched against a real account. I came away more interested in the role and in how your platform team works, and I am happy to go deeper on anything we touched on.";
+
 function fakeAssistant(prep: (input: PrepSheetInput) => PrepSheetDraft = () => ({ facts: [], questions: [] }), costUsd = 0.001) {
   const byId = new Map(Object.values(recorded).map((r) => [r.email.id, r.classification]));
   const prepCalls: PrepSheetInput[] = [];
+  const drafts: DraftInput[] = [];
   const assistant: TrackAssistant = {
     estimateClassifyUsd: () => costUsd,
     async classify(input) {
@@ -167,14 +170,17 @@ function fakeAssistant(prep: (input: PrepSheetInput) => PrepSheetDraft = () => (
       return { classification, costUsd, model: "fake/track-assistant" };
     },
     estimateDraftUsd: () => costUsd,
-    draft: async () => { throw new Error("no drafts in these tests"); },
+    async draft(input) {
+      drafts.push(input);
+      return { draft: { body: thanksBody }, costUsd, model: "fake/track-assistant" };
+    },
     estimatePrepSheetUsd: () => costUsd,
     async buildPrepSheet(input) {
       prepCalls.push(input);
       return { sheet: prep(input), costUsd, model: "fake/track-assistant" };
     },
   };
-  return { assistant, prepCalls };
+  return { assistant, prepCalls, drafts };
 }
 
 /** A Master profile held in memory: its confirmed stories, and the unconfirmed pieces handed to it. */
@@ -413,5 +419,39 @@ describe("a sent copy in the job mailbox", () => {
     });
 
     expect((await tracker.get(id))!.thankYous[0]).toMatchObject({ state: "sent", doneBy: "email" });
+  });
+});
+
+describe("drafts for thank-you notes and check-ins", () => {
+  it("drafts the thank-you note once you give one thing you discussed, at 70-130 words, never before", async () => {
+    const { tracker, clock, ai } = withMail();
+    const id = await add(tracker as Tracker, { company: "Ostwind Cloud", title: "Cloud Security Engineer" });
+    await tracker.setInterview(id, { ...at("2026-10-12T16:00", "2026-10-12T17:00"), people: ["Ivo Marinov"] });
+    clock.set("2026-10-12T14:05:00Z");
+    const thanks = (await tracker.get(id))!.thankYous[0]!;
+
+    expect(await tracker.followUp(thanks.id)).toMatchObject({ draft: null, noDraft: null, words: { min: 70, max: 130 } });
+    expect(ai.drafts).toEqual([]);
+
+    await tracker.saveFollowUpTopic(thanks.id, "Catching IAM drift between Terraform and the live accounts");
+    const draft = (await tracker.followUp(thanks.id))!;
+
+    expect(draft).toMatchObject({ draft: { text: thanksBody }, text: thanksBody });
+    expect(ai.drafts[0]).toMatchObject({
+      kind: "thank-you", stage: "interviewing", topic: "Catching IAM drift between Terraform and the live accounts", people: ["Ivo Marinov"],
+      words: { min: 70, max: 130 },
+    });
+  });
+
+  it("drafts a check-in like a nudge, counted from the last interview", async () => {
+    const { tracker, clock, ai } = withMail();
+    const id = await add(tracker as Tracker);
+    await tracker.setInterview(id, at("2026-10-13T10:00", "2026-10-13T11:00"));
+    clock.set("2026-10-21T08:00:00Z");
+    const checkIn = (await tracker.get(id))!.followUp!;
+
+    await tracker.followUp(checkIn.id);
+
+    expect(ai.drafts[0]).toMatchObject({ kind: "check-in", stage: "interviewing", since: "Tue 13 Oct", daysQuiet: 8, words: { min: 70, max: 110 } });
   });
 });

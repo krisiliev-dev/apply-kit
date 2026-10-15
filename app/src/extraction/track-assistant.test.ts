@@ -98,4 +98,16 @@ describe("OpenRouter Track assistant: drafts", () => {
     }
     expect(sent).not.toContain("fu-secret-id");
   });
+
+  it("tells the model a thank-you note's interview, people and the topic discussed", async () => {
+    const api = fakeOpenRouter(JSON.stringify({ body: "Thank you." }));
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
+
+    await assistant.draft({ ...draftInput, kind: "thank-you", stage: "interviewing", since: "Mon 12 Oct", topic: "IAM drift in Terraform", people: ["Ivo Marinov"], words: { min: 70, max: 130 } });
+
+    const sent = JSON.stringify(api.requests[0]!.messages);
+    for (const part of ["thank-you note after an interview on Mon 12 Oct with Ivo Marinov", "One thing discussed: IAM drift in Terraform", "70-130 words"]) {
+      expect(sent).toContain(part);
+    }
+  });
 });

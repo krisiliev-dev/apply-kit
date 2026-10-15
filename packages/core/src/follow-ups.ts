@@ -153,13 +153,15 @@ export function outlineOf(i: OutlineInput): string[] {
 // ---------- Drafts (Track #32; spec #24 "Draft rules") ----------
 
 /**
- * The messages the Track assistant drafts. Only the nudge so far: thank-you notes, check-ins,
- * withdrawals and declines join with their tickets. A note to self is never drafted (its outline is it).
+ * The messages the Track assistant drafts: the nudge, the thank-you note and the check-in (#33);
+ * withdrawals and declines join with their ticket. A note to self is never drafted (its outline is it).
  */
-export type DraftKind = "nudge";
+export type DraftKind = "nudge" | "thank-you" | "check-in";
 
 /** The length that works well, in words, per kind (spec "Draft rules"). */
-export const draftWords: Record<DraftKind, { min: number; max: number }> = { nudge: { min: 70, max: 110 } };
+export const draftWords: Record<DraftKind, { min: number; max: number }> = {
+  nudge: { min: 70, max: 110 }, "thank-you": { min: 70, max: 130 }, "check-in": { min: 70, max: 110 },
+};
 
 /**
  * Phrases a draft must never use (docs/knowledge/application-tactics.md: the follow-up draft rules
@@ -209,9 +211,9 @@ export interface DraftInput {
   kind: DraftKind;
   company: string;
   title: string;
-  /** The day the stage began, in words ("Mon 5 Oct"), and the stage. */
+  /** The day the stage began (for a thank-you note or check-in: the interview's day), in words ("Mon 5 Oct"), and the stage. */
   since: string;
-  stage: "applied" | "screening";
+  stage: "applied" | "screening" | "interviewing";
   /** Whole days with no reply. */
   daysQuiet: number;
   /** The posting's requirements as read (English labels), most important first; empty when it wasn't read. */
@@ -226,6 +228,10 @@ export interface DraftInput {
   language: string;
   words: { min: number; max: number };
   banned: readonly string[];
+  /** For a thank-you note: the one thing discussed that the user gave. */
+  topic?: string;
+  /** For a thank-you note or a check-in: who the interview was with. */
+  people?: string[];
 }
 
 /** The draft as the assistant returns it: the body only (no greeting, sign-off or subject). */
@@ -251,14 +257,14 @@ const numberRe = /\d+(?:[.,]\d+)*%?/g;
  */
 export function checkDraft(
   body: string,
-  input: Pick<DraftInput, "evidence" | "banned" | "language" | "since" | "requirements" | "notes" | "title" | "company">,
+  input: Pick<DraftInput, "evidence" | "banned" | "language" | "since" | "requirements" | "notes" | "title" | "company" | "topic">,
 ): { ok: true; draft: FollowUpDraftText } | { ok: false; why: string } {
   const text = body.trim();
   if (!text) return { ok: false, why: "it was empty" };
   const plain = text.replace(/[’‘]/g, "'");
   const banned = input.banned.find((p) => new RegExp(`(^|[^\\p{L}])${escapeRe(p)}($|[^\\p{L}])`, "iu").test(plain));
   if (banned) return { ok: false, why: `it used "${banned}"` };
-  const context = [input.since, input.title, input.company, ...input.requirements, ...input.notes].join("\n");
+  const context = [input.since, input.title, input.company, input.topic ?? "", ...input.requirements, ...input.notes].join("\n");
   const numbers: { quote: string; origin: string }[] = [];
   for (const m of text.matchAll(numberRe)) {
     const n = m[0];

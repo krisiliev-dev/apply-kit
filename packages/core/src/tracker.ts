@@ -9,7 +9,7 @@ import type { DiscoveryEngine } from "./engine.ts";
 import type { Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
-  type DraftInput, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
+  type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
 } from "./follow-ups.ts";
 import {
   defaultTimeZone, interviewFormats, interviewIcs, invitedInterviewSchema, isLocalTime, isTimeZone,
@@ -1430,13 +1430,20 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const outline = outlineFor(f, application, requirement?.text ?? null);
     let draft: FollowUpDraftText | null = null;
     let noDraft: NoDraft | null = null;
-    if (f.kind === "nudge" && stage !== "offer") {
+    // A nudge and a check-in are drafted when opened; a thank-you note once its interview ended and
+    // you gave one thing you discussed (that makes it specific).
+    const thanksReady = f.kind === "thank-you" && f.state === "pending" && !!f.readyAt && f.readyAt <= now() && !!f.topic.trim();
+    if ((f.kind === "nudge" && stage !== "offer") || f.kind === "check-in" || thanksReady) {
+      const kind = f.kind as DraftKind;
+      const iv = interviewRow(f.interviewId);
       const made = await draftFor(r, {
-        followUpId, kind: "nudge", company: application.company, title: application.title, since: dayWords(f.anchorOn), stage,
+        followUpId, kind, company: application.company, title: application.title, since: dayWords(f.anchorOn),
+        stage: kind === "nudge" ? (stage === "screening" ? "screening" : "applied") : "interviewing",
         daysQuiet: daysBetween(f.anchorOn, today()),
         requirements: [...(job?.requirements ?? [])].sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "required" ? -1 : 1)).slice(0, 5).map((q) => q.text),
         notes, evidence: [], voice: [], language: job?.language ?? str(row(application.id)?.language) ?? "en",
-        words: draftWords.nudge, banned: bannedPhrases,
+        words: draftWords[kind], banned: bannedPhrases,
+        ...(kind === "thank-you" ? { topic: f.topic.trim(), people: iv?.people ?? [] } : kind === "check-in" ? { people: iv?.people ?? [] } : {}),
       });
       if ("draft" in made) draft = made.draft;
       else noDraft = made.noDraft;
@@ -1449,7 +1456,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return {
       followUp: f, application, text: r.text_saved_at ? f.text : (draft?.text ?? f.text), draft, noDraft, outline,
       mail: subject[f.kind] ? { to, subject: subject[f.kind]! } : null,
-      words: f.kind === "offer-note" ? null : f.kind === "thank-you" ? { min: 70, max: 130 } : draftWords.nudge,
+      words: f.kind === "offer-note" ? null : draftWords[f.kind],
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -1469,7 +1476,10 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId);
     const application = r ? summary(String(r.application_id)) : null;
     if (!r || !application) throw new TrackerError("not-found", "There's no such follow-up.");
-    db.prepare("UPDATE follow_up SET topic = ? WHERE id = ?").run(topic.trim().slice(0, 300), followUpId);
+    const clean = topic.trim().slice(0, 300);
+    // A new topic makes a new draft, unless you have already written your own text.
+    if (clean !== String(r.topic ?? "") && !r.text_saved_at) db.prepare("UPDATE follow_up SET draft_text = NULL WHERE id = ?").run(followUpId);
+    db.prepare("UPDATE follow_up SET topic = ? WHERE id = ?").run(clean, followUpId);
     const followUp = followUpOf(db.prepare("SELECT * FROM follow_up WHERE id = ?").get(followUpId)!);
     return { followUp, outline: outlineFor(followUp, application, null) };
   }
