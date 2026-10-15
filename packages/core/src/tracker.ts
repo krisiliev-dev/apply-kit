@@ -6,7 +6,7 @@
 // Its public interface below is the testing seam (test/tracker.test.ts).
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
-import type { Angle } from "./fit/angles.ts";
+import { angleLabel, type Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
   type DraftInput, type DraftKind, type FollowUp, type FollowUpDraftText, type FollowUpKind, type FollowUpSettings, type MasterProfile, type VoiceSamples,
@@ -22,7 +22,7 @@ import { mailboxFix, type MailboxProblem } from "./mailbox.ts";
 import { storedMessage } from "./mail-store.ts";
 import type { Clock, MailAttachment, MailMessage, SqlDatabase } from "./ports.ts";
 import { migrate } from "./schema.ts";
-import { computeStats, type TrackStats } from "./track-stats.ts";
+import { computeStats, type TrackStats, type WorkingRow } from "./track-stats.ts";
 import {
   baseDomain, classifyInput, draftOutputSchema, companyDomainMatches, domainOf, emailClassificationSchema, emailKindName, highConfidence, hostOf,
   isAtsDomain, isBoardDomain, isJobAlert, isSharedProvider, namesCompany, namesTitle, quoteOf, replyKinds, ruleClassify, senderOf,
@@ -126,7 +126,9 @@ export type NextStep =
   | { kind: "interview"; text: string; interview: Interview }
   | { kind: "wait"; text: string }
   | { kind: "note"; text: string; at: string }
-  | { kind: "closed"; text: string };
+  | { kind: "closed"; text: string }
+  /** The offer accepted: how many withdrawals are still to send. */
+  | { kind: "accepted"; text: string; withdrawals: number };
 
 /** One entry on the timeline: an Event, or something apply-kit saw (the posting closing). */
 export interface TimelineEntry {
@@ -300,6 +302,32 @@ export interface OfferView {
   floor: { floorEur: number; monthlyEur: number | null; verdict: "above" | "at" | "below" | "unknown" } | null;
 }
 
+/** Likely reasons for a rejection the user may pick (a guess for form letters); none is pre-selected. */
+export const rejectionReasons = [
+  { key: "experience", label: "Experience: they asked for more years" },
+  { key: "skill", label: "Missing skill or certificate" },
+  { key: "location", label: "Location or remote terms" },
+  { key: "salary", label: "Salary" },
+  { key: "none-given", label: "No reason given" },
+] as const;
+export type RejectionReason = (typeof rejectionReasons)[number]["key"];
+
+/** A rejected Application's page: the email, the optional lesson and likely reason, and what it changes in Stats. */
+export interface RejectionView {
+  /** One line specific to this one, or null. */
+  lesson: string | null;
+  reason: RejectionReason | null;
+  reasons: { key: RejectionReason; label: string }[];
+  /** The rejection email matched here (still standing), or null when it was set by hand. */
+  email: MatchedEmail | null;
+  /**
+   * What it changes in Stats: a rejection is a reply. `counts` is whether this Application is old
+   * enough (14 days) to count in the response rate yet (`countsFrom` says when, otherwise); `angle`
+   * is its angle's row in What's working, or null.
+   */
+  stats: { replied: number; counted: number; counts: boolean; countsFrom: string | null; angle: WorkingRow | null };
+}
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
   /** When it got its current Status (the Event still standing that set it). */
@@ -328,6 +356,8 @@ export interface ApplicationDetail extends ApplicationSummary {
   closedReason: string | null;
   /** The offer, while at Offer or Accepted (or once it has details); else null. */
   offer: OfferView | null;
+  /** While Rejected: its lesson, likely reason and what it changes in Stats; else null. */
+  rejection: RejectionView | null;
 }
 
 /** What the user gives "Add application". */
@@ -663,6 +693,8 @@ export interface Tracker {
   declineDraft(applicationId: string): Promise<FollowUpDraft>;
   /** Saves the offer's details as the user checked them (empty fields are unknown). Throws a TrackerError when refused. */
   saveOfferDetails(applicationId: string, details: Partial<OfferDetails>): Promise<{ offer: OfferView }>;
+  /** Saves a rejection's optional one-line lesson and likely reason. Throws a TrackerError when refused. */
+  saveRejectionNote(applicationId: string, note: { lesson: string | null; reason: RejectionReason | null }): Promise<{ rejection: RejectionView }>;
   /**
    * Classifies and matches every stored email not decided yet (run after each mailbox read; the
    * engine passes what it just stored). A confident unique match of a Status-changing kind moves the
@@ -1110,6 +1142,17 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
   function nextStepOf(app: ApplicationSummary, standing: ApplicationEvent[], followUp: FollowUp | null, thankYous: FollowUp[], interviews: Interview[]): NextStep {
     if (isClosed(app.status)) return { kind: "closed", text: `Nothing to do: it's ${statusName(app.status).toLowerCase()}. It stays here for your records.` };
+    if (app.status === "accepted") {
+      const left = withdrawalList().items.filter((w) => w.followUp.state === "pending").length;
+      return {
+        kind: "accepted", withdrawals: left,
+        text: `You accepted this offer. ${left ? `${left} withdrawal${left === 1 ? "" : "s"} to send.` : "Nothing left to withdraw."}`,
+      };
+    }
+    const withdrawal = withdrawalOf(app.id);
+    if (withdrawal?.state === "pending") {
+      return { kind: "follow-up", text: "You accepted another offer. Send a short, polite note withdrawing from this one, or keep it open.", followUp: withdrawal };
+    }
     const thanks = thankYous.find(isDueNow);
     if (thanks) {
       const iv = interviews.find((i) => i.id === thanks.interviewId);
@@ -1185,6 +1228,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       movedByEmail: movedByEmailOf(setter, app.status),
       closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
       offer: await offerOf(app),
+      rejection: rejectionOf(app),
     };
   }
 
@@ -1406,6 +1450,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   }
 
   function nextOf(app: Row): NextUp {
+    const withdrawal = app.removed_at ? null : withdrawalOf(String(app.id));
+    if (withdrawal?.state === "pending" && !isClosed(app.status as Status)) return { kind: "follow-up", followUpKind: "withdrawal", dueOn: withdrawal.dueOn, due: true };
     const thanks = thankYousOf(app).find(isDueNow);
     if (thanks) return { kind: "follow-up", followUpKind: "thank-you", dueOn: thanks.dueOn, due: true, ...(thanks.dueAt ? { dueAt: thanks.dueAt } : {}) };
     const coming = isClosed(app.status as Status) || app.removed_at ? undefined : interviewsOf(String(app.id)).find((i) => i.startAt && i.startAt > now());
@@ -1576,6 +1622,43 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
          contract = excluded.contract, other = excluded.other, saved_by = 'you', saved_at = excluded.saved_at`,
     ).run(applicationId, d.baseSalary, d.startDate, d.workPattern, d.contract, d.other, str(r?.from_email), now());
     return { offer: (await offerOf(app))! };
+  }
+
+  function rejectionOf(app: ApplicationSummary): RejectionView | null {
+    if (app.status !== "rejected") return null;
+    const r = db.prepare("SELECT lesson, reason FROM rejection_note WHERE application_id = ?").get(app.id);
+    const latest = db.prepare(
+      "SELECT email_id FROM application_event WHERE application_id = ? AND kind = 'email' AND email_kind = 'rejection' AND undone_at IS NULL ORDER BY at DESC, rowid DESC LIMIT 1",
+    ).get(app.id);
+    const stats = computeStats(db, today());
+    const countsFrom = addDays(app.appliedOn, 14);
+    const angle = app.angle ? stats.working.angle.find((w) => w.name === angleLabel[app.angle!]) ?? null : null;
+    return {
+      lesson: str(r?.lesson), reason: str(r?.reason) as RejectionReason | null, reasons: rejectionReasons.map((x) => ({ ...x })),
+      email: latest?.email_id ? matchedEmail(String(latest.email_id)) : null,
+      stats: {
+        replied: stats.responseRate.replied, counted: stats.responseRate.counted, counts: countsFrom <= today(),
+        countsFrom: countsFrom <= today() ? null : countsFrom, angle,
+      },
+    };
+  }
+
+  async function saveRejectionNote(applicationId: string, note: { lesson: string | null; reason: RejectionReason | null }) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    if (app.status !== "rejected") throw new TrackerError("invalid", "Only a rejection has a lesson and a likely reason.", applicationId);
+    const lesson = typeof note?.lesson === "string" ? note.lesson.trim().slice(0, 300) || null : null;
+    const reason = note?.reason ?? null;
+    if (reason !== null && !rejectionReasons.some((x) => x.key === reason)) throw new TrackerError("invalid", "Choose one of the likely reasons, or none.", applicationId);
+    const plain = lesson?.toLowerCase().replace(/[^\p{L}\s]/gu, "").replace(/\s+/g, " ").trim();
+    if (plain && genericLessons.some((g) => plain.includes(g))) {
+      throw new TrackerError("invalid", `"${lesson}" would fit any rejection. Write what was specific to this one, or leave it empty.`, applicationId);
+    }
+    db.prepare(
+      `INSERT INTO rejection_note (application_id, lesson, reason, saved_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (application_id) DO UPDATE SET lesson = excluded.lesson, reason = excluded.reason, saved_at = excluded.saved_at`,
+    ).run(applicationId, lesson, reason, now());
+    return { rejection: rejectionOf(app)! };
   }
 
   async function needsYou(): Promise<NeedsYou> {
@@ -2538,6 +2621,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     declineOffer,
     declineDraft,
     saveOfferDetails,
+    saveRejectionNote,
     processMail,
     emailsToMatch,
     answerEmail,
@@ -2605,6 +2689,9 @@ function dayName(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
   return `${d} ${months[m! - 1]} ${y}`;
 }
+
+/** Lessons that would fit any rejection (docs/knowledge/application-tactics.md), so they don't count. */
+const genericLessons = ["tailor your cv", "network more", "practice behavioural questions", "practise behavioural questions", "practice behavioral questions", "apply to more jobs"];
 
 /** Leva per euro (the fixed rate). */
 const bgnPerEur = 1.95583;

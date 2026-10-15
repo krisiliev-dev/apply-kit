@@ -133,6 +133,17 @@ describe("a withdrawal", () => {
     expect(after.items.find((i) => i.application.id === velta)).toMatchObject({ done: true, followUp: { state: "sent" } });
   });
 
+  it("is the next step on its Application's page and in the list's Next column; the accepted one says how many are left", async () => {
+    const { tracker, ardent, velta } = await withOffer();
+    await tracker.acceptOffer(ardent);
+
+    const page = (await tracker.get(velta))!;
+    expect(page.nextStep).toMatchObject({ kind: "follow-up", followUp: { kind: "withdrawal" } });
+    const row = (await tracker.list()).groups.flatMap((g) => g.applications).find((a) => a.id === velta)!;
+    expect(row.next).toMatchObject({ kind: "follow-up", followUpKind: "withdrawal", due: true });
+    expect((await tracker.get(ardent))!.nextStep).toEqual({ kind: "accepted", text: "You accepted this offer. 2 withdrawals to send.", withdrawals: 2 });
+  });
+
   it("goes when the accept is undone: back to Offer, nothing left to withdraw", async () => {
     const { tracker, ardent } = await withOffer();
     const { event } = await tracker.acceptOffer(ardent);
@@ -278,5 +289,43 @@ describe("offer details", () => {
     });
     expect((await s.tracker.saveOfferDetails(id, { baseSalary: "€30,000 a year" })).offer.floor).toMatchObject({ monthlyEur: 2500, verdict: "above" });
     await expect(s.tracker.saveOfferDetails(id, { startDate: "next spring" })).rejects.toMatchObject({ problem: "invalid" });
+  });
+});
+
+describe("a rejection", () => {
+  it("offers an optional lesson and likely reason, nothing pre-selected, and what it changes in Stats", async () => {
+    const s = setup();
+    const id = await s.add("Pixelmoor", "UI Designer", "applied", { appliedOn: "2026-09-20" });
+    await s.add("Lumio Maps", "Product Designer", "applied", { appliedOn: "2026-09-21" });
+    await s.tracker.setStatus(id, "rejected");
+
+    const app = (await s.tracker.get(id))!;
+
+    expect(app.rejection).toMatchObject({ lesson: null, reason: null, stats: { replied: 1, counted: 2, counts: true } });
+    expect(app.rejection!.reasons.map((r) => r.key)).toEqual(["experience", "skill", "location", "salary", "none-given"]);
+  });
+
+  it("keeps the lesson and reason you give, both optional; a generic lesson doesn't count", async () => {
+    const s = setup();
+    const id = await s.add("Pixelmoor", "UI Designer", "rejected");
+
+    await s.tracker.saveRejectionNote(id, { lesson: "They wanted a shipped design system, not components", reason: "experience" });
+    expect((await s.tracker.get(id))!.rejection).toMatchObject({ lesson: "They wanted a shipped design system, not components", reason: "experience" });
+
+    await s.tracker.saveRejectionNote(id, { lesson: " ", reason: null });
+    expect((await s.tracker.get(id))!.rejection).toMatchObject({ lesson: null, reason: null });
+
+    await expect(s.tracker.saveRejectionNote(id, { lesson: "Tailor your CV", reason: null })).rejects.toMatchObject({ problem: "invalid" });
+    await expect(s.tracker.saveRejectionNote(id, { lesson: null, reason: "bad-luck" as never })).rejects.toMatchObject({ problem: "invalid" });
+  });
+
+  it("is never a Needs-you item: its pending follow-up goes and nothing takes its place", async () => {
+    const s = setup();
+    const id = await s.add("Pixelmoor", "UI Designer", "applied", { appliedOn: "2026-09-20" });
+    expect((await s.tracker.needsYou()).count).toBe(1); // the nudge, due
+
+    await s.tracker.setStatus(id, "rejected");
+
+    expect(await s.tracker.needsYou()).toMatchObject({ count: 0, items: [] });
   });
 });
