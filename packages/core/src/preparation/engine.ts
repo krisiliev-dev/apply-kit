@@ -34,7 +34,7 @@ import { demoDocument, demoFileName, type DemoOptions } from "../documents/demo.
 import type { PdfText, PreparationDeps } from "./ports.ts";
 import {
   createPackageStore, type ApproveResult, type ChangeResult, type DraftAnswerRequest, type DraftAnswerResult, type FlagChoice, type LearnedPiece, type PackageChip, type PackageJob, type PackageStep, type PackageView,
-  type PrepareStatus, type StartPackageResult,
+  type PrepareStatus, type StartPackageResult, type AtsFix,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
 import type { ApprovedPackage, FrozenFile, MarkSubmittedResult, PackageForApply, ProfileForApply, SubmittedVia } from "./contracts.ts";
@@ -388,6 +388,12 @@ export interface PreparationEngine {
    */
   approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
   /**
+   * The ATS check's fix, which asks for facts rather than guess them: the contact details the CV
+   * lacks, saved to the master profile when Kris ticks it (so it doesn't come back) or used in this
+   * package only. The CV is printed again and checked again; its approval stays.
+   */
+  fixAts(id: string, fix: AtsFix): Promise<ChangeResult>;
+  /**
    * A frozen file of an approved version (the one approved now by default), exactly as approved:
    * its name, SHA-256, size, where it is (and its copy in the Packages folder) and its bytes. Null
    * when there's no such approved version or file. Never a draft.
@@ -495,6 +501,11 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     savePiece: (input, origin) => profile.save(input, origin),
     skipped: () => interview.skipped(),
     contact: () => contact.get(),
+    saveContact(details) {
+      const result = contact.save(details);
+      if (result.saved) seedAnswers();
+      return result;
+    },
     closestAngle: (posting) => angles.closest(posting),
     draftDocument,
     voice: {
@@ -549,6 +560,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     saveScreeningAnswerToBank: (id, questionId) => packages.saveAnswerToBank(id, questionId),
     draftAnswer: (id, request) => packages.draftAnswer(id, request),
     approvePackage: (id, options) => packages.approvePackage(id, options),
+    fixAts: (id, fix) => packages.fixAts(id, fix),
     packageFile: (id, which, version) => packages.frozenFile(id, which, version),
     packageForApply: (query) => packages.forApply(query),
     approvedPackages: () => packages.approvedList(),

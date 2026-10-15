@@ -36,7 +36,7 @@ import {
 } from "./cv-version.ts";
 import { checkWording, validateCv, type HonestyProfile } from "./honesty.ts";
 import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview.ts";
-import type { Contact } from "./contact.ts";
+import type { Contact, ContactDetails, SaveContactResult } from "./contact.ts";
 import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
 import { atsCheckLabel, atsStepView, postingKeywords, type AtsFixField, type AtsStepView } from "./ats-step.ts";
 import type { ApprovedPackage, CvEntryAsSent, FrozenFile, MarkSubmittedResult, PackageForApply, SubmittedVia } from "./contracts.ts";
@@ -419,6 +419,12 @@ export type ApproveResult =
 /** Kris's decision on a flag: one of its options, or her own wording (checked before it's used). */
 export type FlagChoice = { option: string } | { own: string };
 
+/** Kris's answer to the ATS check's fix: the facts asked for, and whether they go into the master profile too. */
+export interface AtsFix {
+  values: Partial<Record<AtsFixField, string>>;
+  updateProfile: boolean;
+}
+
 export type ChangeResult = { changed: true; package: PackageView } | { changed: false; reason: string; package: PackageView };
 
 export interface PackageStoreDeps {
@@ -434,6 +440,8 @@ export interface PackageStoreDeps {
   /** Interview questions Kris skipped, so a gap can say when it was one of them. */
   skipped: () => SkippedQuestion[];
   contact: () => Contact;
+  /** Saves contact details to the master profile (the ATS fix, when Kris ticks it). */
+  saveContact: (details: ContactDetails) => SaveContactResult;
   closestAngle: (posting: AnglePosting) => AngleChoice;
   draftDocument: (request: DraftRequest) => Promise<DocumentDraft>;
   /** The voice, as the letter uses it: the context a draft sends, Kris's edits as evidence, and where excerpts came from. */
@@ -492,6 +500,8 @@ export interface PackageStore {
   saveAnswerToBank(id: string, questionId: string): ChangeResult;
   /** The drafter, for Apply's needs-you questions: honesty-checked, citing pieces, within the limit and the monthly cap. */
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
+  /** The ATS check's fix: the missing contact facts, saved to the master profile or used in this package only; the CV is printed again. */
+  fixAts(id: string, fix: AtsFix): Promise<ChangeResult>;
   /** Approves the package (step 5's Approve) and freezes its files as the next version. */
   approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
   /** Apply's read: the Job's (or package's) approved package, or why there isn't one. */
@@ -1955,6 +1965,35 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
 
   // ---- approving the package (#67) ---------------------------------------------------------
 
+  const fixAsk: Record<AtsFixField, string> = { phone: "Give your phone number, with the country code.", city: "Give the city you live in.", country: "Give the country you live in." };
+
+  async function fixAts(id: string, fix: AtsFix): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
+    const asked = missingContact(r);
+    if (!asked.length) return refuse("There's nothing for this fix to add: the CV has your contact details.");
+    const values: Partial<Record<AtsFixField, string>> = {};
+    for (const field of asked) {
+      const value = fix.values[field]?.trim() ?? "";
+      // Nothing is guessed: every fact asked for comes from Kris.
+      if (!value) return refuse(fixAsk[field]);
+      if (field === "phone" && !/^\+\d[\d\s()-]{5,}$/.test(value)) return refuse("Give the phone number with the country code, like +359 88 000 0000.");
+      values[field] = value;
+    }
+    if (fix.updateProfile) {
+      const c = deps.contact();
+      const { photo: _photo, ...details } = c;
+      const saved = deps.saveContact({ ...details, ...values });
+      if (!saved.saved) return refuse(saved.problems[0]!.message);
+    } else {
+      db.prepare("UPDATE package SET contact_fix = ? WHERE id = ?").run(JSON.stringify({ ...r.contactFix, ...values }), id);
+    }
+    // The check runs again on the CV printed with the new facts; the CV keeps its approval (its words didn't change).
+    await renderCv(id);
+    if (currentLetter(row(id)!)) await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
   const toApproved = (x: Record<string, unknown>): ApprovedPackage => {
     const snapshot = JSON.parse(String(x.snapshot)) as ApprovedPackage;
     const submitted = x.submitted_at == null ? null
@@ -2197,6 +2236,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     saveAnswerToBank,
     draftAnswer,
     approvePackage,
+    fixAts,
     forApply(query) {
       const r = "jobId" in query ? forJob(query.jobId) : row(query.packageId);
       if (!r) return { kind: "none" };

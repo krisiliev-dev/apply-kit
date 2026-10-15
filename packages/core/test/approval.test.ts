@@ -104,6 +104,47 @@ describe("the ATS check (step 5)", () => {
   });
 });
 
+describe("the ATS check's fix", () => {
+  it("asks for the missing fact; ticked, it updates the master profile and the check runs again", async () => {
+    const t = mira({ phone: "" });
+    const pkg = await upToAts(t);
+    expect(pkg.ats!.checks.find((c) => c.check === "contact")).toMatchObject({ passed: false, problems: ["No phone number on the CV"] });
+    expect(pkg.ats!.lost).toEqual(["No phone number on the CV"]);
+    expect(pkg.ats!.fixes).toEqual([{
+      id: "contact", title: "Add your phone number",
+      detail: "Parsers fill a portal's contact fields from the CV, and your profile doesn't have this yet. Nothing is guessed: give the real one.",
+      fields: [{ field: "phone", label: "Phone, with the country code" }],
+    }]);
+
+    const fixed = await t.preparation.fixAts(pkg.id, { values: { phone: "+359 88 000 0175" }, updateProfile: true });
+
+    expect(fixed).toMatchObject({ changed: true });
+    expect(t.preparation.contact().phone).toBe("+359 88 000 0175");
+    expect(fixed.package.ats!.checks.find((c) => c.check === "contact")).toMatchObject({ passed: true });
+    expect(fixed.package.ats!.fixes).toEqual([]);
+    expect(fixed.package.cv!.sha256).not.toBe(pkg.cv!.sha256);
+    // The CV stays approved: the new detail is a fact, not a change to its words.
+    expect(fixed.package.steps.map((s) => s.approvedAt !== null)).toEqual([true, true, true, true, false]);
+  });
+
+  it("unticked, the fact is used in this package only", async () => {
+    const t = mira({ phone: "" });
+    const pkg = await upToAts(t);
+
+    const fixed = await t.preparation.fixAts(pkg.id, { values: { phone: "+359 88 000 0175" }, updateProfile: false });
+
+    expect(t.preparation.contact().phone).toBe("");
+    expect(fixed.package.ats!.checks.find((c) => c.check === "contact")).toMatchObject({ passed: true });
+  });
+
+  it("refuses an empty answer: nothing is guessed", async () => {
+    const t = mira({ phone: "" });
+    const pkg = await upToAts(t);
+
+    expect(await t.preparation.fixAts(pkg.id, { values: { phone: " " }, updateProfile: true })).toMatchObject({ changed: false, reason: "Give your phone number, with the country code." });
+  });
+});
+
 describe("approving the package", () => {
   it("waits while a check fails, naming it, until Kris accepts the failing check knowingly", async () => {
     const t = mira();
