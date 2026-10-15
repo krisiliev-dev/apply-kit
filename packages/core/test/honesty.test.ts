@@ -234,3 +234,24 @@ describe("every refused line, in full (for the tailoring evaluation, #69)", () =
     expect(v.rejected).toEqual([]);
   });
 });
+
+describe("numbers as people write them (review fixes)", () => {
+  /** Made-up pieces with counts, under the analyst role. */
+  const counted: HonestyProfile = {
+    ...profile,
+    pieces: [
+      ...pieces,
+      piece({ id: "regions", kind: "achievement", belongsTo: "analyst", text: "Served customers in 2 regions.", numberSource: "measured" }),
+      piece({ id: "users", kind: "achievement", belongsTo: "analyst", text: "Rolled out phishing training to 1,500 users.", numberSource: "measured" }),
+      piece({ id: "respond", kind: "achievement", belongsTo: "analyst", text: "Cut the time to respond to 2,5 hours.", numberSource: "told" }),
+    ],
+  };
+
+  it("reads a thousands separator as thousands, not as a decimal point", () => {
+    expect(checkWording("Served 1,900 customers", ["regions"], counted)).toEqual([{ rule: "number", message: "says \"1,900\", which its piece doesn't back" }]);
+    expect(checkWording("Rolled out phishing training to 1500 users", ["users"], counted)).toEqual([]);
+    expect(checkWording("Rolled out phishing training to 1 500 users", ["users"], counted)).toEqual([]);
+    // A comma before fewer (or more) than three digits is still a decimal comma.
+    expect(checkWording("Cut the time to respond to 2.5 hours", ["respond"], counted)).toEqual([]);
+  });
+});

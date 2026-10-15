@@ -21,9 +21,11 @@ const fractions: Record<string, number> = {
   "една трета": 1 / 3, "две трети": 2 / 3, "половина": 0.5, "наполовина": 0.5, "една четвърт": 0.25,
 };
 const fractionWords = Object.keys(fractions).sort((a, b) => b.length - a.length).map((w) => w.replace(/ /g, String.raw`[\s-]+`)).join("|");
-// A number with an optional decimal part and thousands suffix, then % or "per cent"; or a fraction in words.
+// A number, then an optional thousands suffix, then % or "per cent"; or a fraction in words. A
+// comma or space followed by exactly three digits groups thousands ("1,500", "12 000"); otherwise a
+// comma or point starts a decimal part ("1.5", "2,5").
 const pattern = new RegExp(
-  String.raw`(?<![\p{L}\p{N}])${hedge}(?:(\d+(?:[.,]\d+)?)(k)?(\s?%|\s?per\s?cent|\s?percent|\s?процента)?|(${fractionWords}))(?![\p{L}\p{N}])`,
+  String.raw`(?<![\p{L}\p{N}])${hedge}(?:(?<digits>\d{1,3}(?<sep>[, \u00a0\u202f])\d{3}(?:\k<sep>\d{3})*(?:\.\d+)?(?!\d)|\d+(?:[.,]\d+)?)(?<k>k)?(?<percent>\s?%|\s?per\s?cent|\s?percent|\s?процента)?|(?<words>${fractionWords}))(?![\p{L}\p{N}])`,
   "giu",
 );
 
@@ -46,12 +48,13 @@ export function quantities(text: string, { source = false }: { source?: boolean 
     found.push({ kind: "count", value: countWords[word] ?? oneWords[word]!, raw: m[0].trim(), index: m.index });
   }
   for (const m of text.matchAll(pattern)) {
-    const [raw, digits, thousands, percent, words] = m;
+    const raw = m[0];
+    const { digits, sep, k: thousands, percent, words } = m.groups!;
     if (words) {
       found.push({ kind: "proportion", value: fractions[words.toLowerCase().replace(/[\s-]+/g, " ")]!, raw: raw.trim(), index: m.index });
       continue;
     }
-    const n = Number(digits!.replace(",", ".")) * (thousands ? 1000 : 1);
+    const n = Number(sep ? digits!.split(sep).join("") : digits!.replace(",", ".")) * (thousands ? 1000 : 1);
     if (!percent && !thousands && /^\d{4}$/.test(digits!) && n >= 1950 && n <= 2099) continue;
     found.push({ kind: percent ? "proportion" : "count", value: percent ? n / 100 : n, raw: raw.trim(), index: m.index });
   }
