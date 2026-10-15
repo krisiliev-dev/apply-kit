@@ -37,7 +37,7 @@ import {
   type PrepareStatus, type StartPackageResult,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
-import type { FrozenFile } from "./contracts.ts";
+import type { ApprovedPackage, FrozenFile, PackageForApply, ProfileForApply } from "./contracts.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -393,7 +393,29 @@ export interface PreparationEngine {
    * when there's no such approved version or file. Never a draft.
    */
   packageFile(id: string, which: "cv" | "letter", version?: number): Promise<(FrozenFile & { bytes: Uint8Array }) | null>;
+
+  // ---------- The contract for Apply (#38, #39, #41; docs/contracts.md) ----------
+
+  /**
+   * The approved package for a Job (or by id), the way Apply fills from it; a draft, or a package
+   * reopened by an edit, answers "not approved yet" and is never returned for filling.
+   */
+  packageForApply(query: { jobId: string } | { packageId: string }): PackageForApply;
+  /** Every package approved now, newest first: what Apply matches a portal's job against. */
+  approvedPackages(): ApprovedPackage[];
+  /** The master profile as a portal's form asks for it: contact details split for forms, roles, education, skills. */
+  profileForApply(): ProfileForApply;
 }
+
+/**
+ * What Apply's fill engine reads from Prepare (read-only, except adding to the answer bank):
+ * the master profile, approved packages with their frozen files, the answer bank and the drafter,
+ * and marking a package submitted. See docs/contracts.md.
+ */
+export type PrepareForApply = Pick<PreparationEngine,
+  | "profileForApply" | "packageForApply" | "approvedPackages" | "packageFile"
+  | "findAnswer" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit" | "draftAnswer"
+>;
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
 export type VoiceForDrafts = Pick<PreparationEngine, "voiceContext" | "recordVoiceEdit">;
@@ -505,6 +527,30 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     draftAnswer: (id, request) => packages.draftAnswer(id, request),
     approvePackage: (id, options) => packages.approvePackage(id, options),
     packageFile: (id, which, version) => packages.frozenFile(id, which, version),
+    packageForApply: (query) => packages.forApply(query),
+    approvedPackages: () => packages.approvedList(),
+    profileForApply() {
+      const c = contact.get();
+      const words = c.nameLatin.trim().split(/\s+/).filter(Boolean);
+      const phone = /^(\+\d{1,3})[\s-]*(.+)$/.exec(c.phone.trim());
+      const link = (host: RegExp) => c.links.find((l) => host.test(l)) ?? null;
+      const pieces = profile.all().filter((p) => p.status === "confirmed");
+      const byEnd = (a: ProfilePiece, b: ProfilePiece) => (b.entry!.end ?? "9999").localeCompare(a.entry!.end ?? "9999") || b.entry!.start.localeCompare(a.entry!.start);
+      const entries = (kind: "role" | "education") => pieces.filter((p) => p.kind === kind && p.entry).sort(byEnd)
+        .map((p) => ({ title: p.entry!.title, organisation: p.entry!.organisation, place: p.entry!.city, start: p.entry!.start, end: p.entry!.end, text: p.text }));
+      return {
+        contact: {
+          givenName: words.slice(0, -1).join(" ") || words[0] || "", familyName: words.length > 1 ? words[words.length - 1]! : "", fullName: words.join(" "),
+          fullNameCyrillic: c.nameCyrillic.trim() || null, email: c.email,
+          phone: c.phone.trim() ? { countryCode: phone?.[1] ?? "", national: phone?.[2] ?? c.phone.trim(), full: c.phone.trim() } : null,
+          city: c.city, country: c.country,
+          linkedin: link(/linkedin\.com/i), github: link(/github\.com/i), portfolio: c.links.find((l) => !/linkedin\.com|github\.com/i.test(l)) ?? null,
+        },
+        roles: entries("role").map(({ text, ...e }) => ({ ...e, description: text })),
+        education: entries("education").map(({ text: _text, ...e }) => ({ ...e, field: null })),
+        skills: pieces.filter((p) => p.kind === "skill").map((p) => p.text),
+      };
+    },
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });

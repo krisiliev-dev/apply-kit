@@ -182,3 +182,65 @@ describe("frozen files", () => {
     expect(await t.preparation.packageFile(pkg.id, "cv", 1)).toMatchObject({ sha256: frozen.sha256 });
   });
 });
+
+describe("what Apply reads (#38, #39, #41)", () => {
+  it("a draft package answers 'not approved yet'; a job without one answers none", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(t.preparation.packageForApply({ jobId: "job-kestrel" })).toEqual({
+      kind: "not-approved", packageId: pkg.id, jobId: "job-kestrel", reason: "Your package isn't approved yet · open it to approve",
+    });
+    expect(t.preparation.packageForApply({ packageId: pkg.id })).toMatchObject({ kind: "not-approved" });
+    expect(t.preparation.packageForApply({ jobId: "job-other" })).toEqual({ kind: "none" });
+    expect(t.preparation.approvedPackages()).toEqual([]);
+    expect(await t.preparation.packageFile(pkg.id, "cv")).toBeNull();
+  });
+
+  it("returns only approved content: the frozen files, the CV's work history, the letter and the approved answers", async () => {
+    const t = mira();
+    const pkg = await approved(t);
+
+    const read = t.preparation.packageForApply({ jobId: "job-kestrel" });
+
+    expect(read).toMatchObject({
+      kind: "approved",
+      package: {
+        id: pkg.id, jobId: "job-kestrel", version: 1, state: "approved", language: "en", angle: "security",
+        job: { title: "Security Engineer", company: "Kestrel Payments" },
+        targetPosting: { url: "https://job-boards.greenhouse.io/kestrel/jobs/4410", site: "job-boards.greenhouse.io", jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" } },
+        cv: {
+          label: "Security · Kestrel Payments", file: pkg.approved!.cv.file, ats: { passed: 10, total: 10, accepted: [] }, skills: ["Wazuh"],
+          roles: [{ title: "Security Analyst", organisation: "Northwind Bank", place: "Sofia", start: "2022-03", end: null }],
+          education: [{ title: "BSc Computer Science", organisation: "Danube Institute of Technology", place: "Ruse", start: "2018-09", end: "2022-06" }],
+        },
+        letter: { file: pkg.approved!.letter!.file },
+      },
+    });
+    if (read.kind !== "approved") return;
+    expect(read.package.letter!.text).toBe(pkg.letter!.text);
+    expect(read.package.answers).toContainEqual({ question: "What are your salary expectations? (gross monthly, EUR)", answer: "3400" });
+    expect(t.preparation.approvedPackages().map((p) => p.id)).toEqual([pkg.id]);
+    expect((await t.preparation.packageFile(pkg.id, "cv"))!.bytes).toEqual((await t.preparation.packageCv(pkg.id))!.pdf);
+
+    // Reopened by an edit, the draft is never read for filling.
+    t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3500");
+    expect(t.preparation.packageForApply({ jobId: "job-kestrel" })).toMatchObject({ kind: "not-approved" });
+    expect(t.preparation.approvedPackages()).toEqual([]);
+  });
+
+  it("the master profile as a portal's form asks for it", () => {
+    const t = mira();
+
+    expect(t.preparation.profileForApply()).toEqual({
+      contact: {
+        givenName: "Mira", familyName: "Petrova", fullName: "Mira Petrova", fullNameCyrillic: "Мира Петрова", email: "mira.petrova@example.com",
+        phone: { countryCode: "+359", national: "88 000 0175", full: "+359 88 000 0175" }, city: "Sofia", country: "Bulgaria",
+        linkedin: "https://www.linkedin.com/in/mira-petrova-example", github: null, portfolio: null,
+      },
+      roles: [{ title: "Security Analyst", organisation: "Northwind Bank", place: "Sofia", start: "2022-03", end: null, description: "" }],
+      education: [{ title: "BSc Computer Science", organisation: "Danube Institute of Technology", place: "Ruse", start: "2018-09", end: "2022-06", field: null }],
+      skills: ["Wazuh"],
+    });
+  });
+});

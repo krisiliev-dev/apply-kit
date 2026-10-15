@@ -39,7 +39,7 @@ import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview
 import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
 import { atsCheckLabel, atsStepView, postingKeywords, type AtsFixField, type AtsStepView } from "./ats-step.ts";
-import type { ApprovedPackage, CvEntryAsSent, FrozenFile } from "./contracts.ts";
+import type { ApprovedPackage, CvEntryAsSent, FrozenFile, PackageForApply } from "./contracts.ts";
 import { portalJobReference } from "./portal.ts";
 import { createHash } from "node:crypto";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
@@ -494,6 +494,10 @@ export interface PackageStore {
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
   /** Approves the package (step 5's Approve) and freezes its files as the next version. */
   approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
+  /** Apply's read: the Job's (or package's) approved package, or why there isn't one. */
+  forApply(query: { jobId: string } | { packageId: string }): PackageForApply;
+  /** Every package approved now (not reopened), newest first. */
+  approvedList(): ApprovedPackage[];
   /** An approved version (the current one by default) and its frozen files. */
   version(id: string, version?: number): ApprovedPackage | null;
   /** A frozen file's bytes, exactly as approved. */
@@ -2184,6 +2188,16 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     saveAnswerToBank,
     draftAnswer,
     approvePackage,
+    forApply(query) {
+      const r = "jobId" in query ? forJob(query.jobId) : row(query.packageId);
+      if (!r) return { kind: "none" };
+      const pkg = r.approvedVersion === null ? null : versionOf(r.id, r.approvedVersion);
+      return pkg ? { kind: "approved", package: pkg } : { kind: "not-approved", packageId: r.id, jobId: r.jobId, reason: "Your package isn't approved yet · open it to approve" };
+    },
+    approvedList() {
+      return db.prepare("SELECT v.* FROM package p JOIN package_version v ON v.package_id = p.id AND v.version = p.approved_version ORDER BY v.approved_at DESC, p.rowid DESC")
+        .all().map(toApproved);
+    },
     version(id, version) {
       const r = row(id);
       const v = version ?? r?.approvedVersion ?? null;
