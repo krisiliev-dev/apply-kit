@@ -33,6 +33,11 @@ export function readConfig() {
       /** AI_MONTHLY_CAP_USD: hard monthly cap. Unset means no AI spending at all. */
       monthlyCapUsd: parseCap(process.env.AI_MONTHLY_CAP_USD),
     },
+    /**
+     * MY_EMAIL_ADDRESSES: the addresses you send mail from (comma-separated). A copy you BCC to the
+     * job mailbox from one of them marks the follow-up it answers as sent.
+     */
+    myAddresses: (process.env.MY_EMAIL_ADDRESSES ?? "").split(",").map((s) => s.trim().toLowerCase()).filter((s) => s.includes("@")),
     // Defaults: every 30 minutes, 07:00-23:00 local time.
     schedule: parseSchedule({
       every: process.env.APPLY_KIT_CHECK_EVERY_MINUTES,

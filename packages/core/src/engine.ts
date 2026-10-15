@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
 import { createAiBudget, type BudgetInfo } from "./budget.ts";
-import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
+import type { AlertEmail, EngineDeps, MailMessage, SqlDatabase } from "./ports.ts";
+import { createMailStore } from "./mail-store.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
 import {
   jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
@@ -13,7 +14,7 @@ import { withEvidence } from "./fit/evidence.ts";
 import { createProfileStore } from "./preparation/profile.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations, NOT_STATED } from "./locations.ts";
-import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
+import { mailboxFix, type MailboxProblem } from "./mailbox.ts";
 import { defaultSearchSettings, parseSearchSettings, type SearchSettings } from "./search-settings.ts";
 import { dealbreakersOf, monthlyEur, type DealbreakerRule, type HiddenReason } from "./dealbreakers.ts";
 import type { FoundPosting, SourceCategory } from "./sources/adapter.ts";
@@ -582,6 +583,11 @@ export interface DiscoveryEngine {
   checkSource(sourceId: string): Promise<SourceCheck>;
   /** Every Source with its status, latest Checks and what a failure means for the Feed. */
   sourceHealth(): Promise<HealthReport>;
+  /**
+   * Emails in the mail store (every email the job mailbox held, once each by Message-ID) received at
+   * or after `since`, or all of them, oldest first.
+   */
+  storedMail(since?: Date): Promise<MailMessage[]>;
   /** Saves open Jobs (new → saved). */
   save(jobIds: string[]): Promise<Decision>;
   /** Passes open Jobs, with the reason and note Kris gave (both optional, never defaulted). */
@@ -818,7 +824,7 @@ const similarLimit = 5;
 /** How many recent Checks sourceHealth returns per Source. */
 const historyLength = 14;
 
-/** How far back a mailbox read looks. Alerts older than this are left alone. */
+/** How far back email-alert Sources look in the mail store. Alerts older than this are left alone. */
 const mailLookbackMs = 14 * 24 * 60 * 60_000;
 
 /** How many redirects a pasted link may go through before apply-kit gives up on it. */
@@ -882,6 +888,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const profilePieces = () => profile.all().filter((p) => p.status === "confirmed");
   backfillMatchKeys(db);
   backfillLinkKeys(db);
+  const mailStore = createMailStore(db, clock, deps.mailReader);
 
   const setting = (name: string) => deps.settings?.get(name)?.trim() || undefined;
   /** Kris's search settings: as he saved them, else the ones the engine was given, else the defaults. */
@@ -1056,23 +1063,26 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   const count = (sql: string, ...params: string[]) => Number(db.prepare(sql).get(...params)?.n ?? 0);
 
-  /** One read of the job mailbox, shared by every email Source in a check and made only if one needs it. */
-  function mailboxRead(): () => Promise<AlertEmail[]> {
-    let read: Promise<AlertEmail[]> | null = null;
-    return () => (read ??= readMailbox());
-  }
-
-  async function readMailbox(): Promise<AlertEmail[]> {
-    const at = clock.now().toISOString();
-    const record = db.prepare("INSERT INTO mailbox_read (read_at, outcome, reason, error, emails) VALUES (?, ?, ?, ?, ?)");
-    try {
-      const emails = await deps.mailReader.fetchSince(new Date(clock.now().getTime() - mailLookbackMs));
-      record.run(at, "ok", null, null, emails.length);
-      return emails;
-    } catch (err) {
-      record.run(at, "error", mailboxProblemOf(err), err instanceof Error ? err.message : String(err), null);
-      throw err;
-    }
+  /**
+   * One read of the job mailbox per check, into the mail store, shared by every email Source and by
+   * whoever waits on new mail (`onMailStored`), and made only if one of them needs it. `recent` is
+   * what alert Sources read: the store's emails from the last 14 days. `finish` hands the emails this
+   * read stored to `onMailStored`, reading first if no Source did; after a failed read, nothing.
+   */
+  function mailboxRead(): { recent: () => Promise<AlertEmail[]>; finish: () => Promise<void> } {
+    let read: Promise<MailMessage[]> | null = null;
+    const once = () => (read ??= mailStore.read());
+    return {
+      recent: async () => {
+        await once();
+        return mailStore.since(new Date(clock.now().getTime() - mailLookbackMs));
+      },
+      finish: async () => {
+        if (!deps.onMailStored) return;
+        const stored = await once().catch(() => null);
+        if (stored) await deps.onMailStored(stored);
+      },
+    };
   }
 
   function mailboxHealth(sources: SourceHealth[]): MailboxHealth | null {
@@ -2034,8 +2044,14 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const pieces = profilePieces();
       const all = rows.map((r) => ({ job: toFeedJob(r, money, active, pieces), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
+      // Jobs with an open Application (Track's) are decided: they leave New, Saved and the hidden pile
+      // and stay in All open with their Status.
+      const applied = new Set(db.prepare(
+        "SELECT job_id FROM application WHERE job_id IS NOT NULL AND removed_at IS NULL AND status NOT IN ('rejected', 'withdrawn')",
+      ).all().map((r) => liveJobId(db, String(r.job_id)) ?? String(r.job_id)));
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
-      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");
+      const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state)
+        && (v === "passed" || (applied.has(j.id) ? v === "open" : j.hidden === (v === "hidden")));
       const countView = (v: FeedView) =>
         all.filter(({ job }) => inView(v, job) && (v === "passed" || v === "hidden" || !relocating(job))).length;
 
@@ -2053,7 +2069,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       }
       const ranked = query.view !== "passed" && query.view !== "hidden";
       // Jobs of this view's states that a filter holds back: relocation ones (filter off) and hidden ones.
-      const heldBack = ranked ? all.map(({ job }) => job).filter((j) => viewStates[query.view].includes(j.state)) : [];
+      const heldBack = ranked
+        ? all.map(({ job }) => job).filter((j) => viewStates[query.view].includes(j.state) && (query.view === "open" || !applied.has(j.id)))
+        : [];
       return {
         view: query.view,
         asOf: clock.now().toISOString(),
@@ -2168,15 +2186,19 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       options.onStart?.(rows.length);
       const mail = mailboxRead();
       const sources = await Promise.all(rows.map(async (r) => {
-        const result = await checkOne(r, startedAt, mail);
+        const result = await checkOne(r, startedAt, mail.recent);
         options.onSourceChecked?.(result);
         return result;
       }));
+      await mail.finish();
       return { startedAt, sources };
     },
 
     async checkSource(sourceId) {
-      return checkOne(liveSource(sourceId), clock.now().toISOString(), mailboxRead());
+      const mail = mailboxRead();
+      const result = await checkOne(liveSource(sourceId), clock.now().toISOString(), mail.recent);
+      await mail.finish();
+      return result;
     },
 
     async detectCompany(input, options) {
@@ -2350,6 +2372,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       const matcher = companyMatcher(job.company, job.fit.angle);
       if (!matcher) throw new Error("This job doesn't say which company it's at, so there's nothing to boost");
       return adjustment(learn("boost", matcher, job.id, null, null));
+    },
+
+    async storedMail(since) {
+      return mailStore.since(since);
     },
 
     async sourceHealth() {

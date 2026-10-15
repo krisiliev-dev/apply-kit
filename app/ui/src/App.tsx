@@ -1,6 +1,6 @@
 import type { HealthSummary, ProfileSummary } from "@apply-kit/core";
 import { useEffect, useState } from "react";
-import { fetchProfileSummary, fetchSources } from "./api.ts";
+import { fetchNeedsYou, fetchProfileSummary, fetchSources } from "./api.ts";
 import { FeedPage } from "./feed/FeedPage.tsx";
 import { healthPill } from "./health.tsx";
 import { SourcesPage } from "./sources/SourcesPage.tsx";
@@ -8,6 +8,9 @@ import { JobPage } from "./job/JobPage.tsx";
 import { ProfilePage } from "./profile/ProfilePage.tsx";
 import { SetupPage } from "./setup/SetupPage.tsx";
 import { PackagePage } from "./package/PackagePage.tsx";
+import { ApplicationsPage } from "./applications/ApplicationsPage.tsx";
+import { ApplicationPage } from "./applications/ApplicationPage.tsx";
+import { FollowUpSettingsPage } from "./settings/FollowUpSettingsPage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -29,6 +32,7 @@ export function App() {
     return () => ctrl.abort();
   }, []);
   const badge = profile?.needsYouTotal ?? 0;
+  const needsYou = useNeedsYouCount();
 
   return (
     <>
@@ -41,8 +45,11 @@ export function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && (path.startsWith("/profile") || path === "/setup" || path.startsWith("/setup/"))) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>
+              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && (path.startsWith("/profile") || path === "/setup" || path.startsWith("/setup/"))) || (n.href === "/" && path.startsWith("/jobs/")) || (n.href === "/applications" && path.startsWith("/applications/")) ? "page" : undefined}>
                 {n.label}
+                {n.href === "/applications" && needsYou > 0 && (
+                  <><span className="badge" aria-hidden="true">{needsYou}</span><span className="sr-only">, {needsYou} need{needsYou === 1 ? "s" : ""} you</span></>
+                )}
                 {n.href === "/profile" && badge > 0 && (
                   <><span className="badge" aria-hidden="true">{badge}</span><span className="sr-only">, {badge} {badge === 1 ? "needs" : "need"} you</span></>
                 )}
@@ -62,12 +69,33 @@ export function App() {
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
             : (path === "/setup" || path.startsWith("/setup/")) ? <SetupPage onHealth={setHealth} />
             : path === "/profile" || path.startsWith("/profile/") ? <ProfilePage onHealth={setHealth} onSummary={setProfile} />
+            : path === "/applications" ? <ApplicationsPage onHealth={setHealth} />
+            : path.startsWith("/applications/") ? <ApplicationPage id={decodeURIComponent(path.slice("/applications/".length))} onHealth={setHealth} />
+            : path === "/settings/follow-ups" ? <FollowUpSettingsPage onHealth={setHealth} />
             : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings/sources/coverage" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}
         </main>
       </div>
     </>
   );
+}
+
+/** The Applications badge: how many items Needs you holds, counted again whenever a screen changes them. */
+function useNeedsYouCount(): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let ctrl = new AbortController();
+    const load = () => {
+      ctrl.abort();
+      ctrl = new AbortController();
+      fetchNeedsYou(ctrl.signal).then((n) => setCount(n.count)).catch(() => {});
+    };
+    load();
+    window.addEventListener("needs-you-changed", load);
+    window.addEventListener("focus", load);
+    return () => { ctrl.abort(); window.removeEventListener("needs-you-changed", load); window.removeEventListener("focus", load); };
+  }, []);
+  return count;
 }
 
 function NotBuilt({ onHealth }: { onHealth: (h: HealthSummary) => void }) {
