@@ -9,6 +9,7 @@ import type {
 import { mountImportApi } from "./import-api.ts";
 import { mountAnswerApi } from "./answers-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
+import { mountSetupApi } from "./setup-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
 const documentLanguages: DocumentLanguage[] = ["en", "bg"];
@@ -344,6 +345,7 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
   // Profile: the master profile's pieces, contact details, section counts and export.
   if (preparation) mountProfileApi(app, preparation);
   if (preparation) mountImportApi(app, preparation);
+  if (preparation) mountSetupApi(app, preparation);
   // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
   if (preparation) mountAnswerApi(app, preparation);
 
