@@ -18,7 +18,7 @@ import type {
 } from "@apply-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  fetchApplicationList, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
+  acceptOffer, fetchApplicationList, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
   setApplicationStatus, undoApplicationEvent, visitApplications, type ApplicationListParams,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
@@ -29,6 +29,7 @@ import type { FollowUpAction } from "./FollowUpWriter.tsx";
 import { MailboxBanner, mailWords, useMailReading } from "./MailState.tsx";
 import { FollowUpDialog, itemId, NeedsYouSection } from "./NeedsYou.tsx";
 import { StatsStrip } from "./StatsStrip.tsx";
+import { WithdrawDialog } from "./Withdrawals.tsx";
 import { angleLabel, daysWord, dueWords, eventTime, followUpName, nextWords, shortDay, statusLabel, statusOrder, todaySofia, weekDay } from "./words.ts";
 
 /** Groups over this many rows are paged (the service's page size). */
@@ -68,6 +69,8 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   const [highlight, setHighlight] = useState<string | null>(null);
   const [needs, setNeeds] = useState<NeedsYou | null>(null);
   const [writing, setWriting] = useState<{ entries: NeedsYouEntry[]; index: number; opener: HTMLElement } | null>(null);
+  /** The offer just accepted (from a row's Status select): the withdrawal dialog is open over the list, with its accept to undo. */
+  const [withdrawing, setWithdrawing] = useState<{ app: ApplicationSummary; from: Status; eventId: string } | null>(null);
   const [filters, setFilters] = useState<Filters>(noFilters);
   /** The search box as typed; the list follows it a moment after the last key. */
   const [typed, setTyped] = useState("");
@@ -218,6 +221,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
   /** Applies a Status change; resolves false when it was refused (the list then shows the Status the service has). */
   async function changeStatus(app: ApplicationSummary, to: Status): Promise<boolean> {
+    if (to === "accepted") return accept(app);
     try {
       const { event, cancelled } = await setApplicationStatus(app.id, to);
       const list = await refresh();
@@ -245,6 +249,38 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     }
   }
 
+  /** Accepted in a row's select: the accept flow, never a silent change. The withdrawal dialog opens over the list. */
+  async function accept(app: ApplicationSummary): Promise<boolean> {
+    try {
+      const { event } = await acceptOffer(app.id);
+      await refresh();
+      setWithdrawing({ app, from: app.status, eventId: event.id });
+      return true;
+    } catch (err) {
+      await refresh().catch(() => {});
+      focusApplication(app.id);
+      toaster.show({ message: `Couldn't accept the offer: ${message(err)}` });
+      return false;
+    }
+  }
+
+  /** The withdrawal dialog closed: focus back to the row's Status, and the accept itself can be undone. */
+  function withdrawn() {
+    const w = withdrawing!;
+    setWithdrawing(null);
+    focusApplication(w.app.id, "accepted");
+    toaster.show({
+      message: `${w.app.company}: ${statusLabel[w.from]} → Accepted. Logged by you.`,
+      returnFocus: () => focusApplication(w.app.id, "accepted"),
+      undo: () => {
+        undoApplicationEvent(w.eventId)
+          .then(() => refresh())
+          .then((after) => { focusApplication(w.app.id, groupOf(after, w.app.id)); toaster.announce(`Undone. Back to ${statusLabel[w.from]}; no withdrawals to send.`); })
+          .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+      },
+    });
+  }
+
   /** Mark sent, skip or snooze a follow-up (from Needs you or its dialog), with Undo in the toast. */
   async function actOn(entry: NeedsYouEntry, action: FollowUpAction) {
     const { application: a, followUp: f } = entry;
@@ -262,7 +298,9 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
       });
       if (!advance) focusAfter();
       toaster.show({
-        message: action === "sent"
+        message: f.kind === "withdrawal"
+          ? (action === "sent" ? `${a.company}: ${statusLabel[a.status]} → Withdrawn. Logged by you.` : `Kept open · no withdrawal for ${a.company}.`)
+          : action === "sent"
           ? `Marked ${f.kind === "nudge" ? "sent" : "done"} · ${name} logged on its timeline.`
           : action === "skip" ? `Skipped · no ${followUpName(f.kind).toLowerCase()} for ${a.company} this time.`
           : `Snoozed · ${name} due again ${weekDay(followUp.dueOn)}.`,
@@ -545,6 +583,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
       </section>
       {dialog}
       {followUpDialog}
+      {withdrawing && <WithdrawDialog accepted={withdrawing.app} onChanged={() => refresh()} onClose={withdrawn} />}
       {toaster.element}
     </section>
   );
@@ -690,7 +729,7 @@ const pickKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Ho
  * The row's quick Status change. Picked with the pointer from the open list, it applies at once.
  * Arrowing through the closed select (which fires `change` on some platforms) only moves the choice;
  * it applies on Enter or when focus leaves, so passing through Statuses never logs each one (TA-09).
- * Accepted is offered but disabled: accepting an offer is its own step, built later. Keyed by the
+ * Accepted opens the accept flow (moves it to Accepted and offers to withdraw the others). Keyed by the
  * Status, so a new Status from the service starts it afresh. Its label is visually hidden unless
  * `label` is given (the Application page shows "Status" beside its stepper).
  */
@@ -727,9 +766,7 @@ export function StatusSelect({ app, onStatus, label }: {
         onBlur={() => { if (value !== app.status) commit(value); }}
       >
         {statusOrder.map((s) => (
-          <option key={s} value={s} disabled={s === "accepted"}>
-            {s === "accepted" ? "Accepted (offer step, coming later)" : statusLabel[s]}
-          </option>
+          <option key={s} value={s}>{s === "accepted" && app.status !== "accepted" ? "Accepted…" : statusLabel[s]}</option>
         ))}
       </select>
     </>

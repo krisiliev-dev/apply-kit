@@ -470,3 +470,14 @@ h2[tabindex="-1"]:focus { outline: none }
   .prep .table td { padding: var(--s-1) 0; border: 0 }
   .prep .table td[data-label]::before { content: attr(data-label); display: block; font-size: var(--fs-caption); color: var(--ink-3); font-weight: 600 }
 }
+
+/* Track #34: the withdrawal dialog after accepting an offer (hi-fi application.html "Accepted · withdraw others"),
+   the offer panel and the rejection form. */
+dialog.dlg.wide { width: min(720px, calc(100vw - 2 * var(--s-5))) }
+.wd { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3) }
+.wd > li { border: 1px solid var(--rule); border-radius: var(--r-control); padding: var(--s-4); display: grid; gap: var(--s-3); min-width: 0 }
+.wd .top { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; overflow-wrap: anywhere }
+.wd .top .grow { flex: 1 1 auto }
+.wd textarea.input { min-height: 112px; font-size: var(--fs-small) }
+.wd > li.is-sent { background: var(--surface-sunken) }
+.offer-acts { display: flex; flex-wrap: wrap; gap: var(--s-3) }

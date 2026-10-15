@@ -52,8 +52,11 @@ const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 export const daysWord = (n: number) => plural(n, "day");
 export const wordsWord = (n: number) => plural(n, "word");
 
-const followUpNames: Record<FollowUpKind, string> = { nudge: "Follow-up", "offer-note": "Note to self", "thank-you": "Thank-you note", "check-in": "Check-in" };
-/** "Follow-up", "Note to self", "Thank-you note" or "Check-in". */
+const followUpNames: Record<FollowUpKind, string> = {
+  nudge: "Follow-up", "offer-note": "Note to self", "thank-you": "Thank-you note", "check-in": "Check-in",
+  withdrawal: "Withdrawal to send", decline: "Reply declining the offer",
+};
+/** "Follow-up", "Note to self", "Thank-you note", "Check-in" or "Withdrawal to send". */
 export const followUpName = (kind: FollowUpKind) => followUpNames[kind];
 
 /** Whether the follow-up is a message the user sends (not a note to self). */

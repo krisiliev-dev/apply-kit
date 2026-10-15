@@ -11,7 +11,7 @@ import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, UpcomingInt
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
 import { interviewIcsUrl } from "../api.ts";
-import { daysFrom, daysWord, dueByWords, dueWords, eventTime, followUpName, interviewWhen, sofiaClock, todaySofia, weekDay } from "./words.ts";
+import { daysFrom, daysWord, dueByWords, dueWords, eventTime, followUpName, interviewWhen, sofiaClock, statusLabel, todaySofia, weekDay } from "./words.ts";
 
 const langOf = (text: string) => (/[Ѐ-ӿ]/.test(text) ? "bg" : undefined);
 export const itemId = (followUpId: string) => `ny-${followUpId}`;
@@ -20,10 +20,12 @@ function why(e: NeedsYouEntry): string {
   const f = e.followUp;
   if (e.done) {
     if (f.doneBy === "email") return `Marked sent ${eventTime(f.doneAt!)}: apply-kit saw the copy you BCC'd to the job mailbox. Logged on its timeline.`;
+    if (f.kind === "withdrawal") return `${f.state === "sent" ? "Marked sent: moved to Withdrawn" : "Kept open"} ${eventTime(f.doneAt!)}. Logged on its timeline.`;
     const how = f.state === "sent" ? (f.kind === "offer-note" ? "Marked done" : "Marked sent") : "Skipped: no note this time";
     return `${how} ${eventTime(f.doneAt!)}. Logged on its timeline.`;
   }
   const quiet = daysFrom(f.anchorOn, todaySofia());
+  if (f.kind === "withdrawal") return "You accepted another offer. A short, polite note frees their time; it moves to Withdrawn only when you mark it sent. Or keep it open.";
   if (f.kind === "thank-you") {
     return `Your interview was ${f.anchorOn === todaySofia() ? "today" : weekDay(f.anchorOn)}${f.readyAt ? `, ended ${sofiaClock(f.readyAt)}` : ""}. Thank-you notes are due within 24 hours of the start. Add one thing you discussed and the points are ready.`;
   }
@@ -33,9 +35,13 @@ function why(e: NeedsYouEntry): string {
   return `${since}, no reply you've recorded. Review the draft and send it from your own mail.`;
 }
 
-const kindPlurals = { nudge: "follow-ups", "offer-note": "notes to self", "thank-you": "thank-you notes", "check-in": "check-ins" } as const;
+const kindPlurals = {
+  nudge: "follow-ups", "offer-note": "notes to self", "thank-you": "thank-you notes", "check-in": "check-ins", withdrawal: "withdrawals", decline: "replies",
+} as const;
 const kindPlural = (g: NeedsYouGroup) => kindPlurals[g.kind];
-const writeLabel = { nudge: "Review draft", "offer-note": "Write note", "thank-you": "Write thank-you", "check-in": "Write check-in" } as const;
+const writeLabel = {
+  nudge: "Review draft", "offer-note": "Write note", "thank-you": "Write thank-you", "check-in": "Write check-in", withdrawal: "Review withdrawal", decline: "Review reply",
+} as const;
 
 /** An interview in the next 7 days: when, with whom, the prep sheet and the calendar file. */
 function InterviewItem({ item }: { item: UpcomingInterview }) {
@@ -91,10 +97,10 @@ function GroupItem({ group, entries, snoozeDays, onReview, onSnoozeAll }: {
   return (
     <li className="needs">
       <div className="stack" style={{ gap: "var(--s-1)" }}>
-        <span className="kind">{n} {plural} due{group.oldestDueOn && ` · oldest ${weekDay(group.oldestDueOn)}`}{group.done > 0 && ` · ${group.done} done today`}</span>
+        <span className="kind">{n} {plural} {group.kind === "withdrawal" ? "to send" : "due"}{group.kind !== "withdrawal" && group.oldestDueOn && ` · oldest ${weekDay(group.oldestDueOn)}`}{group.done > 0 && ` · ${group.done} done today`}</span>
         <span className="what">{companiesWords(group.companies)}</span>
         <span className="why">
-          {group.kind === "nudge"
+          {group.kind === "nudge" || group.kind === "withdrawal"
             ? `You review and send each one yourself; "Next draft" moves to the following one.`
             : "Points to cover are ready for each; \"Next draft\" moves to the following one."}
         </span>
@@ -103,9 +109,11 @@ function GroupItem({ group, entries, snoozeDays, onReview, onSnoozeAll }: {
         <button className="btn primary sm" type="button" onClick={(ev) => onReview(due, ev.currentTarget)}>
           Review {n} {n === 1 ? "draft" : "drafts"}
         </button>
-        <button className="btn sm" type="button" onClick={() => onSnoozeAll(due)}>
-          Snooze all {daysWord(snoozeDays)}<span className="sr-only">: {n} {plural}</span>
-        </button>
+        {group.kind !== "withdrawal" && (
+          <button className="btn sm" type="button" onClick={() => onSnoozeAll(due)}>
+            Snooze all {daysWord(snoozeDays)}<span className="sr-only">: {n} {plural}</span>
+          </button>
+        )}
       </div>
     </li>
   );
@@ -143,7 +151,9 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
             return (
               <li key={e.followUp.id} id={itemId(e.followUp.id)} className={`needs${e.done ? " done" : ""}`}>
                 <div className="stack" style={{ gap: "var(--s-1)" }}>
-                  <span className="kind">{e.done ? `${name} · Done` : `${name} ${e.followUp.dueAt ? dueByWords(e.followUp.dueAt) : dueWords(e.followUp.dueOn)}`}</span>
+                  <span className="kind">
+                    {e.done ? `${name} · Done` : e.followUp.kind === "withdrawal" ? name : `${name} ${e.followUp.dueAt ? dueByWords(e.followUp.dueAt) : dueWords(e.followUp.dueOn)}`}
+                  </span>
                   <span className="what">
                     <a href={`/applications/${encodeURIComponent(e.application.id)}`} lang={langOf(e.application.title)}>{e.application.title} · {e.application.company}</a>
                   </span>
@@ -154,9 +164,11 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
                     <button className="btn primary sm" type="button" onClick={(ev) => onWrite(e, ev.currentTarget)}>
                       {writeLabel[e.followUp.kind]}<span className="sr-only">: {e.application.company}</span>
                     </button>
-                    <button className="btn sm" type="button" onClick={() => onSnooze(e)}>
-                      Snooze {daysWord(needs.snoozeDays)}<span className="sr-only">: {e.application.company}</span>
-                    </button>
+                    {e.followUp.kind !== "withdrawal" && (
+                      <button className="btn sm" type="button" onClick={() => onSnooze(e)}>
+                        Snooze {daysWord(needs.snoozeDays)}<span className="sr-only">: {e.application.company}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </li>
@@ -178,6 +190,7 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
 const dialogTitle: Record<NeedsYouEntry["followUp"]["kind"], (company: string) => string> = {
   nudge: (c) => `Follow up with ${c}`, "offer-note": (c) => `Note to self · ${c}`,
   "thank-you": (c) => `Thank ${c} for the interview`, "check-in": (c) => `Check in with ${c}`,
+  withdrawal: (c) => `Withdraw from ${c}`, decline: (c) => `Decline ${c}'s offer`,
 };
 
 /**
@@ -213,7 +226,7 @@ export function FollowUpDialog({ entries, index, onAct, onNext, onClose, onAnnou
       <div className="body">
         <div className="dlg-head">
           <div className="stack" style={{ gap: "var(--s-1)" }}>
-            <span className="meta">{followUpName(f.kind)} · {entries.length > 1 ? `${index + 1} of ${entries.length}` : dueWords(f.dueOn)}</span>
+            <span className="meta">{followUpName(f.kind)}{entries.length > 1 ? ` · ${index + 1} of ${entries.length}` : f.kind === "withdrawal" ? "" : ` · ${dueWords(f.dueOn)}`}</span>
             <h2 id={`${uid}-h`} tabIndex={-1}>{dialogTitle[f.kind](a.company)}</h2>
           </div>
           <button className="btn ghost sm x" type="button" aria-label="Close" onClick={close}>✕</button>
@@ -223,6 +236,7 @@ export function FollowUpDialog({ entries, index, onAct, onNext, onClose, onAnnou
           {f.kind === "nudge" ? ` · ${a.status === "applied" ? "applied" : "in Screening since"} ${weekDay(f.anchorOn)} · no reply in ${daysWord(quiet)}. You send this from your own mail.`
             : f.kind === "thank-you" ? ` · interview ${weekDay(f.anchorOn)}${f.dueAt ? ` · ${dueByWords(f.dueAt)}` : ""}. You send this from your own mail.`
             : f.kind === "check-in" ? ` · last interview ${weekDay(f.anchorOn)} · no news in ${daysWord(quiet)}. You send this from your own mail.`
+            : f.kind === "withdrawal" ? ` · ${statusLabel[a.status]}. You accepted another offer; you send this from your own mail.`
             : ` · offer ${weekDay(f.anchorOn)}.`}
         </p>
         <FollowUpWriter key={f.id} id={f.id} headingId={`${uid}-h`} onAct={onAct} onAnnounce={onAnnounce} />

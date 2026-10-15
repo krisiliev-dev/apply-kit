@@ -70,7 +70,10 @@ export function useFollowUpDraft(id: string) {
   return { draft, error, text, type, flush, topic, setTopic, keepTopic, drafting };
 }
 
-const fieldLabel = { nudge: "Your follow-up", "offer-note": "Your note to self", "thank-you": "Your thank-you note", "check-in": "Your check-in" } as const;
+const fieldLabel = {
+  nudge: "Your follow-up", "offer-note": "Your note to self", "thank-you": "Your thank-you note", "check-in": "Your check-in",
+  withdrawal: "Your withdrawal note", decline: "Your reply",
+} as const;
 
 /** Why there's no draft, in plain words: the banner's bold line and what follows it. */
 export function noDraftWords(n: NoDraft): { lead: string; rest: string } {
@@ -170,12 +173,23 @@ export function FollowUpWriter({ id, headingId, onAct, onAnnounce, onLoaded }: {
         <button className="btn primary" type="button" onClick={copy}>Copy text</button>
         {draft.mail && <a className="btn" href={mailtoOf(draft.mail)} onClick={flush}>Open in Mail</a>}
         <span className="grow" />
-        <button className="btn" type="button" onClick={() => act("sent")}>{nudge ? "Mark sent" : "Mark done"}</button>
-        <button className="btn ghost" type="button" onClick={() => act("snooze")}>Snooze {daysWord(draft.snoozeDays)}</button>
-        <button className="btn ghost" type="button" onClick={() => act("skip")}>No note this time</button>
+        {kind === "withdrawal" ? (
+          <>
+            <button className="btn ghost" type="button" onClick={() => act("skip")}>Keep this one open</button>
+            <button className="btn" type="button" onClick={() => act("sent")}>Mark sent · Withdrawn</button>
+          </>
+        ) : (
+          <>
+            <button className="btn" type="button" onClick={() => act("sent")}>{nudge ? "Mark sent" : "Mark done"}</button>
+            <button className="btn ghost" type="button" onClick={() => act("snooze")}>Snooze {daysWord(draft.snoozeDays)}</button>
+            <button className="btn ghost" type="button" onClick={() => act("skip")}>No note this time</button>
+          </>
+        )}
       </div>
       <p className="never">
-        {nudge
+        {kind === "withdrawal"
+          ? `apply-kit never sends mail. Send it from your own mail, then press "Mark sent": only then does it move to Withdrawn. "Keep this one open" changes nothing.`
+          : nudge
           ? `apply-kit never sends mail. Copy the text or open it in Mail and send it yourself, then press "Mark sent": it logs an Event and stops this follow-up. If you BCC the job mailbox, apply-kit notices the sent copy and marks it for you.`
           : `A note for you only. "Mark done" logs it on the timeline.`}
       </p>
