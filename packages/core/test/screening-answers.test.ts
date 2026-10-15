@@ -332,3 +332,21 @@ describe("when the form or the model isn't there", () => {
     expect(sent).toMatchObject({ language: "bg", translate: { language: "en", text: "I ran the response to a phishing campaign against the claims team." } });
   });
 });
+
+describe("an Ashby form", () => {
+  it("reads its questions in the form's order, with the limit its help states", async () => {
+    const t = mira({ fetch: fixtureFetch({ "https://jobs.ashbyhq.com/api/non-user-graphql?op=ApiJobPosting": "ashby-kestrel-form.json" }) });
+    const job = kestrelJob({
+      postings: [{ id: "posting-ashby", site: "jobs.ashbyhq.com", url: "https://jobs.ashbyhq.com/kestrel/0b5f1c2e-4d6a-4f1e-9a51-2c7d8e9f0a11", source: { name: "Kestrel Payments", kind: "ashby", label: "Ashby", category: "ats" } }],
+      target: { postingId: "posting-ashby" },
+    });
+
+    const pkg = await started(t, job);
+
+    expect(pkg.answers!.questions.map((q) => [q.question, q.type, q.origin, q.text, q.limit.chars])).toEqual([
+      ["What is your notice period?", "text", "bank", "1 month", null],
+      ["Describe a security incident you handled.", "long-text", "new", recordedDraftAnswer.text, 500],
+      ["Do you have the right to work in Bulgaria?", "select", "bank", "Yes", null],
+    ]);
+  });
+});
