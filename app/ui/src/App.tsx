@@ -7,6 +7,7 @@ import { SourcesPage } from "./sources/SourcesPage.tsx";
 import { JobPage } from "./job/JobPage.tsx";
 import { ProfilePage } from "./profile/ProfilePage.tsx";
 import { SetupPage } from "./setup/SetupPage.tsx";
+import { PackagePage } from "./package/PackagePage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -57,6 +58,7 @@ export function App() {
         </header>
         <main className="main" id="main" tabIndex={-1}>
           {path === "/" ? <FeedPage onHealth={setHealth} />
+            : /^\/jobs\/[^/]+\/package$/.test(path) ? <PackagePage jobId={decodeURIComponent(path.split("/")[2]!)} onHealth={setHealth} />
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
             : path === "/setup" ? <SetupPage onHealth={setHealth} />
             : path === "/profile" || path.startsWith("/profile/") ? <ProfilePage onHealth={setHealth} onSummary={setProfile} />

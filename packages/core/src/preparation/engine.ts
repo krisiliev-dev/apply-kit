@@ -29,6 +29,11 @@ import { documentFileName, type FileNameParts } from "../documents/file-names.ts
 import type { DocumentToRender } from "../documents/content.ts";
 import { demoDocument, demoFileName, type DemoOptions } from "../documents/demo.ts";
 import type { PdfText, PreparationDeps } from "./ports.ts";
+import {
+  createPackageStore, type ApproveResult, type ChangeResult, type PackageChip, type PackageJob, type PackageStep, type PackageView,
+  type PrepareStatus, type StartPackageResult,
+} from "./packages.ts";
+import type { DocumentLanguage } from "../documents/content.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -201,6 +206,40 @@ export interface PreparationEngine {
   recordVoiceEdit(edit: VoiceEditInput): boolean;
   /** The "Learn from my edits" switch: paused, edits aren't recorded as evidence. */
   setVoiceLearning(fromEdits: boolean): VoiceView;
+  /**
+   * What the Job page's Prepare button shows: whether a package can start (with the reason when it
+   * can't: a closed job, a posting not read, no master profile) and the Job's package, if it has one.
+   */
+  prepareStatus(job: PackageJob): PrepareStatus;
+  /**
+   * Starts the Job's package (one per Job: a Job that has one gets it back): the closest angle, the
+   * company's own page as target, the posting's language. Parts are written in the background
+   * within the monthly AI budget; leaving is safe.
+   */
+  startPackage(job: PackageJob): StartPackageResult;
+  package(id: string): PackageView | null;
+  packageForJob(jobId: string): PackageView | null;
+  /** The package chip per Job that has a package ("Continue package · step 2 of 5", "Package ready"), for the Feed. */
+  packageChips(jobIds: string[]): Record<string, PackageChip>;
+  /** Waits until nothing is being written for the package, then returns it. */
+  packageSettled(id: string): Promise<PackageView | null>;
+  /**
+   * Approves a step. Steps approve in order (reading ahead is free); a step whose part isn't written
+   * can't be approved. A refusal says why and names the step that blocks it.
+   */
+  approveStep(id: string, step: PackageStep): ApproveResult;
+  /** Chooses the posting to apply through; reopens the steps already approved. */
+  setTargetPosting(id: string, postingId: string): ChangeResult;
+  /** Switches the package's language; for now this prints the CV again. Reopens the steps already approved. */
+  setPackageLanguage(id: string, language: DocumentLanguage): Promise<ChangeResult>;
+  /** Shows or hides the photo on the CV (off by default); prints it again and reopens the CV step. */
+  setPackagePhoto(id: string, on: boolean): Promise<ChangeResult>;
+  /** Stops generating: finished parts stay, unfinished ones show as stopped, ready to retry. */
+  stopGenerating(id: string): PackageView;
+  /** Writes a failed, stopped or unwritten part again. */
+  retryPart(id: string, part: PackageStep): ChangeResult;
+  /** The CV's current draft PDF, for the preview and the draft download. */
+  packageCv(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 }
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
@@ -242,7 +281,28 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
       };
   }
 
+  const packages = createPackageStore({
+    ...deps,
+    pieces: () => profile.all(),
+    contact: () => contact.get(),
+    closestAngle: (posting) => angles.closest(posting),
+    draftDocument,
+  });
+
   return {
+    prepareStatus: (job) => packages.status(job),
+    startPackage: (job) => packages.start(job),
+    package: (id) => packages.get(id),
+    packageForJob: (jobId) => packages.forJob(jobId),
+    packageChips: (jobIds) => packages.chips(jobIds),
+    packageSettled: (id) => packages.settled(id),
+    approveStep: (id, step) => packages.approve(id, step),
+    setTargetPosting: (id, postingId) => packages.setTarget(id, postingId),
+    setPackageLanguage: (id, language) => packages.setLanguage(id, language),
+    setPackagePhoto: (id, on) => packages.setPhoto(id, on),
+    stopGenerating: (id) => packages.stop(id),
+    retryPart: (id, part) => packages.retry(id, part),
+    packageCv: (id) => packages.cvFile(id),
     budget: () => deps.budget.info(),
     draftDocument,
     demoDocument: (options) => draftDocument({ packageId: "demo", document: demoDocument(options), fileName: demoFileName }),

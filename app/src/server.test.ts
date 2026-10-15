@@ -23,7 +23,7 @@ function service(uiDir = "/nonexistent/") {
   const stored = new Map<string, Uint8Array>();
   const preparation = createPreparationEngine({
     db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
-    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi() },
+    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi(), tailorCv: async () => noAi() },
     renderer: { render: async () => noAi() },
     pdfReader: { read: async () => noAi() },
     files: {
@@ -31,7 +31,7 @@ function service(uiDir = "/nonexistent/") {
       get: async (sha256) => stored.get(sha256) ?? null,
       remove: async (sha256) => { stored.delete(sha256); },
     },
-    packages: { saveDraft: async () => noFiles() },
+    packages: { saveDraft: async () => noFiles(), read: async () => null },
   });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
@@ -279,6 +279,28 @@ describe("Profile's API", () => {
   });
 });
 
+describe("the Package's API", () => {
+  it("says why a package can't start for an unread job, refuses to start it, and has no package to show", async () => {
+    const s = service();
+    const added = await s.engine.addJobLink("https://kestrel.example.com/jobs/security-engineer", {
+      title: "Security Engineer", company: "Kestrel Payments", text: "Security Engineer at Kestrel Payments. Experience with a SIEM.",
+    });
+    if (!("jobId" in added)) throw new Error("not added");
+    const jobId = encodeURIComponent(added.jobId as string);
+
+    const status = await s.request(`/api/jobs/${jobId}/prepare`);
+    const start = await s.request(`/api/jobs/${jobId}/package`, s.json({}));
+    const form = await s.request(`/api/jobs/${jobId}/package`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const feed = await (await s.request("/api/feed?view=new")).json() as { jobs: { package: unknown }[] };
+
+    expect(await status.json()).toMatchObject({ canStart: false, problem: "not-read", package: null });
+    expect(start.status).toBe(422);
+    expect(form.status).toBe(415);
+    expect(feed.jobs.map((j) => j.package)).toEqual([null]);
+    expect((await s.request("/api/packages/nope")).status).toBe(404);
+  });
+});
+
 describe("the answer bank's API", () => {
   it("answers a refused answer with its problems, and lists a saved one", async () => {
     const s = service();
@@ -337,11 +359,11 @@ describe("developer route: the demo documents", () => {
     const rendered: DocumentToRender[] = [];
     const preparation = createPreparationEngine({
       db, clock, budget: createAiBudget({ db, clock, capUsd: 10 }),
-      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); } },
+      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); } },
       renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
       pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
       files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
-      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }) },
+      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), read: async () => null },
     });
     const scheduler = { status: () => ({}) } as unknown as Scheduler;
     const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });

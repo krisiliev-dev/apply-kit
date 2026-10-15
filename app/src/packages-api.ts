@@ -1,0 +1,83 @@
+// The Package's API (ticket #62): the Prepare button's state for a Job, starting the Job's package,
+// reading it, approving steps in order, the target posting, language and photo, stopping and
+// retrying parts, and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
+// service, so a web page can't send one without a CORS preflight.
+import type { Context, Hono } from "hono";
+import { packageSteps, type DiscoveryEngine, type PackageStep, type PreparationEngine } from "@apply-kit/core";
+
+type Body = Record<string, unknown>;
+
+const jsonOnly = (c: Context) => c.req.header("content-type")?.startsWith("application/json") ?? false;
+
+async function jsonBody(c: Context): Promise<Body | null> {
+  if (!jsonOnly(c)) return null;
+  const body: unknown = await c.req.json().catch(() => null);
+  return body && typeof body === "object" && !Array.isArray(body) ? (body as Body) : null;
+}
+
+const noPackage = { error: "No such package" };
+const needJson = { error: "Send a JSON body with Content-Type: application/json" };
+
+export function mountPackageApi(app: Hono, engine: DiscoveryEngine, preparation: PreparationEngine): void {
+  // What the Job page's Prepare button shows: { canStart, problem?, reason?, package }.
+  app.get("/api/jobs/:id/prepare", async (c) => {
+    const job = await engine.getJob(c.req.param("id"));
+    return job ? c.json(preparation.prepareStatus(job)) : c.json({ error: "No such job" }, 404);
+  });
+
+  // Starts the Job's package, or returns the one it has. A package that can't start answers 422 with the reason.
+  app.post("/api/jobs/:id/package", async (c) => {
+    if (!jsonOnly(c)) return c.json(needJson, 415);
+    const job = await engine.getJob(c.req.param("id"));
+    if (!job) return c.json({ error: "No such job" }, 404);
+    const result = preparation.startPackage(job);
+    return c.json(result, result.started ? 201 : 422);
+  });
+
+  app.get("/api/packages/:id", (c) => {
+    const pkg = preparation.package(c.req.param("id"));
+    return pkg ? c.json(pkg) : c.json(noPackage, 404);
+  });
+
+  const withPackage = async (c: Context, act: (id: string, body: Body) => unknown) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json(needJson, 415);
+    const id = c.req.param("id")!;
+    if (!preparation.package(id)) return c.json(noPackage, 404);
+    const result = (await act(id, body)) as { approved?: boolean; changed?: boolean } | Response;
+    if (result instanceof Response) return result;
+    return c.json(result, result.approved === false || result.changed === false ? 422 : 200);
+  };
+  const step = (c: Context, name: string) => (packageSteps.includes(name as PackageStep) ? (name as PackageStep) : c.json({ error: `Unknown step "${name}"` }, 404));
+
+  app.post("/api/packages/:id/steps/:step/approve", (c) => withPackage(c, (id) => {
+    const s = step(c, c.req.param("step")!);
+    return s instanceof Response ? s : preparation.approveStep(id, s);
+  }));
+  // { postingId }
+  app.put("/api/packages/:id/target", (c) => withPackage(c, (id, body) =>
+    typeof body.postingId === "string" ? preparation.setTargetPosting(id, body.postingId) : c.json({ error: "postingId must be a posting id" }, 400)));
+  // { language: "en" | "bg" }
+  app.put("/api/packages/:id/language", (c) => withPackage(c, (id, body) =>
+    body.language === "en" || body.language === "bg" ? preparation.setPackageLanguage(id, body.language) : c.json({ error: "language must be en or bg" }, 400)));
+  // { on: boolean }
+  app.put("/api/packages/:id/photo", (c) => withPackage(c, (id, body) =>
+    typeof body.on === "boolean" ? preparation.setPackagePhoto(id, body.on) : c.json({ error: "on must be true or false" }, 400)));
+  app.post("/api/packages/:id/stop", (c) => withPackage(c, (id) => preparation.stopGenerating(id)));
+  app.post("/api/packages/:id/parts/:part/retry", (c) => withPackage(c, (id) => {
+    const s = step(c, c.req.param("part")!);
+    return s instanceof Response ? s : preparation.retryPart(id, s);
+  }));
+
+  // The CV's draft PDF, exactly as printed. ?download=1 saves it, named as a draft.
+  app.get("/api/packages/:id/cv.pdf", async (c) => {
+    const file = await preparation.packageCv(c.req.param("id"));
+    if (!file) return c.json({ error: "This package has no CV yet" }, 404);
+    const download = c.req.query("download") === "1";
+    return c.body(Buffer.from(file.pdf), 200, {
+      "content-type": "application/pdf",
+      "cache-control": "no-store",
+      "content-disposition": `${download ? "attachment" : "inline"}; filename="${download ? `DRAFT_${file.fileName}` : file.fileName}"`,
+    });
+  });
+}

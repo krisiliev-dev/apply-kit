@@ -63,6 +63,8 @@ export interface FileStore {
 export interface PackageFolder {
   /** Writes the draft and returns where it is, relative to the data folder ("packages/<id>/<file name>"). */
   saveDraft(packageId: string, kind: DocumentKind, fileName: string, bytes: Uint8Array): Promise<{ path: string }>;
+  /** The file at a path `saveDraft` returned, or null if it isn't there (any other path is refused). */
+  read(path: string): Promise<Uint8Array | null>;
 }
 
 export interface PreparationDeps {

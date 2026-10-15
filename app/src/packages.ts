@@ -22,5 +22,12 @@ export function createPackageFolder(dataDir: string): PackageFolder {
       await writeFile(note, fileName);
       return { path: `packages/${packageId}/${fileName}` };
     },
+    async read(path) {
+      const [top, packageId, fileName, ...rest] = path.split("/");
+      if (top !== "packages" || rest.length || !SAFE_ID.test(packageId ?? "") || !SAFE_NAME.test(fileName ?? "") || fileName!.startsWith(".")) {
+        throw new Error(`Not a package file: ${path}`);
+      }
+      return readFile(join(dataDir, "packages", packageId!, fileName!)).then((b) => new Uint8Array(b), () => null);
+    },
   };
 }
