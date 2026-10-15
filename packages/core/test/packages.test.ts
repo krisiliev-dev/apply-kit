@@ -866,6 +866,22 @@ describe("gap flags and gap questions (#64)", () => {
     expect(t.preparation.learnedPieces()).toHaveLength(1);
   });
 
+  it("answering again replaces the line from the earlier answer; both pieces still wait in Profile", async () => {
+    const t = miraProfile({
+      coach: (input, ids) => /k3s/.test(input.asked!.lines.at(-1)!.text)
+        ? { reply: "", ask: "", followUp: false, answer: null, pieces: [{ turn: input.asked!.lines.at(-1)!.id, updates: null, kind: "skill", text: "Kubernetes", entry: null, role: null, tags: [], angles: ["security"], numberSource: null, claim: "stronger", honest: "Learning: Kubernetes (k3s)" }] }
+        : coachWrites()(input, ids),
+    });
+    const pkg = await started(t, kubernetesJob());
+    const gap = pkg.cvVersion!.flags[0]!;
+    await t.preparation.answerGap(pkg.id, gap.id, "I played with k3s once.");
+
+    const r = await t.preparation.answerGap(pkg.id, gap.id, "At Northwind I locked down our Kubernetes test cluster with network policies.");
+
+    expect(r.package.cvVersion!.flags.map((f) => f.kind)).toEqual(["gap", "learned"]);
+    expect(t.preparation.learnedPieces()).toHaveLength(2);
+  });
+
   it("an answer the coach couldn't write a line from leaves the gap open", async () => {
     const t = miraProfile({ coach: () => ({ reply: "", ask: "", followUp: false, answer: null, pieces: [] }) });
     const pkg = await started(t, kubernetesJob());

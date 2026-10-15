@@ -995,12 +995,14 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       id: crypto.randomUUID(), kind: "learned", requirement: f.requirement, place, pieceIds: [piece.id], piece: null,
       draft: near ? near.stronger : null, honest: line, answer: said, related: f.id, decision: null,
     };
+    // Read again: another answer may have finished while the coach was writing this one.
     const current = row(id)!.cvVersion!;
-    const next = current.flags!.filter((x) => x.id !== f.related)
+    const earlier = current.flags?.find((x) => x.id === f.id)?.related ?? null;
+    const next = current.flags!.filter((x) => x.id !== earlier)
       .map((x) => (x.id === f.id ? { ...x, answer: said, related: fresh.id, decision: { option: "experience", text: said, at } } : x));
     // The new flag sits right after its gap.
     next.splice(next.findIndex((x) => x.id === f.id) + 1, 0, fresh);
-    return saveFlags(row(id)!, next, current.changes.filter((c) => !f.related || c.flagId !== f.related));
+    return saveFlags(row(id)!, next, current.changes.filter((c) => !earlier || c.flagId !== earlier));
   }
 
   function learned(): LearnedPiece[] {

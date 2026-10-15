@@ -683,7 +683,12 @@ function Flag({ pkg, flag, must, onChange, say }: { pkg: PackageView; flag: CvFl
   const [error, setError] = useState<string | null>(null);
   const [cls, icon, kind] = flagKind[flag.kind];
   const h = `flag-h-${flag.id}`;
-  const focusSoon = (id: string) => window.setTimeout(() => document.getElementById(id)?.focus(), 0);
+  // Focus moves once the element is on the page (a new flag appears after the package is read back).
+  const focusSoon = (id: string, tries = 10) => window.setTimeout(() => {
+    const el = document.getElementById(id);
+    if (el) el.focus();
+    else if (tries > 0) focusSoon(id, tries - 1);
+  }, 50);
 
   async function send(act: () => Promise<{ changed: boolean; reason?: string; package: PackageView }>, done: (p: PackageView) => void) {
     setBusy(true);
@@ -742,7 +747,7 @@ function Flag({ pkg, flag, must, onChange, say }: { pkg: PackageView; flag: CvFl
             <input
               type="radio" name={name} value={o.id} checked={picked === o.id}
               aria-controls={o.id === "experience" ? `${h}-question` : undefined}
-              onChange={() => { setPicked(o.id); if (o.id !== "experience") void decide(o.id); }}
+              onChange={() => setPicked(o.id)}
             />
             <span><b>{flag.kind === "near-the-line" || o.id === "use" ? `"${o.label}"` : o.label}</b><span className="meta">{o.holdsUp}</span></span>
           </label>
@@ -754,6 +759,12 @@ function Flag({ pkg, flag, must, onChange, say }: { pkg: PackageView; flag: CvFl
           </label>
         )}
       </fieldset>
+      {picked && picked !== "own" && picked !== "experience" && (
+        <div className="row">
+          <button className="btn sm" type="button" disabled={busy} onClick={() => void decide(picked)}>Save this choice<span className="sr-only"> for {flag.title}</span></button>
+          <span className="meta">You can change it until the CV is approved, and after: changing reopens the step.</span>
+        </div>
+      )}
       {picked === "own" && (
         <div className="field" id={`${h}-own`}>
           <label htmlFor={`${h}-own-text`}>Your wording</label>
@@ -774,7 +785,7 @@ function Flag({ pkg, flag, must, onChange, say }: { pkg: PackageView; flag: CvFl
             aria-describedby={`${h}-answer-help${error ? ` ${h}-error` : ""}`} aria-invalid={error ? "true" : undefined}
           />
           <div className="row">
-            <button className="btn sm" type="button" disabled={busy || !answer.trim()} aria-busy={busy || undefined} onClick={() => void tellCoach()}>{busy ? "The coach is reading…" : "Send to the coach"}</button>
+            <button className="btn sm" type="button" disabled={!answer.trim()} aria-disabled={busy || undefined} aria-busy={busy || undefined} onClick={() => { if (!busy) void tellCoach(); }}>{busy ? "The coach is reading…" : "Send to the coach"}</button>
             <span className="meta">The piece is used for this job only until you confirm it in Profile.</span>
           </div>
         </div>
