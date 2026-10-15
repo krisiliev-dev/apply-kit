@@ -80,6 +80,22 @@ export interface VoiceSend {
   words: number;
 }
 
+/** What a draft asks for: its language, and what it's for (recorded with the excerpts, e.g. "cover-letter"). */
+export interface VoiceContextRequest {
+  language: VoiceLanguage;
+  purpose: string;
+}
+
+/**
+ * What a draft sends to sound like Kris: the voice rules for its language and a few short excerpts of
+ * Kris's writing (at most VOICE_EXCERPT_WORDS words in all). Already recorded under `id` when it's handed out.
+ */
+export interface VoiceContext {
+  id: string;
+  rules: { id: string; text: string }[];
+  excerpts: SentExcerpt[];
+}
+
 /** How a learning run ended: everything read, the monthly cap reached, or a failed call (tried again next time). */
 export interface VoiceLearning {
   calls: number;
@@ -92,6 +108,8 @@ export interface VoiceStore {
   add(files: VoiceSampleFile[]): Promise<VoiceSample[]>;
   learn(): Promise<VoiceLearning>;
   sends(): VoiceSend[];
+  context(request: VoiceContextRequest): VoiceContext;
+  removeRule(id: string): boolean;
 }
 
 const CYRILLIC = /\p{Script=Cyrillic}/gu;
@@ -338,6 +356,44 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     return running;
   }
 
+  /**
+   * Rules for the language, and excerpts from its readable samples (cover letters first): the opening
+   * sentences of each, sharing the word limit between them.
+   */
+  function context({ language, purpose }: VoiceContextRequest): VoiceContext {
+    const rules = db.prepare("SELECT id, text FROM voice_rule WHERE removed_at IS NULL AND (language IS NULL OR language = ?) ORDER BY created_at, rowid").all(language)
+      .map((r) => ({ id: String(r.id), text: String(r.text) }));
+    const samples = db.prepare(
+      "SELECT id, text FROM voice_sample WHERE text IS NOT NULL AND language = ? ORDER BY CASE kind WHEN 'cover-letter' THEN 0 ELSE 1 END, position",
+    ).all(language);
+    const share = Math.max(40, Math.floor(VOICE_EXCERPT_WORDS / Math.max(1, samples.length)));
+    const excerpts: SentExcerpt[] = [];
+    let left = VOICE_EXCERPT_WORDS;
+    for (const r of samples) {
+      const allowed = Math.min(share, left);
+      const taken: string[] = [];
+      let n = 0;
+      for (const sentence of sentences(String(r.text))) {
+        const w = wordCount(sentence);
+        if (n + w > allowed) break;
+        taken.push(sentence);
+        n += w;
+      }
+      if (taken.length === 0) continue;
+      excerpts.push({ source: `sample:${String(r.id)}`, text: taken.join(" ") });
+      left -= n;
+      if (left <= 0) break;
+    }
+    return { id: recordSend(purpose, language, excerpts), rules, excerpts };
+  }
+
+  /** Takes a rule out of use; it doesn't come back unless writing newer than this shows it again. */
+  function removeRule(id: string): boolean {
+    if (!db.prepare("SELECT 1 AS x FROM voice_rule WHERE id = ? AND removed_at IS NULL").get(id)) return false;
+    db.prepare("UPDATE voice_rule SET removed_at = ? WHERE id = ?").run(now(), id);
+    return true;
+  }
+
   function view(): VoiceView {
     const samples = db.prepare("SELECT * FROM voice_sample ORDER BY position").all().map(rowToSample);
     return {
@@ -354,6 +410,8 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     view,
     add,
     learn,
+    context,
+    removeRule,
     sends: () => db.prepare("SELECT * FROM voice_send ORDER BY at DESC, rowid DESC").all().map(rowToSend),
   };
 }

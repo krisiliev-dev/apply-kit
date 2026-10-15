@@ -99,3 +99,42 @@ describe("learning the voice", () => {
     expect(voice.learnedFrom).toEqual({ samples: 2, edits: 0 });
   });
 });
+
+/** The writer learns these rules from the first excerpt of any call. */
+const learnsRules = (...rules: string[]) => (input: VoiceLearningInput): LearnedVoice => ({
+  rules: rules.map((r) => ({ id: null, text: r, evidence: "samples", language: null, sources: [input.excerpts[0]!.source] })),
+});
+
+describe("the voice context a draft sends", () => {
+  it("carries the rules and at most 150 words of excerpts in the draft's language, and records what it sent", async () => {
+    const t = await withSamples({ writer: fakeWriter({ learnVoice: learnsRules("Opens with the company's problem, not with you", "Short declarative sentences") }) });
+    await t.preparation.addVoiceSamples([
+      { fileName: "blog-post.txt", bytes: text(longPost) },
+      { fileName: "мотивационно-писмо.txt", bytes: text("Здравейте, екипът ви губи час всяка нощ заради неуспешни сканирания. Аз поправих същия проблем.") },
+    ]);
+    await t.preparation.learnVoice();
+
+    const context = t.preparation.voiceContext({ language: "en", purpose: "cover-letter" });
+
+    expect(context.rules.map((r) => r.text)).toEqual(["Opens with the company's problem, not with you", "Short declarative sentences"]);
+    expect(words(context.excerpts)).toBeLessThanOrEqual(150);
+    expect(context.excerpts.length).toBeGreaterThan(1);
+    // English samples only; each excerpt is Kris's own words, whole sentences from a sample.
+    const english = t.preparation.voice().samples.filter((s) => s.language === "en").map((s) => `sample:${s.id}`);
+    for (const e of context.excerpts) expect(english).toContain(e.source);
+    expect(context.excerpts[0]!.text.startsWith("Dear Orbital Freight team,")).toBe(true);
+    // On record as sent, under the context's id.
+    expect(t.preparation.voiceSends()[0]).toMatchObject({ id: context.id, purpose: "cover-letter", language: "en", excerpts: context.excerpts, words: words(context.excerpts) });
+  });
+
+  it("leaves out a removed rule from the next context", async () => {
+    const t = await withSamples({ writer: fakeWriter({ learnVoice: learnsRules("Opens with the company's problem, not with you", "Signs off \"Kind regards\"") }) });
+    await t.preparation.learnVoice();
+    const signOff = t.preparation.voice().rules.find((r) => r.text.startsWith("Signs off"))!;
+
+    expect(t.preparation.removeVoiceRule(signOff.id)).toBe(true);
+
+    expect(t.preparation.voiceContext({ language: "en", purpose: "cover-letter" }).rules.map((r) => r.text)).toEqual(["Opens with the company's problem, not with you"]);
+    expect(t.preparation.voice().rules.map((r) => r.text)).toEqual(["Opens with the company's problem, not with you"]);
+  });
+});

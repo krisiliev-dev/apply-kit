@@ -10,7 +10,7 @@ import { createAnswerStore, type Answer, type AnswerChange, type AnswerInput, ty
 import { createContactStore, type Contact, type ContactDetails, type PhotoInput, type SaveContactResult } from "./contact.ts";
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
-import { createVoiceStore, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
+import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
 import { createProfileStore, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -179,6 +179,17 @@ export interface PreparationEngine {
   learnVoice(): Promise<VoiceLearning>;
   /** Every call that sent Kris's writing to the model, newest first, with exactly what it sent. */
   voiceSends(): VoiceSend[];
+  /** Takes a voice rule out of use; it won't come back unless Kris's writing shows it again. False if it's gone already. */
+  removeVoiceRule(id: string): boolean;
+
+  // Drafting with the voice (the cover letter; Track's follow-ups through `VoiceForDrafts`). Local only.
+
+  /**
+   * What a draft in this language sends to sound like Kris: the rules in use and at most
+   * VOICE_EXCERPT_WORDS words of excerpts. Recorded (under the context's id) as it's handed out, so
+   * the draft can show what left the machine.
+   */
+  voiceContext(request: VoiceContextRequest): VoiceContext;
 }
 
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
@@ -253,6 +264,8 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     addVoiceSamples: (files) => voice.add(files),
     learnVoice: () => voice.learn(),
     voiceSends: () => voice.sends(),
+    removeVoiceRule: (id) => voice.removeRule(id),
+    voiceContext: (request) => voice.context(request),
     contact: () => contact.get(),
     saveContact(details) {
       const result = contact.save(details);
