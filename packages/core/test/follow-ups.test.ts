@@ -113,7 +113,7 @@ describe("a Status change", () => {
 
     expect((await tracker.get(id))!.followUp).toEqual({
       id: nudge.id, applicationId: id, kind: "nudge", anchorOn: "2026-10-01", dueOn: "2026-10-15", snoozedTo: "2026-10-15",
-      state: "pending", doneAt: null, text: "Still keen on the role.",
+      state: "pending", doneAt: null, text: "Still keen on the role.", interviewId: null, dueAt: null, readyAt: null, topic: "",
     });
   });
 });
@@ -270,9 +270,9 @@ describe("writing a follow-up", () => {
 });
 
 describe("follow-up delays as settings", () => {
-  it("start at 7 days for a nudge, 1 day for the note to self and 3 days of snooze", async () => {
+  it("start at 7 days for a nudge, 1 day for the note to self, 3 days of snooze and 7 days for a check-in", async () => {
     const { tracker } = tracked();
-    expect(await tracker.followUpSettings()).toEqual({ nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3 });
+    expect(await tracker.followUpSettings()).toEqual({ nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3, checkInAfterDays: 7 });
   });
 
   it("move pending follow-ups when changed, and refuse what isn't a number of days", async () => {
@@ -282,7 +282,7 @@ describe("follow-up delays as settings", () => {
     await tracker.saveFollowUpSettings({ nudgeAfterDays: 3, offerNoteAfterDays: 2, snoozeDays: 5 });
 
     expect(await due(tracker)).toEqual(["Fennel Studio:nudge:2026-10-12"]);
-    expect(await tracker.followUpSettings()).toEqual({ nudgeAfterDays: 3, offerNoteAfterDays: 2, snoozeDays: 5 });
+    expect(await tracker.followUpSettings()).toEqual({ nudgeAfterDays: 3, offerNoteAfterDays: 2, snoozeDays: 5, checkInAfterDays: 7 });
     await expect(tracker.saveFollowUpSettings({ nudgeAfterDays: 0 })).rejects.toThrow("The follow-up delay must be a whole number of days from 1 to 60.");
   });
 });

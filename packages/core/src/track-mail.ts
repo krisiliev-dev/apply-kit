@@ -3,6 +3,7 @@
 // assistant port and its classification shape, the rule-based fallback for known job-system
 // confirmations, and the deterministic signals that tie an email to an Application.
 import { z } from "zod";
+import { invitedInterviewSchema, type PrepSheetDraft, type PrepSheetInput } from "./interviews.ts";
 import { htmlToText } from "./extraction/text.ts";
 import { normaliseCompany, normaliseTitle } from "./matching.ts";
 import type { MailMessage } from "./ports.ts";
@@ -28,6 +29,8 @@ export const emailClassificationSchema = z.object({
   language: z.string(),
   /** A one-line English summary for an email not in English; null for English mail. */
   summary: z.string().nullable(),
+  /** For an invitation: the interview's time, format, people, round and notes as the email states them; null otherwise. */
+  interview: invitedInterviewSchema.nullable().default(null),
 });
 export type EmailClassification = z.infer<typeof emailClassificationSchema>;
 
@@ -42,15 +45,22 @@ export interface ClassifyInput {
 }
 
 /**
- * Track's AI seam (spec #24 "AI seam"). Only email classification so far; drafts and prep sheets
- * join it with their tickets. The service passes the OpenRouter implementation; tests pass a fake
- * answering with recorded outputs.
+ * Track's AI seam (spec #24 "AI seam"): email classification and the prep sheet (drafts join it with
+ * their ticket). The service passes the OpenRouter implementation; tests pass a fake answering with
+ * recorded outputs.
  */
 export interface TrackAssistant {
   /** A cautious (high) estimate of the cost in USD, checked against the monthly cap before calling. No I/O. */
   estimateClassifyUsd(input: ClassifyInput): number;
   /** Throws on any failure; the email is then matched on rules alone. */
   classify(input: ClassifyInput): Promise<{ classification: EmailClassification; costUsd: number; model: string }>;
+  /** A cautious estimate of building a prep sheet, checked against the monthly cap. No I/O. */
+  estimatePrepSheetUsd(input: PrepSheetInput): number;
+  /**
+   * Company facts tagged with their source, and likely questions per requirement with the id of a
+   * Master-profile story that truly answers each (or null). Checked by the tracker before use. Throws on failure.
+   */
+  buildPrepSheet(input: PrepSheetInput): Promise<{ sheet: PrepSheetDraft; costUsd: number; model: string }>;
 }
 
 /** How confident the assistant must be for an email to change a Status on its own. */
@@ -167,5 +177,5 @@ const confirmationSubject = new RegExp(
  */
 export function ruleClassify(m: MailMessage): EmailClassification | null {
   if (!isAtsDomain(domainOf(senderOf(m).address)) || !confirmationSubject.test(m.subject)) return null;
-  return { kind: "confirmation", confidence: 0.9, company: null, jobTitle: null, stage: null, language: "en", summary: null };
+  return { kind: "confirmation", confidence: 0.9, company: null, jobTitle: null, stage: null, language: "en", summary: null, interview: null };
 }

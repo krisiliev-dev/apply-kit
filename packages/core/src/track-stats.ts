@@ -47,8 +47,8 @@ export interface TrackStats {
    */
   working: { angle: WorkingRow[]; source: WorkingRow[]; cvVersion: WorkingRow[] };
   /**
-   * Interviews upcoming and so far. Interview records come with their own ticket (#33); until then
-   * an interview so far is an Application that reached Interviewing (or beyond) and none is upcoming.
+   * Interviews upcoming (on open Applications) and so far (held), at how many companies. An
+   * Application that reached Interviewing (or beyond) without an interview recorded counts as one so far.
    */
   interviews: { upcoming: number; soFar: number; companies: number };
   /** While the job mailbox can't be read: since when replies may be missing (the numbers may be incomplete). */
@@ -69,8 +69,8 @@ const replyStatuses = ["screening", "interviewing", "offer", "accepted", "reject
 /** Matched emails that are replies (GLOSSARY "Reply"); a confirmation never is. */
 const replyEmailKinds = ["rejection", "interview-invitation", "offer", "info-request"];
 
-export function computeStats(db: SqlDatabase, today: string, mayBeMissingRepliesSince: string | null = null): TrackStats {
-  const apps = db.prepare("SELECT id, company, applied_on, angle, source, cv_version FROM application WHERE removed_at IS NULL").all();
+export function computeStats(db: SqlDatabase, today: string, mayBeMissingRepliesSince: string | null = null, now: string = new Date().toISOString()): TrackStats {
+  const apps = db.prepare("SELECT id, company, status, applied_on, angle, source, cv_version FROM application WHERE removed_at IS NULL").all();
   const thisMonday = mondayOf(today);
   const perWeek = new Map<string, number>();
   for (const a of apps) {
@@ -121,10 +121,21 @@ export function computeStats(db: SqlDatabase, today: string, mayBeMissingReplies
     `SELECT DISTINCT application_id FROM application_event WHERE undone_at IS NULL AND kind IN ('created', 'status', 'email')
      AND to_status IN ('interviewing', 'offer', 'accepted')`,
   ).all().map((r) => String(r.application_id)));
-  const interviewedApps = apps.filter((a) => interviewed.has(String(a.id)));
+  // Interview records (#33): held ones count so far, those still to come are upcoming (on open
+  // Applications). An Application that reached Interviewing with no interview recorded counts once.
+  const records = db.prepare("SELECT application_id, start_at FROM interview WHERE start_at IS NOT NULL").all();
+  const byId = new Map(apps.map((a) => [String(a.id), a]));
+  const held = records.filter((r) => String(r.start_at) <= now && byId.has(String(r.application_id)));
+  const upcoming = records.filter((r) => {
+    const a = byId.get(String(r.application_id));
+    return String(r.start_at) > now && !!a && !["rejected", "withdrawn"].includes(String(a.status));
+  });
+  const withRecord = new Set(records.map((r) => String(r.application_id)));
+  const unrecorded = apps.filter((a) => interviewed.has(String(a.id)) && !withRecord.has(String(a.id)));
+  const companiesOf = [...held.map((r) => byId.get(String(r.application_id))!), ...unrecorded];
   const interviews = {
-    upcoming: 0, soFar: interviewedApps.length,
-    companies: new Set(interviewedApps.map((a) => String(a.company).trim().toLowerCase())).size,
+    upcoming: upcoming.length, soFar: held.length + unrecorded.length,
+    companies: new Set(companiesOf.map((a) => String(a.company).trim().toLowerCase())).size,
   };
 
   const lastMonday = addDays(thisMonday, -7);

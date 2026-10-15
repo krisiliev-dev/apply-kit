@@ -51,8 +51,12 @@ export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, T
 export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
-  NextUp, NeedsYou, NeedsYouEntry, ComingUp, FollowUpDraft, FollowUpEventKind,
+  NextUp, NeedsYou, NeedsYouEntry, ComingUp, FollowUpDraft, FollowUpEventKind, UpcomingInterview,
 } from "./tracker.ts";
+export { interviewFormats, invitedInterviewSchema, prepSheetDraftSchema, zonedToInstant, instantToLocal, isTimeZone } from "./interviews.ts";
+export type {
+  Interview, InterviewInput, InterviewFormat, InvitedInterview, PrepSheet, PrepQuestion, PrepSheetDraft, PrepSheetInput, ProfileStory, MasterProfile, FactTag,
+} from "./interviews.ts";
 export { defaultFollowUpSettings } from "./follow-ups.ts";
 export type { FollowUp, FollowUpKind, FollowUpSettings } from "./follow-ups.ts";
 export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";
