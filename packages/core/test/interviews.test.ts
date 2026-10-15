@@ -65,3 +65,46 @@ describe("a thank-you note after an interview", () => {
     expect(await due(tracker)).toEqual(["Medora:thank-you:2026-10-16T08:30:00.000Z"]);
   });
 });
+
+const at = (start: string, end: string | null = null, timeZone = "Europe/Sofia") =>
+  ({ start, end, timeZone, format: "video" as const, place: null, people: ["Mara Ivanova"], round: null, notes: null });
+
+describe("a check-in when interviews go quiet", () => {
+  it("comes due 7 days after the last interview ends with no news, and not before", async () => {
+    const { tracker, clock } = tracked();
+    const id = await add(tracker);
+    await tracker.setInterview(id, at("2026-10-13T10:00", "2026-10-13T11:00"));
+    await tracker.setInterview(id, at("2026-10-15T14:00", "2026-10-15T15:00"));
+    const checkIns = async () => (await due(tracker)).filter((d) => d.includes("check-in"));
+
+    clock.set("2026-10-21T21:00:00Z"); // Thu 22 Oct, 00:00 in Sofia: 6 quiet days
+    expect(await checkIns()).toEqual(["Medora:check-in:2026-10-22"]);
+    clock.set("2026-10-21T20:59:00Z");
+    expect(await checkIns()).toEqual([]);
+  });
+
+  it("isn't there while an interview is still to come, nor after a reply or a Status change", async () => {
+    const { tracker, clock } = tracked();
+    const id = await add(tracker);
+    await tracker.setInterview(id, at("2026-10-13T10:00", "2026-10-13T11:00"));
+    await tracker.setInterview(id, at("2026-10-27T10:00", "2026-10-27T11:00"));
+    clock.set("2026-10-24T08:00:00Z");
+    expect((await due(tracker)).filter((d) => d.includes("check-in"))).toEqual([]);
+
+    const other = await add(tracker, { company: "Ostwind Cloud" });
+    await tracker.setInterview(other, at("2026-10-14T10:00", "2026-10-14T11:00"));
+    expect((await due(tracker)).filter((d) => d.includes("check-in"))).toEqual(["Ostwind Cloud:check-in:2026-10-21"]);
+    await tracker.setStatus(other, "offer");
+    expect((await due(tracker)).filter((d) => d.includes("check-in"))).toEqual([]);
+  });
+
+  it("follows the check-in delay setting", async () => {
+    const { tracker, clock } = tracked();
+    const id = await add(tracker);
+    await tracker.setInterview(id, at("2026-10-13T10:00", "2026-10-13T11:00"));
+    await tracker.saveFollowUpSettings({ checkInAfterDays: 4 });
+
+    clock.set("2026-10-17T08:00:00Z");
+    expect((await due(tracker)).filter((d) => d.includes("check-in"))).toEqual(["Medora:check-in:2026-10-17"]);
+  });
+});

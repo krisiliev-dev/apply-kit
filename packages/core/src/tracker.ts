@@ -1164,7 +1164,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
    * unless a reply came since. One per last interview (a later interview gets its own).
    */
   function checkInOf(app: Row): FollowUp | null {
-    const ended = interviewsOf(String(app.id)).filter((i) => i.endAt && i.endAt <= now());
+    const all = interviewsOf(String(app.id));
+    if (all.some((i) => i.startAt && i.startAt > now())) return null; // another one is still to come
+    const ended = all.filter((i) => i.endAt && i.endAt <= now());
     const last = ended.sort((a, b) => a.endAt!.localeCompare(b.endAt!)).at(-1);
     if (!last) return null;
     const replied = db.prepare(
