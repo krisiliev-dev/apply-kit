@@ -584,9 +584,14 @@ describe("a CV that runs onto a second page (#63)", () => {
 
     const r = await t.preparation.fitCv(pkg.id, "keep-two-pages");
 
-    expect(r).toMatchObject({ changed: true, package: { cv: { pages: 2 }, cvVersion: { fit: { keepTwoPages: true } } } });
+    expect(r).toMatchObject({ changed: true, package: { cv: { pages: 2 }, cvVersion: { fit: { keepTwoPages: true, choices: [] } } } });
     t.preparation.approveStep(pkg.id, "target");
     expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: true });
+
+    // Changing her mind brings the choices back and reopens the step.
+    const again = await t.preparation.fitCv(pkg.id, "choose-again");
+    expect(again.package.cvVersion!.fit).toMatchObject({ keepTwoPages: false, choices: expect.arrayContaining([expect.objectContaining({ id: "keep-two-pages" })]) });
+    expect(again.package.steps[1]).toMatchObject({ approvedAt: null });
   });
 
   it("refuses a choice that isn't offered", async () => {

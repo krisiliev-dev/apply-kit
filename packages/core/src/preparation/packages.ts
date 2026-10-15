@@ -253,7 +253,7 @@ export interface PackageStore {
   /** Undoes one change from the master profile (the line it replaced comes back) and prints the CV again. */
   undoChange(id: string, changeId: string): Promise<ChangeResult>;
   redoChange(id: string, changeId: string): Promise<ChangeResult>;
-  /** One of the ways offered to fit the CV on one page (an undoable change), or keep two pages. */
+  /** One of the ways offered to fit the CV on one page (an undoable change), keep two pages, or "choose-again" after keeping two. */
   fitCv(id: string, choiceId: string): Promise<ChangeResult>;
   cvFile(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 }
@@ -855,6 +855,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
 
     async fitCv(id, choiceId) {
       const r = mustGet(id);
+      if (choiceId === "choose-again" && r.cvVersion?.keepTwoPages) {
+        saveVersion(id, { ...r.cvVersion, keepTwoPages: false });
+        reopenFrom(r, "cv");
+        return { changed: true, package: view(row(id)!) };
+      }
       const offered = cvVersionView(r)?.fit.choices ?? [];
       if (!r.cvVersion || !offered.some((c) => c.id === choiceId)) {
         return { changed: false, reason: "That isn't one of the ways offered to fit this CV on one page.", package: view(r) };
