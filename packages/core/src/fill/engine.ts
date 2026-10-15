@@ -7,13 +7,15 @@ import type { PrepareForApply } from "../preparation/engine.ts";
 import { sameJobReference, type ApprovedPackage, type PageJobReference } from "../preparation/contracts.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import { migrate } from "../schema.ts";
+import type { Answer } from "../preparation/answers.ts";
 import { contactValue } from "./contact.ts";
-import { countOutcomes, type FieldAnswer, type FieldOutcome, type PageReading, type RecordedPage } from "./reading.ts";
+import { answerKindWords, fieldKindWords, kindFits, mapToField, nearMissFloor, similarity } from "./questions.ts";
+import { countOutcomes, type FieldAnswer, type FieldOutcome, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
 
 export interface FillDeps {
   db: SqlDatabase;
   clock: Clock;
-  prepare: Pick<PrepareForApply, "approvedPackages" | "packageForApply" | "profileForApply">;
+  prepare: Pick<PrepareForApply, "approvedPackages" | "packageForApply" | "profileForApply" | "findAnswer" | "listAnswers" | "recordAnswerUse">;
 }
 
 /** The page Kris is on, as the extension recognised it from the tab's address. */
@@ -121,6 +123,46 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
       .run(id, pkg.id, page.portal, page.host, jobRef ? JSON.stringify(jobRef) : null, clock.now().toISOString());
     return session(id)!;
   };
+  const pages = (sessionId: string): RecordedPage[] =>
+    db.prepare("SELECT * FROM fill_page WHERE session_id = ? ORDER BY id").all(sessionId).map((r) => ({
+      stepLabel: r.step_label == null ? null : String(r.step_label), pageKind: r.page_kind as RecordedPage["pageKind"], filledAt: String(r.filled_at),
+      counts: JSON.parse(String(r.counts)) as RecordedPage["counts"], fields: JSON.parse(String(r.fields)) as RecordedPage["fields"],
+    }));
+
+  const bankEntries = (): Answer[] => prepare.listAnswers({ pageSize: 10_000 }).answers;
+
+  /** The answer bank's answer for a field, or null when nothing in the bank matches well enough. */
+  function fromBank(f: ReadField, language: "en" | "bg"): { answer: FieldAnswer; answerId: string } | null {
+    const m = prepare.findAnswer(f.label, language);
+    if (!m) return null;
+    const fieldId = f.id;
+    const entry = bankEntries().find((a) => a.id === m.answerId);
+    const basis = m.confidence < 1 ? `Close wording of "${m.question}" in your answer bank` : null;
+    const value = m.fill.action === "fill" ? m.fill.value : null;
+    if (m.confidence < 1 && entry && !kindFits(entry.kind, f.kind)) {
+      const answer: FieldAnswer = { fieldId, kind: "needs-you", reason: `The closest answer is ${answerKindWords(entry.kind)} answer, and this field asks for ${fieldKindWords(f.kind)}`, basis };
+      return { answerId: m.answerId, answer: value ? { ...answer, suggestion: value } : answer };
+    }
+    if (value === null) return null;
+    const mapped = mapToField(value, f);
+    return {
+      answerId: m.answerId,
+      answer: mapped.ok ? { fieldId, kind: "fill", value: mapped.value, source: "answer-bank", basis } : { fieldId, kind: "needs-you", reason: mapped.reason, basis, suggestion: value },
+    };
+  }
+
+  /** "The closest answer bank entry (…) is a different question", for a question nothing matched. */
+  function nearMiss(f: ReadField): string | null {
+    let best: { question: string; score: number } | null = null;
+    for (const a of bankEntries()) {
+      for (const phrase of [a.question, ...a.wordings.map((w) => w.text)]) {
+        const score = similarity(f.label, phrase);
+        if (score >= nearMissFloor && (!best || score > best.score)) best = { question: a.question, score };
+      }
+    }
+    return best ? `The closest answer bank entry ("${best.question}") is a different question, so it wasn't used` : null;
+  }
+
   const approvedById = (id: string) => {
     const r = prepare.packageForApply({ packageId: id });
     return r.kind === "approved" ? r.package : null;
@@ -194,15 +236,26 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
           return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
         }
         if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
+        const banked = fromBank(f, pkg?.language ?? "en");
+        if (banked) return banked.answer;
         return f.required
-          ? { fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null }
+          ? { fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: nearMiss(f) }
           : { fieldId, kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" };
       });
     },
 
     recordPage(sessionId, reading, outcomes) {
-      openSession(sessionId);
+      const s = openSession(sessionId);
       const byId = new Map(outcomes.map((o) => [o.fieldId, o]));
+      // Each answer-bank entry filled in this session counts as one use, however often the page is filled.
+      const language = approvedById(s.packageId)?.language ?? "en";
+      const usedBefore = new Set(pages(sessionId).flatMap((p) => p.fields.filter((f) => f.outcome === "filled" && f.source === "answer-bank").map((f) => f.label)));
+      for (const f of reading.fields) {
+        const o = byId.get(f.id);
+        if (o?.outcome !== "filled" || o.source !== "answer-bank" || usedBefore.has(f.label)) continue;
+        const id = fromBank(f, language)?.answerId;
+        if (id) prepare.recordAnswerUse(id);
+      }
       const fields = reading.fields.flatMap((f) => {
         const o = byId.get(f.id);
         return o ? [{ label: f.label, kind: f.kind, outcome: o.outcome, source: o.source }] : [];
@@ -213,12 +266,7 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
       return page;
     },
 
-    pages(sessionId) {
-      return db.prepare("SELECT * FROM fill_page WHERE session_id = ? ORDER BY id").all(sessionId).map((r) => ({
-        stepLabel: r.step_label == null ? null : String(r.step_label), pageKind: r.page_kind as RecordedPage["pageKind"], filledAt: String(r.filled_at),
-        counts: JSON.parse(String(r.counts)) as RecordedPage["counts"], fields: JSON.parse(String(r.fields)) as RecordedPage["fields"],
-      }));
-    },
+    pages,
 
     session,
     endSession,

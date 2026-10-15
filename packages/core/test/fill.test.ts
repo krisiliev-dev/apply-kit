@@ -221,3 +221,77 @@ describe("recording a page", () => {
     expect(JSON.stringify(t.fill.pages(t.sessionId))).not.toMatch(/Mira|old@example|mira\.petrova/);
   });
 });
+
+/** Adds an answer to Mira's bank through Prepare's interface. */
+function bank(t: Awaited<ReturnType<typeof filling>>, input: Parameters<typeof t.preparation.saveAnswer>[0]) {
+  const r = t.preparation.saveAnswer(input);
+  if (!r.saved) throw new Error(r.problems[0]!.message);
+  return r.answer;
+}
+const yesNo = ["Yes", "No"];
+const sponsorship = { question: "Do you require visa sponsorship?", wordings: ["Will you now or in the future require sponsorship?"], versions: { en: "No", bg: "Не" }, category: "standard", kind: "yes-no" } as const;
+
+describe("answering questions from the answer bank", () => {
+  it("fills an exact or alias match without asking", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+    bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?", "Готови ли сте да се преместите?"], versions: { en: "No", bg: "Не" }, category: "standard", kind: "yes-no" });
+
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("q1", "Do you require visa sponsorship?", { kind: "select", options: yesNo }),
+      field("q2", "Are you willing to relocate?", { kind: "radio", options: yesNo }),
+    ]));
+
+    expect(answers).toEqual([
+      { fieldId: "q1", kind: "fill", value: "No", source: "answer-bank", basis: null },
+      { fieldId: "q2", kind: "fill", value: "No", source: "answer-bank", basis: null },
+    ]);
+  });
+
+  it("fills a close wording above the bar, and names the entry it matched", async () => {
+    const t = await filling();
+    bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?"], versions: { en: "No" }, category: "standard", kind: "yes-no" });
+
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "select", options: yesNo })]));
+
+    expect(a).toEqual({ fieldId: "q", kind: "fill", value: "No", source: "answer-bank", basis: 'Close wording of "Willing to relocate" in your answer bank' });
+  });
+
+  it("refuses a near match to a different question, and names it", async () => {
+    const t = await filling();
+    bank(t, { question: "Do you hold any security certifications?", versions: { en: "CompTIA Security+" }, category: "screening" });
+
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Do you hold a security clearance?", { kind: "radio", options: yesNo })]));
+
+    expect(a).toEqual({
+      fieldId: "q", kind: "needs-you", reason: "apply-kit has no answer for this yet",
+      basis: 'The closest answer bank entry ("Do you hold any security certifications?") is a different question, so it wasn\'t used',
+    });
+  });
+
+  it("refuses a close wording whose answer is the wrong kind for the field", async () => {
+    const t = await filling();
+    bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?"], versions: { en: "No" }, category: "standard", kind: "yes-no" });
+
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "textarea" })]));
+
+    expect(a).toEqual({
+      fieldId: "q", kind: "needs-you", reason: "The closest answer is a yes/no answer, and this field asks for text",
+      basis: 'Close wording of "Willing to relocate" in your answer bank', suggestion: "No",
+    });
+  });
+
+  it("records each use of an answer-bank entry through Prepare, once per session", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+    const r = reading([field("q1", "Will you now or in the future require sponsorship?", { kind: "select", options: yesNo }), field("first_name", "First Name")]);
+    const outcomes = [{ fieldId: "q1", outcome: "filled" as const, source: "answer-bank" as const }, { fieldId: "first_name", outcome: "filled" as const, source: "profile" as const }];
+    const used = () => t.preparation.listAnswers({ search: "visa sponsorship" }).answers[0]!;
+    expect(used().useCount).toBe(0);
+
+    t.fill.recordPage(t.sessionId, r, outcomes);
+    t.fill.recordPage(t.sessionId, r, outcomes);
+
+    expect(used()).toMatchObject({ useCount: 1, lastUsedAt: "2026-10-12T07:30:00.000Z" });
+  });
+});
