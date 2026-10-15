@@ -1,0 +1,7 @@
+{
+  "text": "At Northwind Bank I ran the response to a phishing campaign against the claims team: I traced who had clicked, had their sessions revoked and wrote up what we changed afterwards.",
+  "pieceIds": ["piece-phishing"],
+  "claim": "reworded",
+  "honest": null,
+  "companySpecific": false
+}

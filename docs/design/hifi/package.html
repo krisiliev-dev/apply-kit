@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Package · apply-kit hi-fi</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geologica:wght@500;600;700&family=Onest:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="../../../app/ui/src/styles/tokens.css">
+<link rel="stylesheet" href="../../../app/ui/src/styles/components.css">
+<style>
+/* page-local layout for the Package step: tokens only */
+.skip { position: absolute; left: var(--s-5); top: -200px; z-index: 50; background: var(--surface); color: var(--action); font-weight: 600; padding: var(--s-3) var(--s-5); border-radius: var(--r-pill); box-shadow: var(--shadow-overlay) }
+.skip:focus { top: var(--s-3) }
+.crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-3) }
+.crumbs a { color: var(--ink-2); text-decoration: none; font-weight: 500 }
+.crumbs a:hover { color: var(--action); text-decoration: underline }
+.pk-head { display: grid; gap: var(--s-3) }
+.pk-head h1 { overflow-wrap: anywhere }
+.pk-head .sub { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-5); color: var(--ink-2) }
+.pk-head .sub b { color: var(--ink); font-weight: 600 }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 300px); gap: var(--s-6); align-items: start }
+.col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 960px) { .cols { grid-template-columns: minmax(0, 1fr) } }
+
+.sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4) }
+.sec-head .grow { flex: 1 1 auto }
+.panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.panel h3 { font-size: var(--fs-body) }
+.step-title { display: grid; gap: var(--s-2) }
+.step-title h2 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--track-display) }
+
+/* the side column sticks only where it fits in the viewport (A-23) */
+@media (min-width: 961px) and (min-height: 820px) { .side { position: sticky; top: 96px } }
+.k8s-ev { display: none }
+.flag:has(input[value="have"]:checked) .k8s-ev { display: grid }
+.side .kv { grid-template-columns: max-content minmax(0, 1fr) }
+.goal { display: grid; gap: var(--s-2) }
+
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.checks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-3); align-items: baseline }
+.notes { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+
+.src { display: grid; gap: var(--s-1); border-left: 3px solid var(--rule); background: var(--surface-sunken); padding: var(--s-3) var(--s-4); border-radius: 0 var(--r-small) var(--r-small) 0; font-size: var(--fs-small); color: var(--ink) }
+.src .where { font-size: var(--fs-caption); color: var(--ink-3) }
+
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
+.opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-small) }
+.opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 3px 0 0; flex: none }
+.opt b { font-weight: 600; font-size: var(--fs-body) }
+.opt .meta { display: block }
+
+/* letter editor */
+.editor { font: inherit; font-size: var(--fs-body); line-height: 1.6; width: 100%; min-height: 360px; padding: var(--s-5); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); display: grid; gap: var(--s-4) }
+.editor:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+.editor p { margin: 0; max-width: 68ch }
+.editor mark { background: var(--bloom-soft); color: var(--ink); border-bottom: 1.5px solid var(--bloom); padding: 0 var(--s-1) }
+.textarea { font: inherit; width: 100%; min-height: 96px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); resize: vertical; line-height: var(--lh-body) }
+.textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+
+/* screening answers */
+.qs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }
+.q { display: grid; gap: var(--s-3); padding: var(--s-5); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.q.needs { border-left: 4px solid var(--bloom) }
+.q .qh { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: baseline }
+.q .qh b { font-weight: 600; flex: 1 1 260px }
+.q .ans { color: var(--ink); max-width: 68ch }
+.q .foot { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; font-size: var(--fs-small); color: var(--ink-3) }
+.money { display: flex; gap: var(--s-3); align-items: center; max-width: 280px }
+
+/* ATS parse */
+.parse { font-family: var(--font-text); font-size: var(--fs-small); line-height: 1.6; background: var(--surface-sunken); border-radius: var(--r-control); padding: var(--s-5); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink) }
+.parse .k { font-weight: 700; color: var(--ink-3); font-size: var(--fs-caption); letter-spacing: .04em }
+.parse .lost { background: var(--gap-soft); color: var(--gap); font-weight: 600; padding: 0 var(--s-1); border-radius: var(--s-1) }
+.two { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--s-6); align-items: start }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr) } }
+.selects { display: flex; flex-wrap: wrap; gap: var(--s-4) }
+.selects .field { min-width: 140px }
+select.input { appearance: auto }
+
+.skel.w30 { width: 30% } .skel.w50 { width: 50% } .skel.w70 { width: 70% } .skel.w90 { width: 90% }
+.files-out { display: grid; gap: var(--s-3) }
+.files-out a.btn { justify-content: flex-start }
+.kv.wide { grid-template-columns: minmax(110px, max-content) minmax(0, 1fr) }
+@media (max-width: 520px) { .kv.wide { grid-template-columns: minmax(0, 1fr) } .kv.wide dd { margin-bottom: var(--s-3) } }
+.toolbar { display: flex; flex-wrap: wrap; gap: var(--s-3); align-items: center }
+.alert-list { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2) }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="review" role="region" aria-label="Hi-fi review controls">
+  <span class="label">Hi-fi · Package</span>
+  <a href="index.html">All screens</a>
+  <div class="states" role="tablist" aria-label="State"></div>
+</div>
+
+<div class="shell">
+  <header class="topbar">
+    <a class="brand" href="feed.html"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 20 9 7l4 7 3-4 6 10z" fill="var(--action)"/><circle cx="17.5" cy="5.5" r="2" fill="var(--bloom)"/></svg>apply-kit</a>
+    <nav class="nav" aria-label="Main">
+      <a href="feed.html" aria-current="page">Feed</a>
+      <a href="#">Applications</a>
+      <a href="profile.html">Profile</a>
+      <a href="sources.html">Settings</a>
+    </nav>
+    <span class="grow"></span>
+    <a class="health" href="sources.html"><i aria-hidden="true"></i><span>15 sources OK · 10:30</span></a>
+  </header>
+
+  <main class="main" id="main" tabindex="-1">
+    <div class="sr-only" id="live" role="status" aria-live="polite"></div>
+
+    <!-- ================= GENERATING ================= -->
+    <section data-state="generating" data-state-name="Generating" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head">
+        <h1>Preparing your package</h1>
+        <div class="sub"><span><b>Security Engineer</b> at Kestrel Payments</span><span>English · Security angle</span><span class="num">Started 10:50</span></div>
+      </div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head" aria-live="polite"><h2>3 of 5 parts ready</h2><span class="meta num">about 20 s left</span></div>
+            <div class="meter" role="progressbar" aria-valuemin="0" aria-valuemax="5" aria-valuenow="3" aria-valuetext="3 of 5 parts ready" aria-label="Package progress"><span style="width:60%"></span></div>
+            <ul class="parts" aria-label="Parts of the package">
+              <li class="done"><span class="ic" data-i="met"></span><span><b>Target posting</b><span class="what">kestrel.greenhouse.io, the company's own page · English, from the posting</span></span><span class="chip met" data-i="met">Ready</span></li>
+              <li class="done"><span class="ic" data-i="met"></span><span><b>CV version</b><span class="what">Security angle · 7 changes · 2 flags for you</span></span><span class="chip met" data-i="met">Ready</span></li>
+              <li class="done"><span class="ic" data-i="met"></span><span><b>Screening answers</b><span class="what">6 questions · 3 from your answer bank</span></span><span class="chip met" data-i="met">Ready</span></li>
+              <li class="working"><span class="ic" data-spin></span><span><b>Cover letter</b><span class="what">Writing in your voice from 4 samples and 47 edits</span></span><span class="chip neutral">Writing…</span></li>
+              <li class="waiting"><span class="ic"></span><span><b>ATS check</b><span class="what">Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed.</span></span><span class="chip neutral">Waits for CV</span></li>
+            </ul>
+            <div class="row"><a class="btn primary" href="#target" data-go="target">Start reviewing</a><span class="meta">Begins at step 1; the CV, which needs you most, comes next.</span></div>
+            <p class="meta">You don't have to wait here. Go back to the Feed if you like: the job shows "Package ready" when it's done.</p>
+            <div class="row"><button class="btn" type="button" data-say="Stopped. The 3 finished parts are kept; the cover letter can be generated later or written by you.">Stop generating</button><span class="meta">Keeps the parts already finished.</span></div>
+          </div>
+          <div class="panel">
+            <h2>Already drafted</h2>
+            <div class="stack">
+              <span class="skel w70"></span><span class="skel w90"></span><span class="skel w50"></span>
+            </div>
+            <p class="meta">The cover letter appears here when it's written.</p>
+          </div>
+        </div>
+        <aside class="col side" aria-label="This package">
+          <div class="panel">
+            <h2>Nothing is sent anywhere</h2>
+            <p class="muted mini">Every part is a draft until you approve it. The application exists only after you press Submit in the portal.</p>
+            <dl class="kv"><dt>Model</dt><dd>DeepSeek V4.1 Flash</dd><dt>Cost</dt><dd class="num">about $0.03 for this package</dd><dt>This month</dt><dd class="num">$3.10 of $10.00</dd></dl>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- shared step header is repeated per state so each state reads on its own -->
+
+    <!-- ================= 1 TARGET POSTING ================= -->
+    <section data-state="target" data-state-name="1 · Target posting" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head">
+        <h1>Package for Security Engineer</h1>
+        <div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span><span class="num">Opened 10:50 · 1 min so far</span></div>
+      </div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="current"><a href="#target" data-go="target" aria-current="step"><span class="ic">1</span><span class="lbl">Target posting</span><span class="sub">Choose</span></a></li>
+          <li class="flagged"><a href="#cv" data-go="cv"><span class="ic">2</span><span class="lbl">CV version</span><span class="sub">2 flags</span></a></li>
+          <li class="upcoming"><a href="#letter" data-go="letter"><span class="ic">3</span><span class="lbl">Cover letter</span><span class="sub">Drafted</span></a></li>
+          <li class="flagged"><a href="#answers" data-go="answers"><span class="ic">4</span><span class="lbl">Screening answers</span><span class="sub">1 needs you</span></a></li>
+          <li class="upcoming"><a href="#ats" data-go="ats"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">After the CV</span></a></li>
+        </ol>
+      </nav>
+      <p class="meta">Steps are approved in order. You can read ahead; a step's Approve waits for the steps before it, so a later part never contradicts an earlier decision.</p>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="step-title"><h2>Which posting will you apply through?</h2><p class="muted">The screening questions and the portal the extension fills come from this posting.</p></div>
+            <fieldset class="choices">
+              <legend class="sr-only">Target posting</legend>
+              <label class="choice"><input type="radio" name="tp" checked><b>kestrel.greenhouse.io <span class="chip met" data-i="met">Recommended</span></b><span class="muted">The company's own page. Your CV goes straight into their system, the extension can fill this Greenhouse form, and no account is needed. 6 screening questions.</span></label>
+              <label class="choice"><input type="radio" name="tp"><b>dev.bg</b><span class="muted">Forwards to the same Greenhouse form but marks you as "source: dev.bg". Pick it only if you want the board credited.</span></label>
+              <label class="choice"><input type="radio" name="tp"><b>LinkedIn (from an alert email)</b><span class="muted">Easy Apply sends your LinkedIn profile, not this tailored CV, and the extension doesn't fill LinkedIn. You'd apply by hand.</span></label>
+            </fieldset>
+          </div>
+          <div class="panel">
+            <div class="sec-head"><h2>Language</h2><span class="chip neutral">From the posting</span></div>
+            <fieldset class="choices">
+              <legend class="sr-only">Package language</legend>
+              <label class="choice"><input type="radio" name="lang" checked><b>English</b><span class="muted">The posting is in English. The CV, cover letter and screening answers are all written in English.</span></label>
+              <label class="choice"><input type="radio" name="lang"><b>Bulgarian</b><span class="muted">Writes the whole package in Bulgarian, not only the headings. Switching rewrites the CV, letter and answers together so they never mix languages: about $0.03, and your current drafts and decisions are kept as earlier drafts.</span></label>
+            </fieldset>
+          </div>
+          <div class="actionbar">
+            <a class="btn ghost" href="job.html">Back to the job</a><span class="grow"></span>
+            <a class="btn primary" href="#cv" data-go="cv" data-say="Target posting approved. Step 2, CV version.">Approve and continue</a>
+          </div>
+        </div>
+        <aside class="col side" aria-label="This package">
+          <div class="panel">
+            <h2>This package</h2>
+            <dl class="kv"><dt>Angle</dt><dd>Security <span class="meta">closest of 3</span></dd><dt>Template</dt><dd>Standard, no photo</dd><dt>Cost</dt><dd class="num">$0.03 so far</dd></dl>
+            <div class="goal"><span class="meta">Time since you opened the job</span><div class="meter" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="1" aria-valuetext="1 minute of a 10-minute goal" aria-label="Time against the 10-minute goal"><span style="width:10%"></span></div><span class="meta num">1 of 10 min</span></div>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 2 CV: CHANGES, EVIDENCE, FLAGS ================= -->
+    <section data-state="cv" data-state-name="2 · CV changes & flags" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head">
+        <h1>Package for Security Engineer</h1>
+        <div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span><span class="num">Opened 10:50 · 3 min so far</span></div>
+      </div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="done"><a href="#target" data-go="target"><span class="ic" data-i="met"></span><span class="lbl">Target posting</span><span class="sub">Approved</span></a></li>
+          <li class="current"><a href="#cv" data-go="cv" aria-current="step"><span class="ic">2</span><span class="lbl">CV version</span><span class="sub">2 flags</span></a></li>
+          <li class="upcoming"><a href="#letter" data-go="letter"><span class="ic">3</span><span class="lbl">Cover letter</span><span class="sub">Drafted · after the CV</span></a></li>
+          <li class="flagged"><a href="#answers" data-go="answers"><span class="ic">4</span><span class="lbl">Screening answers</span><span class="sub">1 needs you</span></a></li>
+          <li class="upcoming"><a href="#ats" data-go="ats"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">After the CV</span></a></li>
+        </ol>
+      </nav>
+      <p class="meta">Steps are approved in order. You can read ahead; a step's Approve waits for the steps before it.</p>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head"><div class="step-title grow"><h2>CV version</h2><p class="muted">Tailored from your Security angle: what the CV uses for each requirement, and every change from your master profile.</p></div>
+              <div class="segmented" role="group" aria-label="View"><button type="button" aria-pressed="true">Changes</button><button type="button" aria-pressed="false" data-go="cv-preview">Preview</button></div></div>
+            <div class="banner warning" role="note"><span class="text"><b>2 flags to decide before you can approve.</b> <a href="#flag-ir">Incident response wording</a> · <a href="#flag-k8s">Kubernetes security gap</a></span></div>
+          </div>
+
+          <div class="panel">
+            <div class="sec-head"><h2>Requirements → evidence</h2><span class="meta">6 from the posting · 4 met · 1 partly · 1 gap</span></div>
+            <div class="evmap">
+              <div class="ev-row"><div class="req"><b>3+ years in security operations</b><span class="chip met" data-i="met" data-sr="met">Met</span></div><div class="used"><span class="piece-ref">Junior Security Analyst, Orbital Bank, Jan 2023 – now (3 years 9 months) · SOC Intern, Varna Telecom, 2022</span><span class="cvline">Both roles listed with dates; summary says "3 years in security operations"</span></div></div>
+              <div class="ev-row"><div class="req"><b>Hands-on with Splunk or Elastic</b><span class="chip met" data-i="met" data-sr="met">Met</span></div><div class="used"><span class="piece-ref">Piece: "Built 40 Splunk detections that cut false positives by about a third" · measured (team dashboard)</span><span class="cvline">First bullet under Orbital Bank, unchanged wording</span></div></div>
+              <div class="ev-row" id="flag-ir"><div class="req"><b>Lead incident response for payment-platform incidents</b><span class="chip met" data-i="met" data-sr="met">Met</span></div><div class="used"><span class="piece-ref">Piece: "Led the response to 1 phishing incident and supported 2 more" · confirmed in the coach interview · <a href="profile.html#master">open in Profile</a></span><span class="cvline">Draft: "Led the response to 3 phishing incidents, from first alert to write-up"</span></div>
+                <div class="flag line" role="group" aria-labelledby="f1-h">
+                  <span class="kind" data-i="line">NEAR THE LINE</span>
+                  <h3 id="f1-h">The draft says you led all 3 incidents. Your profile says you led 1 and supported 2.</h3>
+                  <p class="muted mini">"Led" fits the posting's wording, but a reference from Orbital Bank would only back one. Pick the wording you'd defend in an interview.</p>
+                  <fieldset><legend class="sr-only">Wording for incident response</legend>
+                    <label class="opt"><input type="radio" name="ir"><span><b>"Led the response to 1 phishing incident and supported 2 more"</b><span class="meta">Exactly your profile. Holds up to any question.</span></span></label>
+                    <label class="opt"><input type="radio" name="ir"><span><b>"Responded to 3 phishing incidents, leading 1 from first alert to write-up"</b><span class="meta">Leads with the volume, still says which one you led. Holds up.</span></span></label>
+                    <label class="opt"><input type="radio" name="ir"><span><b>Write my own wording</b><span class="meta">Checked against your profile before it's used.</span></span></label>
+                  </fieldset>
+                  <p class="meta">"Led the response to 3" isn't offered: it claims more than your profile backs.</p>
+                </div>
+              </div>
+              <div class="ev-row" id="flag-k8s"><div class="req"><b>Experience securing Kubernetes workloads</b><span class="chip gap" data-i="gap" data-sr="missing">Gap</span></div><div class="used"><span class="piece-ref">No piece in your profile mentions Kubernetes or container security.</span><span class="cvline">Not on the CV</span></div>
+                <div class="flag gap" role="group" aria-labelledby="f2-h">
+                  <span class="kind" data-i="gap">GAP</span>
+                  <h3 id="f2-h">Kubernetes security is required and your profile has no evidence for it.</h3>
+                  <p class="muted mini">Gaps are never covered up: it stays off the CV unless you have real experience to add.</p>
+                  <fieldset><legend class="sr-only">How to handle the Kubernetes gap</legend>
+                    <label class="opt"><input type="radio" name="k8s"><span><b>Name it in the cover letter as something to learn</b><span class="meta">One honest sentence; interviewers tend to ask about a gap anyway.</span></span></label>
+                    <label class="opt"><input type="radio" name="k8s"><span><b>Leave it out of both</b><span class="meta">The CV and letter don't mention it. You'll likely be asked in the interview.</span></span></label>
+                    <label class="opt"><input type="radio" name="k8s" value="have" aria-controls="k8s-ev"><span><b>I have experience the profile doesn't know about</b><span class="meta">Tell the coach. The line it drafts from your answer comes back here as a flag for you to approve, and the piece is used for this job only until you confirm it in Profile.</span></span></label>
+                  </fieldset>
+                  <div id="k8s-ev" class="field k8s-ev">
+                    <label for="k8s-what">What did you do with Kubernetes security?</label>
+                    <span class="help" id="k8s-help">Where, when and what you did. "Once, in a side project" is a fine answer.</span>
+                    <textarea class="textarea" id="k8s-what" aria-describedby="k8s-help"></textarea>
+                    <div class="row"><button class="btn sm" type="button" data-say="Thanks. The coach is reading your answer; the CV is redrafted if it holds up.">Send to the coach</button></div>
+                  </div>
+                </div>
+              </div>
+              <div class="ev-row"><div class="req"><b>Professional English</b><span class="chip met" data-i="met" data-sr="met">Met</span></div><div class="used"><span class="piece-ref">Piece: English, C1</span><span class="cvline">Languages line</span></div></div>
+              <div class="ev-row"><div class="req"><b>CISSP or similar <span class="meta">preferred</span></b><span class="chip partly" data-i="partly" data-sr="partly met">Not held</span></div><div class="used"><span class="piece-ref">Closest: Elastic SIEM course (2026). Not a certificate.</span><span class="cvline">Left out, not claimed. Preferred items are never gaps.</span></div></div>
+            </div>
+          </div>
+
+          <div class="panel">
+            <div class="sec-head"><h2>Changes from your master profile</h2><span class="meta">7 edits · each can be undone</span></div>
+            <ol class="edits">
+              <li class="edit"><div class="what"><b>Summary rewritten</b><del>Security analyst and full-stack developer who likes building tools for defenders.</del><ins>Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing response in a bank SOC.</ins><span class="why">Leads with detection engineering, the posting's first requirement.</span></div><button class="btn ghost sm" type="button" data-say="Undone: summary rewritten. The CV is re-rendered.">Undo<span class="sr-only"> summary rewrite</span></button></li>
+              <li class="edit"><div class="what"><b>Bullet moved to the top</b><span>"Built 40 Splunk detections…" is now the first bullet under Orbital Bank.</span><span class="why">Strongest match for "hands-on with Splunk or Elastic".</span></div><button class="btn ghost sm" type="button">Undo<span class="sr-only"> bullet move</span></button></li>
+              <li class="edit"><div class="what"><b>Posting's term for the same thing</b><span><del>alert monitoring</del> → <ins>alert triage</ins></span><span class="why">Same work, the word Kestrel uses.</span></div><button class="btn ghost sm" type="button">Undo<span class="sr-only"> wording change</span></button></li>
+              <li class="edit"><div class="what"><b>Incident response bullet</b><del>Led the response to 1 phishing incident and supported 2 more</del><ins>Led the response to 3 phishing incidents, from first alert to write-up</ins><span class="why"><span class="chip partly" data-i="line">Flagged</span> near the line: see above.</span></div><a class="btn ghost sm" href="#flag-ir">Decide</a></li>
+              <li class="edit"><div class="what"><b>Freelance role shortened</b><span>4 bullets → 1: "Built and hosted web apps for small businesses (React, Node.js, Linux servers)"</span><span class="why">The role asks for scripting, not product development. The role and dates stay.</span></div><button class="btn ghost sm" type="button">Undo<span class="sr-only"> freelance shortening</span></button></li>
+              <li class="edit"><div class="what"><b>Skills reordered</b><span>Splunk, Elastic SIEM and incident response first; Figma left out of this CV.</span><span class="why">Matching skills first. Nothing added that isn't in your profile.</span></div><button class="btn ghost sm" type="button">Undo<span class="sr-only"> skills reorder</span></button></li>
+              <li class="edit"><div class="what"><b>Course added</b><ins>Elastic SIEM course (2026)</ins><span class="why">From your profile; the posting mentions moving to Elastic.</span></div><button class="btn ghost sm" type="button">Undo<span class="sr-only"> course added</span></button></li>
+            </ol>
+          </div>
+
+          <div class="actionbar">
+            <a class="btn ghost" href="#target" data-go="target">Back</a><span class="grow"></span>
+            <span class="why-off" id="cv-why">2 flags left to decide</span>
+            <button class="btn primary" type="button" aria-disabled="true" aria-describedby="cv-why" data-go="cv-blocked">Approve and continue</button>
+          </div>
+        </div>
+        <aside class="col side" aria-label="Honesty check">
+          <div class="panel">
+            <h2>Honesty check</h2>
+            <ul class="checks">
+              <li><span class="chip met" data-i="met">OK</span><span>Employers, titles and dates match your master profile</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>No skill that isn't in your profile</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>Every number traces to a piece with its source</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>CISSP left out, not claimed</span></li>
+              <li><span class="chip partly" data-i="line">1</span><span>Near-the-line edit: "led" all 3 incidents</span></li>
+              <li><span class="chip gap" data-i="gap">1</span><span>Gap: Kubernetes security, no evidence</span></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h2>Tailoring notes</h2>
+            <ul class="notes"><li>Summary leads with detection engineering.</li><li>Freelance kept but shortened: the role and dates stay.</li><li>1 page, single column, Standard template, no photo.</li></ul>
+            <a class="btn ghost sm" href="#cv-preview" data-go="cv-preview">See the exact PDF</a>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 2 CV: APPROVE PRESSED WITH AN OPEN FLAG ================= -->
+    <section data-state="cv-blocked" data-state-name="2 · Approve with an open flag" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span></div></div>
+      <div class="banner error" role="alert" tabindex="-1" id="blocked-alert" data-autofocus>
+        <span class="text"><b>The CV can't be approved yet: 1 flag is still open.</b> The draft still says you led all 3 phishing incidents, and your profile says you led 1. Pick a wording you can defend in an interview.</span>
+        <a class="btn sm" href="#flag-ir-b">Go to the flag</a>
+      </div>
+      <div class="panel">
+        <div class="ev-row" id="flag-ir-b"><div class="req"><b>Lead incident response</b><span class="chip met" data-i="met" data-sr="met">Met</span></div><div class="used"><span class="piece-ref">Piece: "Led the response to 1 phishing incident and supported 2 more"</span><span class="cvline">Draft: "Led the response to 3 phishing incidents, from first alert to write-up"</span></div>
+          <div class="flag line must" role="group" aria-labelledby="f1b-h">
+            <span class="kind" data-i="line">NEAR THE LINE · STILL OPEN</span>
+            <h3 id="f1b-h" tabindex="-1">Choose the incident response wording</h3>
+            <fieldset><legend class="sr-only">Wording for incident response</legend>
+              <label class="opt"><input type="radio" name="irb"><span><b>"Led the response to 1 phishing incident and supported 2 more"</b></span></label>
+              <label class="opt"><input type="radio" name="irb"><span><b>"Responded to 3 phishing incidents, leading 1 from first alert to write-up"</b></span></label>
+              <label class="opt"><input type="radio" name="irb"><span><b>Write my own wording</b></span></label>
+            </fieldset>
+          </div>
+        </div>
+        <div class="flag gap resolved" role="group" aria-labelledby="f2b-h">
+          <span class="kind" data-i="met">GAP · DECIDED</span>
+          <h3 id="f2b-h">Kubernetes security: named in the cover letter as something to learn</h3>
+          <button class="btn ghost sm" type="button" data-go="cv">Change</button>
+        </div>
+      </div>
+      <div class="actionbar"><a class="btn ghost" href="#target" data-go="target">Back</a><span class="grow"></span><span class="why-off" id="cvb-why">1 flag left: incident response wording</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="cvb-why" data-blocked="f1b-h">Approve and continue</button></div>
+    </section>
+
+    <!-- ================= 2 CV: PREVIEW ================= -->
+    <section data-state="cv-preview" data-state-name="2 · CV preview" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span><span class="num">Opened 10:50 · 5 min so far</span></div></div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="done"><a href="#target" data-go="target"><span class="ic" data-i="met"></span><span class="lbl">Target posting</span><span class="sub">Approved</span></a></li>
+          <li class="current"><a href="#cv" data-go="cv" aria-current="step"><span class="ic">2</span><span class="lbl">CV version</span><span class="sub">Flags decided</span></a></li>
+          <li class="upcoming"><a href="#letter" data-go="letter"><span class="ic">3</span><span class="lbl">Cover letter</span><span class="sub">Drafted</span></a></li>
+          <li class="flagged"><a href="#answers" data-go="answers"><span class="ic">4</span><span class="lbl">Screening answers</span><span class="sub">1 needs you</span></a></li>
+          <li class="upcoming"><a href="#ats" data-go="ats"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">After the CV</span></a></li>
+        </ol>
+      </nav>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head"><div class="step-title grow"><h2>CV version</h2><p class="muted">The exact PDF the extension uploads. Editing a change re-renders it.</p></div>
+              <div class="segmented" role="group" aria-label="View"><button type="button" aria-pressed="false" data-go="cv">Changes</button><button type="button" aria-pressed="true">Preview</button></div></div>
+            <div class="doc-frame fit" tabindex="0" role="region" aria-label="CV preview, page 1 of 1">
+              <div class="bar"><span class="page-chip" data-i="met">1 page</span><span class="meta">Page 1 of 1 · A4</span><span class="grow"></span><div class="segmented" role="group" aria-label="Zoom"><button type="button" aria-pressed="true" data-zoom="fit">Fit</button><button type="button" aria-pressed="false" data-zoom="100">100%</button></div></div>
+              <article class="doc" lang="en" aria-label="CV">
+                <header class="d-head"><p class="d-name">Nia Koleva</p><span class="d-role">Security Analyst</span><span class="d-contact">Sofia, Bulgaria · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span></header>
+                <section><h2>Summary</h2><p>Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing response in a bank SOC. Moving detection work to Elastic and comfortable scripting in Python.</p></section>
+                <section><h2>Experience</h2>
+                  <div class="d-item"><div class="d-line"><b>Junior Security Analyst · Orbital Bank, Sofia</b><span class="d-when">Jan 2023 – present</span></div><ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Rewrote noisy login rules around how staff actually signed in, not vendor templates</li><li>Triaged about 25 alerts a day in a 6-person SOC</li><li>Responded to 3 phishing incidents, leading 1 from first alert to write-up</li></ul></div>
+                  <div class="d-item"><div class="d-line"><b>SOC Intern · Varna Telecom, Varna</b><span class="d-when">Jun 2022 – Aug 2022</span></div><ul><li>Monitored SIEM alerts on the night shift and escalated confirmed incidents</li><li>Wrote Python scripts to enrich alerts with asset and owner data</li></ul></div>
+                  <div class="d-item"><div class="d-line"><b>Freelance Full-stack Developer</b><span class="d-when">2021 – 2023</span></div><ul><li>Built and hosted web apps for small businesses (React, Node.js, Linux servers)</li></ul></div>
+                </section>
+                <section><h2>Skills</h2><p>Splunk (SPL, detection engineering) · Elastic SIEM · Incident response · Python · Linux · Bash · React · Node.js</p></section>
+                <section><h2>Education</h2><div class="d-line"><b>BSc Computer Science · Danube Institute of Technology</b><span class="d-when">2018 – 2022</span></div></section>
+                <section><h2>Languages and courses</h2><p>Bulgarian (native) · English (C1) · Elastic SIEM course (2026)</p></section>
+              </article>
+            </div>
+          </div>
+          <div class="actionbar"><a class="btn ghost" href="#cv" data-go="cv">Back to changes</a><span class="grow"></span><span class="why-off"><span class="chip met" data-i="met">Flags decided</span></span><a class="btn primary" href="#letter" data-go="letter" data-say="CV approved. Step 3, cover letter.">Approve and continue</a></div>
+        </div>
+        <aside class="col side" aria-label="File and template">
+          <div class="panel">
+            <h2>This file</h2>
+            <p class="mini" style="overflow-wrap:anywhere">Nia_Koleva_CV_Kestrel_Security_Engineer.pdf</p>
+            <ul class="checks"><li><span class="chip met" data-i="met">OK</span><span>Fits on 1 page</span></li><li><span class="chip met" data-i="met">OK</span><span>Single column, real text, fonts embedded</span></li><li><span class="chip gap" data-i="gap">1</span><span>Parse check: the internship dates aren't read. <a href="#ats" data-go="ats">Fix in step 5</a>, or edit the role now.</span></li></ul>
+            <a class="btn sm" href="cv-template.html#cv-en">Download draft PDF</a>
+          </div>
+          <div class="panel">
+            <h2>Template</h2>
+            <fieldset class="choices"><legend class="sr-only">Photo</legend>
+              <label class="choice"><input type="radio" name="photo" checked><b>Standard, no photo</b></label>
+              <label class="choice"><input type="radio" name="photo"><b>Standard with photo</b><span class="meta">Suggested for local Bulgarian employers that expect one. Same layout, photo top right. Off for Kestrel.</span></label>
+            </fieldset>
+            <p class="meta">Fixed layout from the design system. Only the words are written for this job.</p>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 2 CV: RUNS ONTO A SECOND PAGE (long content) ================= -->
+    <section data-state="cv-long" data-state-name="2 · Runs onto 2 pages" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Platform Security Engineer (Identity, Fraud and Risk Engineering)</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Platform Security Engineer (Identity, Fraud and Risk Engineering)</h1><div class="sub"><span><b>Northwind Clearing &amp; Settlement Services Europe</b></span><span>English · Security angle</span></div></div>
+      <div class="panel">
+        <div class="sec-head"><div class="step-title grow"><h2>CV version</h2><p class="muted">This posting has 14 requirements, so the draft used more of your profile than one page holds.</p></div></div>
+        <div class="banner warning" role="note"><span class="text"><b>This CV runs onto a second page: 4 lines spill over.</b> One page is the rule for your template. Pick what to tighten; each choice shows as an undoable change. Font and margins never shrink.</span></div>
+        <fieldset class="choices">
+          <legend id="tighten-legend" tabindex="-1">How to fit it on one page</legend>
+          <label class="choice"><input type="radio" name="tighten"><b>Shorten the freelance role to its title and dates</b><span class="meta">Saves 2 lines. Least relevant to this posting.</span></label>
+          <label class="choice"><input type="radio" name="tighten"><b>Drop the summary's second sentence</b><span class="meta">Saves 2 lines. The first sentence already names Splunk and detection work.</span></label>
+          <label class="choice"><input type="radio" name="tighten"><b>Merge the two intern bullets into one</b><span class="meta">Saves 1 line.</span></label>
+          <label class="choice"><input type="radio" name="tighten"><b>Keep 2 pages</b><span class="meta">Some recruiters skip page 2. The ATS check will say so.</span></label>
+        </fieldset>
+        <div class="doc-frame fit" tabindex="0" role="region" aria-label="CV preview, runs onto page 2">
+          <div class="bar"><span class="page-chip over" data-i="line">2 pages · 4 lines on page 2</span><span class="grow"></span><div class="segmented" role="group" aria-label="Zoom"><button type="button" aria-pressed="true" data-zoom="fit">Fit</button><button type="button" aria-pressed="false" data-zoom="100">100%</button></div></div>
+          <article class="doc" lang="en" aria-label="CV, overflowing" style="min-height:auto">
+            <header class="d-head"><p class="d-name">Nia Koleva</p><span class="d-role">Security Analyst</span><span class="d-contact">Sofia, Bulgaria · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span></header>
+            <section><h2>Summary</h2><p>Security analyst with 3 years in security operations, building detections for identity abuse and card fraud alongside a bank's fraud team. I move detection work from vendor templates to rules that fit how people actually sign in, and script the enrichment around them in Python.</p></section>
+            <section><h2>Experience</h2>
+              <div class="d-item"><div class="d-line"><b>Junior Security Analyst · Orbital Bank, Sofia</b><span class="d-when">Jan 2023 – present</span></div><ul><li>Built 40 Splunk detections that cut false positives by about a third</li><li>Rewrote noisy login rules around how staff actually signed in, not vendor templates</li><li>Worked with the fraud team to trace a card-testing pattern in payment alerts and wrote a Splunk detection for it</li><li>Wrote Python scripts that added threat-intel lookups to Splunk alerts</li><li>Triaged about 25 alerts a day in a 6-person SOC</li><li>Responded to 3 phishing incidents, leading 1 from first alert to write-up</li><li>Documented 12 runbooks for the night shift, now used for every new joiner</li></ul></div>
+              <div class="d-item"><div class="d-line"><b>SOC Intern · Varna Telecom, Varna</b><span class="d-when">Jun 2022 – Aug 2022</span></div><ul><li>Monitored SIEM alerts on the night shift and escalated confirmed incidents</li><li>Wrote Python scripts to enrich alerts with asset and owner data</li></ul></div>
+              <div class="d-item"><div class="d-line"><b>Freelance Full-stack Developer</b><span class="d-when">2021 – 2023</span></div><ul><li>Built a booking site with Stripe deposits and Google Calendar sync for a dental clinic in Varna</li><li>Built and hosted web apps for small businesses (React, Node.js, Linux servers)</li></ul></div>
+            </section>
+            <section><h2>Skills</h2><p>Splunk (SPL, detection engineering) · Elastic SIEM · Identity and access logs · Fraud detection · Incident response · Python · Linux · Bash · React · Node.js</p></section>
+            <section><h2>Education</h2><div class="d-line"><b>BSc Computer Science · Danube Institute of Technology</b><span class="d-when">2018 – 2022</span></div><p class="d-muted">Thesis: anomaly detection in authentication logs</p></section>
+            <section><h2>Languages and courses</h2><p>Bulgarian (native) · English (C1) · Elastic SIEM course (2026)</p></section>
+            <span class="d-pagebreak" aria-hidden="true"></span>
+          </article>
+        </div>
+      </div>
+      <div class="actionbar"><a class="btn ghost" href="#cv" data-go="cv">Back to changes</a><span class="grow"></span><span class="why-off" id="long-why">Choose how to fit one page, or keep 2</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="long-why" data-blocked="tighten-legend">Approve and continue</button></div>
+    </section>
+
+    <!-- ================= 3 COVER LETTER ================= -->
+    <section data-state="letter" data-state-name="3 · Cover letter" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span><span class="num">Opened 10:50 · 6 min so far</span></div></div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="done"><a href="#target" data-go="target"><span class="ic" data-i="met"></span><span class="lbl">Target posting</span><span class="sub">Approved</span></a></li>
+          <li class="done"><a href="#cv-preview" data-go="cv-preview"><span class="ic" data-i="met"></span><span class="lbl">CV version</span><span class="sub">Approved</span></a></li>
+          <li class="current"><a href="#letter" data-go="letter" aria-current="step"><span class="ic">3</span><span class="lbl">Cover letter</span><span class="sub">Review</span></a></li>
+          <li class="flagged"><a href="#answers" data-go="answers"><span class="ic">4</span><span class="lbl">Screening answers</span><span class="sub">1 needs you</span></a></li>
+          <li class="upcoming"><a href="#ats" data-go="ats"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">Ready to run</span></a></li>
+        </ol>
+      </nav>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="sec-head"><div class="step-title grow"><h2>Cover letter</h2><p class="muted">Written in your voice. Edit it here; your edits teach the voice for next time.</p></div>
+              <div class="segmented" role="group" aria-label="View"><button type="button" aria-pressed="true">Edit</button><button type="button" aria-pressed="false" data-go="letter-preview">Preview</button></div></div>
+            <div class="toolbar">
+              <div class="row" role="group" aria-label="Drafts"><button class="btn ghost sm" type="button" aria-label="Previous draft">‹</button><span class="meta num">Draft 2 of 2</span><button class="btn ghost sm" type="button" aria-label="Next draft" aria-disabled="true">›</button></div>
+              <span class="grow"></span>
+              <label class="check"><input type="checkbox" checked> Highlight sentences written for Kestrel</label>
+              <span class="count num" id="lc">217 words · target 220</span>
+            </div>
+            <div class="editor" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Cover letter text" aria-describedby="lc">
+              <p>Dear Kestrel hiring team,</p>
+              <p><mark>Kestrel moves money for 12,000 merchants, which means every false alarm in your SOC costs an analyst's time and every missed one can cost a merchant.</mark> Telling those two apart is the part of security work I have spent the last three years on, and it is why the Security Engineer role stood out to me.</p>
+              <p>At Orbital Bank I built 40 Splunk detections for a six-person SOC and cut our false positives by about a third, mostly by rewriting noisy rules around how our staff actually signed in rather than how the vendor templates assumed they did. Triaging around 25 alerts a day taught me which detections earn their place and which only create work. I also responded to three phishing incidents and led one of them from the first alert to the write-up.</p>
+              <p><mark>Your posting mentions moving detection work onto Elastic and hardening the Kubernetes platform. Elastic would be a short step from Splunk for me. Kubernetes security I haven't done in production, and I would want to close that gap early rather than talk around it.</mark> I would like to hear where the team wants its detections to be a year from now.</p>
+              <p>Kind regards,<br>Nia Koleva</p>
+            </div>
+            <p class="meta"><span class="chip ask" data-i="info">Highlighted</span> 4 sentences were written for Kestrel: the opening sentence and the first three sentences of paragraph 3. The rest follows your usual letter. Check the highlighted ones first; highlights never reach the PDF.</p>
+            <div class="field">
+              <label for="instr">Ask for a new draft</label>
+              <span class="help" id="instr-help">Your current draft stays as draft 2, so nothing is lost by trying.</span>
+              <div class="row"><input class="input grow" id="instr" aria-describedby="instr-help" placeholder="e.g. Shorter, and mention the Elastic course…" style="flex:1 1 240px"><button class="btn" type="button" data-say="Writing draft 3. Draft 2 is kept.">Write draft 3</button></div>
+              <div class="chips"><button class="filter" type="button">Shorter</button><button class="filter" type="button">More direct</button><button class="filter" type="button">Mention the Elastic course</button></div>
+            </div>
+          </div>
+          <div class="actionbar"><a class="btn ghost" href="#cv-preview" data-go="cv-preview">Back</a><span class="grow"></span><span class="why-off">Saved 10:56</span><a class="btn primary" href="#answers" data-go="answers" data-say="Cover letter approved. Step 4, screening answers.">Approve and continue</a></div>
+        </div>
+        <aside class="col side" aria-label="Checks and voice">
+          <div class="panel">
+            <h2>Checks</h2>
+            <ul class="checks">
+              <li><span class="chip met" data-i="met">OK</span><span>Every claim traces to your master profile</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>Incident wording matches your CV decision: led 1 of 3</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>Kubernetes gap named, as you chose in the CV step</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>No stock phrases ("passionate", "excited to apply")</span></li>
+              <li><span class="chip met" data-i="met">OK</span><span>One concrete example with a number</span></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h2>Voice</h2>
+            <p class="mini muted">From 4 samples and 47 edits. The samples stay on this laptop.</p>
+            <button class="btn ghost sm" type="button" data-toggle="sent-ex" aria-expanded="false" aria-controls="sent-ex">Sent with this draft: 3 excerpts, 140 words</button>
+            <div id="sent-ex" class="src" hidden><span>"Telling those two apart is the part of the work I care about most…" <span class="where">cover-letter-orbital-2023</span></span><span>"I haven't done that yet, and I'd rather say so than talk around it." <span class="where">cover-letter-varna-telecom</span></span><span>"I build small tools when a process annoys me twice." <span class="where">portfolio-about-page</span></span></div>
+            <a class="btn ghost sm" href="profile.html#voice">What the voice learned</a>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= 3 COVER LETTER PREVIEW ================= -->
+    <section data-state="letter-preview" data-state-name="3 · Letter preview" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span></div></div>
+      <div class="panel">
+        <div class="sec-head"><div class="step-title grow"><h2>Cover letter</h2><p class="muted">The exact PDF that gets uploaded: draft 2, as edited.</p></div>
+          <div class="segmented" role="group" aria-label="View"><button type="button" aria-pressed="false" data-go="letter">Edit</button><button type="button" aria-pressed="true">Preview</button></div></div>
+        <div class="doc-frame fit" tabindex="0" role="region" aria-label="Cover letter preview, page 1 of 1">
+          <div class="bar"><span class="page-chip" data-i="met">1 page</span><span class="meta">Same letterhead as your CV</span><span class="grow"></span><div class="segmented" role="group" aria-label="Zoom"><button type="button" aria-pressed="true" data-zoom="fit">Fit</button><button type="button" aria-pressed="false" data-zoom="100">100%</button></div></div>
+          <article class="doc" lang="en" aria-label="Cover letter">
+            <header class="d-head"><p class="d-name">Nia Koleva</p><span class="d-role">Security Analyst</span><span class="d-contact">Sofia, Bulgaria · nia.koleva@example.com · +359 88 000 0142 · linkedin.com/in/nia-koleva-example</span></header>
+            <div class="d-letter">
+              <p class="d-muted">13 October 2026</p>
+              <p>Hiring team<br>Kestrel Payments<br>Sofia, Bulgaria</p>
+              <p><b>Re: Security Engineer (R-10482)</b></p>
+              <p>Dear Kestrel hiring team,</p>
+              <p>Kestrel moves money for 12,000 merchants, which means every false alarm in your SOC costs an analyst's time and every missed one can cost a merchant. Telling those two apart is the part of security work I have spent the last three years on, and it is why the Security Engineer role stood out to me.</p>
+              <p>At Orbital Bank I built 40 Splunk detections for a six-person SOC and cut our false positives by about a third, mostly by rewriting noisy rules around how our staff actually signed in rather than how the vendor templates assumed they did. Triaging around 25 alerts a day taught me which detections earn their place and which only create work. I also responded to three phishing incidents and led one of them from the first alert to the write-up.</p>
+              <p>Your posting mentions moving detection work onto Elastic and hardening the Kubernetes platform. Elastic would be a short step from Splunk for me. Kubernetes security I haven't done in production, and I would want to close that gap early rather than talk around it. I would like to hear where the team wants its detections to be a year from now.</p>
+              <p>Kind regards,<br>Nia Koleva</p>
+            </div>
+          </article>
+        </div>
+      </div>
+      <div class="actionbar"><a class="btn ghost" href="#letter" data-go="letter">Back to edit</a><span class="grow"></span><a class="btn sm" href="cv-template.html#letter">Download draft PDF</a><a class="btn primary" href="#answers" data-go="answers">Approve and continue</a></div>
+    </section>
+
+    <!-- ================= 4 SCREENING ANSWERS ================= -->
+    <section data-state="answers" data-state-name="4 · Screening answers" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span><span class="num">Opened 10:50 · 7 min so far</span></div></div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="done"><a href="#target" data-go="target"><span class="ic" data-i="met"></span><span class="lbl">Target posting</span><span class="sub">Approved</span></a></li>
+          <li class="done"><a href="#cv-preview" data-go="cv-preview"><span class="ic" data-i="met"></span><span class="lbl">CV version</span><span class="sub">Approved</span></a></li>
+          <li class="done"><a href="#letter" data-go="letter"><span class="ic" data-i="met"></span><span class="lbl">Cover letter</span><span class="sub">Approved</span></a></li>
+          <li class="current"><a href="#answers" data-go="answers" aria-current="step"><span class="ic">4</span><span class="lbl">Screening answers</span><span class="sub">1 needs you</span></a></li>
+          <li class="upcoming"><a href="#ats" data-go="ats"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">Ready to run</span></a></li>
+        </ol>
+      </nav>
+      <div class="panel">
+        <div class="step-title"><h2>Screening answers</h2><p class="muted">6 questions from kestrel.greenhouse.io, in the form's order · 3 from your answer bank · 2 new drafts · 1 needs you.</p></div>
+      </div>
+      <ol class="qs">
+        <li class="q"><div class="qh"><b>Do you have the right to work in Bulgaria?</b><span class="chip neutral">Answer bank</span></div>
+          <fieldset><legend class="sr-only">Right to work in Bulgaria</legend><div class="row"><label class="opt"><input type="radio" name="rtw" checked> Yes</label><label class="opt"><input type="radio" name="rtw"> No</label></div></fieldset>
+          <div class="foot"><span>EU citizen · used in 9 applications</span></div></li>
+        <li class="q"><div class="qh"><b>What is your notice period?</b><span class="chip neutral">Answer bank</span></div><p class="ans">1 month</p><div class="foot"><span>Used in 7 applications · last changed 2 Sep</span><a class="btn ghost sm" href="profile.html#answers">Edit in the answer bank</a></div></li>
+        <li class="q needs" id="q-salary" tabindex="-1"><div class="qh"><b>What are your salary expectations? (gross monthly, EUR)</b><span class="chip ask" data-i="ask">Needs you</span></div>
+          <p class="mini muted">Posting range €2,800–3,600 gross · your minimum €2,000 · last asked at Corvid Logistics: €3,300. A number in the upper half leaves room to negotiate. The form takes one number, not a range.</p>
+          <div class="field"><label for="sal">Your number</label><div class="money"><span aria-hidden="true">€</span><input class="input num" id="sal" inputmode="numeric" placeholder="e.g. 3,300" aria-describedby="sal-help"><span class="meta">gross / month</span></div><span class="help" id="sal-help">Suggested €3,300 by your answer-bank rule (upper half of a stated range, never under €2,000). The number itself is never saved: salary depends on the job.</span></div>
+          <div class="row"><button class="btn sm" type="button">Use €3,300</button><button class="btn sm" type="button" data-say="Salary confirmed.">Confirm</button></div></li>
+        <li class="q"><div class="qh"><b>Why Kestrel?</b><span class="chip neutral">New draft</span></div>
+          <textarea class="textarea" aria-label="Answer: Why Kestrel?" aria-describedby="wk-count">Payments security is detection work with a short feedback loop: a bad rule shows up as blocked merchants or missed fraud within days, and that is the kind of SOC I want to work in. At Orbital Bank I built 40 Splunk detections and cut false positives by about a third, so tuning noisy alerting is where I would start. Kestrel's move to Elastic and the hybrid setup in Sofia fit what I am looking for next.</textarea>
+          <div class="foot"><span class="count num" id="wk-count">77 of 150 words (form limit)</span><span>Written for this company: not saved to the answer bank</span><button class="btn ghost sm" type="button">Write another draft</button></div></li>
+        <li class="q"><div class="qh"><b>Describe a security incident you handled.</b><span class="chip neutral">Answer bank · adapted</span></div>
+          <textarea class="textarea" aria-label="Answer: Describe a security incident you handled" aria-describedby="inc-count inc-note">In March 2024 a phishing email posing as our payroll provider reached about 60 staff at Orbital Bank. I led the response: I pulled the sender and link indicators, searched Splunk for clicks and found 4 people who had entered credentials, had their sessions revoked and passwords reset within the hour, and wrote the incident report with the detection we added afterwards.</textarea>
+          <div class="foot"><span class="count num" id="inc-count">68 of 150 words</span><span id="inc-note">Your answer from 12 Aug, trimmed by 1 sentence to fit. No facts added.</span><a class="btn ghost sm" href="#" data-toggle="inc-diff" aria-expanded="false" aria-controls="inc-diff">What changed</a></div>
+          <div id="inc-diff" class="src" hidden><span>Removed: "Afterwards I ran a short awareness session for the branch staff."</span><span class="where">Your answer bank keeps the full version.</span></div></li>
+        <li class="q"><div class="qh"><b>How did you hear about us?</b><span class="chip neutral">New · from your sources</span></div>
+          <label class="sr-only" for="hear">How did you hear about us?</label><select class="input" id="hear" style="max-width:280px"><option>LinkedIn</option><option>Company website</option><option>Job board</option><option>Referral</option></select>
+          <div class="foot"><span>First seen in a LinkedIn alert on 9 Oct.</span><label class="check"><input type="checkbox"> Save "where it was first seen" as the rule for this question</label></div></li>
+      </ol>
+      <div class="actionbar"><a class="btn ghost" href="#letter" data-go="letter">Back</a><span class="grow"></span><span class="why-off" id="ans-why"><a href="#q-salary">1 answer needs you: salary</a></span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="ans-why" data-blocked="q-salary">Approve and continue</button></div>
+    </section>
+
+    <!-- ================= 5 ATS CHECK ================= -->
+    <section data-state="ats" data-state-name="5 · ATS check" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span><span class="num">Opened 10:50 · 8 min so far</span></div></div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="done"><a href="#target" data-go="target"><span class="ic" data-i="met"></span><span class="lbl">Target posting</span><span class="sub">Approved</span></a></li>
+          <li class="done"><a href="#cv-preview" data-go="cv-preview"><span class="ic" data-i="met"></span><span class="lbl">CV version</span><span class="sub">Approved</span></a></li>
+          <li class="done"><a href="#letter" data-go="letter"><span class="ic" data-i="met"></span><span class="lbl">Cover letter</span><span class="sub">Approved</span></a></li>
+          <li class="done"><a href="#answers" data-go="answers"><span class="ic" data-i="met"></span><span class="lbl">Screening answers</span><span class="sub">Approved</span></a></li>
+          <li class="current"><a href="#ats" data-go="ats" aria-current="step"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">1 check fails</span></a></li>
+        </ol>
+      </nav>
+      <div class="panel">
+        <div class="sec-head"><div class="step-title grow"><h2>ATS check</h2><p class="muted">Your CV PDF read back the way an applicant tracking system reads it: plain text, in reading order. Runs on this laptop.</p></div><span class="chip partly" data-i="partly">6 of 7 pass</span></div>
+        <div class="two">
+          <div class="stack">
+            <h3>What the parser reads</h3>
+<pre class="parse" tabindex="0" aria-label="Parsed text of the CV"><span class="k">NAME</span>  Nia Koleva
+<span class="k">EMAIL</span>  nia.koleva@example.com
+<span class="k">PHONE</span>  +359 88 000 0142
+<span class="k">LOCATION</span>  Sofia, Bulgaria
+<span class="k">SUMMARY</span>  Security analyst with 3 years in security operations: detection engineering in Splunk, alert triage and phishing response in a bank SOC.
+<span class="k">EXPERIENCE</span>
+  Junior Security Analyst · Orbital Bank   Jan 2023 – present
+  SOC Intern · Varna Telecom   <span class="lost">no dates found</span>
+  Freelance Full-stack Developer   2021 – 2023
+<span class="k">EDUCATION</span>  BSc Computer Science · 2018 – 2022
+<span class="k">SKILLS</span>  Splunk, Elastic SIEM, incident response, Python, Linux, Bash, React, Node.js</pre>
+          </div>
+          <div class="stack">
+            <h3>Checks</h3>
+            <ul class="checks">
+              <li><span class="chip met" data-i="met">Pass</span><span>Text-based PDF, single column, 1 page</span></li>
+              <li><span class="chip met" data-i="met">Pass</span><span>Name, email, phone and location found</span></li>
+              <li><span class="chip met" data-i="met">Pass</span><span>Education and skills found</span></li>
+              <li><span class="chip met" data-i="met">Pass</span><span>11 of 13 posting keywords found. Missing: Kubernetes, CISSP, both deliberate gaps</span></li>
+              <li><span class="chip met" data-i="met">Pass</span><span>File name has your name, the company and the role</span></li>
+              <li><span class="chip met" data-i="met">Pass</span><span>Summary 2 sentences, bullets under 160 characters</span></li>
+              <li><span class="chip gap" data-i="gap">Fail</span><span><b>Varna Telecom: "Summer 2022" isn't read as a date</b></span></li>
+            </ul>
+            <div class="flag gap">
+              <span class="kind" data-i="gap">FIX</span>
+              <h3>Give the internship real months</h3>
+              <p class="mini muted">Your profile says "Summer 2022". Parsers need months. Which months were they? Nothing is guessed.</p>
+              <div class="selects">
+                <div class="field"><label for="from-m">From</label><select class="input" id="from-m"><option value="">Choose…</option><option>May 2022</option><option>Jun 2022</option><option>Jul 2022</option></select></div>
+                <div class="field"><label for="to-m">To</label><select class="input" id="to-m"><option value="">Choose…</option><option>Jul 2022</option><option>Aug 2022</option><option>Sep 2022</option></select></div>
+              </div>
+              <label class="check"><input type="checkbox" checked> Also update my master profile, so it doesn't come back</label>
+              <div class="row"><button class="btn sm" type="button" data-say="Re-checking the CV…">Apply and re-check</button></div>
+              <p class="meta">The new dates show in the CV step as a change you made here; the CV stays approved.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="actionbar"><a class="btn ghost" href="#answers" data-go="answers">Back</a><span class="grow"></span><span class="why-off" id="ats-why">1 check fails: internship dates</span><button class="btn primary" type="button" aria-disabled="true" aria-describedby="ats-why" data-blocked="from-m">Approve package</button></div>
+    </section>
+
+    <!-- ================= ERROR: A PART FAILED ================= -->
+    <section data-state="failed" data-state-name="Error · a part failed" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span></div></div>
+      <nav aria-label="Package steps">
+        <ol class="pk-steps">
+          <li class="done"><a href="#target" data-go="target"><span class="ic" data-i="met"></span><span class="lbl">Target posting</span><span class="sub">Approved</span></a></li>
+          <li class="flagged"><a href="#cv" data-go="cv"><span class="ic">2</span><span class="lbl">CV version</span><span class="sub">2 flags</span></a></li>
+          <li class="failed"><a href="#failed" aria-current="step"><span class="ic" data-i="gap"></span><span class="lbl">Cover letter</span><span class="sub">Failed</span></a></li>
+          <li class="flagged"><a href="#answers" data-go="answers"><span class="ic">4</span><span class="lbl">Screening answers</span><span class="sub">1 needs you</span></a></li>
+          <li class="upcoming"><a href="#ats" data-go="ats"><span class="ic">5</span><span class="lbl">ATS check</span><span class="sub">After the CV</span></a></li>
+        </ol>
+      </nav>
+      <div class="banner error" role="alert"><span class="text"><b>The cover letter wasn't written.</b> The model host didn't answer within 60 s, twice (10:46 and 10:47). Your CV version and screening answers are finished and saved; nothing was lost.</span><button class="btn sm" type="button" data-say="Writing the cover letter again…">Try again</button></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <h2>Keep going meanwhile</h2>
+            <p class="muted">A failure in one part never blocks the others. Review the CV now; the letter can be retried when you get there.</p>
+            <div class="row"><a class="btn primary" href="#cv" data-go="cv">Review the CV</a><button class="btn" type="button">Write the letter myself</button></div>
+          </div>
+        </div>
+        <aside class="col side"><div class="panel"><h2>If it keeps failing</h2><p class="mini muted">Check the model and providers in Settings › Model and budget. Each retry costs about $0.01.</p><a class="btn ghost sm" href="#">Model and budget</a></div></aside>
+      </div>
+    </section>
+
+    <!-- ================= AI CAP REACHED ================= -->
+    <section data-state="cap" data-state-name="AI cap reached" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package for Security Engineer</h1><div class="sub"><span><b>Kestrel Payments</b></span><span>English · Security angle</span></div></div>
+      <div class="banner warning" role="status"><span class="text"><b>This month's AI budget is used up: $10.00 of $10.00.</b> Generation stopped before the cover letter. Everything finished so far is saved. The budget resets on 1 Nov.</span></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <h2>Where the package stands</h2>
+            <ul class="parts">
+              <li class="done"><span class="ic" data-i="met"></span><span><b>Target posting</b></span><span class="chip met" data-i="met">Ready</span></li>
+              <li class="done"><span class="ic" data-i="met"></span><span><b>CV version</b><span class="what">2 flags for you</span></span><span class="chip met" data-i="met">Ready</span></li>
+              <li class="done"><span class="ic" data-i="met"></span><span><b>Screening answers</b></span><span class="chip met" data-i="met">Ready</span></li>
+              <li class="stopped"><span class="ic" data-i="partly"></span><span><b>Cover letter</b><span class="what">Not written: the budget would be crossed</span></span><span class="chip partly" data-i="partly">Not written</span></li>
+              <li class="waiting"><span class="ic"></span><span><b>ATS check</b><span class="what">Runs on this laptop, no model needed: it will still run</span></span><span class="chip neutral">Will run</span></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h2>How to continue</h2>
+            <div class="stack">
+              <div class="row"><a class="btn" href="#">Raise the cap in Settings</a><span class="meta">A cover letter costs about $0.01. October so far: 312 postings read, 14 packages.</span></div>
+              <div class="row"><button class="btn" type="button">Write the letter myself</button><span class="meta">Opens an empty editor with your letterhead.</span></div>
+              <div class="row"><button class="btn ghost" type="button">Finish on 1 Nov</button><span class="meta">The job stays in Saved with "Package not finished".</span></div>
+            </div>
+            <p class="meta">The app never raises the cap by itself.</p>
+          </div>
+        </div>
+        <aside class="col side"><div class="panel"><h2>Meanwhile</h2><p class="mini muted">Review the CV and screening answers now; neither needs the model again unless you ask for a new draft.</p><a class="btn primary" href="#cv" data-go="cv">Review the CV</a></div></aside>
+      </div>
+    </section>
+
+    <!-- ================= APPROVED ================= -->
+    <section data-state="approved" data-state-name="Approved" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="pk-head"><h1>Package approved</h1><div class="sub"><span><b>Security Engineer</b> at Kestrel Payments</span><span class="num">Approved 10:58 · 8 minutes since you opened the job</span></div></div>
+      <div class="banner success" role="status"><span class="text"><b>Ready to apply.</b> Open the target posting: the extension fills the Greenhouse form from this package, and you check it and press Submit.</span></div>
+      <div class="cols">
+        <div class="col">
+          <div class="panel">
+            <div class="row"><a class="btn primary" href="#" style="min-height:44px;font-size:var(--fs-body)">Open the target posting<span aria-hidden="true"> ↗</span><span class="sr-only"> (kestrel.greenhouse.io, opens in a new tab)</span></a><span class="meta">kestrel.greenhouse.io · Security Engineer</span></div>
+            <p class="meta"><span class="chip met" data-i="met">Extension connected</span> It fills Greenhouse forms. If it isn't running, the files and answers stay here to copy.</p>
+            <dl class="kv wide">
+              <dt>CV version</dt><dd>Security · Kestrel · 1 page · Standard, no photo · 7 changes from your master profile</dd>
+              <dt>Cover letter</dt><dd>217 words · draft 2</dd>
+              <dt>Screening answers</dt><dd>6 · salary €3,300 gross · 1 rule saved to your answer bank</dd>
+              <dt>ATS check</dt><dd>7 of 7 pass</dd>
+            </dl>
+          </div>
+          <div class="panel">
+            <h2>Your decisions</h2>
+            <p class="mini muted">So you can answer for them in an interview.</p>
+            <dl class="kv wide">
+              <dt>Incident response</dt><dd>"Responded to 3 phishing incidents, leading 1 from first alert to write-up" (not "led all 3")</dd>
+              <dt>Kubernetes</dt><dd>Kept as a named gap, mentioned in the letter as something to learn</dd>
+              <dt>Varna Telecom</dt><dd>Jun – Aug 2022, also saved to your master profile</dd>
+            </dl>
+          </div>
+        </div>
+        <aside class="col side">
+          <div class="panel files-out">
+            <h2>Files</h2>
+            <a class="btn" href="cv-template.html#cv-en">Download CV (PDF)</a>
+            <a class="btn" href="cv-template.html#letter">Download cover letter (PDF)</a>
+          </div>
+          <div class="panel">
+            <h2>What happens next</h2>
+            <ul class="notes"><li>When you press Submit in the portal, the extension logs the application under Applications.</li><li>Until then the job sits in Saved with "Package ready".</li><li>Editing any part re-opens that step for approval.</li></ul>
+            <button class="btn ghost sm" type="button">Edit package</button>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- ================= EMPTY: NO MASTER PROFILE ================= -->
+    <section data-state="noprofile" data-state-name="Empty · no master profile" class="stack" style="gap:var(--s-6)">
+      <nav class="crumbs" aria-label="Breadcrumb"><a href="feed.html">Feed</a><span aria-hidden="true">/</span><a href="job.html">Security Engineer</a><span aria-hidden="true">/</span><span aria-current="page">Package</span></nav>
+      <div class="empty">
+        <h1 style="font-size:var(--fs-h3)">A package needs your master profile first</h1>
+        <p>Every CV, cover letter and screening answer is built from it, and nothing is ever written that it doesn't back. Setup imports your old CVs, lets a coach question them, and takes about 30–45 minutes; you can stop any time.</p>
+        <div class="row"><a class="btn primary" href="onboarding.html">Set up your profile</a><a class="btn" href="onboarding.html#import">Import one CV and start this package</a></div>
+        <p class="meta">The quick start works, but this first package will be thinner and ask you more questions.</p>
+      </div>
+    </section>
+
+    <div id="toast-host" aria-live="off"></div>
+  </main>
+</div>
+<script src="prepare.js"></script>
+</body>
+</html>

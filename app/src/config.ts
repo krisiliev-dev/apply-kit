@@ -19,6 +19,8 @@ export function readConfig() {
   return {
     port: Number(process.env.PORT ?? 4310),
     dbPath: process.env.APPLY_KIT_DB_PATH || join(dataDir, "apply-kit.db"),
+    /** APPLY_KIT_PACKAGES_DIR: where approved package files are copied for Kris (ADR 0003). Default: Documents/apply-kit Packages. */
+    packagesDir: process.env.APPLY_KIT_PACKAGES_DIR || join(homedir(), "Documents", "apply-kit Packages"),
     uiDir: fileURLToPath(new URL("../ui/dist/", import.meta.url)),
     sources: parseSources(process.env.APPLY_KIT_SOURCES ?? ""),
     ai: {

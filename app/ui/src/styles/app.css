@@ -66,7 +66,7 @@
 .jobs tbody tr[data-id]:focus-within td { background: var(--met-soft) }
 .jobs tbody tr[data-id]:focus-within td:first-child { box-shadow: inset 3px 0 0 var(--action) }
 .jobs tbody tr[data-id]:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px }
-.jobs .saved-chip { margin-left: var(--s-2); vertical-align: 1px }
+.jobs .saved-chip, .jobs .pkg-chip { margin-left: var(--s-2); vertical-align: 1px }
 .row-acts { display: flex; gap: var(--s-2); margin-top: var(--s-2) }
 @media (hover: hover) and (min-width: 761px) {
   .row-acts { opacity: 0; transition: opacity var(--dur-fast) var(--ease-standard) }
@@ -264,3 +264,204 @@ h2[tabindex="-1"]:focus { outline: none }
 
 /* Chrome extension pairing code: large and spaced so it is easy to type across. */
 .pair-code { font-family: var(--font-display); font-size: var(--fs-h2); letter-spacing: .12em; font-variant-numeric: tabular-nums; font-weight: 600 }
+
+/* Profile (from the Profile hi-fi): master profile, Edit piece, contact. Tokens only. */
+.local { display: inline-flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; font-size: var(--fs-small); color: var(--ink-2) }
+.local svg { width: 14px; height: 14px; color: var(--action); flex: none }
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 320px); gap: var(--s-6); align-items: start }
+.col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (max-width: 960px) { .cols { grid-template-columns: minmax(0, 1fr) } }
+.form { max-width: 640px; display: grid; gap: var(--s-6); min-width: 0 }
+.form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
+.form fieldset:focus { outline: none }
+.form legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+.form .opt { font-size: var(--fs-small) }
+.form .err { font-size: var(--fs-caption); color: var(--gap); font-weight: 500 }
+.form .help { font-size: var(--fs-caption); color: var(--ink-3) }
+.field .label { font-weight: 600; font-size: var(--fs-small) }
+.textarea { font: inherit; width: 100%; min-height: 88px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface); color: var(--ink); resize: vertical; line-height: var(--lh-body) }
+.textarea:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px }
+.textarea[aria-invalid="true"], .input[aria-invalid="true"] { border-color: var(--gap); box-shadow: 0 0 0 3px var(--gap-soft) }
+.errsum { display: grid; gap: var(--s-2) }
+.errsum:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.errsum ul { margin: 0; padding-left: var(--s-6) }
+.errsum a { color: inherit }
+.chips-edit { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: center; padding: var(--s-2) var(--s-3); border: 1px solid var(--border-control); border-radius: var(--r-control); background: var(--surface); min-height: 40px }
+.chips-edit .chip button { font: inherit; border: 0; background: none; color: inherit; cursor: pointer; padding: 0 0 0 var(--s-1); min-width: 24px; min-height: 24px }
+.chips-edit input { border: 0; outline: 0; font: inherit; flex: 1 1 120px; min-width: 80px; background: transparent; color: var(--ink) }
+.chips-edit:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4) }
+@media (max-width: 640px) { .pair { grid-template-columns: 1fr } }
+.pieces-search { flex: 1 1 220px; max-width: 320px }
+.angle-select { width: auto }
+.group .show-more { justify-self: start }
+.piece:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.kv .links { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-4); overflow-wrap: anywhere }
+
+/* Answer bank and Edit answer (from the Profile hi-fi). Tokens only. */
+.answers-head { padding: var(--s-5) var(--s-6) var(--s-4) }
+.answers-toolbar { padding: 0 var(--s-6) var(--s-4) }
+.answers-search { flex: 1 1 220px; max-width: 320px }
+.answers-none, .answers-pages { padding: var(--s-4) var(--s-6) }
+.answers-head h2:focus { outline: none }
+.answers-table .ans { max-width: 46ch; color: var(--ink-2); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden }
+.answers-table tbody tr { cursor: default }
+.answers-table .q { font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px }
+.answers-table .q:hover { text-decoration-color: var(--action) }
+.needs-acts { flex-wrap: wrap; gap: var(--s-2) }
+@media (max-width: 640px) { .needs { grid-template-columns: 4px minmax(0, 1fr) } .needs-acts { grid-column: 2 } }
+.textarea.short { min-height: var(--s-10) }
+.answer-type { width: auto; max-width: 100% }
+.answer-floor { max-width: 12ch }
+.wordings { list-style: none; margin: 0; padding: 0; display: grid; border: 1px solid var(--rule); border-radius: var(--r-control) }
+.wordings li { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; padding: var(--s-2) var(--s-3); border-top: 1px solid var(--rule); font-size: var(--fs-small); overflow-wrap: anywhere }
+.wordings li:first-child { border-top: 0 }
+.wordings li > span:first-child { flex: 1 1 200px }
+.form .row .input.grow { flex: 1 1 200px; width: auto }
+
+/* Angles (from the Profile hi-fi, state Angles). Tokens only. */
+.measure { max-width: 68ch }
+.angles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: var(--s-5); align-items: start }
+.angle { display: grid; gap: var(--s-4); min-width: 0 }
+.angle ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
+.angle.thin { border-left: 4px solid var(--partly) }
+.angle .thin-why { color: var(--partly); margin: 0 }
+.angle > .btn { justify-self: start }
+.reorder { width: min(640px, calc(100vw - var(--s-8))) }
+.reorder h2:focus { outline: none }
+.lead-order { list-style: none; margin: 0; padding: 0; display: grid }
+.lead-order li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-1) var(--s-3); align-items: baseline; padding: var(--s-3) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.lead-order li:first-child { border-top: 0 }
+.lead-order .num { color: var(--ink-3); font-variant-numeric: tabular-nums }
+.lead-order .acts { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s-1) }
+@media (min-width: 640px) { .lead-order li { grid-template-columns: auto minmax(0, 1fr) auto } .lead-order .acts { grid-column: auto } }
+
+/* ---------- Setup · import (#54, hi-fi onboarding.html) ---------- */
+.setup { gap: var(--s-6) }
+.setup .stack { gap: var(--s-6) }
+.setup .head { display: grid; gap: var(--s-2); max-width: 72ch }
+.setup .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.setup .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (min-width: 961px) and (min-height: 820px) { .setup .side { position: sticky; top: 96px } }
+.setup .privacy ul, .setup .next ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.setup .links { display: grid; gap: var(--s-4) }
+.setup .scope { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0; padding: 0; list-style: none }
+.setup .composer { display: grid; gap: var(--s-3) }
+.setup .msg { overflow-wrap: anywhere; white-space: pre-wrap }
+.setup .side .piece { grid-template-columns: minmax(0, 1fr) }
+.setup .side .piece .acts { justify-content: start }
+.setup .piece fieldset { border: 0; margin: 0; padding: 0; min-width: 0 }
+.setup .pk-steps a[aria-disabled="true"] { color: var(--ink-3); cursor: default }
+.setup .pk-steps a[aria-disabled="true"]:hover { border-color: var(--rule) }
+.setup .merges { margin-top: var(--s-4); font-size: var(--fs-small) }
+.setup .merges summary { cursor: pointer; font-weight: 600; color: var(--action) }
+.setup .merges ul { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: var(--s-3) }
+.setup .merges li { display: grid; gap: var(--s-1); padding-top: var(--s-3); border-top: 1px solid var(--rule) }
+.setup legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+
+/* ---------- Setup · check drafts, search, done, returning (#55, hi-fi onboarding.html) ---------- */
+.setup .draft-group .sec-head h2, .setup .draft-group > summary h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0; margin: 0 }
+.setup .draft-group > summary { padding: 0; flex-wrap: nowrap }
+.setup .draft-group > summary h2 { flex: 1 1 auto; min-width: 0 }
+.setup .draft-group .meta { font-weight: 400 }
+.setup .draft-group .show-more { justify-self: start }
+.setup .segmented { flex-wrap: wrap; max-width: 100%; border-radius: var(--r-control) }
+.setup .segmented button { white-space: nowrap }
+.setup .piece.confirmed { border-left: 4px solid var(--met) }
+.setup .dispute { border: 0; margin: 0; padding: 0; min-width: 0 }
+.setup .dispute .opt .meta { display: block }
+.setup .tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: var(--s-4) }
+.setup .tally .panel { gap: var(--s-2) }
+.setup .tally .big { font-family: var(--font-display); font-size: var(--fs-h2); font-weight: 700; font-variant-numeric: tabular-nums }
+.setup .learning { border-left: 4px solid var(--action) }
+.setup .learning p { max-width: 68ch }
+.setup .empty h1 { font-size: var(--fs-h3) }
+/* Profile › Voice (from the Profile hi-fi, state Voice samples). Tokens only. */
+.rules { list-style: none; margin: 0; padding: 0; display: grid }
+.rules li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-4); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.rules li:first-child { border-top: 0; padding-top: 0 }
+.rules b { font-weight: 600; font-size: var(--fs-body) }
+.block { display: block }
+.voice-notice .local { display: flex; flex-wrap: nowrap; gap: var(--s-3) }
+.voice .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.files .sample-acts { display: grid; gap: var(--s-2); justify-items: stretch }
+
+/* Package (#62, hi-fi package.html): header, the step's two columns, the exact PDF. Tokens only. */
+.pk-head { display: grid; gap: var(--s-3) }
+.pk-head h1 { overflow-wrap: anywhere }
+.pk-head .sub { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-5); color: var(--ink-2) }
+.pk-head .sub b { color: var(--ink); font-weight: 600 }
+.package-page .sec-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--s-2) var(--s-4) }
+.package-page .sec-head .grow { flex: 1 1 auto }
+.package-page .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.package-page .step-title { display: grid; gap: var(--s-2) }
+.package-page .step-title h2 { font-size: var(--fs-h3); font-weight: 700; letter-spacing: var(--track-display) }
+.package-page .goal { display: grid; gap: var(--s-2) }
+.package-page .checks { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-3); font-size: var(--fs-small) }
+.package-page .checks li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--s-3); align-items: baseline }
+.package-page .file-name { overflow-wrap: anywhere }
+.package-page .why-off:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.pk-steps a[aria-current="step"] .lbl { text-decoration: underline; text-underline-offset: 3px }
+/* the side column sticks only where it fits in the viewport (PA-04) */
+@media (min-width: 961px) and (min-height: 820px) { .package-page .side { position: sticky; top: calc(var(--s-10) + var(--s-8)) } }
+
+/* the exact PDF, drawn by pdf.js: white paper with its selectable text layer on top */
+.pdf-pages { display: grid; gap: var(--s-5); justify-items: center }
+.pdf-page { position: relative; flex: none; background: var(--doc-paper); border-radius: var(--r-sheet); box-shadow: var(--shadow-overlay); overflow: hidden }
+.pdf-page canvas { position: absolute; inset: 0; width: 100%; height: 100% }
+/* Fit: the page scaled to the frame's width (set from the frame's size), never above 100% */
+.doc-frame.fit .pdf-page { zoom: var(--fit-zoom, .62) }
+.pdf-page .textLayer { position: absolute; inset: 0; overflow: clip; line-height: 1; transform-origin: 0 0; z-index: 1; --min-font-size: 1; --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size)); --min-font-size-inv: calc(1 / var(--min-font-size)) }
+.pdf-page .textLayer :is(span, br) { color: transparent; position: absolute; white-space: pre; cursor: text; transform-origin: 0% 0% }
+.pdf-page .textLayer > :not(.markedContent), .pdf-page .textLayer .markedContent span:not(.markedContent) { --font-height: 0; font-size: calc(var(--text-scale-factor) * var(--font-height)); --scale-x: 1; --rotate: 0deg; transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv)) }
+.pdf-page .textLayer .markedContent { display: contents }
+.pdf-page .textLayer ::selection { background: var(--bloom-soft) }
+.pkg-chip svg { width: 11px; height: 11px }
+/* the CV version (#63): notes, and every line with its pieces */
+.package-page .notes { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.package-page .cv-lines summary { cursor: pointer }
+.package-page .cv-lines summary h2 { display: inline }
+.package-page .cv-lines summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page .cv-lines .stack { margin-top: var(--s-4); gap: var(--s-4) }
+.package-page .cv-lines h3 { font-size: var(--fs-small); font-weight: 600; margin: 0 0 var(--s-2) }
+.package-page .cv-lines ul { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
+.package-page legend:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
+/* Profile › Learned during packages (#64): a near-the-line piece's choice, as in the hi-fi */
+.piece fieldset legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+/* the cover letter (#65): a plain textarea over a backdrop that draws the same text with the
+   sentences written for the company highlighted; both share one grid cell, font and wrapping */
+.letter-editor { display: grid; border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface) }
+.letter-editor:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+.letter-editor .backdrop, .letter-editor textarea { grid-area: 1 / 1; margin: 0; padding: var(--s-5); font: inherit; font-size: var(--fs-body); line-height: var(--lh-body); white-space: pre-wrap; overflow-wrap: break-word; min-height: calc(var(--s-10) * 8) }
+.letter-editor .backdrop { color: var(--ink); pointer-events: none }
+.letter-editor .backdrop mark { background: var(--bloom-soft); color: var(--ink); box-shadow: inset 0 -1.5px 0 var(--bloom); border-radius: var(--r-small) }
+.letter-editor textarea { border: 0; background: transparent; color: transparent; caret-color: var(--ink); resize: none; overflow: hidden; outline: none }
+.letter-editor textarea::selection { background: var(--bloom-soft); color: transparent }
+
+/* Package · screening answers (#66, hi-fi package.html state 4). Tokens only. */
+.package-page .qs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }
+.package-page .q { display: grid; gap: var(--s-3); padding: var(--s-5); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.package-page .q:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page .q.q-needs { border-left: var(--s-2) solid var(--bloom) }
+.package-page .q .qh { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: baseline }
+.package-page .q .qh b { font-weight: 600; flex: 1 1 calc(var(--s-10) * 4) }
+.package-page .q .foot { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; padding: 0; border-top: 0; font-size: var(--fs-small); color: var(--ink-3) }
+.package-page .q .ans { margin: 0; color: var(--ink); max-width: 68ch }
+.package-page .q fieldset { border: 0; margin: 0; padding: 0; min-width: 0 }
+.package-page .q select.input { appearance: auto; max-width: calc(var(--s-10) * 5) }
+.package-page .money { display: flex; gap: var(--s-3); align-items: center; max-width: calc(var(--s-10) * 5) }
+/* Step 5, the ATS check, and the approved package (#67) */
+.package-page .parse { font-family: var(--font-text); font-size: var(--fs-small); line-height: 1.6; background: var(--surface-sunken); border-radius: var(--r-control); padding: var(--s-5); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink) }
+.package-page .parse:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page .parse .lost { background: var(--gap-soft); color: var(--gap); font-weight: 600; padding: 0 var(--s-1); border-radius: var(--s-1) }
+.package-page .two { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--s-6); align-items: start }
+@media (max-width: 860px) { .package-page .two { grid-template-columns: minmax(0, 1fr) } }
+.package-page .selects { display: flex; flex-wrap: wrap; gap: var(--s-4) }
+.package-page .selects .field { min-width: calc(var(--s-10) * 3); flex: 1 1 calc(var(--s-10) * 3) }
+.package-page .flag .check, .package-page .stack > .check { display: flex; align-items: flex-start; gap: var(--s-3) }
+.package-page .check input { margin-top: var(--s-1); flex: none }
+.package-page .files-out { display: grid; gap: var(--s-3) }
+.package-page .files-out a.btn { justify-content: flex-start }
+.package-page .kv.wide { grid-template-columns: minmax(calc(var(--s-10) * 2), max-content) minmax(0, 1fr) }
+@media (max-width: 520px) { .package-page .kv.wide { grid-template-columns: minmax(0, 1fr) } .package-page .kv.wide dd { margin-bottom: var(--s-3) } }

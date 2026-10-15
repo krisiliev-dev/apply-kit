@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
+import { createAiBudget, type BudgetInfo } from "./budget.ts";
 import type { AlertEmail, EngineDeps, SqlDatabase } from "./ports.ts";
 import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
 import {
@@ -8,6 +9,8 @@ import {
 import { htmlToText } from "./extraction/text.ts";
 import { computeFit, type Fit } from "./fit/fit.ts";
 import type { Angle } from "./fit/angles.ts";
+import { withEvidence } from "./fit/evidence.ts";
+import { createProfileStore } from "./preparation/profile.ts";
 import { detectCompany, slugFor, type CompanyDetection, type DetectOptions } from "./companies.ts";
 import { isInYourLocations, NOT_STATED } from "./locations.ts";
 import { mailboxFix, mailboxProblemOf, type MailboxProblem } from "./mailbox.ts";
@@ -359,15 +362,6 @@ export interface FeedResult {
   health: HealthSummary;
   ranking: { learnedAdjustments: number };
   budget: BudgetInfo;
-}
-
-/** This month's AI spending against the cap. Once reached, unread Postings show as unscreened. */
-export interface BudgetInfo {
-  /** Calendar month the spending counts towards (UTC), e.g. "2026-10". */
-  month: string;
-  capUsd: number;
-  spentUsd: number;
-  reached: boolean;
 }
 
 export interface NewSource {
@@ -882,6 +876,10 @@ const viewStates: Record<FeedView, JobState[]> = {
 export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const { db, clock } = deps;
   migrate(db);
+  // The master profile, read here only: the preparation engine owns it. Its confirmed pieces are
+  // the evidence for requirement statuses and Fit.
+  const profile = createProfileStore({ db, clock });
+  const profilePieces = () => profile.all().filter((p) => p.status === "confirmed");
   backfillMatchKeys(db);
   backfillLinkKeys(db);
 
@@ -996,8 +994,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     const active = activeAdjustments();
     if (active.length === 0) return counts;
     const money = budget();
+    const pieces = profilePieces();
     for (const r of db.prepare(`${jobSelect} WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved')`).all()) {
-      for (const reason of toFeedJob(r, money, active).fit.reasons) {
+      for (const reason of toFeedJob(r, money, active, pieces).fit.reasons) {
         if (reason.adjustmentId) counts.set(reason.adjustmentId, (counts.get(reason.adjustmentId) ?? 0) + 1);
       }
     }
@@ -1174,19 +1173,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
   const inFlight = new Map<string, Promise<keyof ReadResult>>();
   let pendingRun: Promise<ReadResult> | null = null;
 
-  const month = () => clock.now().toISOString().slice(0, 7);
-  const spentThisMonth = () =>
-    Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
-  const cap = () => Math.max(0, deps.aiMonthlyCapUsd ?? 0);
-  /** Estimated cost of the reads running right now, held against the cap until each one is billed. */
-  let reservedUsd = 0;
-  /** The month in which a read was last refused because it would have crossed the cap. */
-  let refusedInMonth: string | null = null;
-  const budget = (): BudgetInfo => {
-    const spentUsd = Math.round(spentThisMonth() * 1e6) / 1e6;
-    const capUsd = cap();
-    return { month: month(), capUsd, spentUsd, reached: capUsd <= 0 || spentUsd >= capUsd || refusedInMonth === month() };
-  };
+  /** The monthly AI budget: the service shares one with the preparation engine (one cap over extraction and writing). */
+  const aiBudget = deps.budget ?? createAiBudget({ db, clock, capUsd: deps.aiMonthlyCapUsd });
+  const budget = (): BudgetInfo => aiBudget.info();
 
   function readingOf(postingId: string, budgetReached = budget().reached): { state: ReadingState; facts: PostingFacts | null; error: string | null; text: string } {
     const p = db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
@@ -1205,9 +1194,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
         .map((r) => [String(r.fact_key), String(r.choice) as FactAnswer]),
     );
 
-  /** The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is read. */
-  function readOf(postingId: string, reading: ReturnType<typeof readingOf>) {
-    return reading.facts ? jobReading(reading.facts, reading.text, answersFor(postingId)) : null;
+  /**
+   * The full reading of a posting (requirements, facts, Needs-you, screening), or null until it is
+   * read. Requirement statuses come from the master profile as it is now, so editing a piece changes
+   * them (and the Fit) on the next query, with no model call.
+   */
+  function readOf(postingId: string, reading: ReturnType<typeof readingOf>, pieces = profilePieces()) {
+    return reading.facts ? withEvidence(jobReading(reading.facts, reading.text, answersFor(postingId)), reading.facts, pieces, clock.now()) : null;
   }
 
   /**
@@ -1281,24 +1274,13 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       location: row.location == null ? null : String(row.location),
       text: text.slice(0, MAX_TEXT_CHARS),
     };
-    const estimate = deps.extractor.estimateCostUsd(input);
-    // The estimate is reserved before the first await, so reads that start together can't all fit
-    // under the cap at once: each one counts what the others are still spending.
-    if (spentThisMonth() + reservedUsd + estimate > cap()) {
-      refusedInMonth = month();
-      return "unscreened";
-    }
-    reservedUsd += estimate;
-    let reserved = true;
-    const settle = () => {
-      if (reserved) reservedUsd -= estimate;
-      reserved = false;
-    };
-
     try {
-      const out = await deps.extractor.extract(input);
-      settle();
-      recordSpend(postingId, Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      const outcome = await aiBudget.call(
+        { task: "extraction", estimateUsd: deps.extractor.estimateCostUsd(input), postingId },
+        () => deps.extractor.extract(input),
+      );
+      if (outcome.refused) return "unscreened";
+      const out = outcome.result;
       const parsed = postingFactsSchema.safeParse(out.facts);
       if (!parsed.success) {
         store("failed", null, out.model, "The model's answer didn't have the expected shape");
@@ -1307,18 +1289,9 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       store("read", parsed.data, out.model, null);
       return "read";
     } catch (err) {
-      settle();
-      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
-      if (typeof billed === "number" && billed > 0) recordSpend(postingId, billed);
       store("failed", null, null, err instanceof Error ? err.message : String(err));
       return "failed";
     }
-  }
-
-  function recordSpend(postingId: string, costUsd: number) {
-    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'extraction', ?, ?)").run(
-      clock.now().toISOString(), month(), postingId, costUsd,
-    );
   }
 
   /** Moves each Job currently in one of `from` to `to`, remembering its previous state. */
@@ -1444,11 +1417,11 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          FROM job j
          JOIN posting p ON p.id = ${targetPostingSql("j.id")}`;
 
-  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments()): FeedJob {
+  function toFeedJob(r: Record<string, unknown>, money = budget(), active = activeAdjustments(), pieces = profilePieces()): FeedJob {
     const links = linksOf(String(r.id));
     const readId = readingPostingId(String(r.id));
     const reading = readingOf(readId, money.reached);
-    const read = readOf(readId, reading);
+    const read = readOf(readId, reading, pieces);
     const base = { title: String(r.title), company: String(r.company), location: sqlText(r.location), postedAt: sqlText(r.posted_at) };
     const fit = fitOf(base, read, reading.facts, active);
     const dealbreakers = dealbreakersFor(read, reading.facts, fit);
@@ -2058,7 +2031,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
          ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
       ).all();
       const active = activeAdjustments();
-      const all = rows.map((r) => ({ job: toFeedJob(r, money, active), changedAt: sqlText(r.state_changed_at) ?? "" }));
+      const pieces = profilePieces();
+      const all = rows.map((r) => ({ job: toFeedJob(r, money, active, pieces), changedAt: sqlText(r.state_changed_at) ?? "" }));
       const relocating = (j: FeedJob) => j.fit.place.tier === "relocation";
       // The hidden pile holds hidden Jobs only; every other view leaves them out.
       const inView = (v: FeedView, j: FeedJob) => viewStates[v].includes(j.state) && j.hidden === (v === "hidden");

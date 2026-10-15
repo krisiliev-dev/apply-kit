@@ -3,8 +3,12 @@
 import type { ExtractedSalary, PostingFacts, SourceQuote } from "./facts.ts";
 import { lineOf } from "./text.ts";
 
-/** Whether Kris meets a requirement. "unknown" until there is a master profile to check against. */
-export type RequirementStatus = "met" | "partly" | "gap" | "unknown";
+/**
+ * Whether Kris meets a requirement, from the master profile (fit/evidence.ts). "unknown" until there
+ * is a master profile, and for what the profile can't tell (location, work authorisation). A
+ * preferred item with no evidence is "not-held": never a gap.
+ */
+export type RequirementStatus = "met" | "partly" | "gap" | "not-held" | "unknown";
 
 export interface FeedRequirement {
   text: string;
@@ -20,11 +24,22 @@ export interface FactSource extends SourceQuote {
   line: number | null;
 }
 
+/** What backs a requirement's status: the pieces used as evidence (fit/evidence.ts). */
+export interface RequirementEvidence {
+  pieces: { id: string; label: string }[];
+  /** What was found, in plain words, e.g. "3 years 8 months from your role dates", "No evidence in your master profile". */
+  note: string;
+}
+
 export interface JobRequirement extends FeedRequirement {
   /** Stable within one read of the posting, e.g. "requirements:2". */
   key: string;
+  /** What backs the status; only once there is a master profile to check against. */
+  evidence?: RequirementEvidence;
   /** How the posting asks for it; "Unclear" while a low-confidence reading waits for Kris. */
   askedAs: "Required" | "Preferred" | "Unclear";
+  /** What kind of thing it asks for (a skill, a language, a certificate…), as the posting was read. */
+  category: PostingFacts["requirements"][number]["category"];
   confidence: number;
   source: FactSource;
 }
@@ -116,7 +131,7 @@ export function jobReading(facts: PostingFacts, text: string, answers: Record<st
     const k = kinded(`requirements:${i}`, "Requirement", `Is "${r.text}" required?`, r.text, r.kind, r.confidence, r.source);
     return {
       key: k.key, text: r.text, askedAs: k.low ? "Unclear" : k.kind === "required" ? "Required" : "Preferred",
-      kind: k.kind, status: "unknown", needsYou: k.needsYou, confidence: k.confidence, source: k.source,
+      kind: k.kind, category: r.category, status: "unknown", needsYou: k.needsYou, confidence: k.confidence, source: k.source,
     };
   });
 

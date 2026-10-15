@@ -235,6 +235,326 @@ const migrations: string[] = [
   // by lookup instead of re-reading every Posting's link. Filled for older Postings on start (backfillLinkKeys).
   `ALTER TABLE posting ADD COLUMN link_key TEXT;
    CREATE INDEX posting_link_key ON posting(link_key);`,
+  // #53: the master profile (ADR 0003). Each profile piece with its tags and angles (JSON lists), the
+  // role or education entry it belongs to, where a number in it comes from, its status and its source
+  // (the file or conversation it came from and the quote, kept word for word). `entry` (JSON) holds a
+  // role's or education's title, organisation, city and months. Contact details are one row (JSON),
+  // with the optional photo kept in the file store under its SHA-256.
+  `CREATE TABLE profile_piece (
+     id TEXT PRIMARY KEY,
+     kind TEXT NOT NULL,
+     text TEXT NOT NULL,
+     entry TEXT,
+     belongs_to TEXT,
+     tags TEXT NOT NULL,
+     angles TEXT NOT NULL,
+     number_source TEXT,
+     status TEXT NOT NULL,
+     source_from TEXT NOT NULL,
+     source_quote TEXT,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE INDEX profile_piece_belongs_to ON profile_piece(belongs_to);
+   CREATE TABLE profile_contact (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     details TEXT NOT NULL,
+     photo_sha256 TEXT,
+     photo_name TEXT,
+     photo_size INTEGER,
+     updated_at TEXT NOT NULL
+   );`,
+  // #58: angles. Kris's summary line per angle and the pieces that lead it, in order (a JSON list of
+  // piece ids; NULL until he orders them, which means the default order). No row means neither is set.
+  `CREATE TABLE angle (
+     angle TEXT PRIMARY KEY,
+     summary TEXT NOT NULL,
+     leads TEXT,
+     updated_at TEXT NOT NULL
+   );`,
+  // #56: the answer bank. Each answer with its wordings and per-language versions (JSON), its
+  // category (standard or screening), kind, fill mode, rule (JSON), source (JSON), use count and last
+  // use, and a portal edit waiting for "keep new or old" (JSON). Its history is one row per change (JSON:
+  // what happened, where, and the text before and after).
+  // `answer_seed` remembers which default answers were added (and the value they were added with),
+  // so a deleted default isn't added again and an unedited one follows the contact details.
+  `CREATE TABLE answer (
+     id TEXT PRIMARY KEY,
+     question TEXT NOT NULL,
+     wordings TEXT NOT NULL,
+     versions TEXT NOT NULL,
+     category TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     mode TEXT NOT NULL,
+     rule TEXT,
+     source TEXT NOT NULL,
+     use_count INTEGER NOT NULL DEFAULT 0,
+     last_used_at TEXT,
+     portal_edit TEXT,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE answer_history (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     answer_id TEXT NOT NULL,
+     at TEXT NOT NULL,
+     detail TEXT NOT NULL
+   );
+   CREATE INDEX answer_history_answer ON answer_history(answer_id);
+   CREATE TABLE answer_seed (
+     key TEXT PRIMARY KEY,
+     answer_id TEXT NOT NULL,
+     value TEXT NOT NULL
+   );`,
+  // #54: imports. A run holds its sources in order (files, the LinkedIn export, GitHub, a portfolio),
+  // each with its state, the text extracted from it (ADR 0003: the file itself is in the file store
+  // under its SHA-256), why it couldn't be read and what Kris chose, and how many pieces it gave.
+  // Merges record each source that said the same as a piece already there, so they can be shown.
+  // Pieces read by text recognition are marked "check this" until confirmed.
+  `CREATE TABLE import_run (
+     id TEXT PRIMARY KEY,
+     started_at TEXT NOT NULL,
+     finished_at TEXT,
+     cancelled_at TEXT
+   );
+   CREATE TABLE import_item (
+     id TEXT PRIMARY KEY,
+     import_id TEXT NOT NULL REFERENCES import_run(id),
+     position INTEGER NOT NULL,
+     source TEXT NOT NULL,
+     name TEXT NOT NULL,
+     type TEXT NOT NULL,
+     sha256 TEXT,
+     size INTEGER,
+     link TEXT,
+     state TEXT NOT NULL,
+     problem TEXT,
+     waiting_for TEXT,
+     detail TEXT,
+     text TEXT,
+     recognised INTEGER NOT NULL DEFAULT 0,
+     pieces INTEGER NOT NULL DEFAULT 0,
+     merged INTEGER NOT NULL DEFAULT 0,
+     estimate_usd REAL,
+     started_at TEXT,
+     finished_at TEXT
+   );
+   CREATE INDEX import_item_import ON import_item(import_id, position);
+   CREATE TABLE import_merge (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     import_id TEXT NOT NULL,
+     item_id TEXT NOT NULL,
+     piece_id TEXT NOT NULL,
+     source_from TEXT NOT NULL,
+     source_quote TEXT,
+     text TEXT NOT NULL,
+     at TEXT NOT NULL
+   );
+   CREATE INDEX import_merge_piece ON import_merge(piece_id);
+   ALTER TABLE profile_piece ADD COLUMN check_this INTEGER NOT NULL DEFAULT 0;`,
+  // #59: voice. Samples keep their text here (the file itself is in the file store under its
+  // SHA-256) and how far learning has read them; rules keep their evidence, and a removed rule stays
+  // (with when) so it doesn't come back unless new writing shows it. Edits to drafts are before/after
+  // pairs, learned from once. Every voice excerpt sent to the model is recorded per call.
+  `CREATE TABLE voice_sample (
+     id TEXT PRIMARY KEY,
+     position INTEGER NOT NULL,
+     file_name TEXT NOT NULL,
+     sha256 TEXT NOT NULL,
+     size INTEGER NOT NULL,
+     kind TEXT NOT NULL,
+     language TEXT,
+     words INTEGER NOT NULL DEFAULT 0,
+     text TEXT,
+     problem TEXT,
+     learned_chunks INTEGER NOT NULL DEFAULT 0,
+     added_at TEXT NOT NULL
+   );
+   CREATE TABLE voice_rule (
+     id TEXT PRIMARY KEY,
+     key TEXT NOT NULL UNIQUE,
+     text TEXT NOT NULL,
+     evidence TEXT NOT NULL,
+     language TEXT,
+     samples TEXT NOT NULL DEFAULT '[]',
+     edits INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     removed_at TEXT
+   );
+   CREATE TABLE voice_edit (
+     id TEXT PRIMARY KEY,
+     at TEXT NOT NULL,
+     draft TEXT NOT NULL,
+     language TEXT NOT NULL,
+     source TEXT,
+     before TEXT NOT NULL,
+     after TEXT NOT NULL,
+     learned_at TEXT
+   );
+   CREATE TABLE voice_send (
+     id TEXT PRIMARY KEY,
+     at TEXT NOT NULL,
+     purpose TEXT NOT NULL,
+     language TEXT,
+     excerpts TEXT NOT NULL,
+     words INTEGER NOT NULL
+   );
+   CREATE TABLE voice_settings (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     learn_from_edits INTEGER NOT NULL DEFAULT 1
+   );`,
+  // #62: packages, one per Job. `job` (JSON) is the Job as it was when the package started (title,
+  // company, requirements, postings), so the package reads the same however Discover changes later.
+  // `approved` (JSON) maps each approved step to when, `reviewed_at` is Kris's first approval; `cv_draft` (JSON) is the CV's current draft file.
+  // Each part (target, cv, letter, answers, ats) has a row with its state, attempts, error, cost and output.
+  `CREATE TABLE package (
+     id TEXT PRIMARY KEY,
+     job_id TEXT NOT NULL UNIQUE,
+     job TEXT NOT NULL,
+     angle TEXT NOT NULL,
+     angle_reason TEXT NOT NULL,
+     language TEXT NOT NULL,
+     target_posting_id TEXT NOT NULL,
+     photo INTEGER NOT NULL DEFAULT 0,
+     approved TEXT NOT NULL DEFAULT '{}',
+     reviewed_at TEXT,
+     cv_draft TEXT,
+     started_at TEXT NOT NULL,
+     stopped_at TEXT
+   );
+   CREATE TABLE package_part (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     part TEXT NOT NULL,
+     state TEXT NOT NULL,
+     attempts INTEGER NOT NULL DEFAULT 0,
+     error TEXT,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     output TEXT,
+     updated_at TEXT NOT NULL,
+     PRIMARY KEY (package_id, part)
+   );`,
+  // Setup (#55): sources that disagree about a piece, discarded pieces (restorable), and where Kris is in setup.
+  `ALTER TABLE profile_piece ADD COLUMN dispute TEXT;
+   ALTER TABLE profile_piece ADD COLUMN discarded_at TEXT;
+   CREATE TABLE setup_progress (
+     id INTEGER PRIMARY KEY CHECK (id = 1),
+     step TEXT NOT NULL,
+     skipped INTEGER NOT NULL DEFAULT 0,
+     started_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL,
+     finished_at TEXT
+   );`,
+  // #57: the coach interview. One interview per scope ("setup", or "angle:<angle>" for a thin angle):
+  // the question it's on, whether it's paused or finished, and the last failure (with when it tries
+  // again) or that it waits for the budget. Questions keep their topic (JSON) and how they ended
+  // (answered, "I don't remember", skipped: skipped ones come back in packages). Turns are the
+  // transcript; Kris's answer is saved before it's sent (sent = 0), so a timeout loses nothing.
+  // Items are what the interview wrote (a piece, new or updated with its earlier version, or a
+  // standard answer), each citing the turn it came from, until Kris finishes (settled_at).
+  `CREATE TABLE interview (
+     id TEXT PRIMARY KEY,
+     angle TEXT,
+     current_key TEXT,
+     paused_at TEXT,
+     finished_at TEXT,
+     failures INTEGER NOT NULL DEFAULT 0,
+     error TEXT,
+     retry_at TEXT,
+     waits_for_budget INTEGER NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL,
+     updated_at TEXT NOT NULL
+   );
+   CREATE TABLE interview_question (
+     interview_id TEXT NOT NULL,
+     key TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     topic TEXT NOT NULL,
+     state TEXT NOT NULL,
+     opened_at TEXT NOT NULL,
+     ended_at TEXT,
+     PRIMARY KEY (interview_id, key)
+   );
+   CREATE TABLE interview_turn (
+     seq INTEGER PRIMARY KEY AUTOINCREMENT,
+     id TEXT NOT NULL UNIQUE,
+     interview_id TEXT NOT NULL,
+     question_key TEXT NOT NULL,
+     who TEXT NOT NULL,
+     text TEXT NOT NULL,
+     sent INTEGER NOT NULL DEFAULT 1,
+     at TEXT NOT NULL
+   );
+   CREATE TABLE interview_item (
+     id TEXT PRIMARY KEY,
+     interview_id TEXT NOT NULL,
+     turn_id TEXT NOT NULL,
+     type TEXT NOT NULL,
+     piece_id TEXT,
+     change TEXT,
+     before TEXT,
+     near TEXT,
+     decision TEXT,
+     answer TEXT,
+     removed_at TEXT,
+     settled_at TEXT,
+     created_at TEXT NOT NULL
+   );`,
+  // #63: the package's CV version: the changes tailoring made to the master profile's CV (each
+  // undoable), how it fits one page, and what the honesty validator caught.
+  `ALTER TABLE package ADD COLUMN cv_version TEXT;`,
+  // #64: pieces a package learned from Kris's answers to its gap questions: used only in that
+  // package until Kris confirms them in Profile, with the question and her original answer.
+  `CREATE TABLE package_piece (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     piece_id TEXT NOT NULL,
+     flag_id TEXT NOT NULL,
+     question TEXT NOT NULL,
+     answer TEXT NOT NULL,
+     near TEXT,
+     created_at TEXT NOT NULL
+   );`,
+  // #66: the package's screening answers (JSON): where the questions came from and each question's
+  // answer with its origin (bank, adapted, new, needs you, translated).
+  `ALTER TABLE package ADD COLUMN screening TEXT;`,
+  // #65: the cover letter's drafts, kept and paged: what the writer wrote (null for one Kris writes
+  // herself), the text as Kris edited it, the instruction it was asked with, the voice excerpts it
+  // sent, and the voice edit recording Kris's changes to it. The package shows one draft at a time,
+  // and keeps the letter's printed draft PDF.
+  `CREATE TABLE package_letter (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     number INTEGER NOT NULL,
+     origin TEXT NOT NULL,
+     instruction TEXT,
+     written TEXT,
+     content TEXT NOT NULL,
+     excerpts TEXT NOT NULL DEFAULT '[]',
+     voice_edit_id TEXT,
+     cost_usd REAL NOT NULL DEFAULT 0,
+     created_at TEXT NOT NULL,
+     edited_at TEXT,
+     PRIMARY KEY (package_id, number)
+   );
+   ALTER TABLE package ADD COLUMN letter_draft INTEGER;
+   ALTER TABLE package ADD COLUMN letter_file TEXT;`,
+  // #67: approving a package freezes it as a version: the files (by SHA-256, in packages/<id>/v<n>/)
+  // and what Apply and Track read, as JSON that never changes. Editing a part afterwards reopens it
+  // (approved_version back to NULL) and the next approval is the next version. A version is marked
+  // submitted once, when Track records the submission. Failing ATS checks Kris accepted knowingly,
+  // and contact facts she gave the ATS fix for this package only, sit on the package.
+  `CREATE TABLE package_version (
+     package_id TEXT NOT NULL REFERENCES package(id),
+     version INTEGER NOT NULL,
+     approved_at TEXT NOT NULL,
+     snapshot TEXT NOT NULL,
+     submitted_at TEXT,
+     submitted_via TEXT,
+     portal_url TEXT,
+     PRIMARY KEY (package_id, version)
+   );
+   ALTER TABLE package ADD COLUMN approved_version INTEGER;
+   ALTER TABLE package ADD COLUMN ats_accepted TEXT NOT NULL DEFAULT '[]';
+   ALTER TABLE package ADD COLUMN contact_fix TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

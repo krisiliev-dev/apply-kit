@@ -2,13 +2,14 @@
 // key facts with "Show where", low-confidence facts for Kris to confirm, the reading,
 // couldn't-read and unscreened states, the Postings merged into the Job (target, split), and
 // Bulgarian postings shown in English with the original one click away, and a closed Job: how it
-// closed, Prepare disabled with the reason, reopen (with Undo) and similar open Jobs.
-import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, KeyFact, NeedsYouItem, FactSource } from "@apply-kit/core";
+// closed, Prepare disabled with the reason, reopen (with Undo) and similar open Jobs. Prepare (#62)
+// starts the Job's package, or shows "Continue package · step N of 5" or "Package ready".
+import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, JobRequirement, KeyFact, NeedsYouItem, FactSource, PrepareStatus, RequirementEvidence } from "@apply-kit/core";
 import { useEffect, useId, useState, type FormEvent } from "react";
-import { boostJob, confirmFact, fetchJob, fetchSources, readJob, reopenJobs, undoAdjustment, undoDecision } from "../api.ts";
+import { boostJob, confirmFact, fetchJob, fetchPrepareStatus, fetchSources, readJob, reopenJobs, setPackageLanguage, startPackage, undoAdjustment, undoDecision } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Chevron, Icon } from "../icons.tsx";
-import { AskChip, StatusChip } from "../requirements.tsx";
+import { AskChip, StatusChip, statusLabel } from "../requirements.tsx";
 import { PostingsPanel } from "./PostingsPanel.tsx";
 
 type Load = { state: "loading" } | { state: "missing" } | { state: "error"; message: string } | { state: "ready"; job: JobDetail };
@@ -368,7 +369,7 @@ function FitCheck({ job }: { job: JobDetail }) {
           <dd>
             {fit.gaps.length > 0
               ? <div className="chips">{fit.gaps.map((g) => <StatusChip key={g} status="gap" label={g} />)}</div>
-              : <span className="meta">{read ? "None known: whether you meet each requirement needs your master profile, so nothing is counted as a gap yet." : "Not known until the posting is read."}</span>}
+              : <span className="meta">{!read ? "Not known until the posting is read." : job.requirements.some((r) => r.evidence) ? "None: your master profile has evidence for every required item it can check." : "None known: whether you meet each requirement needs your master profile, so nothing is counted as a gap yet."}</span>}
           </dd>
         </dl>
       </div>
@@ -377,24 +378,37 @@ function FitCheck({ job }: { job: JobDetail }) {
 }
 
 function Requirements({ job }: { job: JobDetail }) {
-  const ask = job.requirements.filter((r) => r.needsYou).length;
-  const summary = job.requirements.length === 0
+  const reqs = job.requirements;
+  const ask = reqs.filter((r) => r.needsYou).length;
+  const checked = reqs.some((r) => r.evidence);
+  const n = (s: JobRequirement["status"]) => reqs.filter((r) => !r.needsYou && r.status === s).length;
+  // The same counts as the Feed row's chips: needs-you items are counted once, as waiting on you.
+  const counts = [
+    `${n("met")} met`,
+    n("partly") ? `${n("partly")} partly` : "",
+    n("gap") ? `${n("gap")} ${n("gap") === 1 ? "gap" : "gaps"}` : "",
+    n("not-held") ? `${n("not-held")} preferred not held` : "",
+    n("unknown") ? `${n("unknown")} not checked` : "",
+  ].filter(Boolean);
+  const summary = reqs.length === 0
     ? "None found in the posting"
-    : `${job.requirements.length} found${ask ? ` · ${job.requirements.length - ask} read confidently · ${ask} waiting on you` : ""}`;
+    : checked
+      ? [`${reqs.length} found`, ...counts, ask ? `${ask} waiting on you` : ""].filter(Boolean).join(" · ")
+      : `${reqs.length} found${ask ? ` · ${reqs.length - ask} read confidently · ${ask} waiting on you` : ""}`;
   return (
     <div className="panel flush o3">
       <div className="sec-head"><h2>Requirements</h2><span className="meta">{summary}</span></div>
       {job.requirements.length > 0 && (
         <div className="table-wrap">
-          <table className="table req" aria-label="Requirements from the posting">
+          <table className="table req" aria-label={checked ? "Requirements against your master profile" : "Requirements from the posting"}>
             <thead><tr><th scope="col">Requirement</th><th scope="col">Asked as</th><th scope="col">You</th><th scope="col">Evidence in your master profile</th></tr></thead>
             <tbody>
-              {job.requirements.map((r) => (
+              {reqs.map((r) => (
                 <tr key={r.key} className={r.needsYou ? "is-ask" : undefined}>
                   <td>{r.text}</td>
                   <td className="asked">{r.askedAs}</td>
-                  <td>{r.needsYou ? <AskChip label="Needs you" /> : <StatusChip status={r.status} label={r.status === "unknown" ? "Not checked" : r.status} />}</td>
-                  <td className="ev">{r.status === "unknown" ? "No master profile yet" : ""}</td>
+                  <td>{r.needsYou ? <AskChip label="Needs you" /> : <StatusChip status={r.status} label={statusLabel[r.status]} />}</td>
+                  <td className="ev">{r.evidence ? <EvidenceCell evidence={r.evidence} /> : "No master profile yet"}</td>
                 </tr>
               ))}
             </tbody>
@@ -402,6 +416,18 @@ function Requirements({ job }: { job: JobDetail }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** The pieces behind a status, each linked to its place in Profile, then what was found. */
+function EvidenceCell({ evidence }: { evidence: RequirementEvidence }) {
+  return (
+    <>
+      {evidence.pieces.map((p, i) => (
+        <span key={p.id}>{i > 0 && " · "}<a href={`/profile/pieces/${encodeURIComponent(p.id)}`}>{p.label}</a></span>
+      ))}
+      {evidence.note && <>{evidence.pieces.length > 0 && <br />}<span className={evidence.pieces.length > 0 ? "meta" : undefined}>{evidence.note}</span></>}
+    </>
   );
 }
 
@@ -542,21 +568,58 @@ function SimilarJobs({ jobs }: { jobs: FeedJob[] }) {
 
 function Decide({ job, onReopen }: { job: JobDetail; onReopen: () => void }) {
   const [language, setLanguage] = useState(job.packageLanguage);
-  const why = job.closed
-    ? `Can't prepare a package: this job is closed (${job.closed.how.charAt(0).toLowerCase()}${job.closed.how.slice(1)}), so the posting may no longer accept applications. If it's still open, reopen it first.`
-    : job.reading.state === "read"
-    ? "Packages arrive with a later part of the rebuild."
-    : "A package needs the requirements first, and packages arrive with a later part of the rebuild.";
+  const [status, setStatus] = useState<PrepareStatus | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const packagePage = `/jobs/${encodeURIComponent(job.id)}/package`;
+
+  // The button's state comes from the service: it can start, why it can't, or the Job's package.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchPrepareStatus(job.id, ctrl.signal).then(setStatus).catch((err: unknown) => { if (!ctrl.signal.aborted) setError(message(err)); });
+    return () => ctrl.abort();
+  }, [job.id, job.reading.state, job.state]);
+
+  async function prepare() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await startPackage(job.id);
+      if (!r.started) {
+        setStatus({ canStart: false, problem: r.problem, reason: r.reason, package: null });
+        return;
+      }
+      if (language !== r.package.language) await setPackageLanguage(r.package.id, language);
+      window.location.assign(packagePage);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const chip = status?.package ?? null;
+  // No master profile: the button still opens the package, which shows setup and the quick start.
+  const opensEmpty = status?.canStart === false && status.problem === "no-profile";
+  const why = status && !status.canStart && !opensEmpty ? status.reason : null;
   const inOriginal = job.packageLanguage !== "en";
   return (
     <div className="panel decide o2" role="group" aria-label="Decide">
-      <button className="btn primary" type="button" disabled aria-describedby="prep-why">
-        Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}
-      </button>
-      <p className="why-off" id="prep-why">{why}</p>
+      {chip ? (
+        <a className="btn primary" href={packagePage}>{chip.label}{chip.kind === "preparing" && "…"}</a>
+      ) : opensEmpty ? (
+        <a className="btn primary" href={packagePage}>Prepare package</a>
+      ) : (
+        <button className="btn primary" type="button" disabled={!status?.canStart || busy} aria-describedby={why ? "prep-why" : undefined} onClick={() => void prepare()}>
+          {busy ? "Starting…" : <>Prepare package{inOriginal && ` in ${language === "bg" ? "Bulgarian" : "English"}`}</>}
+        </button>
+      )}
+      {why && <p className="why-off" id="prep-why">{why}</p>}
+      {!status && !error && <p className="meta" role="status">Checking whether a package can start…</p>}
+      {error && <p className="why-off" role="alert">Couldn't reach the service: {error}</p>}
       {job.closed && <button className="btn ghost" type="button" onClick={onReopen}>It's still open: reopen</button>}
       <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
-      {inOriginal && (
+      {inOriginal && !chip && (
         <div className="lang">
           <span aria-live="polite">
             {language === "bg"

@@ -1,0 +1,20 @@
+{
+  "data": {
+    "jobPosting": {
+      "applicationForm": {
+        "sections": [
+          {
+            "fieldEntries": [
+              { "isRequired": true, "descriptionPlain": null, "field": { "path": "_systemfield_name", "title": "Name", "type": "String" } },
+              { "isRequired": true, "descriptionPlain": null, "field": { "path": "_systemfield_email", "title": "Email", "type": "Email" } },
+              { "isRequired": true, "descriptionPlain": null, "field": { "path": "_systemfield_resume", "title": "Resume", "type": "File" } },
+              { "isRequired": true, "descriptionPlain": null, "field": { "path": "6a1f0c2e-notice", "title": "What is your notice period?", "type": "String" } },
+              { "isRequired": true, "descriptionPlain": "Up to 500 characters.", "field": { "path": "6a1f0c2e-incident", "title": "Describe a security incident you handled.", "type": "LongText" } },
+              { "isRequired": true, "descriptionPlain": null, "field": { "path": "6a1f0c2e-rtw", "title": "Do you have the right to work in Bulgaria?", "type": "Boolean" } }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

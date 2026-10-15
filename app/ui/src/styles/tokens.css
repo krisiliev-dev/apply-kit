@@ -15,6 +15,10 @@
 
   /* documents: always white paper */
   --doc-paper: #ffffff; --doc-text: #1d2b25; --doc-muted: #4e5c56; --doc-accent: #24584a; --doc-rule: #d5ddd8;
+  /* documents: A4 geometry and type in print units (the PDF template uses these, the app theme never touches them) */
+  --doc-page-w: 210mm; --doc-page-h: 297mm; --doc-margin: 18mm; --doc-photo: 26mm;
+  --doc-fs-name: 20pt; --doc-fs-section: 10.5pt; --doc-fs-body: 9.75pt; --doc-fs-small: 8.75pt;
+  --doc-lh: 1.38; --doc-gap-section: 4.5mm; --doc-gap-item: 2.5mm; --doc-gap-line: 0.8mm;
 
   /* type */
   --font-display: "Geologica", ui-sans-serif, system-ui, sans-serif;

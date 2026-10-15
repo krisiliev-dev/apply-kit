@@ -165,3 +165,174 @@ kbd { font-family: var(--font-text); font-size: 11px; font-weight: 600; color: v
 .review .states button { font: inherit; border: 1px solid color-mix(in srgb, var(--ground) 35%, transparent); background: transparent; color: var(--ground); padding: 2px var(--s-3); border-radius: var(--r-pill); cursor: pointer }
 .review .states button[aria-selected="true"] { background: var(--ground); color: var(--ink) }
 @media (max-width: 720px) { .review { padding-inline: var(--s-5) } }
+.review :focus-visible { outline-color: var(--ground) }
+
+/* =====================================================================
+   Prepare components (Profile, onboarding, Package, documents).
+   Specified in docs/design/DESIGN.md › Components. Tokens only.
+   ===================================================================== */
+
+/* ---------- section links (Profile areas): links to pages, not a tablist ---------- */
+.subnav { display: flex; flex-wrap: wrap; gap: var(--s-2); border-bottom: 1px solid var(--rule); padding-bottom: var(--s-3) }
+.subnav a { display: inline-flex; align-items: center; gap: var(--s-2); min-height: 32px; padding: 0 var(--s-4); border-radius: var(--r-pill); color: var(--ink-2); text-decoration: none; font-size: var(--fs-small); font-weight: 500 }
+.subnav a:hover { background: var(--surface-sunken) }
+.subnav a[aria-current="page"] { background: var(--ink); color: var(--ground); font-weight: 600 }
+.subnav .n { font-variant-numeric: tabular-nums; font-size: var(--fs-caption); padding: 0 var(--s-2); border-radius: var(--r-pill); background: var(--bloom); color: var(--on-action); font-weight: 700 }
+
+/* ---------- package stepper: done, current, flagged, working, failed, upcoming ---------- */
+.pk-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: var(--s-2) }
+.pk-steps li { min-width: 0 }
+.pk-steps a { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 0 var(--s-3); align-items: center; min-height: 52px; padding: var(--s-3) var(--s-4); border-radius: var(--r-control); border: 1px solid var(--rule); background: var(--surface); color: var(--ink); text-decoration: none; font-size: var(--fs-small) }
+.pk-steps a:hover { border-color: var(--border-control) }
+.pk-steps .ic { grid-row: span 2; width: 24px; height: 24px; display: inline-grid; place-items: center; border-radius: 50%; font-size: var(--fs-caption); font-weight: 700; font-variant-numeric: tabular-nums }
+.pk-steps .ic svg { width: 12px; height: 12px }
+.pk-steps .lbl { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pk-steps .sub { font-size: var(--fs-caption); color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pk-steps .upcoming .ic { border: 1.5px dashed var(--border-control); color: var(--ink-3) }
+.pk-steps .done .ic { background: var(--met-soft); color: var(--met) }
+.pk-steps .done .sub { color: var(--met) }
+.pk-steps .current a { border: 2px solid var(--action); padding: calc(var(--s-3) - 1px) calc(var(--s-4) - 1px) }
+.pk-steps .current .ic { background: var(--action); color: var(--on-action) }
+.pk-steps .flagged .ic { background: var(--bloom-soft); color: var(--bloom) }
+.pk-steps .flagged .sub { color: var(--bloom); font-weight: 600 }
+.pk-steps .failed .ic { background: var(--gap-soft); color: var(--gap) }
+.pk-steps .failed .sub { color: var(--gap); font-weight: 600 }
+.pk-steps .working .ic { background: none; color: var(--action) }
+
+/* ---------- action bar: a step's one decision stays in reach on long steps ---------- */
+.actionbar { position: sticky; bottom: var(--s-3); z-index: 5; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); padding: var(--s-4) var(--s-5); background: var(--surface); border: 1px solid var(--rule); border-radius: var(--r-card); box-shadow: var(--shadow-overlay) }
+.actionbar .why-off { font-size: var(--fs-small); color: var(--ink-2) }
+.actionbar .btn.primary { min-height: 40px; font-size: var(--fs-body) }
+/* keyboard focus never ends up under the sticky bar (WCAG 2.4.11) */
+html:has(.actionbar) { scroll-padding-bottom: 112px }
+@media (max-height: 560px) { .actionbar { position: static } }
+
+/* a visually hidden file input shows its focus on the label that opens it */
+label.btn:has(+ input[type="file"]:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px }
+
+/* ---------- per-part progress (generating a package, reading imported files) ---------- */
+.parts { list-style: none; margin: 0; padding: 0; display: grid }
+.parts li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: var(--s-1) var(--s-4); align-items: center; padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.parts li:first-child { border-top: 0; padding-top: 0 }
+.parts .ic { width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 50% }
+.parts .ic svg { width: 12px; height: 12px }
+.parts b { font-weight: 600 }
+.parts .what { color: var(--ink-2); display: block }
+.parts .done .ic { background: var(--met-soft); color: var(--met) }
+.parts .working .ic { color: var(--action) }
+.parts .waiting .ic { border: 1.5px dashed var(--border-control) }
+.parts .failed .ic { background: var(--gap-soft); color: var(--gap) }
+.parts .stopped .ic { background: var(--partly-soft); color: var(--partly) }
+
+/* ---------- flag: an item on the honesty line that needs a decision ---------- */
+.flag { display: grid; gap: var(--s-3); padding: var(--s-4) var(--s-5); border-radius: var(--r-control); border: 1px solid var(--rule); border-left: 4px solid var(--partly); background: var(--surface); min-width: 0 }
+.flag.gap { border-left-color: var(--gap) }
+.flag.low { border-left-color: var(--bloom) }
+.flag .kind { font-size: var(--fs-caption); font-weight: 700; letter-spacing: .02em; display: inline-flex; gap: var(--s-2); align-items: center }
+.flag .kind svg { width: 12px; height: 12px }
+.flag.line .kind { color: var(--partly) }
+.flag.gap .kind { color: var(--gap) }
+.flag.low .kind { color: var(--bloom) }
+.flag.must { outline: 2px solid var(--gap); outline-offset: 2px }
+.flag.resolved { border-left-color: var(--met); background: color-mix(in srgb, var(--met-soft) 55%, var(--surface)) }
+.flag.resolved .kind { color: var(--met) }
+
+/* ---------- radio choice cards (each option says what it costs) ---------- */
+.choices { display: grid; gap: var(--s-3); border: 0; margin: 0; padding: 0; min-width: 0 }
+.choice { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: var(--s-1) var(--s-3); padding: var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface); cursor: pointer; font-size: var(--fs-small) }
+.choice:hover { border-color: var(--border-control) }
+.choice input { accent-color: var(--action); width: 16px; height: 16px; margin: 3px 0 0 }
+.choice b { font-weight: 600; font-size: var(--fs-body) }
+.choice > :not(input) { grid-column: 2 }
+.choice:has(input:checked) { border: 2px solid var(--action); padding: calc(var(--s-4) - 1px) }
+.choice:has(input:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px }
+
+/* ---------- requirement → evidence map ---------- */
+.evmap { display: grid }
+.ev-row { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: var(--s-3) var(--s-6); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.ev-row:first-child { border-top: 0; padding-top: 0 }
+.ev-row .req { display: grid; gap: var(--s-2); align-content: start; justify-items: start }
+.ev-row .req b { font-weight: 600; font-size: var(--fs-body) }
+.ev-row .used { display: grid; gap: var(--s-2); min-width: 0 }
+.ev-row .piece-ref { color: var(--ink-2) }
+.ev-row .cvline { color: var(--ink); padding-left: var(--s-4); border-left: 2px solid var(--action) }
+.ev-row .cvline .meta { display: block }
+.ev-row > .flag { grid-column: 1 / -1 }
+@media (max-width: 640px) { .ev-row { grid-template-columns: minmax(0, 1fr) } }
+
+/* ---------- change against the master profile: auditable, undoable ---------- */
+.edits { list-style: none; margin: 0; padding: 0; display: grid }
+.edit { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2) var(--s-4); padding: var(--s-4) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.edit:first-child { border-top: 0; padding-top: 0 }
+.edit .what { display: grid; gap: var(--s-2); min-width: 0 }
+.edit del { color: var(--ink-3); text-decoration-thickness: 1px }
+.edit ins { text-decoration: none; color: var(--ink); background: color-mix(in srgb, var(--met-soft) 70%, transparent); border-radius: var(--s-1); padding: 0 var(--s-1) }
+.edit .why { color: var(--ink-3); font-size: var(--fs-caption) }
+.edit.undone .what { color: var(--ink-3) }
+
+/* ---------- profile piece card ---------- */
+.pieces { display: grid; gap: var(--s-3) }
+.piece { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-2) var(--s-5); padding: var(--s-4) var(--s-5); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface); min-width: 0 }
+.piece .top { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-3); align-items: center; font-size: var(--fs-caption); color: var(--ink-3) }
+.piece .type { font-weight: 700; color: var(--ink-2); letter-spacing: .02em }
+.piece .text { font-size: var(--fs-body); color: var(--ink); overflow-wrap: anywhere }
+.piece .acts { display: flex; flex-wrap: wrap; gap: var(--s-2); align-items: start; justify-content: end }
+.piece.unconfirmed { border-left: 4px solid var(--bloom) }
+.piece.flagged { border-left: 4px solid var(--partly) }
+@media (max-width: 640px) { .piece { grid-template-columns: minmax(0, 1fr) } .piece .acts { justify-content: start } }
+.group { display: grid; gap: var(--s-3) }
+.group > summary { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: baseline; cursor: pointer; font-weight: 600; list-style: none; padding: var(--s-3) 0; min-height: 24px }
+.group > summary::-webkit-details-marker { display: none }
+.group > summary .meta { font-weight: 400 }
+.group > summary .chev { width: 12px; height: 12px; transition: rotate var(--dur-fast) var(--ease-standard) }
+.group[open] > summary .chev { rotate: 90deg }
+
+/* ---------- file drop zone ---------- */
+.dropzone { display: grid; justify-items: center; gap: var(--s-3); padding: var(--s-9) var(--s-6); text-align: center; border: 2px dashed var(--border-control); border-radius: var(--r-card); background: var(--surface) }
+.dropzone svg { width: 28px; height: 28px; color: var(--action) }
+.dropzone.over { border-color: var(--action); background: var(--met-soft) }
+.files { list-style: none; margin: 0; padding: 0; display: grid }
+.files li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-4); align-items: center; padding: var(--s-3) 0; border-top: 1px solid var(--rule); font-size: var(--fs-small) }
+.files li:first-child { border-top: 0 }
+.files .name { font-weight: 600; overflow-wrap: anywhere }
+
+/* ---------- coach interview transcript ---------- */
+.chat { display: grid; gap: var(--s-4); margin: 0; padding: 0; list-style: none }
+.msg { display: grid; gap: var(--s-1); max-width: 62ch; padding: var(--s-4) var(--s-5); border-radius: var(--r-card); font-size: var(--fs-body) }
+.msg .who { font-size: var(--fs-caption); font-weight: 700; color: var(--ink-3) }
+.msg.coach { background: var(--surface); border: 1px solid var(--rule); border-top-left-radius: var(--r-small) }
+.msg.you { justify-self: end; background: var(--met-soft); color: var(--ink); border-top-right-radius: var(--r-small) }
+.msg.unsent { border: 1px dashed var(--border-control); background: var(--surface) }
+
+/* ---------- word count against a limit or target ---------- */
+.count { font-size: var(--fs-caption); color: var(--ink-3); font-variant-numeric: tabular-nums }
+.count.over { color: var(--gap); font-weight: 600 }
+
+/* ---------- document frame and A4 page (CV, cover letter): always white paper ---------- */
+.doc-frame { display: grid; gap: var(--s-4); padding: var(--s-5); background: var(--surface-sunken); border-radius: var(--r-card); overflow: auto; max-height: 82vh; justify-items: center; min-width: 0 }
+.doc-frame .bar { justify-self: stretch; display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); align-items: center; font-size: var(--fs-small) }
+.doc-frame.fit .doc { zoom: .62 }
+@media (max-width: 720px) { .doc-frame.fit .doc { zoom: .42 } }
+.doc { width: var(--doc-page-w); min-height: var(--doc-page-h); padding: var(--doc-margin); background: var(--doc-paper); color: var(--doc-text); border-radius: var(--r-sheet); box-shadow: var(--shadow-overlay); font-family: var(--font-text); font-size: var(--doc-fs-body); line-height: var(--doc-lh); font-variant-ligatures: none; font-feature-settings: "liga" 0, "clig" 0, "dlig" 0; display: flex; flex-direction: column; gap: var(--doc-gap-section); position: relative; text-align: left; flex: none }
+.doc h1, .doc h2 { letter-spacing: 0; text-wrap: wrap; margin: 0 }
+.doc .d-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--doc-gap-line) var(--doc-gap-section); align-items: start }
+.doc .d-head > * { grid-column: 1 }
+.doc .d-name { font-family: var(--font-display); font-size: var(--doc-fs-name); font-weight: 700; color: var(--doc-accent); line-height: 1.1 }
+.doc .d-role { font-size: var(--doc-fs-section); font-weight: 600; color: var(--doc-text) }
+.doc .d-contact { color: var(--doc-muted); font-size: var(--doc-fs-small) }
+.doc .d-contact > span { white-space: nowrap }
+.doc .d-photo { width: var(--doc-photo); height: calc(var(--doc-photo) * 1.25); border-radius: var(--r-sheet); background: var(--doc-rule); grid-column: 2; grid-row: 1 / span 3; display: grid; place-items: center; color: var(--doc-muted); font-size: var(--doc-fs-small); text-align: center }
+.doc section { display: grid; gap: var(--doc-gap-item) }
+.doc h2 { font-family: var(--font-display); font-size: var(--doc-fs-section); font-weight: 700; color: var(--doc-accent); text-transform: uppercase; letter-spacing: .04em; padding-bottom: var(--doc-gap-line); border-bottom: 0.5pt solid var(--doc-rule) }
+.doc .d-item { display: grid; gap: var(--doc-gap-line) }
+.doc .d-line { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 var(--doc-gap-item) }
+.doc .d-line b { font-weight: 600 }
+.doc .d-when { color: var(--doc-muted); font-variant-numeric: tabular-nums; white-space: nowrap }
+.doc ul { margin: 0; padding-left: 4mm; display: grid; gap: var(--doc-gap-line) }
+.doc p { margin: 0 }
+.doc .d-muted { color: var(--doc-muted) }
+.doc .d-pagebreak { position: absolute; left: 0; right: 0; top: var(--doc-page-h); border-top: 1.5px dashed var(--partly) }
+.page-chip { display: inline-flex; gap: var(--s-2); align-items: center; font-size: var(--fs-caption); font-weight: 600; padding: 1px var(--s-3); border-radius: var(--r-pill); background: var(--met-soft); color: var(--met) }
+.page-chip.over { background: var(--partly-soft); color: var(--partly) }
+.page-chip svg { width: 11px; height: 11px }
+@media print { .doc { box-shadow: none; border-radius: 0; zoom: 1 } }

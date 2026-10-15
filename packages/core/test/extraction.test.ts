@@ -78,7 +78,7 @@ describe("reading postings: the Job view", () => {
       { key: "salary", label: "Salary", value: "Not stated", confidence: 1, needsYou: false, source: null },
     ]);
     expect(job.requirements[3]).toEqual({
-      key: "requirements:3", text: "CISSP", askedAs: "Preferred", kind: "preferred", status: "unknown", needsYou: false, confidence: 0.9,
+      key: "requirements:3", text: "CISSP", askedAs: "Preferred", kind: "preferred", category: "certificate", status: "unknown", needsYou: false, confidence: 0.9,
       source: { quote: "CISSP or a similar certification", translation: null, line: 8 },
     });
     expect(job.postingText.split("\n")[2]).toBe("• You have 3+ years in a security operations or SOC role");

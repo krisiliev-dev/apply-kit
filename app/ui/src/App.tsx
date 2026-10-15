@@ -1,11 +1,13 @@
-import type { HealthSummary } from "@apply-kit/core";
+import type { HealthSummary, ProfileSummary } from "@apply-kit/core";
 import { useEffect, useState } from "react";
-import { fetchSources } from "./api.ts";
+import { fetchProfileSummary, fetchSources } from "./api.ts";
 import { FeedPage } from "./feed/FeedPage.tsx";
 import { healthPill } from "./health.tsx";
 import { SourcesPage } from "./sources/SourcesPage.tsx";
 import { JobPage } from "./job/JobPage.tsx";
-import { SearchSettingsPage } from "./settings/SearchSettingsPage.tsx";
+import { ProfilePage } from "./profile/ProfilePage.tsx";
+import { SetupPage } from "./setup/SetupPage.tsx";
+import { PackagePage } from "./package/PackagePage.tsx";
 
 const nav = [
   { href: "/", label: "Feed" },
@@ -19,6 +21,14 @@ export function App() {
   const [health, setHealth] = useState<HealthSummary | null>(null);
   const [cls, text] = health ? healthPill(health) : ["", "Checking…"];
   const settings = path.startsWith("/settings");
+  // Profile's badge: what waits for Kris there (its section counts add up to it).
+  const [profile, setProfile] = useState<ProfileSummary | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchProfileSummary(ctrl.signal).then(setProfile).catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+  const badge = profile?.needsYouTotal ?? 0;
 
   return (
     <>
@@ -31,7 +41,12 @@ export function App() {
           </a>
           <nav className="nav" aria-label="Main">
             {nav.map((n) => (
-              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && path.startsWith("/profile")) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>{n.label}</a>
+              <a key={n.href} href={n.href} aria-current={n.href === path || (n.href === "/settings" && settings) || (n.href === "/profile" && (path.startsWith("/profile") || path === "/setup" || path.startsWith("/setup/"))) || (n.href === "/" && path.startsWith("/jobs/")) ? "page" : undefined}>
+                {n.label}
+                {n.href === "/profile" && badge > 0 && (
+                  <><span className="badge" aria-hidden="true">{badge}</span><span className="sr-only">, {badge} {badge === 1 ? "needs" : "need"} you</span></>
+                )}
+              </a>
             ))}
           </nav>
           <span className="grow" />
@@ -43,8 +58,10 @@ export function App() {
         </header>
         <main className="main" id="main" tabIndex={-1}>
           {path === "/" ? <FeedPage onHealth={setHealth} />
+            : /^\/jobs\/[^/]+\/package$/.test(path) ? <PackagePage jobId={decodeURIComponent(path.split("/")[2]!)} onHealth={setHealth} />
             : path.startsWith("/jobs/") ? <JobPage id={decodeURIComponent(path.slice("/jobs/".length))} onHealth={setHealth} />
-            : path === "/profile" || path === "/profile/search" ? <SearchSettingsPage onHealth={setHealth} />
+            : (path === "/setup" || path.startsWith("/setup/")) ? <SetupPage onHealth={setHealth} />
+            : path === "/profile" || path.startsWith("/profile/") ? <ProfilePage onHealth={setHealth} onSummary={setProfile} />
             : path === "/settings/sources" || path === "/settings/sources/add" || path === "/settings/sources/coverage" || path === "/settings" ? <SourcesPage onHealth={setHealth} />
             : <NotBuilt onHealth={setHealth} />}
         </main>

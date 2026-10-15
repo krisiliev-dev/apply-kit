@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createEngine, createPairing, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createPairing, createPreparationEngine, type DocumentToRender, type Scheduler } from "@apply-kit/core";
 import { createServer } from "./server.ts";
 
 const port = 4310;
@@ -18,15 +18,30 @@ function service(uiDir = "/nonexistent/") {
     extractor: { estimateCostUsd: () => 0, extract: async () => { throw new Error("no AI in tests"); } },
     mailReader: { fetchSince: async () => [] },
   });
+  const noAi = () => { throw new Error("no AI in tests"); };
+  const noFiles = () => { throw new Error("no files in these tests"); };
+  const stored = new Map<string, Uint8Array>();
+  const preparation = createPreparationEngine({
+    db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
+    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi(), tailorCv: async () => noAi(), coachTurn: async () => noAi(), writeLetter: async () => noAi(), draftAnswer: async () => noAi() },
+    renderer: { render: async () => noAi() },
+    pdfReader: { read: async () => noAi() },
+    files: {
+      put: async (bytes) => { const sha256 = String(stored.size).padStart(64, "0"); stored.set(sha256, bytes); return { sha256, size: bytes.byteLength }; },
+      get: async (sha256) => stored.get(sha256) ?? null,
+      remove: async (sha256) => { stored.delete(sha256); },
+    },
+    packages: { saveDraft: async () => noFiles(), freeze: async () => noFiles(), read: async () => null },
+  });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const app = createServer({ engine, scheduler, pairing, uiDir, port });
+  const app = createServer({ engine, preparation, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
   // Requests as a browser on this machine sends them: to the service's own address and port.
   const request = (path: string, init?: RequestInit) => app.request(`http://127.0.0.1:${port}${path}`, init);
-  return { app, json, engine, request };
+  return { app, json, engine, preparation, request };
 }
 
 /** A synthetic job search page with one listing (made-up company). */
@@ -207,5 +222,291 @@ describe("the app's routes", () => {
     expect(missing.status).toBe(404);
     expect(form.status).toBe(415);
     expect(noIds.status).toBe(400);
+  });
+});
+
+describe("Profile's API", () => {
+  it("answers a refused piece with its problems and honest fixes, and keeps a saved one", async () => {
+    const s = service();
+
+    const refused = await s.request("/api/profile/pieces", s.json({ kind: "achievement", text: "Triaged 25 alerts a day." }));
+    const saved = await s.request("/api/profile/pieces", s.json({ kind: "achievement", text: "Triaged 25 alerts a day.", numberSource: "estimate" }));
+
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toEqual({ saved: false, problems: [{ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] }] });
+    expect(saved.status).toBe(201);
+    expect(s.preparation.profileSummary()).toMatchObject({ pieces: 1, confirmed: 1 });
+  });
+
+  it("only deletes a piece through a JSON request", async () => {
+    const s = service();
+    const saved = s.preparation.savePiece({ kind: "skill", text: "Python" });
+    if (!saved.saved) throw new Error("not saved");
+    const path = `/api/profile/pieces/${encodeURIComponent(saved.piece.id)}/delete`;
+
+    const form = await s.request(path, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const json = await s.request(path, s.json({}));
+
+    expect(form.status).toBe(415);
+    expect(await json.json()).toEqual({ deleted: true, untied: 0 });
+    expect(s.preparation.profileSummary().pieces).toBe(0);
+  });
+
+  it("saves an angle's summary line and lead order, answering a refused lead with its problem", async () => {
+    const s = service();
+    const piece = s.preparation.savePiece({ kind: "skill", text: "Wireshark", angles: ["security"] });
+    if (!piece.saved) throw new Error("not saved");
+
+    const refused = await s.request("/api/profile/angles/security", { ...s.json({ leads: ["piece:gone"] }), method: "PUT" });
+    const saved = await s.request("/api/profile/angles/security", { ...s.json({ summary: "Analyst who reads packets.", leads: [piece.piece.id] }), method: "PUT" });
+    const unknown = await s.request("/api/profile/angles/marketing", { ...s.json({ summary: "x" }), method: "PUT" });
+    const list = await s.request("/api/profile/angles");
+
+    expect(refused.status).toBe(422);
+    expect(saved.status).toBe(200);
+    expect(unknown.status).toBe(404);
+    expect(((await list.json()) as unknown[])[1]).toMatchObject({ angle: "security", summary: "Analyst who reads packets.", leads: [{ text: "Wireshark" }] });
+  });
+
+  it("exports the profile as a JSON file to download", async () => {
+    const s = service();
+    s.preparation.savePiece({ kind: "skill", text: "Python" });
+
+    const res = await s.request("/api/profile/export");
+
+    expect(res.headers.get("content-disposition")).toBe('attachment; filename="apply-kit-profile-2026-10-12.json"');
+    expect(await res.json()).toMatchObject({ format: "apply-kit master profile", pieces: [expect.objectContaining({ text: "Python" })] });
+  });
+});
+
+describe("the Package's API", () => {
+  it("says why a package can't start for an unread job, refuses to start it, and has no package to show", async () => {
+    const s = service();
+    const added = await s.engine.addJobLink("https://kestrel.example.com/jobs/security-engineer", {
+      title: "Security Engineer", company: "Kestrel Payments", text: "Security Engineer at Kestrel Payments. Experience with a SIEM.",
+    });
+    if (!("jobId" in added)) throw new Error("not added");
+    const jobId = encodeURIComponent(added.jobId as string);
+
+    const status = await s.request(`/api/jobs/${jobId}/prepare`);
+    const start = await s.request(`/api/jobs/${jobId}/package`, s.json({}));
+    const form = await s.request(`/api/jobs/${jobId}/package`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const feed = await (await s.request("/api/feed?view=new")).json() as { jobs: { package: unknown }[] };
+
+    expect(await status.json()).toMatchObject({ canStart: false, problem: "not-read", package: null });
+    expect(start.status).toBe(422);
+    expect(form.status).toBe(415);
+    expect(feed.jobs.map((j) => j.package)).toEqual([null]);
+    expect((await s.request("/api/packages/nope")).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/changes/c1/undo", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/fit", s.json({ choice: "keep-two-pages" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/flags/f1/decide", s.json({ option: "letter" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/flags/f1/answer", s.json({ answer: "Once." }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/drafts", s.json({ instruction: "Shorter" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/drafts/1", { ...s.json({ text: "Hi" }), method: "PUT" })).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/current", { ...s.json({ draft: 1 }), method: "PUT" })).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter/own", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/letter.pdf")).status).toBe(404);
+    expect((await s.request("/api/packages/nope/answers/question_1", { ...s.json({ text: "1 month" }), method: "PUT" })).status).toBe(404);
+    expect((await s.request("/api/packages/nope/answers/question_1/save", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/draft-answer", s.json({ question: "Why us?" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/approve", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/approve", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/packages/nope/ats/fix", s.json({ values: { phone: "+359 88 000 0175" }, updateProfile: true }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/redraft-changed", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/files/cv.pdf")).status).toBe(404);
+    expect(await (await s.request("/api/profile/learned")).json()).toEqual([]);
+    expect((await s.request("/api/profile/learned/confirm", { method: "POST", body: "" })).status).toBe(415);
+  });
+});
+
+describe("the answer bank's API", () => {
+  it("answers a refused answer with its problems, and lists a saved one", async () => {
+    const s = service();
+    const answer = { question: "Notice period", wordings: ["When could you start?"], versions: { en: "1 month", bg: "1 месец" }, category: "standard", kind: "text", mode: "fill" };
+
+    const refused = await s.request("/api/profile/answers", s.json({ ...answer, versions: {} }));
+    const saved = await s.request("/api/profile/answers", s.json(answer));
+    const list = await s.request("/api/profile/answers?category=standard&q=notice");
+
+    expect(refused.status).toBe(422);
+    expect(saved.status).toBe(201);
+    expect(await list.json()).toMatchObject({ total: 1, answers: [{ question: "Notice period", versions: { en: "1 month", bg: "1 месец" } }] });
+  });
+
+  it("resolves a portal edit and shows the history with the answer", async () => {
+    const s = service();
+    const r = s.preparation.saveAnswer({ question: "Kubernetes experience", versions: { en: "None in production." }, category: "screening" });
+    if (!r.saved) throw new Error("not saved");
+    s.preparation.recordPortalEdit(r.answer.id, { language: "en", text: "One personal k3s project.", portal: "Halden Systems Workday form" });
+    const path = `/api/profile/answers/${encodeURIComponent(r.answer.id)}`;
+
+    const resolved = await s.request(`${path}/portal-edit`, s.json({ keep: "keep-new" }));
+    const detail = await (await s.request(path)).json();
+
+    expect(resolved.status).toBe(200);
+    expect(detail).toMatchObject({ answer: { versions: { en: "One personal k3s project." }, portalEdit: null }, history: [{ event: "changed", before: "None in production." }, { event: "created" }] });
+    expect(s.preparation.profileSummary().needsYou.answerBank).toBe(0);
+  });
+
+  it("only deletes an answer through a JSON request", async () => {
+    const s = service();
+    const r = s.preparation.saveAnswer({ question: "Notice period", versions: { en: "1 month" }, category: "standard" });
+    if (!r.saved) throw new Error("not saved");
+    const path = `/api/profile/answers/${encodeURIComponent(r.answer.id)}/delete`;
+
+    const form = await s.request(path, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const json = await s.request(path, s.json({}));
+
+    expect(form.status).toBe(415);
+    expect(json.status).toBe(200);
+    expect(s.preparation.answer(r.answer.id)).toBeNull();
+  });
+});
+
+describe("developer route: the demo documents", () => {
+  /** The service with a preparation engine whose renderer prints the document's title as its only line. */
+  function withPreparation() {
+    const db = new DatabaseSync(":memory:");
+    const clock = { now: () => new Date("2026-10-12T07:30:00Z") };
+    const engine = createEngine({
+      db, clock,
+      fetch: async () => { throw new Error("no network in tests"); },
+      extractor: { estimateCostUsd: () => 0, extract: async () => { throw new Error("no AI in tests"); } },
+      mailReader: { fetchSince: async () => [] },
+    });
+    const rendered: DocumentToRender[] = [];
+    const preparation = createPreparationEngine({
+      db, clock, budget: createAiBudget({ db, clock, capUsd: 10 }),
+      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); }, coachTurn: async () => { throw new Error("no AI in tests"); }, writeLetter: async () => { throw new Error("no AI in tests"); }, draftAnswer: async () => { throw new Error("no AI in tests"); } },
+      renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
+      pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
+      files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
+      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), freeze: async (id, v, name) => ({ path: `packages/${id}/v${v}/${name}`, copy: null }), read: async () => null },
+    });
+    const scheduler = { status: () => ({}) } as unknown as Scheduler;
+    const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });
+    return { request: (path: string) => app.request(`http://127.0.0.1:${port}${path}`), rendered };
+  }
+
+  it("serves the demo CV as the PDF itself, named as it would be uploaded", async () => {
+    const s = withPreparation();
+
+    const res = await s.request("/api/dev/documents/cv?language=bg&photo=1");
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-disposition")).toBe('inline; filename="Nia_Koleva_CV_Kestrel_Payments_Security_Engineer.pdf"');
+    expect(await res.text()).toBe("%PDF Ния Колева · CV · Кестрел Плащания");
+    expect(s.rendered[0]).toMatchObject({ kind: "cv", language: "bg", content: { photo: { mediaType: "image/svg+xml" } } });
+  });
+
+  it("shows what the parse check read back from it", async () => {
+    const s = withPreparation();
+
+    const res = await s.request("/api/dev/documents/cover-letter/check");
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      fileName: "Nia_Koleva_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", pages: 1, overflow: null, ats: null,
+      text: { pages: [{ lines: ["Nia Koleva · Cover letter · Kestrel Payments"] }] },
+    });
+  });
+
+  it("refuses a document or language the template doesn't have", async () => {
+    const s = withPreparation();
+
+    expect((await s.request("/api/dev/documents/resume")).status).toBe(404);
+    expect((await s.request("/api/dev/documents/cv?language=de")).status).toBe(400);
+  });
+});
+
+describe("Import's API", () => {
+  it("starts an import from base64 files, and reports a file the model failed on with a retry", async () => {
+    const s = service();
+    const cv = { fileName: "mira-petrova-cv.txt", base64: Buffer.from("Mira Petrova\nSecurity Analyst, Northwind Bank").toString("base64") };
+
+    const started = await s.request("/api/import", s.json({ files: [cv] }));
+    expect(started.status).toBe(202);
+    const { id } = (await started.json()) as { id: string };
+    await new Promise((r) => setTimeout(r, 10));
+    const status = await (await s.request("/api/import")).json();
+
+    expect(status).toMatchObject({ id, state: "finished", items: [{ name: "mira-petrova-cv.txt", state: "unreadable", problem: { reason: "failed", options: ["retry", "skip"] } }] });
+    expect((await s.request(`/api/import/${id}/cancel`, s.json({}))).status).toBe(200);
+  });
+
+  it("refuses an import with nothing in it, and a choice a file doesn't offer", async () => {
+    const s = service();
+
+    const empty = await s.request("/api/import", s.json({ files: [] }));
+    const choice = await s.request("/api/import/items/import-item:gone", s.json({ action: "skip" }));
+
+    expect(empty.status).toBe(422);
+    expect(choice.status).toBe(422);
+  });
+
+  it("confirms a piece, or says what it still needs", async () => {
+    const s = service();
+    const piece = s.preparation.savePiece({ kind: "achievement", text: "Triaged 25 alerts a day." }, { from: "CV.pdf", quote: "Triaged 25 alerts a day.", status: "unconfirmed" });
+    if (!piece.saved) throw new Error("not saved");
+
+    const res = await s.request(`/api/profile/pieces/${encodeURIComponent(piece.piece.id)}/confirm`, s.json({}));
+
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ saved: false, problems: [{ field: "numberSource" }] });
+  });
+});
+
+describe("Voice's API", () => {
+  const sample = (fileName: string, text: string) => ({ fileName, base64: Buffer.from(text).toString("base64") });
+
+  it("adds samples from base64 files, shows an unreadable one with its reason, and removes one", async () => {
+    const s = service();
+
+    const added = await s.request("/api/profile/voice/samples", s.json({ files: [sample("about-page.txt", "I build small tools that make noisy systems quieter."), sample("letter.pages", "PK")] }));
+    expect(added.status).toBe(201);
+    const voice = (await (await s.request("/api/profile/voice")).json()) as { samples: { id: string; fileName: string; problem: { reason: string } | null }[] };
+    expect(voice.samples.map((x) => [x.fileName, x.problem?.reason ?? null])).toEqual([["about-page.txt", null], ["letter.pages", "pages"]]);
+
+    const removed = await s.request(`/api/profile/voice/samples/${encodeURIComponent(voice.samples[0]!.id)}/remove`, s.json({}));
+    expect(removed.status).toBe(200);
+    expect(((await removed.json()) as { samples: unknown[] }).samples).toHaveLength(1);
+  });
+
+  it("pauses and resumes learning from edits, and asks for JSON on every change", async () => {
+    const s = service();
+
+    const paused = await s.request("/api/profile/voice/learning", { ...s.json({ fromEdits: false }), method: "PUT" });
+    expect(await paused.json()).toMatchObject({ learnFromEdits: false });
+    expect(s.preparation.recordVoiceEdit({ purpose: "cover-letter", language: "en", before: "I am passionate.", after: "I fix noisy alerts." })).toBe(false);
+
+    expect((await s.request("/api/profile/voice/rules/voice-rule:x/remove", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/profile/voice/rules/voice-rule:x/remove", s.json({}))).status).toBe(404);
+  });
+});
+
+describe("the coach interview's API", () => {
+  it("starts the interview at its first question, says when the coach can't answer, and refuses an empty answer", async () => {
+    const s = service();
+    s.preparation.savePiece({ kind: "role", text: "", entry: { title: "Junior Security Analyst", organisation: "Orbital Bank", city: "Sofia", start: "2021-03", end: "2025-12" } });
+
+    const started = await s.request("/api/interview/start", s.json({}));
+    expect(started.status).toBe(200);
+    await s.preparation.interviewSettled();
+    expect(await (await s.request("/api/interview")).json()).toMatchObject({ id: "setup", status: "failed", question: { kind: "gap" }, failure: { message: "no AI in tests" } });
+
+    const refused = await s.request("/api/interviews/setup/answer", s.json({ text: "  " }));
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toMatchObject({ changed: false });
+  });
+
+  it("refuses an unknown angle or interview, and asks for JSON on every change", async () => {
+    const s = service();
+
+    expect((await s.request("/api/interview?angle=marketing")).status).toBe(400);
+    expect((await s.request("/api/interviews/elsewhere/skip", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/interviews/setup/finish", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/interview/items/x/decide", s.json({ choice: "maybe" }))).status).toBe(400);
   });
 });
