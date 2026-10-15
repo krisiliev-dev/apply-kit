@@ -148,7 +148,7 @@ function Group({ group: g, show, collapsed, onConfirmed, onUndone, changed }: {
       const r = await confirmDrafts(g.id);
       const parts = [`${plural(r.confirmed, "piece", "pieces")} ${where} confirmed.`];
       if (r.flagged > 0) parts.push(`The ${plural(r.flagged, "flagged one still waits", "flagged ones still wait")}.`);
-      if (r.refused.length > 0) parts.push(`${plural(r.refused.length, "piece needs", "pieces need")} more before it can be confirmed: use Edit.`);
+      if (r.refused.length > 0) parts.push(r.refused.length === 1 ? "1 piece needs more before it can be confirmed: use Edit." : `${r.refused.length} pieces need more before they can be confirmed: use Edit.`);
       changed(parts.join(" "));
     } catch (err) {
       setFailure(message(err));
@@ -225,7 +225,7 @@ function DraftCard({ piece: p, show, focusRef, onConfirmed, onUndone, changed }:
   const [pick, setPick] = useState<string | null>(null);
   const [missing, setMissing] = useState(false);
   const refusalRef = useRef<HTMLDivElement>(null);
-  const name = `${kindLabel[p.kind].toLowerCase()}: ${pieceName(p)}`;
+  const name = `${kindLabel[p.kind].toLowerCase()}: ${pieceName(p).replace(/\.$/, "")}`;
   const dispute = p.dispute;
   const confirmed = p.status === "confirmed";
   // Focus follows a refusal to its reason.
@@ -258,7 +258,7 @@ function DraftCard({ piece: p, show, focusRef, onConfirmed, onUndone, changed }:
     void run(async () => {
       const r = await resolveDispute(p.id, pick === "coach" ? { askCoach: true } : { version: Number(pick) });
       if (!r.saved) { setRefusal(r.problems.map((x) => x.message)); return null; }
-      return pick === "coach" ? `The coach will ask about ${name}.` : `Kept "${versionText(dispute!.versions[Number(pick)]!)}". Confirm it when you're ready.`;
+      return pick === "coach" ? `The coach will ask about ${name}.` : `Kept "${versionText(dispute!.versions[Number(pick)]!).replace(/\.$/, "")}". Confirm it when you're ready.`;
     });
   };
 
@@ -277,7 +277,7 @@ function DraftCard({ piece: p, show, focusRef, onConfirmed, onUndone, changed }:
           <span>{sources}</span>
         </div>
         <p className="text">{p.entry ? entryLabel(p.entry) : p.text}</p>
-        {!dispute && !confirmed && p.source.quote && p.source.quote !== p.text && <p className="mini muted">From the source: <q>{p.source.quote}</q></p>}
+        {!dispute && !confirmed && !p.entry && p.source.quote && p.source.quote !== p.text && <p className="mini muted">From the source: <q>{p.source.quote}</q></p>}
         {(p.tags.length > 0 || p.angles.length > 0) && (
           <div className="chips">
             {p.tags.map((t) => <span className="chip neutral" key={t}>{t}</span>)}
