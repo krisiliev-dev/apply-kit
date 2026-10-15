@@ -24,11 +24,18 @@ export const DEFAULT_PROVIDERS = ["deepinfra", "together", "fireworks", "corewea
 /** Highest price accepted per million tokens (USD). Also the prices cost estimates assume. */
 export const MAX_PRICE = { prompt: 0.5, completion: 2 };
 
+export interface Price {
+  prompt: number;
+  completion: number;
+}
+
 export interface OpenRouterOptions {
   apiKey: string;
   model?: string;
   /** Provider slugs to allow; China-hosted ones are dropped. Defaults to DEFAULT_PROVIDERS. */
   providers?: string[];
+  /** Highest price accepted per million tokens (USD), and the prices estimates assume. Defaults to MAX_PRICE. */
+  maxPrice?: Price;
   /** Injected for tests; defaults to the global fetch. */
   fetch?: typeof fetch;
 }
@@ -36,7 +43,7 @@ export interface OpenRouterOptions {
 const baseSlug = (slug: string) => slug.trim().toLowerCase().split("/")[0]!;
 
 /** The routing preferences sent with every request (exported for the record; tests check the request itself). */
-export function providerRouting(providers: string[] = DEFAULT_PROVIDERS) {
+export function providerRouting(providers: string[] = DEFAULT_PROVIDERS, maxPrice: Price = MAX_PRICE) {
   const only = providers.map((p) => p.trim().toLowerCase()).filter((p) => p && !CHINA_HOSTED_PROVIDERS.includes(baseSlug(p)));
   if (only.length === 0) throw new Error("OPENROUTER_PROVIDERS lists no non-China provider; the model needs at least one");
   return {
@@ -45,14 +52,14 @@ export function providerRouting(providers: string[] = DEFAULT_PROVIDERS) {
     data_collection: "deny" as const,
     allow_fallbacks: false,
     require_parameters: true,
-    max_price: MAX_PRICE,
+    max_price: maxPrice,
   };
 }
 
 /** The pinned model, and its id as configured. */
 export function openRouterModel(options: OpenRouterOptions): { modelId: string; model: LanguageModel } {
   const modelId = options.model || DEFAULT_MODEL;
-  const routing = providerRouting(options.providers?.length ? options.providers : DEFAULT_PROVIDERS);
+  const routing = providerRouting(options.providers?.length ? options.providers : DEFAULT_PROVIDERS, options.maxPrice);
   const openrouter = createOpenRouter({ apiKey: options.apiKey, fetch: options.fetch });
   return { modelId, model: openrouter(modelId, { provider: routing, usage: { include: true } }) };
 }
@@ -61,13 +68,13 @@ export function openRouterModel(options: OpenRouterOptions): { modelId: string; 
 export const tokensIn = (chars: number) => Math.ceil(chars / 2.5);
 
 /** USD for these token counts at the price ceiling. */
-export const usdFor = (promptTokens: number, completionTokens: number) =>
-  (promptTokens * MAX_PRICE.prompt + completionTokens * MAX_PRICE.completion) / 1_000_000;
+export const usdFor = (promptTokens: number, completionTokens: number, price: Price = MAX_PRICE) =>
+  (promptTokens * price.prompt + completionTokens * price.completion) / 1_000_000;
 
 /** What a finished call cost: as OpenRouter reports it, else worked out from its tokens at the price ceiling. */
-export function billedUsd(result: { providerMetadata?: unknown; usage?: { inputTokens?: number; outputTokens?: number } }, maxOutputTokens: number): number {
+export function billedUsd(result: { providerMetadata?: unknown; usage?: { inputTokens?: number; outputTokens?: number } }, maxOutputTokens: number, price: Price = MAX_PRICE): number {
   const reported = ((result.providerMetadata as { openrouter?: { usage?: { cost?: unknown } } } | undefined)?.openrouter)?.usage?.cost;
   return typeof reported === "number" && Number.isFinite(reported)
     ? reported
-    : usdFor(result.usage?.inputTokens ?? 0, result.usage?.outputTokens ?? maxOutputTokens);
+    : usdFor(result.usage?.inputTokens ?? 0, result.usage?.outputTokens ?? maxOutputTokens, price);
 }
