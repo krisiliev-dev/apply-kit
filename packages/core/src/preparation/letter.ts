@@ -77,6 +77,7 @@ export function parseLetterText(text: string, before: LetterDraft): LetterDraft 
   };
 }
 
+const counts: Record<number, string> = { 2: "two", 3: "three", 4: "four", 5: "five" };
 const ordinal = (n: number) => ["first", "second", "third", "fourth", "fifth", "sixth"][n - 1] ?? `${n}th`;
 
 /**
@@ -89,7 +90,7 @@ export function forCompanyPlaces(d: LetterDraft): string | null {
     if (!at.length) return [];
     const run = at.every((n, k) => n === k + 1);
     const where = at.length === p.length ? (p.length === 1 ? "the sentence" : `all ${p.length} sentences`)
-      : run ? (at.length === 1 ? "the first sentence" : `the first ${at.length} sentences`)
+      : run ? (at.length === 1 ? "the first sentence" : `the first ${counts[at.length] ?? at.length} sentences`)
       : at.length === 1 ? `the ${ordinal(at[0]!)} sentence` : `sentences ${at.join(", ")}`;
     return [`${where} of paragraph ${i + 1}`];
   });

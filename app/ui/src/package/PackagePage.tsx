@@ -522,7 +522,7 @@ function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Pa
           <label className="choice" lang="en">
             <input type="radio" name="lang" checked={pkg.language === "bg"} onChange={() => void language("bg")} />
             <b>Bulgarian</b>
-            <span className="muted">{fromPosting("bg") ? "The posting is in Bulgarian. " : ""}The whole package in Bulgarian, not only the headings. For now switching prints the CV again with the Bulgarian section titles and your name as stored in Cyrillic; nothing is lost.</span>
+            <span className="muted">{fromPosting("bg") ? "The posting is in Bulgarian. " : ""}The whole package in Bulgarian, not only the headings. For now switching prints the CV and the cover letter again with the Bulgarian titles and your name as stored in Cyrillic (the letter keeps its words: ask for a new draft in Bulgarian), and writes the screening answers again; nothing is lost.</span>
           </label>
         </fieldset>
       </div>

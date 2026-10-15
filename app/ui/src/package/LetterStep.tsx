@@ -59,7 +59,11 @@ export function LetterStep({ pkg, view, onView, onChange, onGo, say }: {
     return (
       <>
         <div className={`banner ${part.state === "failed" ? "error" : "warning"}`} role="alert">
-          <span className="text"><b>The cover letter wasn't written.</b> {part.what} Your CV version and everything else are saved; nothing was lost.</span>
+          <span className="text">
+            <b>The cover letter wasn't written.</b>{" "}
+            {capped ? "This month's AI budget would be crossed, so it wasn't started." : part.state === "stopped" ? "You stopped it before it was written." : `${part.error ?? "The model didn't answer"}${part.attempts > 1 ? `, ${part.attempts} times` : ""}.`}
+            {" "}Your CV version and everything else are saved; nothing was lost.
+          </span>
           {!capped && <button className="btn sm" type="button" onClick={() => void retry()}>Try again</button>}
         </div>
         <div className="panel">
@@ -176,7 +180,11 @@ function LetterEditor({ pkg, letter, onChange, say }: { pkg: PackageView; letter
     const r: ChangeResult = await redraftLetter(pkg.id, said).catch((err: unknown) => ({ changed: false, reason: message(err), package: pkg }));
     setWriting(false);
     onChange(r.package);
-    if (r.changed) say(`Draft ${r.package.letter!.draft} is ready.`);
+    if (r.changed) {
+      say(`Draft ${r.package.letter!.draft} is ready.`);
+      // The editor opens on the new draft: focus follows it.
+      window.setTimeout(() => document.querySelector<HTMLElement>(".letter-editor textarea")?.focus(), 0);
+    }
     else { setRefused(r.reason ?? null); say(r.reason ?? ""); }
   }
 
@@ -185,6 +193,9 @@ function LetterEditor({ pkg, letter, onChange, say }: { pkg: PackageView; letter
     const r: ChangeResult = await showLetterDraft(pkg.id, to).catch((err: unknown) => ({ changed: false, reason: message(err), package: pkg }));
     onChange(r.package);
     say(r.changed ? `Draft ${to} of ${letter.drafts}.` : r.reason ?? "");
+    // The pager stays where it was for the next press.
+    const back = to < letter.draft ? "Previous draft" : "Next draft";
+    window.setTimeout(() => document.querySelector<HTMLElement>(`[aria-label="${back}"]`)?.focus(), 0);
   }
 
   const words = bodyWordsOf(text, letter);
