@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PackageJob, PieceInput } from "../src/index.ts";
 import { fixtureFetch } from "./harness.ts";
-import { createTestPreparation, fakeWriter, recordedDraftAnswer, recordedLetter, recordedTailoredCv, recordedWhyAnswer, templateRenderer } from "./preparation-harness.ts";
+import { createTestPreparation, fakeWriter, memoryPackageFolder, recordedDraftAnswer, recordedLetter, recordedTailoredCv, recordedWhyAnswer, templateRenderer } from "./preparation-harness.ts";
 
 // Step 5 and the finish (ticket #67), through the preparation engine: the ATS check of the CV's
 // PDF, approving the package (files frozen by SHA-256), reopening, a profile change to a draft, and
@@ -133,5 +133,52 @@ describe("approving the package", () => {
 
     expect(ready.ats!.checks.find((c) => c.check === "keywords")).toMatchObject({ passed: true, notes: ["Kubernetes: a deliberate gap, left out"] });
     expect(await t.preparation.approvePackage(ready.id)).toMatchObject({ approved: true });
+  });
+});
+
+/** Approves the whole package; the ATS check passes on the template-like PDF. */
+async function approved(t: ReturnType<typeof mira>, job = kestrelJob()) {
+  const pkg = await upToAts(t, job);
+  const r = await t.preparation.approvePackage(pkg.id);
+  if (!r.approved) throw new Error(r.reason);
+  return r.package;
+}
+
+describe("frozen files", () => {
+  it("freezes the CV and letter PDFs by SHA-256 as version 1, copied to the Packages folder", async () => {
+    const folder = memoryPackageFolder();
+    const t = mira({ packages: folder });
+
+    const pkg = await approved(t);
+
+    const cv = pkg.approved!.cv.file;
+    expect(pkg.approved).toMatchObject({ version: 1, state: "approved", approvedAt: "2026-10-12T07:30:00.000Z" });
+    expect(cv).toMatchObject({
+      fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", sha256: pkg.cv!.sha256, size: pkg.cv!.size,
+      path: `packages/${pkg.id}/v1/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf`, copy: "Packages/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf",
+    });
+    expect(pkg.approved!.letter!.file).toMatchObject({ fileName: "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", path: `packages/${pkg.id}/v1/Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf` });
+    expect(folder.files.get(cv.path)).toEqual(await t.preparation.packageCv(pkg.id).then((f) => f!.pdf));
+  });
+
+  it("an approved CV file's hash never changes: editing a part reopens it as a new draft that needs approval", async () => {
+    const t = mira();
+    const pkg = await approved(t);
+    const frozen = pkg.approved!.cv.file;
+    const change = pkg.cvVersion!.changes.find((c) => !c.flagId)!;
+
+    const edited = await t.preparation.undoCvChange(pkg.id, change.id);
+
+    expect(edited.package.approved).toBeNull();
+    expect(edited.package.steps.map((s) => s.approvedAt !== null)).toEqual([true, false, false, false, false]);
+    expect(edited.package.cv!.sha256).not.toBe(frozen.sha256);
+    expect(edited.package.chip).toMatchObject({ kind: "continue", label: "Continue package · step 2 of 5" });
+
+    // Approved again, it's version 2; version 1's file is as it was.
+    for (const step of ["cv", "letter", "answers"] as const) t.preparation.approveStep(pkg.id, step);
+    const again = await t.preparation.approvePackage(pkg.id);
+    expect(again).toMatchObject({ approved: true, package: { approved: { version: 2 } } });
+    expect(again.package.approved!.cv.file.sha256).toBe(edited.package.cv!.sha256);
+    expect(await t.preparation.packageFile(pkg.id, "cv", 1)).toMatchObject({ sha256: frozen.sha256 });
   });
 });

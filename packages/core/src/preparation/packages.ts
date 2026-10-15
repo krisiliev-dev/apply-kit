@@ -494,6 +494,10 @@ export interface PackageStore {
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
   /** Approves the package (step 5's Approve) and freezes its files as the next version. */
   approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
+  /** An approved version (the current one by default) and its frozen files. */
+  version(id: string, version?: number): ApprovedPackage | null;
+  /** A frozen file's bytes, exactly as approved. */
+  frozenFile(id: string, which: "cv" | "letter", version?: number): Promise<(FrozenFile & { bytes: Uint8Array }) | null>;
 }
 
 /** Sources that are the company's own careers system (an ATS, or a company's own jobs API). */
@@ -2180,6 +2184,19 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     saveAnswerToBank,
     draftAnswer,
     approvePackage,
+    version(id, version) {
+      const r = row(id);
+      const v = version ?? r?.approvedVersion ?? null;
+      return r && v !== null ? versionOf(id, v) : null;
+    },
+    async frozenFile(id, which, version) {
+      const r = row(id);
+      const v = version ?? r?.approvedVersion ?? null;
+      const pkg = r && v !== null ? versionOf(id, v) : null;
+      const file = which === "cv" ? pkg?.cv.file : pkg?.letter?.file;
+      const bytes = file ? await deps.packages.read(file.path) : null;
+      return file && bytes ? { ...file, bytes } : null;
+    },
 
   };
 }

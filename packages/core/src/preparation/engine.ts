@@ -37,6 +37,7 @@ import {
   type PrepareStatus, type StartPackageResult,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
+import type { FrozenFile } from "./contracts.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -386,6 +387,12 @@ export interface PreparationEngine {
    * any part afterwards reopens its step and the package needs approving again.
    */
   approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
+  /**
+   * A frozen file of an approved version (the one approved now by default), exactly as approved:
+   * its name, SHA-256, size, where it is (and its copy in the Packages folder) and its bytes. Null
+   * when there's no such approved version or file. Never a draft.
+   */
+  packageFile(id: string, which: "cv" | "letter", version?: number): Promise<(FrozenFile & { bytes: Uint8Array }) | null>;
 }
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
@@ -497,6 +504,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     saveScreeningAnswerToBank: (id, questionId) => packages.saveAnswerToBank(id, questionId),
     draftAnswer: (id, request) => packages.draftAnswer(id, request),
     approvePackage: (id, options) => packages.approvePackage(id, options),
+    packageFile: (id, which, version) => packages.frozenFile(id, which, version),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });
