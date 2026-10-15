@@ -440,6 +440,52 @@ export function createServer({ engine, tracker, scheduler, pairing, uiDir, port 
     });
   }
 
+  // The thank-you note's topic (PUT { topic }): one thing discussed, which makes the note specific.
+  app.put("/api/follow-ups/:id/topic", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.saveFollowUpTopic(c.req.param("id"), typeof body.topic === "string" ? body.topic : ""));
+  });
+
+  // Interviews: add one by hand, or edit one ({ interviewId? , start, end, timeZone, format, place, people, round, notes };
+  // times are "YYYY-MM-DDTHH:mm" in timeZone), and its calendar file.
+  app.post("/api/applications/:id/interviews", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    const text = (v: unknown) => (typeof v === "string" ? v : null);
+    const format = body.format === "video" || body.format === "phone" || body.format === "onsite" ? body.format : null;
+    return trackerCall(c, () => tracker.setInterview(c.req.param("id"), {
+      interviewId: text(body.interviewId) ?? undefined, start: text(body.start), end: text(body.end), timeZone: text(body.timeZone) ?? "",
+      format, place: text(body.place), people: stringArray(body.people) ?? [], round: text(body.round), notes: text(body.notes),
+    }), body.interviewId ? 200 : 201);
+  });
+  app.get("/api/interviews/:id/ics", async (c) => {
+    const file = await tracker.interviewIcs(c.req.param("id"));
+    if (!file) return c.json({ error: "No such interview with a time" }, 404);
+    return c.body(file.text, 200, {
+      "content-type": "text/calendar; charset=utf-8",
+      "content-disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    });
+  });
+
+  // The prep sheet: GET it ({ sheet: null } until built), POST to build it (once, within the AI budget;
+  // 409 "budget" when it can't), a practised mark ({ practised }) and your own story ({ text }) per question.
+  app.get("/api/applications/:id/prep", async (c) => c.json({ sheet: await tracker.prepSheet(c.req.param("id")) }));
+  app.post("/api/applications/:id/prep", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, async () => ({ sheet: await tracker.buildPrepSheet(c.req.param("id")) }));
+  });
+  app.post("/api/applications/:id/prep/:question/practised", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, async () => ({ sheet: await tracker.markPractised(c.req.param("id"), c.req.param("question"), body.practised === true) }));
+  });
+  app.post("/api/applications/:id/prep/:question/story", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, async () => ({ sheet: await tracker.addPrepStory(c.req.param("id"), c.req.param("question"), typeof body.text === "string" ? body.text : "") }));
+  });
+
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
   // The built UI (pnpm start). In dev, Vite serves the UI and proxies /api here.

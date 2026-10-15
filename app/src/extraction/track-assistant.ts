@@ -3,7 +3,7 @@
 // of an email goes out: sender, subject, date and its text (trimmed); never attachments.
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
-import { emailClassificationSchema, type ClassifyInput, type TrackAssistant } from "@apply-kit/core";
+import { emailClassificationSchema, prepSheetDraftSchema, type ClassifyInput, type PrepSheetInput, type TrackAssistant } from "@apply-kit/core";
 import { DEFAULT_MODEL, DEFAULT_PROVIDERS, providerRouting } from "./openrouter.ts";
 
 /** Prices the estimate assumes (the routing's max price per million tokens), and output limits. */
@@ -21,7 +21,21 @@ const instructions = `You read one email from a job seeker's job mailbox and cla
 - language: the email's ISO 639-1 code, such as "en" or "bg".
 - summary: for an email not in English, one short plain-English line saying what it says; null for English mail.
 - confidence (0 to 1): 0.9+ only when the kind is unmistakable; 0.5-0.7 when you had to interpret; lower when unsure.
-  Be honest: below 0.8 nothing changes without the job seeker confirming.`;
+  Be honest: below 0.8 nothing changes without the job seeker confirming.
+- interview: for an interview-invitation only (null otherwise): what the email states, never guessed.
+  start and end as "YYYY-MM-DDTHH:mm" local to timeZone (resolve "Tuesday" from the email's Date), null when no time
+  is fixed yet; timeZone as an IANA name ("CET" means "Europe/Berlin", "UK time" "Europe/London"), null when not stated;
+  format "video", "phone" or "onsite" or null; place: the call link, phone number or address as written, or null;
+  people: who it is with, as written ("Mara Ivanova, Engineering Manager"); round: which round or stage as written, or null;
+  notes: anything else useful (what to prepare, time-zone remarks), or null.`;
+
+const prepInstructions = `You write a light interview prep sheet as JSON matching the schema, for a job seeker's application. Rules:
+- facts: 3 to 6 short company facts. source "posting" only for what the posting text says, "notes" only for what the
+  job seeker's notes say, "unverified" for anything else you know or believe. Never present a guess as from the posting.
+- questions: 5 to 8 likely interview questions, each tied to one requirement from the posting (requirement as written).
+- storyId: the id of one of the given stories that truly answers the question, or null when none does. Use only the ids
+  given; never invent, merge or stretch a story. A null is fine and honest.
+- Write in the given language.`;
 
 export interface TrackAssistantOptions {
   apiKey: string;
@@ -42,7 +56,33 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
   const tokens = (chars: number) => Math.ceil(chars / 2.5);
   const usd = (prompt: number, completion: number) => (prompt * PRICE.prompt + completion * PRICE.completion) / 1_000_000;
 
+  const prepPromptFor = (input: PrepSheetInput) => JSON.stringify({
+    company: input.company, title: input.title, language: input.language, requirements: input.requirements, notes: input.notes,
+    stories: input.stories.map((s) => ({ id: s.id, text: s.text })), posting: input.postingText,
+  });
+  const PREP_OUTPUT_TOKENS = 1_800;
+
   return {
+    estimatePrepSheetUsd(input) {
+      return usd(tokens(prepInstructions.length + prepPromptFor(input).length + 1_500), PREP_OUTPUT_TOKENS);
+    },
+    async buildPrepSheet(input) {
+      const result = await generateText({
+        model,
+        instructions: prepInstructions,
+        prompt: prepPromptFor(input),
+        output: Output.object({ schema: prepSheetDraftSchema, name: "prep_sheet" }),
+        temperature: 0.2,
+        maxOutputTokens: PREP_OUTPUT_TOKENS,
+        maxRetries: 1,
+        timeout: TIMEOUT_MS * 2,
+      });
+      const reported = (result.providerMetadata?.openrouter as { usage?: { cost?: unknown } } | undefined)?.usage?.cost;
+      const costUsd = typeof reported === "number" && Number.isFinite(reported)
+        ? reported
+        : usd(result.usage.inputTokens ?? 0, result.usage.outputTokens ?? PREP_OUTPUT_TOKENS);
+      return { sheet: result.output, costUsd, model: result.response.modelId || modelId };
+    },
     estimateClassifyUsd(input) {
       return usd(tokens(instructions.length + promptFor(input).length + 1_500), MAX_OUTPUT_TOKENS);
     },

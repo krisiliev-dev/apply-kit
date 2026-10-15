@@ -322,10 +322,33 @@ describe("the Applications routes", () => {
     expect((await s.request(`${at}/skip`, s.json({}))).status).toBe(200);
     expect((await s.request("/api/follow-ups/no-such-id")).status).toBe(404);
 
-    expect(await (await s.request("/api/settings/follow-ups")).json()).toEqual({ nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3 });
+    expect(await (await s.request("/api/settings/follow-ups")).json()).toEqual({ nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3, checkInAfterDays: 7 });
     const put = (body: unknown) => s.request("/api/settings/follow-ups", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     expect((await put({ nudgeAfterDays: 0 })).status).toBe(400);
     expect(await (await put({ nudgeAfterDays: 10, offerNoteAfterDays: 1, snoozeDays: 3 })).json()).toMatchObject({ nudgeAfterDays: 10 });
+  });
+
+  it("takes an interview, gives its .ics, and says the prep sheet can't be built without the AI", async () => {
+    const s = service();
+    const added = await s.request("/api/applications", s.json({ job: { company: "Medora", title: "Full-stack Engineer" }, appliedOn: "2026-09-28", status: "interviewing" }));
+    const { application } = (await added.json()) as { application: { id: string } };
+    const at = `/api/applications/${encodeURIComponent(application.id)}`;
+
+    const bad = await s.request(`${at}/interviews`, s.json({ start: "2026-10-15T14:00", end: "2026-10-15T13:00", timeZone: "Europe/Sofia" }));
+    expect(bad.status).toBe(422);
+    const set = await s.request(`${at}/interviews`, s.json({ start: "2026-10-15T14:00", end: "2026-10-15T15:00", timeZone: "Europe/Sofia", format: "video", people: ["Mara Ivanova"] }));
+    expect(set.status).toBe(201);
+    const { interview } = (await set.json()) as { interview: { id: string } };
+
+    const ics = await s.request(`/api/interviews/${encodeURIComponent(interview.id)}/ics`);
+    expect(ics.headers.get("content-type")).toBe("text/calendar; charset=utf-8");
+    expect(ics.headers.get("content-disposition")).toContain("interview-medora-2026-10-15.ics");
+    expect(await ics.text()).toContain("DTSTART;TZID=Europe/Sofia:20261015T140000");
+
+    expect(await (await s.request(`${at}/prep`)).json()).toEqual({ sheet: null });
+    const build = await s.request(`${at}/prep`, s.json({}));
+    expect(build.status).toBe(409);
+    expect(await build.json()).toMatchObject({ problem: "budget" });
   });
 
   it("gives the Stats strip its numbers", async () => {

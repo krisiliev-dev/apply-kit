@@ -10,7 +10,7 @@ const input = {
   text: "Thank you for applying. We have decided to move forward with other candidates.",
 };
 const classification: EmailClassification = {
-  kind: "rejection", confidence: 0.95, company: "Northwind Labs", jobTitle: "Security Engineer", stage: null, language: "en", summary: null,
+  kind: "rejection", confidence: 0.95, company: "Northwind Labs", jobTitle: "Security Engineer", stage: null, language: "en", summary: null, interview: null,
 };
 
 function fakeOpenRouter(content: string = JSON.stringify(classification)) {
@@ -48,5 +48,27 @@ describe("OpenRouter Track assistant", () => {
     expect(assistant.estimateClassifyUsd(input)).toBeGreaterThan(0.00012);
     expect(api.requests).toHaveLength(0);
     await expect(assistant.classify(input)).rejects.toThrow();
+  });
+
+  it("builds a prep sheet from the posting, notes and stories it is given, sending story ids and texts but nothing else of the profile", async () => {
+    const sheet = {
+      facts: [{ text: "Booking software for private clinics.", source: "posting" }],
+      questions: [{ requirement: "TypeScript", question: "Walk me through a codebase you made safer.", storyId: "piece-ts" }],
+    };
+    const api = fakeOpenRouter(JSON.stringify(sheet));
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
+    const prep = {
+      company: "Medora", title: "Full-stack Engineer", postingText: "Booking software for private clinics.\nTypeScript, 2+ years.",
+      requirements: [{ text: "TypeScript, 2+ years", kind: "required" as const }], notes: ["Liked the salary range."],
+      stories: [{ id: "piece-ts", text: "Moved 40k lines to strict TypeScript", where: "Velora · 2023" }], language: "en",
+    };
+
+    expect(assistant.estimatePrepSheetUsd(prep)).toBeGreaterThan(0);
+    const result = await assistant.buildPrepSheet(prep);
+
+    expect(result).toEqual({ sheet, costUsd: 0.00012, model: "deepseek/deepseek-v4.1-flash" });
+    const sent = JSON.stringify(api.requests[0]!.messages);
+    expect(sent).toContain("piece-ts");
+    expect(sent).toContain("Moved 40k lines to strict TypeScript");
   });
 });
