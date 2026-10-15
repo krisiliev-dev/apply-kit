@@ -10,7 +10,7 @@ let next = 0;
 function piece(p: Partial<ProfilePiece> & Pick<ProfilePiece, "kind">): ProfilePiece {
   return {
     id: `piece:${++next}`, text: "", entry: null, belongsTo: null, tags: [], angles: [], numberSource: null,
-    status: "confirmed", source: { from: "Added in Profile", quote: null }, createdAt: now.toISOString(), updatedAt: now.toISOString(),
+    status: "confirmed", source: { from: "Added in Profile", quote: null }, alsoFrom: [], checkThis: false, createdAt: now.toISOString(), updatedAt: now.toISOString(),
     ...p,
   };
 }

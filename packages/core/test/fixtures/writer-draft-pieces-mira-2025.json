@@ -1,0 +1,9 @@
+{
+  "pieces": [
+    { "kind": "role", "text": "", "quote": "Security Analyst, Northwind Bank, Sofia, Mar 2022 – present", "entry": { "title": "Security Analyst", "organisation": "Northwind Bank", "city": "Sofia", "start": "2022-03", "end": null }, "role": null },
+    { "kind": "achievement", "text": "Cut false positives by about a third by tuning Splunk detection rules.", "quote": "Cut false positives by about a third by tuning Splunk detection rules.", "entry": null, "role": 0 },
+    { "kind": "achievement", "text": "Wrote the phishing runbook the SOC uses for every reported email.", "quote": "Wrote the phishing runbook the SOC uses for every reported email.", "entry": null, "role": 0 },
+    { "kind": "skill", "text": "Splunk", "quote": "Splunk, Python, incident response", "entry": null, "role": null },
+    { "kind": "skill", "text": "Python", "quote": "Splunk, Python, incident response", "entry": null, "role": null }
+  ]
+}

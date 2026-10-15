@@ -57,6 +57,10 @@ export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedT
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft } from "./preparation/engine.ts";
 export type { ProfileExport } from "./preparation/engine.ts";
+export type {
+  ImportFile, ImportInput, ImportInputProblem, ImportField, ImportItem, ImportItemState, ImportMerge, ImportProblem, ImportRun, ImportSource,
+  ImportStatus, ImportFileType, ResolveResult, StartImportResult, UnreadableAction, UnreadableChoice, UnreadableReason,
+} from "./preparation/import.ts";
 export { pieceKinds, numberSources, entryLabel, unattachedGroupLabel, maxAchievementLength } from "./preparation/profile.ts";
 export type {
   ProfilePiece, PieceKind, PieceStatus, NumberSource, PieceEntry, PieceSource, PieceInput, PieceOrigin, PieceField, PieceFix,
@@ -72,7 +76,7 @@ export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleRes
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
-  PdfTextReader, PdfText, FileStore, StoredFile, PackageFolder,
+  PdfTextReader, PdfText, FileStore, StoredFile, PackageFolder, TextRecognizer,
 } from "./preparation/ports.ts";
 export type {
   CvContent, CvRole, CvEducation, LetterContent, Letterhead, DocumentDate, MonthYear, DocumentPhoto,

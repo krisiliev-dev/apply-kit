@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import {
   createAiBudget, createEngine, createPreparationEngine, draftedPiecesSchema,
   type AiBudget, type DiscoveryEngine, type DocumentRenderer, type DraftedPieces, type EngineDeps, type FileStore,
-  type ImportedText, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type Writer, type WriterRequest,
+  type ImportedText, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type TextRecognizer, type Writer, type WriterRequest,
 } from "../src/index.ts";
 import { fakeClock, fakeExtractor, fixtureFetch, loadFixture, memoryDb, type FakeClock, type FakeExtractor } from "./harness.ts";
 
@@ -15,7 +15,7 @@ export const recordedDraftPieces: DraftedPieces = draftedPiecesSchema.parse(JSON
 
 /** A recorded output per task, or an error to throw (it may carry a billed `costUsd`). */
 export interface RecordedOutputs {
-  draftPieces?: DraftedPieces | Error | ((input: ImportedText) => DraftedPieces);
+  draftPieces?: DraftedPieces | Error | ((input: ImportedText) => DraftedPieces | Error | Promise<DraftedPieces | Error>);
 }
 
 export interface FakeWriter extends Writer {
@@ -32,8 +32,8 @@ export function fakeWriter(
   { costUsd = 0.002, estimateUsd = costUsd }: { costUsd?: number; estimateUsd?: number } = {},
 ): FakeWriter {
   const calls: WriterRequest[] = [];
-  const answer = <I, O>(given: O | Error | ((input: I) => O) | undefined, fallback: O, input: I) => {
-    const out = typeof given === "function" ? (given as (input: I) => O)(input) : (given ?? fallback);
+  const answer = async <I, O>(given: O | Error | ((input: I) => O | Error | Promise<O | Error>) | undefined, fallback: O, input: I) => {
+    const out = typeof given === "function" ? await (given as (input: I) => O | Error | Promise<O | Error>)(input) : (given ?? fallback);
     if (out instanceof Error) throw out;
     return { output: out, costUsd, model: "fake/writer", excerpts: [] };
   };
@@ -96,6 +96,20 @@ export function fakeRenderer(layout: (doc: Parameters<DocumentRenderer["render"]
   };
 }
 
+/** A PDF stand-in with a text layer holding these lines per page, as the fake reader reads it. */
+export function fakePdf(pages: string[][]): Uint8Array {
+  return new TextEncoder().encode(fakePdfMagic + JSON.stringify({ pages: pages.map((lines) => ({ lines })) }));
+}
+
+/** A scanned PDF: pages that are pictures, so the reader finds no text layer. */
+export const scannedPdf = new TextEncoder().encode("%PDF-1.7\n% scanned pages, images only\n");
+
+/** Text recognition that "reads" a scan as these lines (one page), recording each scan it was given. */
+export function fakeRecognizer(lines: string[]): TextRecognizer & { scans: Uint8Array[] } {
+  const scans: Uint8Array[] = [];
+  return { scans, async recognise(pdf) { scans.push(pdf); return { pages: [{ lines }] }; } };
+}
+
 /** Reads the fake renderer's stand-ins back; any other bytes read as a PDF with no text layer (a scan). */
 export function fakePdfReader(): PdfTextReader {
   return {
@@ -138,6 +152,7 @@ export function createTestPreparation(options: TestPreparationOptions = {}): Tes
     pdfReader: fakePdfReader(),
     files: memoryFileStore(),
     packages: memoryPackageFolder(),
+    fetch,
     ...overrides,
   };
   const discoveryDeps: EngineDeps = {
