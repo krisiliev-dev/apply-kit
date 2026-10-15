@@ -29,6 +29,15 @@ export const emailClassificationSchema = z.object({
   language: z.string(),
   /** A one-line English summary for an email not in English; null for English mail. */
   summary: z.string().nullable(),
+  /** For an offer: its details as the email states them (null where it doesn't); null or absent otherwise. */
+  offer: z.object({
+    baseSalary: z.string().nullable(),
+    /** YYYY-MM-DD. */
+    startDate: z.string().nullable(),
+    workPattern: z.string().nullable(),
+    contract: z.string().nullable(),
+    other: z.string().nullable(),
+  }).nullish(),
 });
 export type EmailClassification = z.infer<typeof emailClassificationSchema>;
 

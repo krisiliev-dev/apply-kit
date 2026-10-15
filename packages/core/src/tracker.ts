@@ -266,6 +266,32 @@ export interface AttachCvInput {
 /** The largest CV PDF taken: 10 MB. */
 export const maxCvBytes = 10 * 1024 * 1024;
 
+/** An offer's facts, as the offer email states them or as the user saved them; null where unknown. */
+export interface OfferDetails {
+  /** As written ("€3,100 gross / month"). */
+  baseSalary: string | null;
+  /** YYYY-MM-DD. */
+  startDate: string | null;
+  workPattern: string | null;
+  contract: string | null;
+  other: string | null;
+}
+
+/** The offer on an Application's page: its details, where they came from, and the salary against the floor. */
+export interface OfferView {
+  details: OfferDetails;
+  /** "email" while pre-filled from the offer email, "you" once saved; null while there are none. */
+  from: "email" | "you" | null;
+  /** The latest offer email matched here (its letter kept as an attachment), or null. */
+  email: MatchedEmail | null;
+  /**
+   * The base salary per month in euros against the floor (the lowest acceptable monthly salary in
+   * Search settings); `unknown` when the salary can't be read as euros or leva per month or year.
+   * Null when there's no floor.
+   */
+  floor: { floorEur: number; monthlyEur: number | null; verdict: "above" | "at" | "below" | "unknown" } | null;
+}
+
 /** One Application in full, as its page shows it. */
 export interface ApplicationDetail extends ApplicationSummary {
   /** When it got its current Status (the Event still standing that set it). */
@@ -288,6 +314,8 @@ export interface ApplicationDetail extends ApplicationSummary {
   movedByEmail: MovedByEmail | null;
   /** Why it is closed, when the Status change said ("declined offer", "accepted another offer"); else null. */
   closedReason: string | null;
+  /** The offer, while at Offer or Accepted (or once it has details); else null. */
+  offer: OfferView | null;
 }
 
 /** What the user gives "Add application". */
@@ -611,6 +639,8 @@ export interface Tracker {
   declineOffer(applicationId: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent }>;
   /** The optional reply declining an Application's offer: drafted in the user's voice, never due. Throws a TrackerError when refused. */
   declineDraft(applicationId: string): Promise<FollowUpDraft>;
+  /** Saves the offer's details as the user checked them (empty fields are unknown). Throws a TrackerError when refused. */
+  saveOfferDetails(applicationId: string, details: Partial<OfferDetails>): Promise<{ offer: OfferView }>;
   /**
    * Classifies and matches every stored email not decided yet (run after each mailbox read; the
    * engine passes what it just stored). A confident unique match of a Status-changing kind moves the
@@ -638,8 +668,8 @@ export interface Tracker {
 export interface TrackerDeps {
   db: SqlDatabase;
   clock: Clock;
-  /** Discover: Jobs are read and pasted links added through it. */
-  discovery: Pick<DiscoveryEngine, "addJobLink" | "getJob">;
+  /** Discover: Jobs are read and pasted links added through it; its Search settings hold the salary floor. */
+  discovery: Pick<DiscoveryEngine, "addJobLink" | "getJob"> & Partial<Pick<DiscoveryEngine, "getSearchSettings">>;
   /** Reads emails (classify). Without it every email is matched on rules alone. */
   assistant?: TrackAssistant;
   /** The monthly AI cap shared with Discover (AI_MONTHLY_CAP_USD). Unset or 0 means no AI spending. */
@@ -1087,6 +1117,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing), nextStep: nextStepOf(app, standing, followUp), followUp, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
       closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
+      offer: await offerOf(app),
     };
   }
 
@@ -1344,6 +1375,65 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       r = db.prepare("SELECT * FROM follow_up WHERE id = ?").get(id)!;
     }
     return (await followUpDraft(String(r.id)))!;
+  }
+
+  /** An offer email's details pre-fill the Application's, unless the user saved their own. */
+  function prefillOffer(applicationId: string, emailId: string) {
+    const offer = str(db.prepare("SELECT offer FROM email_classification WHERE email_id = ?").get(emailId)?.offer);
+    if (!offer) return;
+    const d = JSON.parse(offer) as OfferDetails;
+    db.prepare(
+      `INSERT INTO offer_details (application_id, base_salary, start_date, work_pattern, contract, other, from_email, saved_by, saved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'email', ?)
+       ON CONFLICT (application_id) DO UPDATE SET base_salary = excluded.base_salary, start_date = excluded.start_date, work_pattern = excluded.work_pattern,
+         contract = excluded.contract, other = excluded.other, from_email = excluded.from_email, saved_at = excluded.saved_at
+       WHERE offer_details.saved_by = 'email'`,
+    ).run(applicationId, d.baseSalary, /^\d{4}-\d{2}-\d{2}$/.test(d.startDate ?? "") ? d.startDate : null, d.workPattern, d.contract, d.other, emailId, now());
+  }
+
+  async function offerOf(app: ApplicationSummary): Promise<OfferView | null> {
+    const r = db.prepare("SELECT * FROM offer_details WHERE application_id = ?").get(app.id);
+    if (!r && app.status !== "offer" && app.status !== "accepted") return null;
+    const details: OfferDetails = {
+      baseSalary: str(r?.base_salary), startDate: str(r?.start_date), workPattern: str(r?.work_pattern), contract: str(r?.contract), other: str(r?.other),
+    };
+    const latest = db.prepare(
+      "SELECT email_id FROM application_event WHERE application_id = ? AND kind = 'email' AND email_kind = 'offer' AND undone_at IS NULL ORDER BY at DESC, rowid DESC LIMIT 1",
+    ).get(app.id);
+    const floorEur = (await discovery.getSearchSettings?.())?.minMonthlySalaryEur ?? 0;
+    const monthlyEur = monthlyEurOf(details.baseSalary);
+    return {
+      details, from: r ? (r.saved_by === "you" ? "you" : "email") : null,
+      email: latest?.email_id ? matchedEmail(String(latest.email_id)) : null,
+      floor: floorEur > 0
+        ? { floorEur, monthlyEur, verdict: monthlyEur === null ? "unknown" : monthlyEur > floorEur ? "above" : monthlyEur < floorEur ? "below" : "at" }
+        : null,
+    };
+  }
+
+  async function saveOfferDetails(applicationId: string, input: Partial<OfferDetails>) {
+    const app = summary(applicationId);
+    if (!app) throw new TrackerError("not-found", "There's no such Application.");
+    const r = db.prepare("SELECT * FROM offer_details WHERE application_id = ?").get(applicationId);
+    const field = (k: keyof OfferDetails, col: string): string | null => {
+      if (!(k in input) || input[k] === undefined) return str(r?.[col]);
+      const v = typeof input[k] === "string" ? input[k].trim().slice(0, 400) : "";
+      return v || null;
+    };
+    const d: OfferDetails = {
+      baseSalary: field("baseSalary", "base_salary"), startDate: field("startDate", "start_date"), workPattern: field("workPattern", "work_pattern"),
+      contract: field("contract", "contract"), other: field("other", "other"),
+    };
+    if (d.startDate && (!/^\d{4}-\d{2}-\d{2}$/.test(d.startDate) || Number.isNaN(Date.parse(d.startDate)))) {
+      throw new TrackerError("invalid", "Enter the start date as a date, or leave it empty.", applicationId);
+    }
+    db.prepare(
+      `INSERT INTO offer_details (application_id, base_salary, start_date, work_pattern, contract, other, from_email, saved_by, saved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'you', ?)
+       ON CONFLICT (application_id) DO UPDATE SET base_salary = excluded.base_salary, start_date = excluded.start_date, work_pattern = excluded.work_pattern,
+         contract = excluded.contract, other = excluded.other, saved_by = 'you', saved_at = excluded.saved_at`,
+    ).run(applicationId, d.baseSalary, d.startDate, d.workPattern, d.contract, d.other, str(r?.from_email), now());
+    return { offer: (await offerOf(app))! };
   }
 
   async function needsYou(): Promise<NeedsYou> {
@@ -1698,6 +1788,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       applicationId, kind: "email", cause, from: moves ? from : null, to: moves ? target : null, text, undoes: null,
       emailId: m.id, emailKind: kind,
     });
+    if (kind === "offer") prefillOffer(applicationId, m.id);
     return { event, moved: moves };
   }
 
@@ -1757,9 +1848,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
     const { c, by, model } = await classify(m);
     db.prepare(
-      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    ).run(m.id, by, c?.kind ?? null, c?.confidence ?? null, c?.company ?? null, c?.jobTitle ?? null, c?.stage ?? null, c?.language ?? null, c?.summary ?? null, model, now());
+      `INSERT OR REPLACE INTO email_classification (email_id, by, kind, confidence, company, job_title, stage, language, summary, model, classified_at, offer)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      m.id, by, c?.kind ?? null, c?.confidence ?? null, c?.company ?? null, c?.jobTitle ?? null, c?.stage ?? null, c?.language ?? null, c?.summary ?? null, model, now(),
+      c?.kind === "offer" && c.offer ? JSON.stringify(c.offer) : null,
+    );
 
     const candidates = signalsFor(m, c);
     const match = uniqueMatch(candidates);
@@ -2013,6 +2107,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     withdrawals: async () => withdrawalList(),
     declineOffer,
     declineDraft,
+    saveOfferDetails,
     processMail,
     emailsToMatch,
     answerEmail,
@@ -2069,6 +2164,31 @@ const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 function dayName(day: string): string {
   const [y, m, d] = day.split("-").map(Number);
   return `${d} ${months[m! - 1]} ${y}`;
+}
+
+/** Leva per euro (the fixed rate). */
+const bgnPerEur = 1.95583;
+
+/**
+ * A salary as written, per month in euros: "€3,100 gross / month" is 3100, "€30,000 a year" is 2500,
+ * "4,000 лв." is 2045. The lowest figure of a range. Null when it has no figure, or its currency (euros
+ * or leva) or its period (a month unless it says a year) can't be told.
+ */
+export function monthlyEurOf(text: string | null): number | null {
+  if (!text) return null;
+  const t = text.toLowerCase();
+  const figure = t.match(/\d[\d\s.,']*(?:\s?k\b)?/)?.[0]?.trim();
+  if (!figure) return null;
+  let digits = figure.replace(/\s?k$/, "").replace(/[\s']/g, "").replace(/[.,]$/, "");
+  if (/^\d{1,3}([.,]\d{3})+$/.test(digits)) digits = digits.replace(/[.,]/g, "");
+  else digits = digits.replace(",", ".");
+  let amount = Number(digits) * (/k$/.test(figure) ? 1000 : 1);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  if (/€|\beur|euro/.test(t)) { /* euros */ } else if (/лв|\bbgn\b|лева/.test(t)) amount /= bgnPerEur;
+  else return null;
+  if (/hour|час/.test(t)) return null;
+  if (/year|annual|\bp\.?\s?a\b|годишн|на година/.test(t)) amount /= 12;
+  return Math.round(amount);
 }
 
 /** A contact address or domain, normalised; "invalid" when it is neither; null when empty. */

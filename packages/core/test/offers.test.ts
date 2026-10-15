@@ -6,8 +6,10 @@
 // clock (Mon 12 Oct 2026, 10:30 in Sofia), in-memory database, a fake Track assistant answering with
 // recorded drafts, no live AI and no mailbox.
 import { describe, expect, it } from "vitest";
-import { createTracker, type DraftInput, type Status, type TrackAssistant, type Tracker } from "../src/index.ts";
-import { createTestEngine } from "./harness.ts";
+import {
+  createTracker, defaultSearchSettings, type DraftInput, type EmailClassification, type Status, type TrackAssistant, type Tracker,
+} from "../src/index.ts";
+import { createTestEngine, fakeClock, fakeMailbox, mailMessage } from "./harness.ts";
 
 const withdrawalBody = "Thank you for the time your team has given me. I've accepted another offer, so I'd like to withdraw from the process. I enjoyed our conversations and hope our paths cross again.";
 
@@ -205,5 +207,72 @@ describe("declining an offer", () => {
     // Never a Needs-you item, and declining doesn't need it sent.
     expect((await s.tracker.needsYou()).items.some((i) => i.followUp.kind === "decline")).toBe(false);
     await expect(s.tracker.markFollowUpSent(d.followUp.id)).rejects.toMatchObject({ problem: "invalid" });
+  });
+});
+
+describe("offer details", () => {
+  /** The offer letter from Ardent Labs (made up), as the Track assistant reads it. */
+  const offerEmail = mailMessage({
+    id: "<offer-1@ardentlabs.example>", from: "Lea Hristova <lea.hristova@ardentlabs.example>", to: ["sample.jobs@example.com"],
+    subject: "Your offer: Detection Engineer", receivedAt: "2026-10-12T09:40:00Z",
+    text: "Dear Alex, we're delighted to offer you the Detection Engineer role. Base salary €3,100 gross per month, starting 1 December. Hybrid, 2 days a week in our Sofia office. Permanent contract with a 6-month probation. The full letter is attached; please reply by 6 November.",
+    attachments: [{ name: "offer-letter.pdf", type: "application/pdf" }],
+  });
+  const reading: EmailClassification = {
+    kind: "offer", confidence: 0.95, company: "Ardent Labs", jobTitle: "Detection Engineer", stage: null, language: "en", summary: null,
+    offer: { baseSalary: "€3,100 gross / month", startDate: "2026-12-01", workPattern: "Hybrid, 2 days a week in the Sofia office", contract: "Permanent, 6-month probation", other: "Reply by 6 November" },
+  };
+
+  /** Discover and Track on one database, with one mailbox read per check and a salary floor of €2,450 a month. */
+  function withMail() {
+    const clock = fakeClock();
+    const mailbox = fakeMailbox(clock);
+    const assistant: TrackAssistant = {
+      estimateClassifyUsd: () => 0.0005,
+      classify: async () => ({ classification: reading, costUsd: 0.0005, model: "fake/track-assistant" }),
+      estimateDraftUsd: () => 0.002,
+      draft: async () => { throw new Error("no drafts here"); },
+    };
+    let tracker: Tracker | null = null;
+    const t = createTestEngine({
+      clock, mailReader: mailbox, aiMonthlyCapUsd: 10, searchSettings: { ...defaultSearchSettings, minMonthlySalaryEur: 2450 },
+      onMailStored: (emails) => tracker!.processMail(emails),
+    });
+    tracker = createTracker({ db: t.deps.db, clock, discovery: t.engine, assistant, aiMonthlyCapUsd: 10 });
+    return { ...t, tracker, mailbox };
+  }
+
+  it("are pre-filled from the offer email that moved it to Offer, and the base salary is compared with the floor", async () => {
+    const s = withMail();
+    const r = await s.tracker.addByHand({ job: { company: "Ardent Labs", title: "Detection Engineer" }, appliedOn: "2026-10-01", status: "interviewing", contact: "ardentlabs.example" });
+    const id = r.outcome === "added" ? r.application.id : "";
+    s.mailbox.deliver(offerEmail);
+    await s.clock.advance(4 * 60 * 60_000);
+    await s.engine.checkAll();
+
+    const app = (await s.tracker.get(id))!;
+
+    expect(app.status).toBe("offer");
+    expect(app.offer).toMatchObject({
+      details: reading.offer, from: "email",
+      email: { subject: "Your offer: Detection Engineer", attachments: [{ name: "offer-letter.pdf" }] },
+      floor: { floorEur: 2450, monthlyEur: 3100, verdict: "above" },
+    });
+  });
+
+  it("are the user's once saved: edited, compared again (a yearly or BGN salary per month in euros)", async () => {
+    const s = withMail();
+    const r = await s.tracker.addByHand({ job: { company: "Ardent Labs", title: "Detection Engineer" }, appliedOn: "2026-10-01", status: "offer" });
+    const id = r.outcome === "added" ? r.application.id : "";
+    expect((await s.tracker.get(id))!.offer).toMatchObject({ from: null, details: { baseSalary: null }, floor: { floorEur: 2450, monthlyEur: null, verdict: "unknown" } });
+
+    const saved = await s.tracker.saveOfferDetails(id, { baseSalary: "4,000 лв. gross / month", startDate: "2026-12-01", workPattern: " On-site ", contract: "", other: null });
+
+    expect(saved.offer).toMatchObject({
+      from: "you", details: { baseSalary: "4,000 лв. gross / month", startDate: "2026-12-01", workPattern: "On-site", contract: null, other: null },
+      floor: { monthlyEur: 2045, verdict: "below" },
+    });
+    expect((await s.tracker.saveOfferDetails(id, { baseSalary: "€30,000 a year" })).offer.floor).toMatchObject({ monthlyEur: 2500, verdict: "above" });
+    await expect(s.tracker.saveOfferDetails(id, { startDate: "next spring" })).rejects.toMatchObject({ problem: "invalid" });
   });
 });
