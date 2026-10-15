@@ -1102,7 +1102,9 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     db.prepare("UPDATE package SET cv_draft = ? WHERE id = ?").run(JSON.stringify(cv), id);
   }
 
-  const cvDraftView = ({ text: _text, document: _document, ...view }: CvDraftStored): CvDraftView => view;
+  const cvDraftView = (d: CvDraftStored): CvDraftView => ({
+    fileName: d.fileName, path: d.path, sha256: d.sha256, size: d.size, pages: d.pages, overflow: d.overflow, ats: d.ats, language: d.language, photo: d.photo,
+  });
 
   /** The ATS check over the CV's PDF as read back, with the posting keywords as Kris's decisions stand now. */
   function atsCheckOf(r: Row): AtsCheck | null {
@@ -2041,8 +2043,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     }
     if (fix.updateProfile) {
       const c = deps.contact();
-      const { photo: _photo, ...details } = c;
-      const saved = deps.saveContact({ ...details, ...values });
+      const saved = deps.saveContact({ nameLatin: c.nameLatin, nameCyrillic: c.nameCyrillic, email: c.email, phone: c.phone, city: c.city, country: c.country, links: c.links, ...values });
       if (!saved.saved) return refuse(saved.problems[0]!.message);
     } else {
       db.prepare("UPDATE package SET contact_fix = ? WHERE id = ?").run(JSON.stringify({ ...r.contactFix, ...values }), id);

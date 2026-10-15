@@ -598,7 +598,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
           linkedin: link(/linkedin\.com/i), github: link(/github\.com/i), portfolio: c.links.find((l) => !/linkedin\.com|github\.com/i.test(l)) ?? null,
         },
         roles: entries("role").map(({ text, ...e }) => ({ ...e, description: text })),
-        education: entries("education").map(({ text: _text, ...e }) => ({ ...e, field: null })),
+        education: entries("education").map((e) => ({ title: e.title, organisation: e.organisation, place: e.place, start: e.start, end: e.end, field: null })),
         skills: pieces.filter((p) => p.kind === "skill").map((p) => p.text),
       };
     },
