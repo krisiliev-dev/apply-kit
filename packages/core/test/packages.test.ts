@@ -234,15 +234,15 @@ describe("the target posting and the language", () => {
     expect(t.preparation.setTargetPosting(pkg.id, "posting-elsewhere")).toMatchObject({ changed: false, reason: "That posting isn't one of this job's." });
   });
 
-  it("switching the language prints the CV again in that language, without the model", async () => {
+  it("switching the language writes the CV again in that language, with the name as stored in Cyrillic (#68)", async () => {
     const writer = fakeWriter();
     const u = miraProfile({ writer });
     const pkg = await started(u);
 
-    const switched = await u.preparation.setPackageLanguage(pkg.id, "bg");
+    await u.preparation.setPackageLanguage(pkg.id, "bg");
 
-    expect(switched).toMatchObject({ changed: true, package: { language: "bg", postingLanguage: "en", cv: { language: "bg" } } });
-    expect(writer.calls.filter((c) => c.task === "tailor-cv")).toHaveLength(1);
+    expect(await u.preparation.packageSettled(pkg.id)).toMatchObject({ language: "bg", postingLanguage: "en", cv: { language: "bg" } });
+    expect(writer.calls.filter((c) => c.task === "tailor-cv").map((c) => (c.input as { language: string }).language)).toEqual(["en", "bg"]);
     expect(new TextDecoder().decode((await u.preparation.packageCv(pkg.id))!.pdf)).toContain("Мира Петрова");
   });
 });

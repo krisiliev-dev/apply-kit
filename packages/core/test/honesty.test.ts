@@ -204,3 +204,33 @@ describe("skills and evidence", () => {
     expect(v.skills).toEqual(["draft"]);
   });
 });
+
+describe("every refused line, in full (for the tailoring evaluation, #69)", () => {
+  it("lists each line the hard rules refused, where it was and why, word for word", () => {
+    const long = "Wrote 45 detection rules in Splunk that cut false alerts across the whole bank by about a third";
+    const v = validateCv(output({
+      summary: line("Security analyst with 9 years of SIEM work.", ["detections"]),
+      roles: [
+        analystRole([line(long, ["detections"]), line("Wrote Python scripts to enrich alerts with owner data", ["scripts"]), line("Hardened the mail gateway", [])], { title: "Senior Security Analyst" }),
+        { pieceId: "role-x", title: "SOC Lead", employer: "Globex Security", start: "2020-01", end: "2021-01", bullets: [], why: "" },
+      ],
+      skills: [{ text: "Splunk", pieceIds: [] }],
+    }), profile);
+
+    expect(v.rejected).toEqual([
+      { where: "Role", line: "Senior Security Analyst · Northwind Bank, 2022-03 – present", problems: ["changes the title"] },
+      { where: "Bullet under Northwind Bank", line: long, problems: ["names \"Splunk\", which isn't in your profile", "says \"45\", which its piece doesn't back"] },
+      { where: "Bullet under Northwind Bank", line: "Wrote Python scripts to enrich alerts with owner data", problems: ["puts it under a role it isn't from"] },
+      { where: "Bullet under Northwind Bank", line: "Hardened the mail gateway", problems: ["cites no piece from your profile"] },
+      { where: "Role", line: "SOC Lead · Globex Security, 2020-01 – 2021-01", problems: ["lists a role that isn't in your profile"] },
+      { where: "Summary", line: "Security analyst with 9 years of SIEM work.", problems: ["says \"9 years\", which its piece doesn't back"] },
+      { where: "Skills", line: "Splunk", problems: ["lists a skill that isn't in your profile"] },
+    ]);
+  });
+
+  it("refuses nothing in a draft that keeps to the profile; a stronger wording held back isn't a refusal", () => {
+    const v = validateCv(output({ roles: [analystRole([line("Led detection engineering, cutting false alerts by about a third", ["detections"], "stronger")])] }), profile);
+    expect(v.heldBack).toBe(1);
+    expect(v.rejected).toEqual([]);
+  });
+});

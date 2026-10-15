@@ -346,7 +346,7 @@ describe("when the form or the model isn't there", () => {
     const pkg = await started(u, kestrelJob({ packageLanguage: "bg" }));
 
     expect(question(pkg, "Describe a security incident")).toMatchObject({
-      origin: "translated", label: "Translated · check it", needsYou: true, text: "Ръководих реакцията при фишинг кампания срещу екипа по искове.",
+      origin: "translated", label: "Answer bank · translated", needsYou: true, text: "Ръководих реакцията при фишинг кампания срещу екипа по искове.",
       note: "Translated from your English answer: check it, then confirm.",
     });
     const sent = u.writer.calls.filter((c) => c.task === "draft-answer").map((c) => c.input as DraftAnswerInput).find((i) => i.translate)!;

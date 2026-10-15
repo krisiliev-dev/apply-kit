@@ -24,7 +24,8 @@ function fieldsInOrder(c: CvContent, language: DocumentLanguage): string[] {
   };
   return [
     h.name, h.headline, h.location!, h.email, h.phone!, ...h.links,
-    ...cvSections.flatMap((s) => [titles[s], ...sections[s]]),
+    // The template leaves an empty section out.
+    ...cvSections.filter((s) => sections[s].some(Boolean)).flatMap((s) => [titles[s], ...sections[s]]),
   ];
 }
 
@@ -61,6 +62,37 @@ describe.skipIf(!available)("the CV template printed by Chromium", () => {
     expect(pages).toBe(1);
     expect(outOfOrder(text, fieldsInOrder(doc.content, doc.language))).toEqual([]);
     const fileName = documentFileName("cv", { name: "Nia Koleva", company: "Kestrel Payments", role: "Security Engineer" });
+    expect(checkAts({ text, document: doc, fileName }).checks.filter((c) => !c.passed)).toEqual([]);
+  }, 30_000);
+
+  it("prints a Bulgarian package's CV (#68): Bulgarian lines with Latin names, the Cyrillic name, MM.YYYY and \"досега\", tagged bg", async () => {
+    // The CV a Bulgarian package prints for a made-up profile: roles and skills as stored, no languages section.
+    const doc: Extract<DocumentToRender, { kind: "cv" }> = {
+      kind: "cv", language: "bg", title: "Мира Петрова · CV · Vitosha Pay",
+      content: {
+        letterhead: { name: "Мира Петрова", headline: "Security Analyst", location: "Sofia, Bulgaria", email: "mira.petrova@example.com", phone: "+359 88 000 0175", links: ["linkedin.com/in/mira-petrova-example"] },
+        summary: "Анализатор по сигурност в банка, който пише правила за откриване в SIEM и провежда реакцията при инциденти.",
+        experience: [{
+          title: "Security Analyst", employer: "Northwind Bank", place: "Sofia", start: { year: 2022, month: 3 }, end: "present",
+          bullets: ["Проведох реакцията при фишинг кампания срещу екипа по искове", "Написах 30 правила за откриване, които намалиха фалшивите сигнали с една четвърт"],
+        }],
+        skills: ["Wazuh", "Splunk (SPL)", "Python"],
+        education: [{ degree: "BSc Computer Science", school: "Danube Institute of Technology", start: { year: 2018, month: 9 }, end: { year: 2022, month: 6 } }],
+        languagesAndCourses: [],
+      },
+    };
+
+    const { pdf, pages } = await renderer.render(doc);
+    const text = await readPdfText(pdf);
+
+    expect(pages).toBe(1);
+    expect(outOfOrder(text, fieldsInOrder(doc.content, "bg"))).toEqual([]);
+    const lines = text.pages.flatMap((p) => p.lines).join("\n");
+    expect(lines).toContain("03.2022 – досега");
+    expect(lines).not.toMatch(/Summary|Experience|Skills|Education|present/);
+    expect(latin1(pdf)).toMatch(/\/Lang\s*\(bg\)/);
+    const fileName = documentFileName("cv", { name: "Mira Petrova", company: "Vitosha Pay", role: "Анализатор по информационна сигурност" });
+    expect(fileName).toBe("Mira_Petrova_CV_Vitosha_Pay_Analizator_po_informatsionna_sigurnost.pdf");
     expect(checkAts({ text, document: doc, fileName }).checks.filter((c) => !c.passed)).toEqual([]);
   }, 30_000);
 

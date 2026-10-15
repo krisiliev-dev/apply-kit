@@ -1,0 +1,36 @@
+{
+  "id": "alex-developer",
+  "fictional": true,
+  "about": "Made-up junior developer: a final-year student with one internship and side projects.",
+  "contact": {
+    "nameLatin": "Alex Doe", "nameCyrillic": "Алекс Доу", "email": "alex.doe@example.com", "phone": "+359 88 000 0142",
+    "city": "Plovdiv", "country": "Bulgaria", "links": ["https://alex-doe.example.com"]
+  },
+  "angles": [
+    { "angle": "developer", "summary": "Final-year computer science student who builds small web services in TypeScript and Python." }
+  ],
+  "pieces": [
+    { "key": "intern", "kind": "role", "text": "Backend internship on the dispatch team.", "entry": { "title": "Software Engineering Intern", "organisation": "Maritsa Logistics", "city": "Plovdiv", "start": "2025-07", "end": "2025-09" }, "tags": ["backend"], "angles": ["developer"] },
+    { "key": "endpoint", "kind": "achievement", "text": "Added a REST endpoint in Express that lets dispatchers search shipments by customer.", "belongsTo": "intern", "tags": ["Node.js", "REST", "web services"], "angles": ["developer"] },
+    { "key": "index", "kind": "achievement", "text": "Added an index to the shipments table in PostgreSQL that brought the search from about 4 seconds to under 1.", "belongsTo": "intern", "tags": ["SQL", "databases"], "angles": ["developer"], "numberSource": "measured" },
+    { "key": "tests", "kind": "achievement", "text": "Wrote integration tests for the endpoint with Jest.", "belongsTo": "intern", "tags": ["testing"], "angles": ["developer"] },
+    { "key": "tutor", "kind": "role", "text": "Part-time teaching assistant for the first-year programming course.", "entry": { "title": "Teaching Assistant", "organisation": "Plovdiv University of Technology", "city": "Plovdiv", "start": "2024-10", "end": null }, "angles": ["developer"] },
+    { "key": "labs", "kind": "achievement", "text": "Runs weekly labs for a group of 25 students on C basics.", "belongsTo": "tutor", "tags": ["teaching", "C"], "angles": ["developer"], "numberSource": "measured" },
+    { "key": "degree", "kind": "education", "text": "", "entry": { "title": "BSc Software Engineering", "organisation": "Plovdiv University of Technology", "city": "Plovdiv", "start": "2022-09", "end": null }, "angles": ["developer"] },
+    { "key": "project", "kind": "achievement", "text": "Built a React app for booking study rooms, used by about 200 students in its first term.", "belongsTo": "degree", "tags": ["React", "TypeScript", "frontend"], "angles": ["developer"], "numberSource": "estimate" },
+    { "key": "typescript", "kind": "skill", "text": "TypeScript", "tags": ["JavaScript"], "angles": ["developer"] },
+    { "key": "javascript", "kind": "skill", "text": "JavaScript", "tags": ["ES6"], "angles": ["developer"] },
+    { "key": "react", "kind": "skill", "text": "React", "angles": ["developer"] },
+    { "key": "express", "kind": "skill", "text": "Express", "tags": ["Node.js", "web framework"], "angles": ["developer"] },
+    { "key": "postgres", "kind": "skill", "text": "PostgreSQL", "tags": ["SQL", "RDBMS"], "angles": ["developer"] },
+    { "key": "python", "kind": "skill", "text": "Python", "angles": ["developer"] },
+    { "key": "html", "kind": "skill", "text": "HTML and CSS", "angles": ["developer"] },
+    { "key": "english", "kind": "skill", "text": "English (B2)", "tags": ["language"], "angles": ["developer"] }
+  ],
+  "answers": [
+    { "question": "Right to work in Bulgaria", "wordings": ["Do you have the right to work in this country?"], "versions": { "en": "Yes", "bg": "Да" }, "kind": "yes-no" }
+  ],
+  "voice": [
+    { "fileName": "alex-readme.txt", "text": "Roomie books study rooms. You pick a slot, it holds it for ten minutes, and if you don't show up it lets the room go. That's it. I built it because our faculty's spreadsheet kept getting overwritten, and it turns out a lot of people were annoyed by the same thing." }
+  ]
+}

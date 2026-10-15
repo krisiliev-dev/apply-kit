@@ -298,7 +298,11 @@ export interface PreparationEngine {
   approveStep(id: string, step: PackageStep): ApproveResult;
   /** Chooses the posting to apply through; reopens the steps already approved. */
   setTargetPosting(id: string, postingId: string): ChangeResult;
-  /** Switches the package's language; for now this prints the CV again. Reopens the steps already approved. */
+  /**
+   * Switches the package's language (#68): the current drafts and decisions are kept, and the CV,
+   * letter and answers are written again in the new language together, or brought back without the
+   * model when drafts in it are kept. Refused while parts are being written. Reopens the approved steps.
+   */
   setPackageLanguage(id: string, language: DocumentLanguage): Promise<ChangeResult>;
   /** Shows or hides the photo on the CV (off by default); prints it again and reopens the CV step. */
   setPackagePhoto(id: string, on: boolean): Promise<ChangeResult>;

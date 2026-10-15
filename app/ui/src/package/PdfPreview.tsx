@@ -23,8 +23,10 @@ function rememberedZoom(): Zoom {
   }
 }
 
-export function PdfPreview({ url, name, pages, overflow, linesOnPage2 }: {
+export function PdfPreview({ url, name, pages, overflow, linesOnPage2, lang }: {
   url: string;
+  /** The document's language, for the text layer a screen reader reads ("bg" for a Bulgarian CV). */
+  lang?: string;
   /** "CV": the region is named "CV preview, page 1 of 1". */
   name: string;
   /** Page count, read from the PDF by the service. */
@@ -79,6 +81,7 @@ export function PdfPreview({ url, name, pages, overflow, linesOnPage2 }: {
         canvas.setAttribute("aria-hidden", "true");
         const text = document.createElement("div");
         text.className = "textLayer";
+        if (lang) text.lang = lang;
         sheet.append(canvas, text);
         el.append(sheet);
         await page.render({ canvas, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] }).promise;
@@ -90,7 +93,7 @@ export function PdfPreview({ url, name, pages, overflow, linesOnPage2 }: {
       cancelled = true;
       void task.destroy();
     };
-  }, [url]);
+  }, [url, lang]);
 
   const pageWord = `${pages} ${pages === 1 ? "page" : "pages"}`;
   return (

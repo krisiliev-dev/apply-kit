@@ -1,0 +1,34 @@
+{
+  "id": "nia-design",
+  "fictional": true,
+  "about": "Made-up product designer with four years at a small software studio, strong on research.",
+  "contact": {
+    "nameLatin": "Nia Koleva", "nameCyrillic": "Ния Колева", "email": "nia.koleva@example.com", "phone": "+359 88 000 0163",
+    "city": "Sofia", "country": "Bulgaria", "links": ["https://nia-koleva.example.com"]
+  },
+  "angles": [
+    { "angle": "design", "summary": "Product designer who ships small features end to end and grounds them in user interviews." }
+  ],
+  "pieces": [
+    { "key": "studio", "kind": "role", "text": "Product designer for client web apps at a small software studio.", "entry": { "title": "Product Designer", "organisation": "Lark Studio", "city": "Sofia", "start": "2022-02", "end": null }, "tags": ["product design", "UX"], "angles": ["design"] },
+    { "key": "onboarding", "kind": "achievement", "text": "Redesigned a client's onboarding flow after 8 user interviews; completed sign-ups rose from 41% to 55%.", "belongsTo": "studio", "tags": ["user research", "UX", "metrics"], "angles": ["design"], "numberSource": "measured" },
+    { "key": "system", "kind": "achievement", "text": "Set up the studio's shared Figma component library, now used on all new projects.", "belongsTo": "studio", "tags": ["Figma", "design systems"], "angles": ["design"] },
+    { "key": "prototype", "kind": "achievement", "text": "Prototyped a booking widget in HTML and CSS so developers could test it with real data.", "belongsTo": "studio", "tags": ["prototyping", "HTML", "CSS"], "angles": ["design"] },
+    { "key": "critique", "kind": "achievement", "text": "Started a weekly design critique with the studio's other designers.", "belongsTo": "studio", "tags": ["team rituals"], "angles": ["design"] },
+    { "key": "junior", "kind": "role", "text": "Graphic and web design for local clients.", "entry": { "title": "Junior Designer", "organisation": "Pixelhaus", "city": "Sofia", "start": "2020-09", "end": "2022-01" }, "tags": ["graphic design", "web design"], "angles": ["design"] },
+    { "key": "sites", "kind": "achievement", "text": "Designed 14 websites for small businesses in Photoshop and Figma.", "belongsTo": "junior", "tags": ["Photoshop", "Figma", "web design"], "angles": ["design"], "numberSource": "measured" },
+    { "key": "degree", "kind": "education", "text": "", "entry": { "title": "BA Graphic Design", "organisation": "Sofia Academy of Arts", "city": "Sofia", "start": "2016-09", "end": "2020-06" }, "angles": ["design"] },
+    { "key": "figma", "kind": "skill", "text": "Figma", "angles": ["design"] },
+    { "key": "photoshop", "kind": "skill", "text": "Photoshop", "angles": ["design"] },
+    { "key": "research", "kind": "skill", "text": "User interviews", "tags": ["qualitative research"], "angles": ["design"] },
+    { "key": "htmlcss", "kind": "skill", "text": "HTML and CSS", "angles": ["design"] },
+    { "key": "english", "kind": "skill", "text": "English (C1)", "tags": ["language"], "angles": ["design"] }
+  ],
+  "answers": [
+    { "question": "Right to work in Bulgaria", "wordings": ["Do you have the right to work in this country?"], "versions": { "en": "Yes", "bg": "Да" }, "kind": "yes-no" },
+    { "question": "Notice period", "wordings": ["What is your notice period?"], "versions": { "en": "2 months", "bg": "2 месеца" } }
+  ],
+  "voice": [
+    { "fileName": "nia-case-study.txt", "text": "The first version was wrong, and the interviews told us why within a week: people didn't trust a form that asked for their company size before showing them anything. We moved it to the end. It's not a clever fix. It's just what they told us." }
+  ]
+}
