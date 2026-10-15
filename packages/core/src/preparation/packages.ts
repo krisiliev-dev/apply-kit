@@ -1414,6 +1414,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         reopenFrom(r, "target");
         // Until the other parts exist, switching only prints the CV again in the new language.
         if (parts(id).get("cv")!.state === "done") await renderCv(id);
+        if (currentLetter(row(id)!)) await renderLetter(id);
       }
       return { changed: true, package: view(row(id)!) };
     },

@@ -402,3 +402,14 @@ describe("when the letter can't be written", () => {
     expect((await t.preparation.writeLetterYourself(pkg.id)).package.letter).toMatchObject({ origin: "own" });
   });
 });
+
+describe("switching the package's language", () => {
+  it("prints the letter again with the Bulgarian letterhead", async () => {
+    const t = await mira();
+    const pkg = await started(t);
+
+    await t.preparation.setPackageLanguage(pkg.id, "bg");
+
+    expect(printed<LetterContent>((await t.preparation.packageLetter(pkg.id))!.pdf).letterhead.name).toBe("Мира Петрова");
+  });
+});
