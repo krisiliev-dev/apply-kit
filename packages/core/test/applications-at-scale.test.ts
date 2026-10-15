@@ -184,3 +184,60 @@ describe("searching matched email text", () => {
     expect(await ids("ТЕЛЕФОНЕН разговор")).toEqual([varna]);
   });
 });
+
+describe("Since your last visit", () => {
+  it("says nothing on the first visit", async () => {
+    const { tracker } = withMail();
+
+    expect(await tracker.visit()).toEqual({ since: null, changes: [] });
+  });
+
+  it("lists the Status changes email made since the previous visit, each naming its Application", async () => {
+    const { tracker, add, receive, clock } = withMail();
+    const northwind = await add("Northwind Labs", "Security Engineer", "northwind-labs.example");
+    const varna = await add("Varna Trust Bank", "Специалист информационна сигурност");
+    const fennel = await add("Fennel Studio", "UX Engineer");
+    await tracker.visit(); // Mon 12 Oct 07:30 UTC
+
+    await receive("2026-10-13T06:00:00Z", "bulgarian-call");
+    await receive("2026-10-14T10:00:00Z", "rejection");
+    await tracker.setStatus(fennel, "screening"); // by you: not listed
+    clock.set("2026-10-14T18:00:00Z");
+
+    const seen = await tracker.visit();
+
+    expect(seen.since).toBe("2026-10-12T07:30:00.000Z");
+    expect(seen.changes).toEqual([
+      expect.objectContaining({ applicationId: varna, company: "Varna Trust Bank", title: "Специалист информационна сигурност", from: "applied", to: "screening" }),
+      expect.objectContaining({ applicationId: northwind, company: "Northwind Labs", from: "applied", to: "rejected" }),
+    ]);
+  });
+
+  it("starts afresh on the next visit, but a page opened again within 30 minutes is the same visit", async () => {
+    const { tracker, add, receive, clock } = withMail();
+    await add("Northwind Labs", "Security Engineer", "northwind-labs.example");
+    await tracker.visit();
+    await receive("2026-10-14T10:00:00Z", "rejection");
+
+    clock.set("2026-10-14T18:00:00Z");
+    expect((await tracker.visit()).changes).toHaveLength(1);
+    clock.set("2026-10-14T18:20:00Z");
+    expect((await tracker.visit()).changes).toHaveLength(1);
+    clock.set("2026-10-15T08:00:00Z");
+    expect(await tracker.visit()).toEqual({ since: "2026-10-14T18:20:00.000Z", changes: [] });
+  });
+
+  it("leaves out a change that was undone, and email that changed nothing", async () => {
+    const { tracker, add, receive, clock } = withMail();
+    const northwind = await add("Northwind Labs", "Security Engineer", "northwind-labs.example");
+    await add("Nimbus Cloud", "Platform Security Engineer");
+    await tracker.visit();
+    await receive("2026-10-12T08:00:00Z", "greenhouse-confirmation"); // filed: no Status change
+    await receive("2026-10-13T10:00:00Z", "unsure-invitation"); // waits as Email to match
+    await receive("2026-10-14T10:00:00Z", "rejection");
+    await tracker.undoEvent((await tracker.get(northwind))!.movedByEmail!.eventId);
+    clock.set("2026-10-14T18:00:00Z");
+
+    expect((await tracker.visit()).changes).toEqual([]);
+  });
+});

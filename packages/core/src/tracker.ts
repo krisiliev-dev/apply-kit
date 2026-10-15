@@ -448,6 +448,28 @@ export interface FollowUpDraft {
   snoozeDays: number;
 }
 
+/** A Status change an email made, for "Since your last visit". */
+export interface EmailChange {
+  applicationId: string;
+  title: string;
+  company: string;
+  from: Status;
+  to: Status;
+  at: string;
+  eventId: string;
+}
+
+/** "Since your last visit": the Status changes email made since the previous visit ended. */
+export interface SinceLastVisit {
+  /** When the previous visit ended, or null on the first visit. */
+  since: string | null;
+  /** Oldest first; undone ones left out. */
+  changes: EmailChange[];
+}
+
+/** Opening Applications again within this long is the same visit. */
+const visitGapMs = 30 * 60_000;
+
 /** A change the tracker refuses, with why in plain words. */
 export class TrackerError extends Error {
   constructor(
@@ -534,6 +556,11 @@ export interface Tracker {
   confirmEmailMove(eventId: string): Promise<void>;
   /** The job mailbox's state, for Applications' banners. */
   mailbox(): Promise<TrackMailbox>;
+  /**
+   * Records a visit to Applications and returns what email changed since the previous one. Opening
+   * the page again within 30 minutes continues the same visit (and shows the same changes).
+   */
+  visit(): Promise<SinceLastVisit>;
 }
 
 export interface TrackerDeps {
@@ -1590,7 +1617,31 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     };
   }
 
+  function visit(): SinceLastVisit {
+    const at = now();
+    const latest = db.prepare("SELECT * FROM track_visit ORDER BY id DESC LIMIT 1").get();
+    let since: string | null;
+    if (latest && clock.now().getTime() - Date.parse(String(latest.seen_at)) < visitGapMs) {
+      since = str(latest.since);
+      db.prepare("UPDATE track_visit SET seen_at = ? WHERE id = ?").run(at, Number(latest.id));
+    } else {
+      since = latest ? String(latest.seen_at) : null;
+      db.prepare("INSERT INTO track_visit (started_at, seen_at, since) VALUES (?, ?, ?)").run(at, at, since);
+    }
+    if (!since) return { since: null, changes: [] };
+    const changes = db.prepare(
+      `SELECT e.*, a.title, a.company FROM application_event e JOIN application a ON a.id = e.application_id
+       WHERE e.kind = 'email' AND e.cause = 'email' AND e.to_status IS NOT NULL AND e.undone_at IS NULL AND a.removed_at IS NULL
+       AND e.at > ? AND e.at <= ? ORDER BY e.at, e.rowid`,
+    ).all(since, at).map((r) => ({
+      applicationId: String(r.application_id), title: String(r.title), company: String(r.company),
+      from: r.from_status as Status, to: r.to_status as Status, at: String(r.at), eventId: String(r.id),
+    }));
+    return { since, changes };
+  }
+
   return {
+    visit: async () => visit(),
     needsYou,
     followUp: followUpDraft,
     saveFollowUpText,

@@ -59,5 +59,5 @@ export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";
 export { emailKinds, emailClassificationSchema, highConfidence } from "./track-mail.ts";
 export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } from "./track-mail.ts";
 export type {
-  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed,
+  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";

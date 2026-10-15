@@ -369,6 +369,14 @@ const migrations: string[] = [
    );
    ALTER TABLE application_event ADD COLUMN email_id TEXT;
    ALTER TABLE application_event ADD COLUMN email_kind TEXT;`,
+  // Track #36: visits to Applications, for "Since your last visit". A visit lasts while the page is
+  // opened again within 30 minutes; `since` is where the visit before it ended.
+  `CREATE TABLE track_visit (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     started_at TEXT NOT NULL,
+     seen_at TEXT NOT NULL,
+     since TEXT
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {
