@@ -4,6 +4,7 @@ import type {
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
   ConfirmGroupResult, DisputeChoice, DraftFilter, DraftsToCheck, SearchSuggestion, SetupProgress, SetupStep, SetupSummary,
+  Angle, FinishInterviewResult, InterviewChange, InterviewView,
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
 } from "@apply-kit/core";
@@ -421,6 +422,31 @@ export const restorePiece = async (id: string): Promise<ProfilePiece> => json(aw
 export const unconfirmPiece = async (id: string): Promise<ProfilePiece> => json(await postJson(`/api/setup/drafts/${encodeURIComponent(id)}/unconfirm`));
 export const fetchSearchSuggestion = async (signal?: AbortSignal): Promise<SearchSuggestion> => json(await fetch("/api/setup/search", { signal }));
 export const fetchSetupSummary = async (signal?: AbortSignal): Promise<SetupSummary> => json(await fetch("/api/setup/summary", { signal }));
+// ---------- Coach interview (#57) ----------
+
+const interviewPath = (id: string) => `/api/interviews/${encodeURIComponent(id)}`;
+/** A refusal (422) resolves with its reason; anything else not OK throws. */
+const refusalOk = async <T>(res: Response): Promise<T> => (res.status === 422 ? ((await res.json()) as T) : json<T>(res));
+
+export async function fetchInterview(angle: Angle | null, signal?: AbortSignal): Promise<InterviewView> {
+  return json(await fetch(`/api/interview${angle ? `?angle=${angle}` : ""}`, { signal }));
+}
+/** Starts the interview, or resumes it at the same question. */
+export const startInterview = async (angle: Angle | null): Promise<InterviewView> => json(await postJson("/api/interview/start", { angle }));
+export const answerInterview = async (id: string, text: string): Promise<InterviewChange> => refusalOk(await postJson(`${interviewPath(id)}/answer`, { text }));
+export const dontRemember = async (id: string): Promise<InterviewChange> => refusalOk(await postJson(`${interviewPath(id)}/dont-remember`));
+export const skipQuestion = async (id: string): Promise<InterviewChange> => refusalOk(await postJson(`${interviewPath(id)}/skip`));
+export const retryInterview = async (id: string): Promise<InterviewChange> => refusalOk(await postJson(`${interviewPath(id)}/retry`));
+export const pauseInterview = async (id: string): Promise<InterviewView> => json(await postJson(`${interviewPath(id)}/pause`));
+export const finishInterview = async (id: string): Promise<FinishInterviewResult> => refusalOk(await postJson(`${interviewPath(id)}/finish`));
+export const decideInterviewPiece = async (itemId: string, choice: "honest" | "stronger"): Promise<InterviewChange> =>
+  refusalOk(await postJson(`/api/interview/items/${encodeURIComponent(itemId)}/decide`, { choice }));
+export const removeInterviewItem = async (itemId: string): Promise<InterviewChange> =>
+  refusalOk(await postJson(`/api/interview/items/${encodeURIComponent(itemId)}/remove`));
+export async function editInterviewAnswer(itemId: string, text: string): Promise<InterviewChange> {
+  return refusalOk(await fetch(`/api/interview/items/${encodeURIComponent(itemId)}/answer`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) }));
+}
+
 // ---------- Voice (#59) ----------
 
 export async function fetchVoice(signal?: AbortSignal): Promise<VoiceView> {

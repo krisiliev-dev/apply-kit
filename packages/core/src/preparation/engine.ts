@@ -12,6 +12,8 @@ import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, 
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
 import { createSetupStore, experienceOf, maxYearsFor, type ConfirmGroupResult, type DraftFilter, type DraftsToCheck, type SearchSuggestion, type SetupProgress, type SetupStep, type SetupSummary } from "./setup.ts";
 import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceEditInput, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
+import { createInterviewStore, type FinishInterviewResult, type InterviewChange, type InterviewView, type SkippedQuestion } from "./interview.ts";
+import type { Angle } from "../fit/angles.ts";
 import { createProfileStore, type DisputeChoice, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -136,6 +138,41 @@ export interface PreparationEngine {
   searchSuggestion(): SearchSuggestion;
   /** Setup's finish: the pieces, the angles (and the thinnest), the answer bank and the voice. */
   setupSummary(): SetupSummary;
+
+  // ---------- Coach interview (#57) ----------
+
+  /**
+   * Starts the coach interview, or resumes it at the question it was on: setup's (no angle), or a
+   * short one about a thin angle. The coach phrases the question in the background.
+   */
+  startInterview(angle?: Angle | null): InterviewView;
+  /** The interview ("setup" or "angle:<angle>"): its scope, transcript, what it wrote and where it is. */
+  interview(id?: string): InterviewView;
+  /** Kris's answer: saved at once (not sent yet), then sent to the coach in the background. */
+  answerInterview(id: string, text: string): InterviewChange;
+  /** "I don't remember": a fine answer; the coach moves on and writes nothing. */
+  dontRemember(id: string): InterviewChange;
+  /** "Skip this question": kept, so a package can ask it if a job needs it. */
+  skipQuestion(id: string): InterviewChange;
+  /** "Pause, finish later": the interview reopens at the same question. */
+  pauseInterview(id: string): InterviewView;
+  /** "Try now": sends what waits for the coach again (after a timeout, or once the budget allows). */
+  retryInterview(id: string): InterviewChange;
+  /** Kris's decision on a near-the-line piece: keep her own wording ("honest") or the stronger one. */
+  decideInterviewPiece(itemId: string, choice: "honest" | "stronger"): InterviewChange;
+  /** Removes something the interview wrote: a new piece is deleted, an updated one goes back to what it said. */
+  removeInterviewItem(itemId: string): InterviewChange;
+  /** Edits a standard answer the interview wrote, before it goes to the answer bank. */
+  editInterviewAnswer(itemId: string, text: string): InterviewChange;
+  /**
+   * "Finish and confirm N pieces": confirms what the interview wrote, in one list, and puts its
+   * standard answers in the answer bank. Refused while a near-the-line piece has no decision.
+   */
+  finishInterview(id: string): FinishInterviewResult;
+  /** Waits until the coach isn't writing. */
+  interviewSettled(): Promise<void>;
+  /** Questions Kris skipped, for packages to ask when a job needs them. */
+  skippedQuestions(): SkippedQuestion[];
 
   /** One piece, for editing; null once it's deleted. */
   piece(id: string): ProfilePiece | null;
@@ -312,6 +349,12 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
       };
   }
 
+  const interview = createInterviewStore({
+    db: deps.db, clock: deps.clock, budget: deps.budget, writer: deps.writer, profile,
+    findAnswer: (question, language) => answers.find(question, language),
+    saveAnswer: (input, origin) => answers.save(input, origin),
+  });
+
   const packages = createPackageStore({
     ...deps,
     pieces: () => profile.all(),
@@ -321,6 +364,19 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   });
 
   return {
+    startInterview: (angle) => touched(interview.start(angle ?? null)),
+    interview: (id = "setup") => interview.view(id),
+    answerInterview: (id, text) => touched(interview.answer(id, text)),
+    dontRemember: (id) => touched(interview.dontRemember(id)),
+    skipQuestion: (id) => touched(interview.skip(id)),
+    pauseInterview: (id) => touched(interview.pause(id)),
+    retryInterview: (id) => interview.retry(id),
+    decideInterviewPiece: (itemId, choice) => touched(interview.decide(itemId, choice)),
+    removeInterviewItem: (itemId) => touched(interview.remove(itemId)),
+    editInterviewAnswer: (itemId, text) => touched(interview.editAnswer(itemId, text)),
+    finishInterview: (id) => touched(interview.finish(id)),
+    interviewSettled: () => interview.settled(),
+    skippedQuestions: () => interview.skipped(),
     prepareStatus: (job) => packages.status(job),
     startPackage: (job) => packages.start(job),
     package: (id) => packages.get(id),

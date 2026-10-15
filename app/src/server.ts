@@ -11,6 +11,7 @@ import { mountAnswerApi } from "./answers-api.ts";
 import { mountPackageApi } from "./packages-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
 import { mountSetupApi } from "./setup-api.ts";
+import { mountInterviewApi } from "./interview-api.ts";
 import { mountVoiceApi } from "./voice-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
@@ -351,6 +352,7 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
   if (preparation) mountProfileApi(app, preparation);
   if (preparation) mountImportApi(app, preparation);
   if (preparation) mountSetupApi(app, preparation);
+  if (preparation) mountInterviewApi(app, preparation);
   // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
   if (preparation) mountAnswerApi(app, preparation);
   // Profile's voice: samples, the rules learned, and the "Learn from my edits" switch.

@@ -23,7 +23,7 @@ function service(uiDir = "/nonexistent/") {
   const stored = new Map<string, Uint8Array>();
   const preparation = createPreparationEngine({
     db, clock, budget: createAiBudget({ db, clock, capUsd: 0 }),
-    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi(), tailorCv: async () => noAi() },
+    writer: { estimateCostUsd: () => 0, draftPieces: async () => noAi(), learnVoice: async () => noAi(), tailorCv: async () => noAi(), coachTurn: async () => noAi() },
     renderer: { render: async () => noAi() },
     pdfReader: { read: async () => noAi() },
     files: {
@@ -359,7 +359,7 @@ describe("developer route: the demo documents", () => {
     const rendered: DocumentToRender[] = [];
     const preparation = createPreparationEngine({
       db, clock, budget: createAiBudget({ db, clock, capUsd: 10 }),
-      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); } },
+      writer: { estimateCostUsd: () => 0, draftPieces: async () => { throw new Error("no AI in tests"); }, learnVoice: async () => { throw new Error("no AI in tests"); }, tailorCv: async () => { throw new Error("no AI in tests"); }, coachTurn: async () => { throw new Error("no AI in tests"); } },
       renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
       pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
       files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
@@ -464,5 +464,30 @@ describe("Voice's API", () => {
 
     expect((await s.request("/api/profile/voice/rules/voice-rule:x/remove", { method: "POST" })).status).toBe(415);
     expect((await s.request("/api/profile/voice/rules/voice-rule:x/remove", s.json({}))).status).toBe(404);
+  });
+});
+
+describe("the coach interview's API", () => {
+  it("starts the interview at its first question, says when the coach can't answer, and refuses an empty answer", async () => {
+    const s = service();
+    s.preparation.savePiece({ kind: "role", text: "", entry: { title: "Junior Security Analyst", organisation: "Orbital Bank", city: "Sofia", start: "2021-03", end: "2025-12" } });
+
+    const started = await s.request("/api/interview/start", s.json({}));
+    expect(started.status).toBe(200);
+    await s.preparation.interviewSettled();
+    expect(await (await s.request("/api/interview")).json()).toMatchObject({ id: "setup", status: "failed", question: { kind: "gap" }, failure: { message: "no AI in tests" } });
+
+    const refused = await s.request("/api/interviews/setup/answer", s.json({ text: "  " }));
+    expect(refused.status).toBe(422);
+    expect(await refused.json()).toMatchObject({ changed: false });
+  });
+
+  it("refuses an unknown angle or interview, and asks for JSON on every change", async () => {
+    const s = service();
+
+    expect((await s.request("/api/interview?angle=marketing")).status).toBe(400);
+    expect((await s.request("/api/interviews/elsewhere/skip", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/interviews/setup/finish", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/interview/items/x/decide", s.json({ choice: "maybe" }))).status).toBe(400);
   });
 });
