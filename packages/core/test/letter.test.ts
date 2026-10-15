@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { PackageJob, PieceInput, TailoredCv, WriteLetterInput, WriterRequest, WrittenLetter } from "../src/index.ts";
-import { createTestPreparation, fakeWriter, recordedLetter, recordedTailoredCv } from "./preparation-harness.ts";
+import type { DocumentRenderer, LetterContent, PackageJob, PieceInput, TailoredCv, WriteLetterInput, WriterRequest, WrittenLetter } from "../src/index.ts";
+import { createTestPreparation, fakeRenderer, fakeWriter, recordedLetter, recordedTailoredCv } from "./preparation-harness.ts";
 
 // The cover letter (ticket #65): step 3 of a package, written in Kris's voice from the CV as decided,
 // checked against the profile, the CV's decisions, the gaps to name and the stock phrases; drafts
@@ -20,6 +20,7 @@ async function mira(options: {
   letter?: (letter: WrittenLetter, input: WriteLetterInput) => WrittenLetter | Error | void;
   pieces?: (save: (key: string, input: PieceInput) => void, ids: Record<string, string>) => void;
   capUsd?: number;
+  renderer?: DocumentRenderer;
 } = {}) {
   const ids: Record<string, string> = {};
   const writer = fakeWriter({
@@ -31,7 +32,7 @@ async function mira(options: {
     },
     learnVoice: (input) => ({ rules: [{ id: null, text: "Opens with the company's problem, not with you", evidence: "1 sample", language: null, sources: [input.excerpts[0]!.source] }] }),
   });
-  const t = createTestPreparation({ writer, capUsd: options.capUsd });
+  const t = createTestPreparation({ writer, capUsd: options.capUsd, ...(options.renderer && { renderer: options.renderer }) });
   const save = (key: string, input: PieceInput) => {
     const r = t.preparation.savePiece(input);
     if (!r.saved) throw new Error(`${key}: ${r.problems[0]!.message}`);
@@ -313,5 +314,41 @@ describe("editing the letter", () => {
     expect(r.package.letter!.checks[0]).toMatchObject({
       state: "problem", detail: "\"I cut false alerts by 90% with Splunk\" names \"Splunk\", which isn't in your profile; it says \"90%\", which its piece doesn't back.",
     });
+  });
+});
+
+/** What the fake renderer printed into a PDF: the document's content. */
+const printed = <T>(pdf: Uint8Array): T => {
+  const text = JSON.parse(new TextDecoder().decode(pdf).slice("%PDF-fake\n".length)) as { pages: { lines: string[] }[] };
+  return JSON.parse(text.pages[0]!.lines[1]!) as T;
+};
+
+describe("the letter's PDF", () => {
+  it("shares the CV's letterhead, with the date, recipient and Re: line filled from the job, on one page", async () => {
+    const t = await mira();
+    const pkg = await started(t);
+
+    const file = await t.preparation.packageLetter(pkg.id);
+
+    expect(pkg.letter!.file).toMatchObject({ fileName: "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", pages: 1, overflow: null, draft: 1 });
+    expect(file!.fileName).toBe("Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf");
+    const letter = printed<LetterContent>(file!.pdf);
+    const cv = printed<{ letterhead: unknown }>((await t.preparation.packageCv(pkg.id))!.pdf);
+    expect(letter.letterhead).toEqual(cv.letterhead);
+    expect(letter).toMatchObject({
+      date: "2026-10-12", recipient: { company: "Kestrel Payments", place: "Sofia" }, re: { role: "Security Engineer" },
+      greeting: "Dear Kestrel Payments hiring team,", closing: "Kind regards,",
+      paragraphs: [expect.stringMatching(/^Every false alert/), expect.stringMatching(/^At Northwind Bank/), expect.stringMatching(/^Your posting asks/)],
+    });
+  });
+
+  it("a letter that runs onto a second page can't be approved until it's shorter", async () => {
+    const renderer = fakeRenderer((doc) => ({ pages: doc.kind === "cover-letter" ? [{ lines: ["Dear"] }, { lines: ["Kind regards,"] }] : [{ lines: [doc.title] }] }));
+    const t = await mira({ renderer });
+    const pkg = await started(t);
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+
+    expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({ approved: false, reason: "The letter runs onto 2 pages. Shorten it to fit one." });
   });
 });

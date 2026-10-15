@@ -371,6 +371,8 @@ export interface PackageStore {
   showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
   /** Kris's text for a draft: saved, printed, and recorded as voice evidence unless learning is paused. */
   editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
+  /** The letter's draft PDF, as printed from the draft shown. */
+  letterFile(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
   learned(): LearnedPiece[];
 }
@@ -1476,6 +1478,13 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     redraftLetter,
     showLetterDraft,
     editLetter,
+    async letterFile(id) {
+      const r = row(id);
+      const file = r?.letterFile;
+      if (!file || file.draft !== r.letterDraft) return null;
+      const pdf = await deps.packages.read(file.path);
+      return pdf ? { fileName: file.fileName, pdf } : null;
+    },
 
   };
 }

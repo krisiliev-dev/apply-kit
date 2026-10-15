@@ -346,6 +346,8 @@ export interface PreparationEngine {
    * paused. An approved letter step reopens.
    */
   editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
+  /** The letter's draft PDF (the draft shown, with the CV's letterhead), for the preview and the draft download. */
+  packageLetter(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 
   /** Profile › Learned during packages: pieces learned from answers in packages, waiting for Kris, newest first. */
   learnedPieces(): LearnedPiece[];
@@ -456,6 +458,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     redraftLetter: (id, instruction) => packages.redraftLetter(id, instruction),
     showLetterDraft: (id, draft) => packages.showLetterDraft(id, draft),
     editLetter: (id, draft, text) => packages.editLetter(id, draft, text),
+    packageLetter: (id) => packages.letterFile(id),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });
