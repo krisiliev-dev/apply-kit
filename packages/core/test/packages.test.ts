@@ -1,15 +1,26 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PackageJob, PieceInput } from "../src/index.ts";
+import type { PackageJob, PieceInput, TailoredCv } from "../src/index.ts";
 import { memoryDb } from "./harness.ts";
-import { createTestPreparation, fakeWriter, recordedTailoredCv } from "./preparation-harness.ts";
+import { createTestPreparation, fakeRenderer, fakeWriter, recordedTailoredCv } from "./preparation-harness.ts";
 
 // Packages through the preparation engine (ticket #62): the Prepare button's states, starting a
 // package, its parts and steps. Made-up people, companies and postings only.
 
+/**
+ * The recorded tailored CV with its placeholder ids ("piece-analyst") swapped for the profile's,
+ * optionally edited the way a slipping model would write it.
+ */
+function recordedFor(ids: Record<string, string>, edit: (cv: TailoredCv) => void = () => {}): TailoredCv {
+  const cv = JSON.parse(JSON.stringify(recordedTailoredCv).replace(/"piece-([a-z]+)"/g, (m, key: string) => (ids[key] ? JSON.stringify(ids[key]) : m))) as TailoredCv;
+  edit(cv);
+  return cv;
+}
+
 /** Mira Petrova's made-up master profile: one security role with results, a skill and a degree. */
-function miraProfile(options: Parameters<typeof createTestPreparation>[0] = {}) {
-  const t = createTestPreparation(options);
+function miraProfile(options: Parameters<typeof createTestPreparation>[0] & { tailor?: (cv: TailoredCv) => void } = {}) {
   const ids: Record<string, string> = {};
+  const { tailor, ...rest } = options;
+  const t = createTestPreparation({ writer: fakeWriter({ tailorCv: () => recordedFor(ids, tailor) }), ...rest });
   const save = (key: string, input: PieceInput) => {
     const r = t.preparation.savePiece(input);
     if (!r.saved) throw new Error(`${key}: ${r.problems[0]!.message}`);
@@ -20,6 +31,7 @@ function miraProfile(options: Parameters<typeof createTestPreparation>[0] = {}) 
   save("phishing", { kind: "achievement", text: "Ran the response to a phishing campaign against the claims team.", belongsTo: ids.analyst, tags: ["incident response"], angles: ["security"] });
   save("wazuh", { kind: "skill", text: "Wazuh", tags: ["SIEM"], angles: ["security"] });
   save("degree", { kind: "education", text: "", entry: { title: "BSc Computer Science", organisation: "Danube Institute of Technology", city: "Ruse", start: "2018-09", end: "2022-06" }, angles: ["security", "developer"] });
+  t.preparation.saveAngle({ angle: "security", summary: "Security analyst at a bank, writing detection rules." });
   t.preparation.saveContact({ nameLatin: "Mira Petrova", nameCyrillic: "Мира Петрова", email: "mira.petrova@example.com", phone: "+359 88 000 0175", city: "Sofia", country: "Bulgaria", links: ["linkedin.com/in/mira-petrova-example"] });
   return { ...t, ids };
 }
@@ -69,6 +81,11 @@ describe("whether a package can start", () => {
   });
 });
 
+/** The CV's draft as the fake renderer printed it. */
+async function printedCv(t: ReturnType<typeof miraProfile>, id: string): Promise<string> {
+  return new TextDecoder().decode((await t.preparation.packageCv(id))!.pdf);
+}
+
 /** Starts Kestrel's package and waits until nothing is being written. */
 async function started(t: ReturnType<typeof miraProfile>, job = kestrelJob()) {
   const r = t.preparation.startPackage(job);
@@ -102,20 +119,18 @@ describe("starting a package", () => {
     ]);
   });
 
-  it("finishes as a ready package with the CV printed from the angle's pieces, and its cost", async () => {
+  it("finishes as a ready package with the tailored CV printed, and its cost", async () => {
     const t = miraProfile();
 
     const pkg = await started(t);
 
     expect(pkg).toMatchObject({ generating: false, partsReady: 2, costUsd: 0.002, estimate: { costUsd: 0, seconds: 0 }, chip: { kind: "ready", label: "Package ready" } });
     expect(pkg.cv).toMatchObject({ fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", pages: 1, overflow: null, language: "en", photo: false });
-    const file = await t.preparation.packageCv(pkg.id);
-    const printed = new TextDecoder().decode(file!.pdf);
-    // The placeholder CV is the pieces as stored; the model's tailored lines wait for the honesty check (#63).
+    const printed = await printedCv(t, pkg.id);
+    expect(printed).toContain("Ran the incident response to a phishing campaign against the claims team");
     expect(printed).toContain("Wrote 30 detection rules that cut false alerts by a quarter");
     expect(printed).toContain("Northwind Bank");
     expect(printed).toContain("Wazuh");
-    expect(printed).not.toContain(recordedTailoredCv.roles[0]!.bullets[0]!.text);
   });
 
   it("is one package per job: starting again returns the same one", async () => {
@@ -339,5 +354,243 @@ describe("stopping, the cap and failures", () => {
 
     expect(after).toMatchObject({ generating: false });
     expect(after!.parts[1]).toMatchObject({ state: "failed", error: "apply-kit stopped while this was being written" });
+  });
+});
+
+describe("the tailored CV version (#63)", () => {
+  it("prints the writer's lines in its order, every line linked to at least one piece", async () => {
+    const t = miraProfile();
+
+    const pkg = await started(t);
+
+    const cv = pkg.cvVersion!;
+    expect(cv.summary).toEqual({
+      text: "Security analyst who writes SIEM detection rules and runs incident response at a bank.",
+      pieces: [
+        { id: t.ids.detections, label: "Wrote 30 detection rules that cut false alerts by a quarter." },
+        { id: t.ids.phishing, label: "Ran the response to a phishing campaign against the claims team." },
+      ],
+    });
+    expect(cv.roles).toEqual([{
+      roleId: t.ids.analyst, heading: "Security Analyst · Northwind Bank, Sofia · Mar 2022 – present",
+      bullets: [
+        { text: "Ran the incident response to a phishing campaign against the claims team", pieces: [{ id: t.ids.phishing, label: "Ran the response to a phishing campaign against the claims team." }] },
+        { text: "Wrote 30 detection rules that cut false alerts by a quarter", pieces: [{ id: t.ids.detections, label: "Wrote 30 detection rules that cut false alerts by a quarter." }] },
+      ],
+    }]);
+    const lines = [cv.summary!, ...cv.roles.flatMap((r) => r.bullets), ...cv.skills, ...cv.education];
+    expect(lines.length).toBe(5);
+    for (const line of lines) expect(line.pieces.length).toBeGreaterThan(0);
+  });
+
+  it("lists every change from the master profile with what was, what is and why", async () => {
+    const t = miraProfile();
+
+    const pkg = await started(t);
+
+    expect(pkg.cvVersion!.changes.map(({ label, was, is, detail, why, undone }) => ({ label, was, is, detail, why, undone }))).toEqual([
+      {
+        label: "Summary rewritten", was: "Security analyst at a bank, writing detection rules.",
+        is: "Security analyst who writes SIEM detection rules and runs incident response at a bank.", detail: null,
+        why: "Leads with SIEM work, the posting's first requirement.", undone: false,
+      },
+      {
+        label: "Bullet reworded", was: "Ran the response to a phishing campaign against the claims team",
+        is: "Ran the incident response to a phishing campaign against the claims team", detail: null,
+        why: "The posting's term for the same work.", undone: false,
+      },
+      {
+        label: "Bullet moved to the top", was: null, is: null,
+        detail: "\"Ran the incident response to a phishing campaign against the claims team\" is now the first bullet under Northwind Bank.",
+        why: "Incident response first: the posting asks for it by name.", undone: false,
+      },
+    ]);
+  });
+
+  it("never lets an invented employer, a changed date, a skill not in the profile or a number not in its pieces reach the CV", async () => {
+    const t = miraProfile({
+      tailor: (cv) => {
+        cv.roles[0]!.start = "2020-03";
+        cv.roles[0]!.bullets[1]!.text = "Wrote 45 detection rules in Splunk that cut false alerts by a quarter";
+        cv.roles.push({ pieceId: "role-globex", title: "Threat Hunter", employer: "Globex Security", start: "2019-01", end: "2022-02", bullets: [], why: "" });
+        cv.skills.push({ text: "Kubernetes", pieceIds: [] });
+      },
+    });
+
+    const pkg = await started(t);
+
+    const printed = await printedCv(t, pkg.id);
+    for (const invented of ["Globex", "Threat Hunter", "2020", "Splunk", "45", "Kubernetes"]) expect(printed).not.toContain(invented);
+    expect(printed).toContain("Wrote 30 detection rules that cut false alerts by a quarter.".replace(/\.$/, ""));
+    expect(pkg.cvVersion!.honesty.slice(0, 4)).toEqual([
+      { id: "roles", state: "fixed", label: "Employers, titles and dates match your master profile", detail: "The draft changed 2; the CV keeps your profile's." },
+      { id: "skills", state: "fixed", label: "No skill that isn't in your profile", detail: "The draft named 2 that aren't; they were left out." },
+      { id: "numbers", state: "fixed", label: "Every number traces to a piece with its source", detail: "The draft had 1 that didn't; your profile's wording is used." },
+      { id: "citations", state: "ok", label: "Every line links to a piece in your profile", detail: null },
+    ]);
+    expect(pkg.cvVersion!.notes).toEqual(expect.arrayContaining([
+      "The draft listed a role at Globex Security, which isn't in your profile. It was left out.",
+      "Left \"Kubernetes\" off the skills: it isn't a skill in your profile.",
+    ]));
+  });
+
+  it("maps each requirement to its evidence: the matcher's pieces, the ones the writer cited, and where they are on the CV", async () => {
+    const t = miraProfile();
+    const job = kestrelJob({ requirements: [
+      { text: "Experience triaging alerts in a SIEM", kind: "required", category: "skill" },
+      { text: "Incident response", kind: "required", category: "skill" },
+      { text: "Kubernetes security", kind: "required", category: "skill" },
+      { text: "CISSP", kind: "preferred", category: "certificate" },
+    ] });
+
+    const pkg = await started(t, job);
+
+    expect(pkg.cvVersion!.evidence).toEqual([
+      {
+        requirement: "Experience triaging alerts in a SIEM", kind: "required", status: "partly",
+        pieces: [{ id: t.ids.detections, label: "Wrote 30 detection rules that cut false alerts by a quarter." }, { id: t.ids.wazuh, label: "Wazuh" }],
+        note: "Partly: no evidence for triaging", onCv: ["Summary", "Bullet 2 under Northwind Bank", "Skills"],
+      },
+      {
+        requirement: "Incident response", kind: "required", status: "met",
+        pieces: [{ id: t.ids.phishing, label: "Ran the response to a phishing campaign against the claims team." }],
+        note: "", onCv: ["Summary", "Bullet 1 under Northwind Bank"],
+      },
+      { requirement: "Kubernetes security", kind: "required", status: "gap", pieces: [], note: "No evidence in your master profile", onCv: ["Not on the CV"] },
+      { requirement: "CISSP", kind: "preferred", status: "not-held", pieces: [], note: expect.any(String), onCv: ["Left out, not claimed. Preferred items are never gaps."] },
+    ]);
+    expect(pkg.cvVersion!.honesty.slice(4)).toEqual([
+      { id: "not-held:3", state: "ok", label: "CISSP left out, not claimed", detail: null },
+      { id: "gap:2", state: "gap", label: "Gap: Kubernetes security, no evidence in your profile", detail: "Left off the CV." },
+    ]);
+  });
+
+  it("has tailoring notes: the writer's, then the template's", async () => {
+    const t = miraProfile();
+    const pkg = await started(t);
+    expect(pkg.cvVersion!.notes).toEqual([
+      "Led with incident response and SIEM work, the two things the posting asks for.",
+      "1 page, single column, Standard template, no photo.",
+    ]);
+  });
+});
+
+describe("undoing a change (#63)", () => {
+  it("restores the previous line and prints the CV again; redo brings it back", async () => {
+    const t = miraProfile();
+    const pkg = await started(t);
+    const reword = pkg.cvVersion!.changes.find((c) => c.label === "Bullet reworded")!;
+
+    const undone = await t.preparation.undoCvChange(pkg.id, reword.id);
+
+    expect(undone).toMatchObject({ changed: true });
+    expect(undone.package.cvVersion!.changes.find((c) => c.id === reword.id)).toMatchObject({ undone: true });
+    expect(undone.package.cv!.sha256).not.toBe(pkg.cv!.sha256);
+    expect(undone.package.cvVersion!.roles[0]!.bullets[0]!.text).toBe("Ran the response to a phishing campaign against the claims team");
+    expect(await printedCv(t, pkg.id)).not.toContain("Ran the incident response");
+
+    const redone = await t.preparation.redoCvChange(pkg.id, reword.id);
+    expect(redone.package.cvVersion!.roles[0]!.bullets[0]!.text).toBe("Ran the incident response to a phishing campaign against the claims team");
+    expect(await printedCv(t, pkg.id)).toContain("Ran the incident response");
+  });
+
+  it("undoing a move puts the bullets back in the profile's order, and undoing the summary brings the angle's back", async () => {
+    const t = miraProfile();
+    const pkg = await started(t);
+    const [summary, , move] = pkg.cvVersion!.changes;
+
+    await t.preparation.undoCvChange(pkg.id, move!.id);
+    const after = (await t.preparation.undoCvChange(pkg.id, summary!.id)).package;
+
+    expect(after.cvVersion!.roles[0]!.bullets.map((b) => b.text)).toEqual([
+      "Wrote 30 detection rules that cut false alerts by a quarter",
+      "Ran the incident response to a phishing campaign against the claims team",
+    ]);
+    expect(after.cvVersion!.summary!.text).toBe("Security analyst at a bank, writing detection rules.");
+  });
+
+  it("reopens an approved CV step", async () => {
+    const t = miraProfile();
+    const pkg = await started(t);
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+
+    const r = await t.preparation.undoCvChange(pkg.id, pkg.cvVersion!.changes[0]!.id);
+
+    expect(r.package.steps[1]).toMatchObject({ state: "current", approvedAt: null });
+  });
+
+  it("refuses a change that isn't this package's", async () => {
+    const t = miraProfile();
+    const pkg = await started(t);
+    expect(await t.preparation.undoCvChange(pkg.id, "change-nope")).toMatchObject({ changed: false, reason: "That change isn't in this CV version." });
+  });
+});
+
+/** A renderer that fits `perPage` lines on a page: the title, the summary, then every bullet. */
+function pagedRenderer(perPage: number) {
+  return fakeRenderer((doc) => {
+    const c = doc.content as { summary?: string; experience?: { bullets: string[] }[] };
+    const lines = [doc.title, ...(c.summary ? [c.summary] : []), ...(c.experience ?? []).flatMap((r) => r.bullets)];
+    const pages = [];
+    for (let i = 0; i < lines.length; i += perPage) pages.push({ lines: lines.slice(i, i + perPage) });
+    return { pages };
+  });
+}
+
+/** Mira with an older internship and its bullet, printed four lines to a page: one line spills onto page 2. */
+async function longCv() {
+  const t = miraProfile({ renderer: pagedRenderer(4) });
+  const save = (input: PieceInput) => { const r = t.preparation.savePiece(input); if (!r.saved) throw new Error(r.problems[0]!.message); return r.piece.id; };
+  t.ids.intern = save({ kind: "role", text: "", entry: { title: "SOC Intern", organisation: "Varna Telecom", city: "Varna", start: "2021-06", end: "2021-09" }, angles: ["security"] });
+  t.ids.scripts = save({ kind: "achievement", text: "Wrote Python scripts to enrich alerts with owner data.", belongsTo: t.ids.intern, angles: ["security"] });
+  return { t, pkg: await started(t) };
+}
+
+describe("a CV that runs onto a second page (#63)", () => {
+  it("reports the lines on page 2 with ways to tighten it, and Approve waits for a choice", async () => {
+    const { t, pkg } = await longCv();
+
+    expect(pkg.cvVersion!.fit).toEqual({
+      pages: 2, linesOnPage2: 1, keepTwoPages: false,
+      choices: [
+        { id: `shorten-role:${t.ids.intern}`, label: "Shorten the SOC Intern role to its title and dates", meta: "Saves about 1 line. Least relevant to this posting." },
+        { id: `drop-bullet:${t.ids.detections}`, label: "Leave out the last bullet under Northwind Bank", meta: "Saves about 1 line: \"Wrote 30 detection rules that cut false alerts by a quarter\"." },
+        { id: "keep-two-pages", label: "Keep 2 pages", meta: "Some recruiters skip page 2. The ATS check will say so." },
+      ],
+    });
+    t.preparation.approveStep(pkg.id, "target");
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: false, blockedBy: "cv", reason: "This CV runs onto 2 pages. Choose how to fit one page, or keep 2." });
+  });
+
+  it("a tightening choice is an undoable change that brings it back to one page", async () => {
+    const { t, pkg } = await longCv();
+
+    const r = await t.preparation.fitCv(pkg.id, `shorten-role:${t.ids.intern}`);
+
+    expect(r).toMatchObject({ changed: true, package: { cv: { pages: 1, overflow: null }, cvVersion: { fit: { pages: 1, linesOnPage2: 0, choices: [] } } } });
+    const change = r.package.cvVersion!.changes.at(-1)!;
+    expect(change).toMatchObject({ label: "SOC Intern role shortened to its title and dates", detail: "1 bullet → 0. The role and dates stay.", why: "To fit one page: least relevant to this posting.", origin: "tightening" });
+    t.preparation.approveStep(pkg.id, "target");
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: true });
+
+    const undone = await t.preparation.undoCvChange(pkg.id, change.id);
+    expect(undone.package.cv).toMatchObject({ pages: 2 });
+    expect(undone.package.steps[1]).toMatchObject({ approvedAt: null, blocked: "This CV runs onto 2 pages. Choose how to fit one page, or keep 2." });
+  });
+
+  it("Keep 2 pages is a choice too", async () => {
+    const { t, pkg } = await longCv();
+
+    const r = await t.preparation.fitCv(pkg.id, "keep-two-pages");
+
+    expect(r).toMatchObject({ changed: true, package: { cv: { pages: 2 }, cvVersion: { fit: { keepTwoPages: true } } } });
+    t.preparation.approveStep(pkg.id, "target");
+    expect(t.preparation.approveStep(pkg.id, "cv")).toMatchObject({ approved: true });
+  });
+
+  it("refuses a choice that isn't offered", async () => {
+    const { t, pkg } = await longCv();
+    expect(await t.preparation.fitCv(pkg.id, "shrink-font")).toMatchObject({ changed: false, reason: "That isn't one of the ways offered to fit this CV on one page." });
   });
 });

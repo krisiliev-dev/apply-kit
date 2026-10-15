@@ -4,16 +4,24 @@
 // generates the parts in the background within the monthly AI budget: a part that would cross the
 // cap isn't started, a failed part is retried once and then waits for Retry, and stopping keeps
 // what's finished. Stored in SQLite (ADR 0003); the CV's draft PDF is in the packages folder.
+// The CV version (#63) is the master profile's CV with the tailoring's changes, each checked by the
+// honesty validator and undoable, printed again on every change (cv-version.ts).
 import { angleLabel, type Angle } from "../fit/angles.ts";
+import { evidenceLabel, matchEvidence, type RequirementCategory } from "../fit/evidence.ts";
 import type { AiBudget, BudgetInfo } from "../budget.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import type { CvContent, DocumentDate, DocumentLanguage, DocumentToRender } from "../documents/content.ts";
 import type { AtsCheck } from "../documents/ats.ts";
-import type { TailorCvInput, Writer } from "../writing/writer.ts";
+import type { TailorCvInput, TailoredCv, Writer } from "../writing/writer.ts";
 import type { AngleChoice, AnglePosting } from "./angles.ts";
+import {
+  applyChanges, deriveChanges, honestyChecks, keepTwoPages, placesOnCv, tightenChange, tightenChoices,
+  type CvLineView, type CvPlan, type CvVersionState, type EvidenceRow, type HonestyCheckView, type PieceLink, type TightenChoice,
+} from "./cv-version.ts";
+import { validateCv } from "./honesty.ts";
 import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder } from "./ports.ts";
-import type { ProfilePiece } from "./profile.ts";
+import { entryLabel, type ProfilePiece } from "./profile.ts";
 import type { DocumentDraft, DraftRequest } from "./engine.ts";
 
 export const packageSteps = ["target", "cv", "letter", "answers", "ats"] as const;
@@ -48,7 +56,8 @@ export interface PackageJob {
   packageLanguage: DocumentLanguage;
   closed: { at: string; how: string; decisionId: string } | null;
   reading: { state: string };
-  requirements: { text: string }[];
+  /** How the posting asks for each (required unless it says), and what kind of thing it is, for the evidence matcher. */
+  requirements: { text: string; kind?: "required" | "preferred"; category?: RequirementCategory }[];
   postings: {
     id: string;
     site: string;
@@ -137,6 +146,40 @@ export interface CvDraftView {
   photo: boolean;
 }
 
+/** A change from the master profile, as the CV step lists it. */
+export interface CvChangeView {
+  id: string;
+  origin: "tailoring" | "tightening";
+  label: string;
+  was: string | null;
+  is: string | null;
+  detail: string | null;
+  why: string;
+  undone: boolean;
+}
+
+/** Whether the CV fits one page, and the ways to tighten it when it doesn't (Approve waits for one). */
+export interface CvFit {
+  pages: number;
+  linesOnPage2: number;
+  keepTwoPages: boolean;
+  /** Empty while it fits on one page or Kris kept two. */
+  choices: TightenChoice[];
+}
+
+/** The tailored CV version: its lines with their pieces, the evidence per requirement, every change, the honesty summary and notes. */
+export interface CvVersionView {
+  summary: CvLineView | null;
+  roles: { roleId: string; heading: string; bullets: CvLineView[] }[];
+  skills: CvLineView[];
+  education: CvLineView[];
+  evidence: EvidenceRow[];
+  changes: CvChangeView[];
+  honesty: HonestyCheckView[];
+  notes: string[];
+  fit: CvFit;
+}
+
 export interface PackageView {
   id: string;
   jobId: string;
@@ -161,6 +204,8 @@ export interface PackageView {
   stoppedAt: string | null;
   steps: PackageStepView[];
   cv: CvDraftView | null;
+  /** The tailored CV version, once the CV is written. */
+  cvVersion: CvVersionView | null;
   /** What the package has cost so far, and the estimate for what's still to be written. */
   costUsd: number;
   estimate: { costUsd: number; seconds: number };
@@ -205,6 +250,11 @@ export interface PackageStore {
   setPhoto(id: string, on: boolean): Promise<ChangeResult>;
   stop(id: string): PackageView;
   retry(id: string, part: PackageStep): ChangeResult;
+  /** Undoes one change from the master profile (the line it replaced comes back) and prints the CV again. */
+  undoChange(id: string, changeId: string): Promise<ChangeResult>;
+  redoChange(id: string, changeId: string): Promise<ChangeResult>;
+  /** One of the ways offered to fit the CV on one page (an undoable change), or keep two pages. */
+  fitCv(id: string, choiceId: string): Promise<ChangeResult>;
   cvFile(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 }
 
@@ -239,7 +289,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   interface Row {
     id: string; jobId: string; job: PackageJob; angle: Angle; angleReason: string; language: DocumentLanguage;
     targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftView | null;
-    startedAt: string; stoppedAt: string | null;
+    cvVersion: CvVersionState | null; startedAt: string; stoppedAt: string | null;
   }
   interface PartRow { part: PackageStep; state: PartState; attempts: number; error: string | null; costUsd: number; output: unknown }
 
@@ -248,6 +298,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     angleReason: String(r.angle_reason), language: r.language as DocumentLanguage, targetPostingId: String(r.target_posting_id),
     photo: Number(r.photo) === 1, approved: JSON.parse(String(r.approved)) as Row["approved"], reviewed: r.reviewed_at != null,
     cvDraft: r.cv_draft == null ? null : (JSON.parse(String(r.cv_draft)) as CvDraftView),
+    cvVersion: r.cv_version == null ? null : (JSON.parse(String(r.cv_version)) as CvVersionState),
     startedAt: String(r.started_at), stoppedAt: r.stopped_at == null ? null : String(r.stopped_at),
   });
   const row = (id: string) => {
@@ -316,7 +367,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const p = ps.get(step)!;
     const name = lower(stepLabel[step]);
     switch (p.state) {
-      case "done": return null;
+      case "done":
+        if (step === "cv" && r.cvDraft?.overflow && !r.cvVersion?.keepTwoPages) {
+          return { reason: `This CV runs onto ${r.cvDraft.pages} pages. Choose how to fit one page, or keep ${r.cvDraft.pages}.`, by: step };
+        }
+        return null;
       case "working": return { reason: `The ${name} is still being written.`, by: step };
       case "waiting": return step === "ats"
         ? { reason: "The ATS check runs once the CV is approved.", by: step }
@@ -373,6 +428,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       stoppedAt: r.stoppedAt,
       steps: stepsOf(r, ps),
       cv: r.cvDraft,
+      cvVersion: cvVersionView(r),
       costUsd: Math.round(list.reduce((n, p) => n + p.costUsd, 0) * 1e6) / 1e6,
       estimate: {
         // Only the CV needs the model so far; later parts add their own task's estimate here.
@@ -407,43 +463,66 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return Number.isFinite(y) ? (m ? { year: y!, month: m } : { year: y! }) : { text: ym };
   };
 
+  const byId = () => new Map(deps.pieces().map((p) => [p.id, p]));
+
   /**
-   * The placeholder CV: the angle's confirmed pieces as stored, through the template. Every role
-   * stays (the timeline is never shortened); bullets are the angle's achievements, leads first.
-   * Tailored lines replace these once the honesty validator checks them (#63).
+   * The master profile's CV for the package's angle, by piece: the angle's summary line, every role
+   * (the timeline is never shortened) with the angle's achievements as bullets, leads first, the
+   * angle's skills, and education. The baseline every change is made to.
    */
-  async function cvDocument(r: Row): Promise<DocumentToRender> {
+  function baseline(r: Row): CvPlan {
     const pieces = confirmed();
-    const contact = deps.contact();
     const choice = deps.closestAngle(r.job);
     const leads = choice.angle === r.angle ? choice.leads.map((p) => p.id) : [];
     const rank = (p: ProfilePiece) => (leads.includes(p.id) ? leads.indexOf(p.id) : leads.length);
     const byEnd = (a: ProfilePiece, b: ProfilePiece) => (b.entry!.end ?? "9999").localeCompare(a.entry!.end ?? "9999") || b.entry!.start.localeCompare(a.entry!.start);
     const roles = pieces.filter((p) => p.kind === "role" && p.entry).sort(byEnd);
     const ofAngle = (p: ProfilePiece) => p.angles.includes(r.angle);
+    const summaryText = choice.angle === r.angle ? choice.summary.trim() : "";
+    const summaryPieces = leads.length ? leads.slice(0, 3) : roles.slice(0, 1).map((p) => p.id);
+    return {
+      summary: summaryText && summaryPieces.length ? { text: summaryText, pieceIds: summaryPieces } : null,
+      roles: roles.map((role) => ({
+        roleId: role.id,
+        bullets: pieces.filter((p) => p.kind === "achievement" && p.belongsTo === role.id && ofAngle(p))
+          .sort((a, b) => rank(a) - rank(b)).map((p) => ({ pieceId: p.id, text: p.text.trim().replace(/\.$/, ""), pieceIds: [p.id] })),
+      })),
+      skills: pieces.filter((p) => p.kind === "skill" && ofAngle(p)).sort((a, b) => rank(a) - rank(b)).map((p) => p.id),
+      education: pieces.filter((p) => p.kind === "education" && p.entry).sort(byEnd).map((p) => p.id),
+    };
+  }
+
+  /** The CV as printed: the baseline with the changes that aren't undone. */
+  const planOf = (r: Row): CvPlan => applyChanges(baseline(r), r.cvVersion?.changes ?? []);
+
+  /** The CV through its template: the plan's words, with roles' and education's facts exactly as in the profile. */
+  async function cvDocument(r: Row): Promise<DocumentToRender> {
+    const plan = planOf(r);
+    const pieces = byId();
+    const contact = deps.contact();
+    const entries = plan.roles.map((role) => ({ role, entry: pieces.get(role.roleId)?.entry })).filter((x) => x.entry);
     const name = r.language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin;
     const content: CvContent = {
       letterhead: {
         name,
-        headline: roles[0]?.entry?.title ?? "",
+        headline: entries[0]?.entry?.title ?? "",
         location: [contact.city, contact.country].filter(Boolean).join(", ") || undefined,
         email: contact.email,
         phone: contact.phone || undefined,
         links: contact.links.map((l) => l.replace(/^https?:\/\//, "").replace(/\/$/, "")),
       },
-      summary: r.angle === choice.angle ? choice.summary : "",
-      experience: roles.map((role) => ({
-        title: role.entry!.title,
-        employer: role.entry!.organisation,
-        place: role.entry!.city ?? undefined,
-        start: month(role.entry!.start),
-        end: role.entry!.end ? month(role.entry!.end) : "present",
-        bullets: pieces.filter((p) => p.kind === "achievement" && p.belongsTo === role.id && ofAngle(p))
-          .sort((a, b) => rank(a) - rank(b)).map((p) => p.text.replace(/\.$/, "")),
+      summary: plan.summary?.text ?? "",
+      experience: entries.map(({ role, entry }) => ({
+        title: entry!.title,
+        employer: entry!.organisation,
+        place: entry!.city ?? undefined,
+        start: month(entry!.start),
+        end: entry!.end ? month(entry!.end) : "present",
+        bullets: role.bullets.map((b) => b.text),
       })),
-      skills: pieces.filter((p) => p.kind === "skill" && ofAngle(p)).sort((a, b) => rank(a) - rank(b)).map((p) => p.text),
-      education: pieces.filter((p) => p.kind === "education" && p.entry).sort(byEnd).map((e) => ({
-        degree: e.entry!.title, school: e.entry!.organisation, start: month(e.entry!.start), end: e.entry!.end ? month(e.entry!.end) : { text: "" },
+      skills: plan.skills.map((id) => pieces.get(id)?.text ?? "").filter(Boolean),
+      education: plan.education.map((id) => pieces.get(id)?.entry).filter((e) => !!e).map((e) => ({
+        degree: e.title, school: e.organisation, start: month(e.start), end: e.end ? month(e.end) : { text: "" },
       })),
       languagesAndCourses: [],
     };
@@ -452,6 +531,71 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (bytes) content.photo = { mediaType: bytes[0] === 0x89 && bytes[1] === 0x50 ? "image/png" : "image/jpeg", bytes };
     }
     return { kind: "cv", language: r.language, title: `${name} · CV · ${r.job.company}`, content };
+  }
+
+  /** Checks the writer's tailored CV with the honesty validator and keeps it as the package's CV version. */
+  function keepTailored(id: string, output: unknown): void {
+    const r = row(id)!;
+    const validated = validateCv(output as TailoredCv, { pieces: deps.pieces(), alsoNamed: [r.job.company], now: clock.now() });
+    const state: CvVersionState = {
+      changes: deriveChanges(baseline(r), validated, byId(), () => crypto.randomUUID()),
+      keepTwoPages: false,
+      evidence: validated.evidence,
+      notes: validated.notes,
+      caught: validated.caught,
+      heldBack: validated.heldBack,
+    };
+    db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
+  }
+
+  const saveVersion = (id: string, state: CvVersionState) => db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
+
+  function cvVersionView(r: Row): CvVersionView | null {
+    if (!r.cvVersion || !r.cvDraft) return null;
+    const state = r.cvVersion;
+    const pieces = byId();
+    const plan = planOf(r);
+    const link = (id: string): PieceLink | null => { const p = pieces.get(id); return p ? evidenceLabel(p) : null; };
+    const line = (text: string, ids: string[]): CvLineView => ({ text, pieces: ids.map(link).filter((l): l is PieceLink => l !== null) });
+    const now = clock.now();
+    const evidence: EvidenceRow[] = r.job.requirements.map((q, i) => {
+      const kind = q.kind ?? "required";
+      const found = matchEvidence({ text: q.text, kind, category: q.category ?? "other" }, deps.pieces(), now);
+      const cited = state.evidence.filter((e) => e.requirement === i).flatMap((e) => e.pieceIds);
+      const ids = [...new Set([...found.pieces.map((p) => p.id), ...(found.status === "gap" || found.status === "not-held" ? [] : cited)])];
+      const onCv = placesOnCv(ids, plan, pieces);
+      return {
+        requirement: q.text, kind, status: found.status, note: found.note,
+        pieces: ids.map(link).filter((l): l is PieceLink => l !== null),
+        onCv: onCv.length ? onCv
+          : found.status === "not-held" ? ["Left out, not claimed. Preferred items are never gaps."]
+          : found.status === "gap" ? ["Not on the CV"] : ["Not on this CV"],
+      };
+    });
+    const draft = r.cvDraft;
+    const overflow = draft.overflow;
+    const template = `${draft.pages === 1 ? "1 page" : `${draft.pages} pages`}, single column, Standard template, ${r.photo ? "with photo" : "no photo"}.`;
+    return {
+      summary: plan.summary && line(plan.summary.text, plan.summary.pieceIds),
+      roles: plan.roles.filter((role) => pieces.get(role.roleId)?.entry).map((role) => ({
+        roleId: role.roleId, heading: entryLabel(pieces.get(role.roleId)!.entry!), bullets: role.bullets.map((b) => line(b.text, b.pieceIds)),
+      })),
+      skills: plan.skills.filter((id) => pieces.has(id)).map((id) => line(pieces.get(id)!.text, [id])),
+      education: plan.education.filter((id) => pieces.get(id)?.entry).map((id) => {
+        const e = pieces.get(id)!.entry!;
+        return line(`${e.title} · ${e.organisation}`, [id]);
+      }),
+      evidence,
+      changes: state.changes.map(({ id, origin, label, was, is, detail, why, undone }) => ({ id, origin, label, was, is, detail, why, undone })),
+      honesty: honestyChecks(state, evidence),
+      notes: [...state.notes, template],
+      fit: {
+        pages: draft.pages,
+        linesOnPage2: overflow?.linesAfterFirstPage ?? 0,
+        keepTwoPages: state.keepTwoPages,
+        choices: overflow && !state.keepTwoPages ? tightenChoices(plan, pieces, r.angle) : [],
+      },
+    };
   }
 
   /** Prints the CV and keeps it as the package's draft. */
@@ -506,6 +650,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       // Stopped while the model was writing: the call is paid for, but its answer isn't used.
       if (stopped(id)) { setPart(id, "cv", { attempts, costUsd }); return; }
       setPart(id, "cv", { attempts, costUsd, output: outcome.result.output });
+      keepTailored(id, outcome.result.output);
       try {
         await renderCv(id);
       } catch (err) {
@@ -573,7 +718,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const snapshot: PackageJob = {
       id: job.id, title: job.title, titleTranslation: job.titleTranslation, company: job.company, location: job.location,
       packageLanguage: job.packageLanguage, closed: null, reading: { state: job.reading.state },
-      requirements: job.requirements.map((q) => ({ text: q.text })),
+      requirements: job.requirements.map((q) => ({ text: q.text, kind: q.kind ?? "required", category: q.category ?? "other" })),
       postings: job.postings.map((p) => ({ id: p.id, site: p.site, url: p.url, source: { name: p.source.name, kind: p.source.kind, label: p.source.label, category: p.source.category } })),
       target: { postingId: job.target.postingId },
     };
@@ -602,6 +747,19 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const approved = Object.fromEntries(Object.entries(r.approved).filter(([s]) => packageSteps.indexOf(s as PackageStep) < from));
     db.prepare("UPDATE package SET approved = ? WHERE id = ?").run(JSON.stringify(approved), r.id);
   };
+
+  /** Undoes (or redoes) one change, reopens the CV step and prints the CV again. */
+  async function toggleChange(id: string, changeId: string, undone: boolean): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const change = r.cvVersion?.changes.find((c) => c.id === changeId);
+    if (!r.cvVersion || !change) return { changed: false, reason: "That change isn't in this CV version.", package: view(r) };
+    if (change.undone !== undone) {
+      saveVersion(id, { ...r.cvVersion, changes: r.cvVersion.changes.map((c) => (c.id === changeId ? { ...c, undone } : c)) });
+      reopenFrom(r, "cv");
+      await renderCv(id);
+    }
+    return { changed: true, package: view(row(id)!) };
+  }
 
   const mustGet = (id: string) => {
     const r = row(id);
@@ -689,6 +847,27 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       setPart(id, part, { state: "waiting", error: null });
       reopenFrom(r, part);
       generate(id);
+      return { changed: true, package: view(row(id)!) };
+    },
+
+    async undoChange(id, changeId) { return toggleChange(id, changeId, true); },
+    async redoChange(id, changeId) { return toggleChange(id, changeId, false); },
+
+    async fitCv(id, choiceId) {
+      const r = mustGet(id);
+      const offered = cvVersionView(r)?.fit.choices ?? [];
+      if (!r.cvVersion || !offered.some((c) => c.id === choiceId)) {
+        return { changed: false, reason: "That isn't one of the ways offered to fit this CV on one page.", package: view(r) };
+      }
+      if (choiceId === keepTwoPages) {
+        saveVersion(id, { ...r.cvVersion, keepTwoPages: true });
+        return { changed: true, package: view(row(id)!) };
+      }
+      const change = tightenChange(choiceId, planOf(r), byId(), () => crypto.randomUUID());
+      if (!change) return { changed: false, reason: "That isn't one of the ways offered to fit this CV on one page.", package: view(r) };
+      saveVersion(id, { ...r.cvVersion, changes: [...r.cvVersion.changes, change] });
+      reopenFrom(r, "cv");
+      await renderCv(id);
       return { changed: true, package: view(row(id)!) };
     },
 

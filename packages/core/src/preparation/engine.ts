@@ -238,6 +238,17 @@ export interface PreparationEngine {
   stopGenerating(id: string): PackageView;
   /** Writes a failed, stopped or unwritten part again. */
   retryPart(id: string, part: PackageStep): ChangeResult;
+  /**
+   * Undoes one change the tailoring made to the master profile's CV: the line it replaced comes
+   * back, the CV is printed again, and an approved CV step reopens. Redo puts the change back.
+   */
+  undoCvChange(id: string, changeId: string): Promise<ChangeResult>;
+  redoCvChange(id: string, changeId: string): Promise<ChangeResult>;
+  /**
+   * For a CV that runs onto a second page: one of the ways offered to tighten it (an undoable
+   * change, printed again), or "keep-two-pages". Type and margins never shrink.
+   */
+  fitCv(id: string, choiceId: string): Promise<ChangeResult>;
   /** The CV's current draft PDF, for the preview and the draft download. */
   packageCv(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 }
@@ -302,6 +313,9 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     setPackagePhoto: (id, on) => packages.setPhoto(id, on),
     stopGenerating: (id) => packages.stop(id),
     retryPart: (id, part) => packages.retry(id, part),
+    undoCvChange: (id, changeId) => packages.undoChange(id, changeId),
+    redoCvChange: (id, changeId) => packages.redoChange(id, changeId),
+    fitCv: (id, choiceId) => packages.fitCv(id, choiceId),
     packageCv: (id) => packages.cvFile(id),
     budget: () => deps.budget.info(),
     draftDocument,

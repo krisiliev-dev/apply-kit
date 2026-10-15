@@ -145,7 +145,9 @@ const pieceTexts = (p: ProfilePiece) => [p.text, ...p.tags, ...(p.entry ? [p.ent
 
 const year = (month: string) => month.slice(0, 4);
 const roleLabel = (e: PieceEntry) => `${e.organisation}, ${e.title} ${year(e.start)}${e.end && year(e.end) === year(e.start) ? "" : `–${e.end ? year(e.end) : "present"}`}`;
-const labelOf = (p: ProfilePiece): EvidencePiece => ({ id: p.id, label: p.entry ? roleLabel(p.entry) : p.text });
+/** A piece as evidence is named: a role or education by its facts, anything else by its text. */
+export const evidenceLabel = (p: ProfilePiece): EvidencePiece => ({ id: p.id, label: p.entry ? roleLabel(p.entry) : p.text });
+const labelOf = evidenceLabel;
 
 function duration(months: number): string {
   const y = Math.floor(months / 12);

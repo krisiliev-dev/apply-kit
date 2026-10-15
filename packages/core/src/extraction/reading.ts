@@ -38,6 +38,8 @@ export interface JobRequirement extends FeedRequirement {
   evidence?: RequirementEvidence;
   /** How the posting asks for it; "Unclear" while a low-confidence reading waits for Kris. */
   askedAs: "Required" | "Preferred" | "Unclear";
+  /** What kind of thing it asks for (a skill, a language, a certificate…), as the posting was read. */
+  category: PostingFacts["requirements"][number]["category"];
   confidence: number;
   source: FactSource;
 }
@@ -129,7 +131,7 @@ export function jobReading(facts: PostingFacts, text: string, answers: Record<st
     const k = kinded(`requirements:${i}`, "Requirement", `Is "${r.text}" required?`, r.text, r.kind, r.confidence, r.source);
     return {
       key: k.key, text: r.text, askedAs: k.low ? "Unclear" : k.kind === "required" ? "Required" : "Preferred",
-      kind: k.kind, status: "unknown", needsYou: k.needsYou, confidence: k.confidence, source: k.source,
+      kind: k.kind, category: r.category, status: "unknown", needsYou: k.needsYou, confidence: k.confidence, source: k.source,
     };
   });
 

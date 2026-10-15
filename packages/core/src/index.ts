@@ -82,8 +82,9 @@ export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleRes
 export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts";
 export type {
   PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
-  TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult,
+  TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult, CvChangeView, CvFit, CvVersionView,
 } from "./preparation/packages.ts";
+export type { CvLineView, EvidenceRow, HonestyCheckView, HonestyCheckState, PieceLink, TightenChoice } from "./preparation/cv-version.ts";
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
