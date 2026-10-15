@@ -28,7 +28,7 @@ const extractor: Extractor = config.ai.openRouterApiKey
 
 const writer: Writer = config.ai.openRouterApiKey
   ? createOpenRouterWriter({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
-  : { estimateCostUsd: () => 0, draftPieces: async () => { throw noKey(); } };
+  : { estimateCostUsd: () => 0, draftPieces: async () => { throw noKey(); }, learnVoice: async () => { throw noKey(); }, tailorCv: async () => { throw noKey(); } };
 
 // PDFs: the fixed templates printed by headless Chromium (started on first use) and read back with
 // pdf.js, both on this laptop (ADR 0003).
@@ -90,6 +90,16 @@ const scheduler = createScheduler({
   schedule: config.schedule,
 });
 
+// The voice learns from new samples and edits to drafts periodically (and once at start), within
+// the monthly budget; adding samples on Profile › Voice starts it too.
+const learnVoice = () => {
+  preparation.learnVoice()
+    .then((r) => { if (r.stopped === "failed") console.error(r.message); })
+    .catch((err: unknown) => console.error("Learning the voice failed:", err));
+};
+learnVoice();
+const voiceTimer = setInterval(learnVoice, 60 * 60 * 1000);
+
 // The Chrome extension pairs once with a code shown in the app; only paired extensions are answered.
 const pairing = createPairing({ db, clock });
 
@@ -107,6 +117,7 @@ const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1
 
 const shutdown = async () => {
   scheduler.stop();
+  clearInterval(voiceTimer);
   server.close();
   await renderer.close();
   await scheduler.settled();

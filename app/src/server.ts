@@ -8,8 +8,10 @@ import type {
 } from "@apply-kit/core";
 import { mountImportApi } from "./import-api.ts";
 import { mountAnswerApi } from "./answers-api.ts";
+import { mountPackageApi } from "./packages-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
 import { mountSetupApi } from "./setup-api.ts";
+import { mountVoiceApi } from "./voice-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
 const documentLanguages: DocumentLanguage[] = ["en", "bg"];
@@ -86,7 +88,10 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
     const sort = c.req.query("sort") ?? "fit";
     if (!sorts.includes(sort as FeedSort)) return c.json({ error: `Unknown sort "${sort}"` }, 400);
     const relocation = c.req.query("relocation") === "1";
-    return c.json(await engine.queryFeed({ view: v as FeedView, sort: sort as FeedSort, relocation }));
+    const feed = await engine.queryFeed({ view: v as FeedView, sort: sort as FeedSort, relocation });
+    // Each row carries its Job's package chip ("Continue package · step 2 of 5", "Package ready"), or null.
+    const chips = preparation?.packageChips(feed.jobs.map((j) => j.id)) ?? {};
+    return c.json({ ...feed, jobs: feed.jobs.map((j) => ({ ...j, package: chips[j.id] ?? null })) });
   });
 
   // Requiring a JSON body type means a web page can't trigger a POST without a CORS preflight,
@@ -348,6 +353,10 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
   if (preparation) mountSetupApi(app, preparation);
   // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
   if (preparation) mountAnswerApi(app, preparation);
+  // Profile's voice: samples, the rules learned, and the "Learn from my edits" switch.
+  if (preparation) mountVoiceApi(app, preparation);
+  // Packages: the Prepare button, starting a package, its steps, parts and the CV draft.
+  if (preparation) mountPackageApi(app, engine, preparation);
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

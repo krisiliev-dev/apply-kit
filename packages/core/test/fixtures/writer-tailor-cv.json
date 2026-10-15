@@ -1,0 +1,8 @@
+{
+  "summary": "Security analyst who writes detection rules and runs phishing response at an insurer.",
+  "lines": [
+    { "text": "Wrote 30 detection rules that cut false alerts by a quarter", "pieceIds": ["piece-detections"], "claim": "as-written" },
+    { "text": "Triaged about 20 SIEM alerts a day for a team of 5", "pieceIds": ["piece-triage"], "claim": "reworded" }
+  ],
+  "notes": ["Led with detection work because the posting asks for SIEM experience first."]
+}

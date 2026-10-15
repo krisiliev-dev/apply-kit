@@ -203,3 +203,14 @@ describe("done", () => {
     expect(summary.answerBank).toBeGreaterThan(0);
   });
 });
+
+describe("done, with voice", () => {
+  it("counts the voice samples that can be read", async () => {
+    const t = await imported();
+    await t.preparation.addVoiceSamples([
+      { fileName: "cover-letter-orbital.txt", bytes: new TextEncoder().encode("Dear Orbital team,\nYour SOC loses an hour every night to failed scans. I fixed the same problem before.") },
+    ]);
+
+    expect(t.preparation.setupSummary().voice).toEqual({ samples: 1, rules: 0 });
+  });
+});

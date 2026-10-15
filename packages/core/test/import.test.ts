@@ -156,7 +156,7 @@ describe("files that can't be read", () => {
       options: ["recognise", "text-version", "skip"],
     });
     expect(t.status).toMatchObject({ state: "finished", done: 2, total: 3 });
-    expect(writer.calls.map((c) => c.input.fileName)).toEqual(["CV-2025.pdf", "CV-2023.docx"]);
+    expect(writer.calls.flatMap((c) => (c.task === "draft-pieces" ? [c.input.fileName] : []))).toEqual(["CV-2025.pdf", "CV-2023.docx"]);
   });
 
   it("reads a scan with text recognition on request, marking its pieces check this", async () => {
@@ -276,7 +276,7 @@ describe("the LinkedIn export and GitHub, read without the model", () => {
       ["skill", "English (Full professional proficiency)"],
     ]);
     expect(t.status.items[1]).toMatchObject({ state: "done", pieces: 4, merged: 2, detail: "2 positions · 1 school · 3 skills" });
-    expect(writer.calls.map((c) => c.input.fileName)).toEqual(["CV-2025.pdf"]);
+    expect(writer.calls.flatMap((c) => (c.task === "draft-pieces" ? [c.input.fileName] : []))).toEqual(["CV-2025.pdf"]);
   });
 
   it("drafts a skill per language from public GitHub repositories, leaving forks out", async () => {

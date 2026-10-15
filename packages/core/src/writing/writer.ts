@@ -36,15 +36,69 @@ export const draftedPiecesSchema = z.object({
 });
 export type DraftedPieces = z.infer<typeof draftedPiecesSchema>;
 
+/**
+ * What learning the voice sends: the rules so far (to reinforce or refine), the rules Kris removed
+ * (not to suggest again from the same writing), and a few short excerpts of Kris's writing: parts
+ * of samples and edits to drafts, never more than the excerpt limit in one call.
+ */
+export interface VoiceLearningInput {
+  rules: { id: string; text: string; evidence: string }[];
+  removed: string[];
+  excerpts: SentExcerpt[];
+}
+
+/**
+ * Voice rules the excerpts show: new ones (id null) or ones already there (their id) with updated
+ * evidence. Each is a readable statement of how Kris writes, with its evidence in plain words, the
+ * language it holds for (null when both), and the sources of the excerpts that show it.
+ */
+export const learnedVoiceSchema = z.object({
+  rules: z.array(z.object({
+    id: z.string().nullable(),
+    text: z.string(),
+    evidence: z.string(),
+    language: z.enum(["en", "bg"]).nullable(),
+    sources: z.array(z.string()),
+  })),
+});
+export type LearnedVoice = z.infer<typeof learnedVoiceSchema>;
+
+/** What a CV version is tailored from: the posting, the angle it starts from and the confirmed pieces it may use. */
+export interface TailorCvInput {
+  posting: { title: string; company: string; requirements: string[] };
+  language: "en" | "bg";
+  angle: { label: string; summary: string };
+  /** Only confirmed pieces (and unconfirmed ones from this package); the model may cite nothing else. */
+  pieces: { id: string; kind: string; text: string; entry: { title: string; organisation: string; start: string; end: string | null } | null }[];
+}
+
+/**
+ * A tailored CV version: the summary and lines, each with the piece ids it relies on and how its
+ * claim compares to them (as written, reworded, or stronger), plus tailoring notes. The honesty
+ * validator (#63) checks every line before it is offered; until then the package shows the pieces as stored.
+ */
+export const tailoredCvSchema = z.object({
+  summary: z.string(),
+  lines: z.array(z.object({
+    text: z.string(),
+    pieceIds: z.array(z.string()),
+    claim: z.enum(["as-written", "reworded", "stronger"]),
+  })),
+  notes: z.array(z.string()),
+});
+export type TailoredCv = z.infer<typeof tailoredCvSchema>;
+
 /** Every writing task with its input, so one estimate covers them all. */
 export type WriterRequest =
-  | { task: "draft-pieces"; input: ImportedText };
+  | { task: "draft-pieces"; input: ImportedText }
+  | { task: "learn-voice"; input: VoiceLearningInput }
+  | { task: "tailor-cv"; input: TailorCvInput };
 
 export type WriterTask = WriterRequest["task"];
 
 /** A short piece of Kris's own writing sent with a call (voice excerpts), recorded so the Package can show it. */
 export interface SentExcerpt {
-  /** Where it comes from, e.g. a voice sample's id. */
+  /** Where it comes from: "sample:<sample id>" or "edit:<edit id>". */
   source: string;
   text: string;
 }
@@ -68,4 +122,7 @@ export interface Writer {
    * may carry a numeric `costUsd` if the failed call was still billed.
    */
   draftPieces(input: ImportedText): Promise<Written<DraftedPieces>>;
+  /** Learns voice rules from the excerpts; reports exactly the excerpts it sent. */
+  learnVoice(input: VoiceLearningInput): Promise<Written<LearnedVoice>>;
+  tailorCv(input: TailorCvInput): Promise<Written<TailoredCv>>;
 }

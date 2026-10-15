@@ -1,6 +1,7 @@
-import type { FeedJob, FeedResult, FeedSort, FeedView, LearnedAdjustment, PassInput } from "@apply-kit/core";
+import type { FeedJob, FeedResult, FeedSort, FeedView, LearnedAdjustment, PackageChip, PassInput } from "@apply-kit/core";
 import { Fragment, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
-import { passJobs, saveJobs, undoDecision } from "../api.ts";
+import { passJobs, saveJobs, undoDecision, type FeedRow } from "../api.ts";
+import { Icon } from "../icons.tsx";
 import { PassDialog } from "./PassDialog.tsx";
 import { useShortcutsSetting } from "./shortcuts.ts";
 import type { Toaster } from "./toast.tsx";
@@ -300,6 +301,13 @@ export function learnedText(learned: LearnedAdjustment[] | undefined): string {
   return ` ${learned.map((a) => `${a.applies} will rank ${a.effect}`).join("; ")}.`;
 }
 
+/** The Job's package, as on the Job page: "Package ready", "Continue package · step 2 of 5" or "Preparing package". */
+export function PackageChipView({ chip }: { chip: PackageChip | null | undefined }) {
+  if (!chip) return null;
+  const cls = chip.kind === "ready" ? "met" : chip.kind === "continue" ? "ask" : "neutral";
+  return <span className={`chip ${cls} pkg-chip`}>{chip.kind === "ready" && <Icon name="met" />}{chip.label}</span>;
+}
+
 function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, onCheck, onSave, onPass }: {
   job: FeedJob;
   asOf: string;
@@ -327,6 +335,7 @@ function JobRow({ job, asOf, active, checked, showSavedChip, rowRef, onFocus, on
         <a className="t" href={jobPage(job.id)} tabIndex={tab}>{titleOf(job)}</a>
         <span className="co">{job.company}</span>
         {showSavedChip && job.state === "saved" && <span className="chip met saved-chip">Saved</span>}
+        <PackageChipView chip={(job as FeedRow).package} />
         {job.unverified && <span className="chip partly" title="Captured or pasted, and nothing has seen it for 30 days. Still in the Feed.">Unverified after 30 days</span>}
         {job.titleTranslation && <span className="meta"> · <span lang={job.language ?? undefined}>{job.title}</span></span>}
         {job.siteCount > 1

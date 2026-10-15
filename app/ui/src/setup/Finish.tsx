@@ -150,8 +150,11 @@ export function Done() {
               <span className="mini">Standard answers for application forms · <a href="/profile/answers">check them</a></span>
             </div>
             <div className="panel">
-              <span className="meta">Voice</span><span className="big">0</span>
-              <span className="mini">voice samples so far · <a href="/profile/voice">add some</a></span>
+              <span className="meta">Voice</span><span className="big">{summary.voice.samples}</span>
+              <span className="mini">
+                {summary.voice.samples === 1 ? "voice sample" : "voice samples"}
+                {summary.voice.rules > 0 ? `, ${plural(summary.voice.rules, "rule", "rules")} learned` : ""} · <a href="/profile/voice">{summary.voice.samples > 0 ? "add more" : "add some"}</a>
+              </span>
             </div>
           </div>
           <div className="panel learning">

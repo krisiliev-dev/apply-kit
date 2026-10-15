@@ -11,6 +11,7 @@ import { createContactStore, type Contact, type ContactDetails, type PhotoInput,
 import { createImportStore, type ImportInput, type ImportMerge, type ImportRun, type ImportStatus, type ResolveResult, type StartImportResult, type UnreadableChoice } from "./import.ts";
 import { createAngleStore, type AngleChoice, type AnglePosting, type AngleView, type SaveAngleInput, type SaveAngleResult } from "./angles.ts";
 import { createSetupStore, experienceOf, maxYearsFor, type ConfirmGroupResult, type DraftFilter, type DraftsToCheck, type SearchSuggestion, type SetupProgress, type SetupStep, type SetupSummary } from "./setup.ts";
+import { createVoiceStore, type VoiceContext, type VoiceContextRequest, type VoiceEditInput, type VoiceLearning, type VoiceSample, type VoiceSampleFile, type VoiceSend, type VoiceView } from "./voice.ts";
 import { createProfileStore, type DisputeChoice, type DeletedPiece, type PieceInput, type ProfilePiece, type PieceList, type PieceOrigin, type PieceQuery, type ProfileSummary, type SavePieceResult } from "./profile.ts";
 
 /** The whole profile as one portable file: every piece with its source, the contact details and photo. */
@@ -29,6 +30,11 @@ import { documentFileName, type FileNameParts } from "../documents/file-names.ts
 import type { DocumentToRender } from "../documents/content.ts";
 import { demoDocument, demoFileName, type DemoOptions } from "../documents/demo.ts";
 import type { PdfText, PreparationDeps } from "./ports.ts";
+import {
+  createPackageStore, type ApproveResult, type ChangeResult, type PackageChip, type PackageJob, type PackageStep, type PackageView,
+  type PrepareStatus, type StartPackageResult,
+} from "./packages.ts";
+import type { DocumentLanguage } from "../documents/content.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -128,7 +134,7 @@ export interface PreparationEngine {
    * years asked filled from her role dates; and the experience they were read from.
    */
   searchSuggestion(): SearchSuggestion;
-  /** Setup's finish: the pieces, the angles (and the thinnest), and the answer bank. */
+  /** Setup's finish: the pieces, the angles (and the thinnest), the answer bank and the voice. */
   setupSummary(): SetupSummary;
 
   /** One piece, for editing; null once it's deleted. */
@@ -186,7 +192,85 @@ export interface PreparationEngine {
   closestAngle(posting: AnglePosting): AngleChoice;
   /** Drafts one of the fictional demo profile's documents (package "demo"), for checking the template. */
   demoDocument(options: DemoOptions): Promise<DocumentDraft>;
+
+  // ---------- Voice (Profile › Voice, and drafts: the cover letter here, Track's follow-ups) ----------
+
+  /** Profile › Voice: the samples, the rules learned (with their evidence), the edits and the learning switch. */
+  voice(): VoiceView;
+  /**
+   * Keeps samples of Kris's writing (PDF, DOCX, TXT) on this laptop: the file in the file store, its
+   * text read here. One that can't be read says why and how to fix it; the others still count.
+   */
+  addVoiceSamples(files: VoiceSampleFile[]): Promise<VoiceSample[]>;
+  /** Replace: a new file in an (unreadable) sample's place. Null if there's no such sample. */
+  replaceVoiceSample(id: string, file: VoiceSampleFile): Promise<VoiceSample | null>;
+  /** Deletes a sample and its copy; drafts send nothing more from it. False if it was gone already. */
+  removeVoiceSample(id: string): Promise<boolean>;
+  /**
+   * Learns voice rules from what's new (unread parts of samples, edits not yet learned from), within
+   * the monthly budget. No call sends more than VOICE_EXCERPT_WORDS words of Kris's writing, and each
+   * call's excerpts are recorded. The service runs it after samples are added and periodically;
+   * a run already going is joined, not started twice.
+   */
+  learnVoice(): Promise<VoiceLearning>;
+  /** Every call that sent Kris's writing to the model, newest first, with exactly what it sent. */
+  voiceSends(): VoiceSend[];
+  /** Takes a voice rule out of use; it won't come back unless Kris's writing shows it again. False if it's gone already. */
+  removeVoiceRule(id: string): boolean;
+
+  // Drafting with the voice (the cover letter; Track's follow-ups through `VoiceForDrafts`). Local only.
+
+  /**
+   * What a draft in this language sends to sound like Kris: the rules in use and at most
+   * VOICE_EXCERPT_WORDS words of excerpts. Recorded (under the context's id) as it's handed out, so
+   * the draft can show what left the machine.
+   */
+  voiceContext(request: VoiceContextRequest): VoiceContext;
+  /**
+   * Kris edited a draft (a letter, an answer, a follow-up): kept as a before/after pair to learn the
+   * voice from, periodically. False when learning from edits is paused or nothing changed.
+   */
+  recordVoiceEdit(edit: VoiceEditInput): boolean;
+  /** The "Learn from my edits" switch: paused, edits aren't recorded as evidence. */
+  setVoiceLearning(fromEdits: boolean): VoiceView;
+  /**
+   * What the Job page's Prepare button shows: whether a package can start (with the reason when it
+   * can't: a closed job, a posting not read, no master profile) and the Job's package, if it has one.
+   */
+  prepareStatus(job: PackageJob): PrepareStatus;
+  /**
+   * Starts the Job's package (one per Job: a Job that has one gets it back): the closest angle, the
+   * company's own page as target, the posting's language. Parts are written in the background
+   * within the monthly AI budget; leaving is safe.
+   */
+  startPackage(job: PackageJob): StartPackageResult;
+  package(id: string): PackageView | null;
+  packageForJob(jobId: string): PackageView | null;
+  /** The package chip per Job that has a package ("Continue package · step 2 of 5", "Package ready"), for the Feed. */
+  packageChips(jobIds: string[]): Record<string, PackageChip>;
+  /** Waits until nothing is being written for the package, then returns it. */
+  packageSettled(id: string): Promise<PackageView | null>;
+  /**
+   * Approves a step. Steps approve in order (reading ahead is free); a step whose part isn't written
+   * can't be approved. A refusal says why and names the step that blocks it.
+   */
+  approveStep(id: string, step: PackageStep): ApproveResult;
+  /** Chooses the posting to apply through; reopens the steps already approved. */
+  setTargetPosting(id: string, postingId: string): ChangeResult;
+  /** Switches the package's language; for now this prints the CV again. Reopens the steps already approved. */
+  setPackageLanguage(id: string, language: DocumentLanguage): Promise<ChangeResult>;
+  /** Shows or hides the photo on the CV (off by default); prints it again and reopens the CV step. */
+  setPackagePhoto(id: string, on: boolean): Promise<ChangeResult>;
+  /** Stops generating: finished parts stay, unfinished ones show as stopped, ready to retry. */
+  stopGenerating(id: string): PackageView;
+  /** Writes a failed, stopped or unwritten part again. */
+  retryPart(id: string, part: PackageStep): ChangeResult;
+  /** The CV's current draft PDF, for the preview and the draft download. */
+  packageCv(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
 }
+
+/** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
+export type VoiceForDrafts = Pick<PreparationEngine, "voiceContext" | "recordVoiceEdit">;
 
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
   migrate(deps.db);
@@ -195,6 +279,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
   const imports = createImportStore(deps, profile);
   const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
   const answers = createAnswerStore(deps);
+  const voice = createVoiceStore(deps);
   const setup = createSetupStore({ db: deps.db, clock: deps.clock, profile });
   /** A change made while checking drafts counts as Kris being in Setup. */
   const touched = <T>(value: T): T => { setup.touch(); return value; };
@@ -227,7 +312,28 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
       };
   }
 
+  const packages = createPackageStore({
+    ...deps,
+    pieces: () => profile.all(),
+    contact: () => contact.get(),
+    closestAngle: (posting) => angles.closest(posting),
+    draftDocument,
+  });
+
   return {
+    prepareStatus: (job) => packages.status(job),
+    startPackage: (job) => packages.start(job),
+    package: (id) => packages.get(id),
+    packageForJob: (jobId) => packages.forJob(jobId),
+    packageChips: (jobIds) => packages.chips(jobIds),
+    packageSettled: (id) => packages.settled(id),
+    approveStep: (id, step) => packages.approve(id, step),
+    setTargetPosting: (id, postingId) => packages.setTarget(id, postingId),
+    setPackageLanguage: (id, language) => packages.setLanguage(id, language),
+    setPackagePhoto: (id, on) => packages.setPhoto(id, on),
+    stopGenerating: (id) => packages.stop(id),
+    retryPart: (id, part) => packages.retry(id, part),
+    packageCv: (id) => packages.cvFile(id),
     budget: () => deps.budget.info(),
     draftDocument,
     demoDocument: (options) => draftDocument({ packageId: "demo", document: demoDocument(options), fileName: demoFileName }),
@@ -263,11 +369,13 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     },
     setupSummary() {
       const views = angles.list();
+      const v = voice.view();
       const thinnest = views.reduce((a, b) => (b.available < a.available ? b : a), views[0]!);
       return {
         pieces: setup.progress().counts,
         angles: { count: views.length, thinnest: thinnest?.label ?? null },
         answerBank: answers.list().counts.all,
+        voice: { samples: v.samples.filter((x) => !x.problem).length, rules: v.rules.length },
       };
     },
     listPieces: (query) => profile.list(query),
@@ -285,6 +393,16 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     recordPortalEdit: (id, edit) => answers.recordPortalEdit(id, edit),
     resolvePortalEdit: (id, keep) => answers.resolvePortalEdit(id, keep),
     answerHistory: (id) => answers.history(id),
+    voice: () => voice.view(),
+    addVoiceSamples: (files) => voice.add(files),
+    replaceVoiceSample: (id, file) => voice.replace(id, file),
+    removeVoiceSample: (id) => voice.remove(id),
+    learnVoice: () => voice.learn(),
+    voiceSends: () => voice.sends(),
+    removeVoiceRule: (id) => voice.removeRule(id),
+    voiceContext: (request) => voice.context(request),
+    recordVoiceEdit: (edit) => voice.recordEdit(edit),
+    setVoiceLearning: (on) => voice.setLearning(on),
     contact: () => contact.get(),
     saveContact(details) {
       const result = contact.save(details);

@@ -178,6 +178,8 @@ export interface SetupSummary {
   angles: { count: number; thinnest: string | null };
   /** Standard and screening answers in the bank. */
   answerBank: number;
+  /** Voice samples that could be read, and the voice rules learned from them. */
+  voice: { samples: number; rules: number };
 }
 
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;

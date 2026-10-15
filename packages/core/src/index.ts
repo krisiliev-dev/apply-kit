@@ -52,10 +52,14 @@ export { runEvaluation } from "./evaluation/run.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
 export { createAiBudget } from "./budget.ts";
 export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcome } from "./budget.ts";
-export { draftedPiecesSchema } from "./writing/writer.ts";
-export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces } from "./writing/writer.ts";
+export { draftedPiecesSchema, learnedVoiceSchema } from "./writing/writer.ts";
+export type { Writer, WriterRequest, WriterTask, Written, SentExcerpt, ImportedText, DraftedPieces, LearnedVoice, VoiceLearningInput } from "./writing/writer.ts";
+export { VOICE_EXCERPT_WORDS } from "./preparation/voice.ts";
+export type { VoiceView, VoiceSample, VoiceSampleFile, VoiceSampleKind, VoiceSampleProblem, VoiceRule, VoiceLanguage, VoiceSend, VoiceLearning, VoiceContext, VoiceContextRequest, VoiceEditInput } from "./preparation/voice.ts";
+export { tailoredCvSchema } from "./writing/writer.ts";
+export type { TailorCvInput, TailoredCv } from "./writing/writer.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
-export type { PreparationEngine, DraftRequest, DocumentDraft } from "./preparation/engine.ts";
+export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts } from "./preparation/engine.ts";
 export type { ProfileExport } from "./preparation/engine.ts";
 export type {
   ImportFile, ImportInput, ImportInputProblem, ImportField, ImportItem, ImportItemState, ImportMerge, ImportProblem, ImportRun, ImportSource,
@@ -75,6 +79,11 @@ export { angleRules } from "./preparation/angles.ts";
 export { setupSteps, draftFilters } from "./preparation/setup.ts";
 export type { SetupStep, SetupProgress, DraftFilter, DraftCounts, DraftGroup, DraftsToCheck, ConfirmGroupResult, Experience, SearchSuggestion, SetupSummary } from "./preparation/setup.ts";
 export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleResult, AngleProblem } from "./preparation/angles.ts";
+export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts";
+export type {
+  PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
+  TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult,
+} from "./preparation/packages.ts";
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";
 export type {
   PreparationDeps, DocumentRenderer, DocumentToRender, DocumentKind, DocumentLanguage, RenderedDocument,
