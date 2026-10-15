@@ -174,4 +174,59 @@ describe("the letter's checks", () => {
     });
     expect(refused.package.steps[2]).toMatchObject({ state: "current", sub: "1 to fix" });
   });
+
+  it("holds every claim to the profile: a number or a tool it doesn't have is a problem", async () => {
+    const t = await mira({
+      letter: (letter) => { letter.paragraphs[1]!.sentences[0]!.text = "At Northwind Bank I wrote 50 detection rules in Splunk."; },
+    });
+    const pkg = await started(t);
+    expect(pkg.letter!.checks[0]).toEqual({
+      id: "trace", state: "problem", label: "A claim doesn't trace to your master profile",
+      detail: "\"At Northwind Bank I wrote 50 detection rules in Splunk\" names \"Splunk\", which isn't in your profile; it says \"50\", which its piece doesn't back.",
+    });
+  });
+
+  it("names the gap Kris chose to name, and says so when a draft doesn't", async () => {
+    const kubernetes = kestrelJob({ requirements: [{ text: "Incident response", kind: "required", category: "skill" }, { text: "Kubernetes security", kind: "required", category: "skill" }] });
+    let named = false;
+    const t = await mira({
+      letter: (letter) => {
+        if (named) letter.paragraphs[2]!.sentences.push({ text: "Kubernetes security I haven't done in production, and I would want to close that gap early.", forCompany: true, pieceIds: [] });
+      },
+    });
+    const pkg = await started(t, kubernetes);
+    const gap = pkg.cvVersion!.flags.find((f) => f.kind === "gap")!;
+
+    const decided = await t.preparation.decideFlag(pkg.id, gap.id, { option: "letter" });
+
+    expect(decided.package.letter!.checks.find((c) => c.id === "gaps")).toEqual({
+      id: "gaps", state: "problem", label: "Kubernetes security gap not named",
+      detail: "You chose to name Kubernetes security in the letter, as something to learn. Ask for a new draft (\"Name the Kubernetes security gap\"), or add a sentence yourself.",
+    });
+    expect(decided.package.letter!.quick).toContain("Name the Kubernetes security gap");
+
+    named = true;
+    const redrafted = await t.preparation.redraftLetter(pkg.id, "Name the Kubernetes security gap");
+
+    expect(letterInputs(t).at(-1)).toMatchObject({ gaps: ["Kubernetes security"], instruction: "Name the Kubernetes security gap" });
+    expect(redrafted.package.letter!.checks.find((c) => c.id === "gaps")).toMatchObject({ state: "ok", label: "Kubernetes security gap named, as you chose in the CV step" });
+    expect(redrafted.package.letter!.checks[0]).toMatchObject({ state: "ok" });
+  });
+
+  it("warns about stock phrases and a letter with no example, without stopping Approve", async () => {
+    const t = await mira({
+      letter: (letter) => {
+        letter.paragraphs[1]!.sentences = [{ text: "I am passionate about security and excited to apply.", forCompany: false, pieceIds: [] }];
+      },
+    });
+    const pkg = await started(t);
+    t.preparation.approveStep(pkg.id, "target");
+    t.preparation.approveStep(pkg.id, "cv");
+
+    expect(pkg.letter!.checks.slice(3)).toEqual([
+      { id: "stock", state: "warning", label: "Stock phrases: \"passionate\", \"excited to apply\"", detail: "In \"I am passionate about security and excited to apply\". Say what you did instead." },
+      { id: "example", state: "warning", label: "No concrete example with a number", detail: "Anchor the letter in one example from your profile, with its number." },
+    ]);
+    expect(t.preparation.approveStep(pkg.id, "letter")).toMatchObject({ approved: true });
+  });
 });

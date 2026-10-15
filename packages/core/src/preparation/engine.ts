@@ -330,6 +330,14 @@ export interface PreparationEngine {
    * in this package; the line drafted from it comes back as a new flag before the CV changes.
    */
   answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
+  // ---------- The cover letter (#65) ----------
+
+  /**
+   * "Write draft N": a new letter with Kris's instruction ("Shorter", "Name the Kubernetes security
+   * gap"), within the cap. Earlier drafts are kept and paged; a failure keeps the draft there is.
+   */
+  redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
+
   /** Profile › Learned during packages: pieces learned from answers in packages, waiting for Kris, newest first. */
   learnedPieces(): LearnedPiece[];
   /** A near-the-line learned piece: its suggested honest version becomes the piece, confirmed. */
@@ -436,6 +444,7 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     decideFlag: (id, flagId, choice) => packages.decideFlag(id, flagId, choice),
     answerGap: (id, flagId, answer) => packages.answerGap(id, flagId, answer),
     learnedPieces: () => packages.learned(),
+    redraftLetter: (id, instruction) => packages.redraftLetter(id, instruction),
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });

@@ -175,7 +175,8 @@ function keyWords(requirement: string): string[] {
   const longest = words(requirement).filter((w) => !stopWords.has(w)).sort((a, b) => b.length - a.length)[0];
   return longest ? [longest] : [];
 }
-const mentions = (text: string, requirement: string) => {
+/** Whether a text names a requirement (a gap): by its names, or else its longest word. */
+export const mentions = (text: string, requirement: string) => {
   const have = new Set(words(text));
   const key = keyWords(requirement);
   return key.length > 0 && key.every((w) => have.has(w));

@@ -31,7 +31,10 @@ import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder } from "./ports.ts";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
 import type { DocumentDraft, DraftRequest } from "./engine.ts";
-import { bodyWords, checkLetter, emptyLetter, forCompanyCount, forCompanyPlaces, fromWritten, LETTER_WORDS, letterText, type LetterCheck, type LetterDraft } from "./letter.ts";
+import {
+  bodyParagraphs, bodyWords, checkLetter, emptyLetter, forCompanyCount, forCompanyPlaces, fromWritten, LETTER_WORDS, letterText, mentions, parseLetterText,
+  type LetterCheck, type LetterDraft,
+} from "./letter.ts";
 import { wordCount, type VoiceContext, type VoiceContextRequest, type VoiceEditInput } from "./voice.ts";
 
 export const packageSteps = ["target", "cv", "letter", "answers", "ats"] as const;
@@ -362,7 +365,8 @@ export interface PackageStore {
   decideFlag(id: string, flagId: string, choice: FlagChoice): Promise<ChangeResult>;
   /** Kris's answer to a gap's question: the coach writes a piece from it, and its line comes back as a new flag. */
   answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
-  // LETTER-OPS
+  /** A new letter draft with Kris's instruction; the earlier drafts are kept. */
+  redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
   learned(): LearnedPiece[];
 }
@@ -928,7 +932,10 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       forCompany: { count: forCompanyCount(l.content), where: forCompanyPlaces(l.content) },
       checks: letterChecks(r, l).map(({ id, state, label, detail }) => ({ id, state, label, detail })),
       voice: { samples: learned.samples, edits: learned.edits, sent, sentWords: sent.reduce((n, e) => n + wordCount(e.text), 0) },
-      quick: ["Shorter", "More direct"],
+      quick: [
+        ...namedGaps(r).filter((gap) => !mentions(bodyParagraphs(l.content).join(" "), gap)).map((gap) => `Name the ${gap} gap`),
+        "Shorter", "More direct",
+      ],
       file: r.letterFile && r.letterFile.draft === l.number ? r.letterFile : null,
       editedAt: l.editedAt,
     };
@@ -1277,6 +1284,37 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       });
   }
 
+  // ---- the cover letter's operations (#65) ----------------------------------------------------
+
+  /** Adds a call's cost to the letter part. */
+  const chargeLetter = (id: string, usd: number) => setPart(id, "letter", { costUsd: parts(id).get("letter")!.costUsd + usd });
+
+  async function redraftLetter(id: string, instruction: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(row(id)!) });
+    const said = instruction.trim();
+    if (!said) return refuse("Say what to change, or pick one of the quick instructions.");
+    if (parts(id).get("letter")!.state === "working") return refuse("The letter is still being written. Ask for a new draft once it's there.");
+    const current = currentLetter(r);
+    const kept = current ? ` Draft ${current.number} is kept.` : "";
+    let outcome;
+    try {
+      outcome = await letterCall(id, said, current ? letterText(current.content) : null);
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) chargeLetter(id, billed);
+      return refuse(`The new draft wasn't written: ${message(err)}.${kept} Try again, or edit this one yourself.`);
+    }
+    if (outcome.refused) return refuse(`This month's AI budget would be crossed, so a new draft can't be written now.${kept} Edit it, or write it yourself.`);
+    const written = outcome.result;
+    chargeLetter(id, written.costUsd);
+    addLetter(id, { origin: "writer", instruction: said, written: fromWritten(written.output), content: fromWritten(written.output), excerpts: written.excerpts, costUsd: written.costUsd });
+    setPart(id, "letter", { state: "done", error: null });
+    reopenFrom(r, "letter");
+    await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
   const mustGet = (id: string) => {
     const r = row(id);
     if (!r) throw new Error("No such package");
@@ -1402,6 +1440,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     decideFlag,
     answerGap,
     learned,
+    redraftLetter,
 
   };
 }
