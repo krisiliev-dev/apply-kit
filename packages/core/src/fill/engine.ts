@@ -6,14 +6,29 @@ import { randomUUID } from "node:crypto";
 import type { PrepareForApply } from "../preparation/engine.ts";
 import { sameJobReference, type ApprovedPackage, type PageJobReference } from "../preparation/contracts.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
+import type { PackageFolder } from "../preparation/ports.ts";
 import { migrate } from "../schema.ts";
 import { contactValue } from "./contact.ts";
-import { countOutcomes, type FieldAnswer, type FieldOutcome, type PageReading, type RecordedPage } from "./reading.ts";
+import { countOutcomes, type FieldAnswer, type FieldOutcome, type PackageFileKind, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
 
 export interface FillDeps {
   db: SqlDatabase;
   clock: Clock;
-  prepare: Pick<PrepareForApply, "approvedPackages" | "packageForApply" | "profileForApply">;
+  prepare: Pick<PrepareForApply, "approvedPackages" | "packageForApply" | "profileForApply" | "packageFile">;
+  /**
+   * The packages folder, to copy an approved file to Kris's Packages folder on first use when approval
+   * couldn't ("Show in Finder" needs it there). Freezing the same bytes again only finds the file and its copy.
+   */
+  packages?: Pick<PackageFolder, "freeze">;
+}
+
+/** A package file to attach: its bytes, the name the portal gets, and its copy in the Packages folder (null if it couldn't be written). */
+export interface PackageFileForFill {
+  which: PackageFileKind;
+  fileName: string;
+  size: number;
+  path: string | null;
+  bytes: Uint8Array;
 }
 
 /** The page Kris is on, as the extension recognised it from the tab's address. */
@@ -44,7 +59,7 @@ export interface PackageInBrief {
   job: { title: string; company: string };
   jobRef: PageJobReference | null;
   language: "en" | "bg";
-  cv: { fileName: string; label: string; angle: ApprovedPackage["angle"]; ats: ApprovedPackage["cv"]["ats"] };
+  cv: { fileName: string; size: number; label: string; angle: ApprovedPackage["angle"]; ats: ApprovedPackage["cv"]["ats"] };
   /** How many approved screening answers it carries. */
   answers: number;
   /** Whether it has an approved letter. */
@@ -78,6 +93,8 @@ export interface FillEngine {
   startFill(page: FillPage, options?: FillOptions): Promise<FillStart>;
   /** The answer for each field of the page, in its order. Throws once the session has ended. */
   answer(sessionId: string, reading: PageReading): FieldAnswer[];
+  /** The session's package's CV or letter, exactly as approved; null when the package has no such file. Throws once the session has ended. */
+  packageFile(sessionId: string, which: PackageFileKind): Promise<PackageFileForFill | null>;
   /** Records what the fill did on a page: counts and per-field outcome and source, no values. */
   recordPage(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): RecordedPage;
   /** The pages recorded in a session, oldest first. */
@@ -92,7 +109,7 @@ export class FillError extends Error {
   }
 }
 
-export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
+export function createFillEngine({ db, clock, prepare, packages }: FillDeps): FillEngine {
   migrate(db);
 
   const toSession = (r: Record<string, unknown>): FillSession => ({
@@ -177,14 +194,16 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
       const s = openSession(sessionId);
       const profile = prepare.profileForApply();
       const pkg = approvedById(s.packageId);
+      // One letter per page: as a file where the page takes one, its text only where there's no file field for it.
+      const letterAsFile = !!pkg?.letter && reading.fields.some((f) => f.kind === "file" && letterLabel.test(f.label));
       return reading.fields.map((f): FieldAnswer => {
         const fieldId = f.id;
         if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
         if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
-        if (f.kind === "file") {
-          const letter = /cover|letter|мотивац/i.test(f.label);
-          const file = letter ? pkg?.letter?.file : pkg?.cv.file;
-          return { fieldId, kind: "needs-you", reason: `Attach the ${letter ? "letter" : "CV"} yourself for now`, basis: file ? `Your package's ${letter ? "letter" : "CV"}: ${file.fileName}` : null };
+        if (f.kind === "file") return fileAnswer(f, pkg);
+        if (letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) {
+          if (letterAsFile) return { fieldId, kind: "skip", reason: "Your letter is attached as a file" };
+          if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
         }
         const contact = contactValue(f, profile);
         if (contact?.value) {
@@ -198,6 +217,16 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
           ? { fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null }
           : { fieldId, kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" };
       });
+    },
+
+    async packageFile(sessionId, which) {
+      const s = openSession(sessionId);
+      const pkg = approvedById(s.packageId);
+      const file = pkg ? await prepare.packageFile(pkg.id, which, pkg.version) : null;
+      if (!pkg || !file) return null;
+      let path = file.copy;
+      if (!path && packages) path = await packages.freeze(pkg.id, pkg.version, file.fileName, file.bytes).then((r) => r.copy, () => null);
+      return { which, fileName: file.fileName, size: file.size, path, bytes: file.bytes };
     },
 
     recordPage(sessionId, reading, outcomes) {
@@ -225,10 +254,25 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
   };
 }
 
+const letterLabel = /\bcover(ing)? ?letter\b|\bmotivation(al)? letter\b|мотивационно писмо/iu;
+const cvLabel = /\b(resume|résumé|cv|curriculum)\b|автобиография/iu;
+
+/** A file field: the package's CV or letter, or Kris's when the package has no such file. */
+function fileAnswer(f: ReadField, pkg: ApprovedPackage | null): FieldAnswer {
+  const fieldId = f.id;
+  const which = letterLabel.test(f.label) ? "letter" : cvLabel.test(f.label) ? "cv" : null;
+  const file = which === "letter" ? pkg?.letter?.file : which === "cv" ? pkg?.cv.file : null;
+  if (which && file && pkg) {
+    return { fieldId, kind: "file", which, fileName: file.fileName, size: file.size, source: "package", basis: `Your package's ${which === "cv" ? "CV" : "letter"}${pkg.language === "bg" ? " in Bulgarian" : ""}, v${pkg.version}` };
+  }
+  const reason = which === "letter" ? "Your package has no letter" : "apply-kit has no file for this";
+  return f.required ? { fieldId, kind: "needs-you", reason, basis: null } : { fieldId, kind: "skip", reason };
+}
+
 function brief(p: ApprovedPackage): PackageInBrief {
   return {
     id: p.id, version: p.version, approvedAt: p.approvedAt, job: p.job, jobRef: p.targetPosting.jobRef, language: p.language,
-    cv: { fileName: p.cv.file.fileName, label: p.cv.label, angle: p.angle, ats: p.cv.ats },
+    cv: { fileName: p.cv.file.fileName, size: p.cv.file.size, label: p.cv.label, angle: p.angle, ats: p.cv.ats },
     answers: p.answers.length, letter: p.letter !== null,
   };
 }

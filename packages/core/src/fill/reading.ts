@@ -39,12 +39,17 @@ export interface PageReading {
   fields: ReadField[];
 }
 
+/** Which of the package's files a file field gets. */
+export type PackageFileKind = "cv" | "letter";
+
 /** Where a filled value came from, as the panel names it. */
 export type FillSource = "profile" | "answer-bank" | "package" | "cv-version" | "you";
 
 /** The engine's answer for one field: a value to fill, something for Kris, or a field to leave alone. */
 export type FieldAnswer =
   | { fieldId: string; kind: "fill"; value: string; source: FillSource; basis: string | null }
+  /** Attach the package's frozen CV or letter: the extension fetches its bytes (`packageFile`) and attaches them first. */
+  | { fieldId: string; kind: "file"; which: PackageFileKind; fileName: string; size: number; source: "package"; basis: string }
   | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string }
   | { fieldId: string; kind: "skip"; reason: string };
 
