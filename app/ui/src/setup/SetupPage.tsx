@@ -1,35 +1,101 @@
-// Setup, phase A: import (hi-fi: docs/design/hifi/onboarding.html, states "A · Import", "Reading
-// files", "Partial · one file unreadable" and "AI cap reached"). Old CVs, the LinkedIn export and links
-// become drafted pieces, usable in Profile as each file finishes. The coach interview and the search
-// check are later steps (#55, #56).
-import type { HealthSummary, ImportInputProblem, ImportItem, ImportMerge, ImportStatus, UnreadableAction } from "@apply-kit/core";
-import { useCallback, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+// Setup (hi-fi: docs/design/hifi/onboarding.html): four steps around the import (Import, Check
+// drafts, Interview, Your search) and the finish. Each step has its own address under /setup; moving
+// to one records it, so /setup opens where Kris stopped ("Welcome back"), with the same counts.
+// This file holds the router and phase A, import (states "A · Import", "Reading files", "Partial ·
+// one file unreadable" and "AI cap reached"): old CVs, the LinkedIn export and links become drafted
+// pieces, checkable as each file finishes. Phase B, the coach interview, is in Interview.tsx.
+import type { HealthSummary, ImportInputProblem, ImportItem, ImportMerge, ImportStatus, SetupProgress, SetupStep, UnreadableAction } from "@apply-kit/core";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
 import {
-  cancelImport, fetchImport, fetchImportMerges, fetchLatestImport, fetchSources, resolveImportItem, resumeImport, startImport, toUpload,
+  cancelImport, fetchImport, fetchImportMerges, fetchLatestImport, fetchSetup, fetchSources, resolveImportItem, resumeImport, setSetupStep, startImport, toUpload,
 } from "../api.ts";
 import { Icon } from "../icons.tsx";
+import { CheckDrafts } from "./CheckDrafts.tsx";
+import { Done, Returning, SkipSetup, YourSearch } from "./Finish.tsx";
+import { Interview } from "./Interview.tsx";
+import { message, plural, resetDay, usd, SetupContext, stepPath, Steps, useNavLink, useSetup, type Go, type SetupContextValue } from "./common.tsx";
 
 const POLL_MS = 1_000;
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
+const stepOf = (path: string) => (/^\/setup\/(import|review|interview|search|done)$/.exec(path)?.[1] ?? null) as SetupStep | null;
 
 export function SetupPage({ onHealth }: { onHealth: (h: HealthSummary) => void }) {
-  const [status, setStatus] = useState<ImportStatus | null | undefined>(undefined);
-  const [form, setForm] = useState(false);
+  const [path, setPath] = useState(window.location.pathname);
+  const [progress, setProgress] = useState<SetupProgress | null>(null);
+  const [imported, setImported] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState("");
+  const moved = useRef(false);
 
   const announce = useCallback((msg: string) => {
     setLive("");
     window.setTimeout(() => setLive(msg), 60);
   }, []);
 
+  const go: Go = useCallback((to: string) => {
+    window.history.pushState(null, "", to);
+    moved.current = true;
+    setPath(window.location.pathname);
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    const back = () => { moved.current = true; setPath(window.location.pathname); };
+    window.addEventListener("popstate", back);
+    return () => window.removeEventListener("popstate", back);
+  }, []);
+
+  const refresh = useCallback(() => {
+    fetchSetup().then(setProgress).catch(() => {});
+  }, []);
+
   // The top bar shows source health on every screen.
   useEffect(() => {
     const ctrl = new AbortController();
     fetchSources(ctrl.signal).then((r) => onHealth(r.summary)).catch(() => {});
+    fetchSetup(ctrl.signal).then(setProgress).catch((err: unknown) => { if (!ctrl.signal.aborted) setError(message(err)); });
+    fetchLatestImport(ctrl.signal).then((s) => setImported(s ? s.pieces : null)).catch(() => {});
     return () => ctrl.abort();
   }, [onHealth]);
+
+  // Opening a step records it, so Setup reopens there; the heading takes focus after a move.
+  const step = stepOf(path);
+  useEffect(() => {
+    if (step && step !== "done") setSetupStep(step).then(setProgress).catch(() => {});
+    if (moved.current) window.setTimeout(() => document.getElementById("setup-h")?.focus(), 0);
+  }, [step]);
+
+  const ctx: SetupContextValue = useMemo(() => ({ progress, go, announce, refresh }), [progress, go, announce, refresh]);
+
+  let view;
+  if (error) view = <div className="banner error" role="alert"><span className="text"><b>Couldn't load setup.</b> {error}</span></div>;
+  else if (step === "review") view = <CheckDrafts imported={imported} />;
+  else if (step === "interview") view = <Interview imported={imported} />;
+  else if (step === "search") view = <YourSearch imported={imported} />;
+  else if (step === "done") view = <Done />;
+  else if (step === "import") view = <ImportStep onImported={setImported} />;
+  else if (!progress) view = <p className="meta" role="status">Loading…</p>;
+  // /setup itself: where Kris stopped.
+  else if (progress.finishedAt && progress.step === "done") view = <Done />;
+  else if (progress.started && (progress.step === "review" || progress.step === "interview" || progress.step === "search")) view = <Returning step={progress.step} />;
+  else view = <ImportStep onImported={setImported} />;
+
+  return (
+    <SetupContext.Provider value={ctx}>
+      <section className="setup stack">
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{live}</div>
+        {view}
+      </section>
+    </SetupContext.Provider>
+  );
+}
+
+// ---------- A · Import ----------
+
+function ImportStep({ onImported }: { onImported: (pieces: number) => void }) {
+  const [status, setStatus] = useState<ImportStatus | null | undefined>(undefined);
+  const [form, setForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { announce, refresh } = useSetup();
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -47,9 +113,13 @@ export function SetupPage({ onHealth }: { onHealth: (h: HealthSummary) => void }
       if (before === undefined || before === item.state || (item.state !== "done" && item.state !== "unreadable" && item.state !== "waiting")) continue;
       said.push(item.state === "done" ? `${item.name} done, ${plural(item.pieces, "piece", "pieces")}.` : item.state === "unreadable" ? `${item.name} couldn't be read.` : `${item.name} waits for the AI budget.`);
     }
-    if (said.length > 0) announce(said.join(" "));
+    if (said.length > 0) {
+      announce(said.join(" "));
+      refresh();
+    }
     setStatus(next);
-  }, [announce]);
+    onImported(next.pieces);
+  }, [announce, refresh, onImported]);
   const running = status?.state === "running";
   const runId = status?.id;
   useEffect(() => {
@@ -68,45 +138,14 @@ export function SetupPage({ onHealth }: { onHealth: (h: HealthSummary) => void }
     window.setTimeout(() => document.getElementById("setup-h")?.focus(), 0);
   };
 
-  return (
-    <section className="setup stack">
-      <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{live}</div>
-      {error ? (
-        <div className="banner error" role="alert"><span className="text"><b>Couldn't load setup.</b> {error}</span></div>
-      ) : status === undefined ? (
-        <p className="meta" role="status">Loading…</p>
-      ) : status === null || form ? (
-        <ImportForm onStarted={started} onBack={status ? () => setForm(false) : null} />
-      ) : (
-        <ImportRunView status={status} onStatus={receive} announce={announce} onImportMore={() => { setForm(true); window.setTimeout(() => document.getElementById("setup-h")?.focus(), 0); }} />
-      )}
-    </section>
-  );
-}
-
-function Steps({ status }: { status: ImportStatus | null }) {
-  const reading = status?.state === "running";
-  return (
-    <nav aria-label="Setup steps">
-      <ol className="pk-steps">
-        <li className={`current${reading ? " working" : ""}`}>
-          <a href="/setup" aria-current="step">
-            <span className="ic" aria-hidden="true">{reading ? <span className="spin" /> : "1"}</span>
-            <span className="lbl">Import</span>
-            <span className="sub">{reading ? "Reading…" : "Old CVs, LinkedIn"}</span>
-          </a>
-        </li>
-        <li className="upcoming">
-          <a href="/profile"><span className="ic" aria-hidden="true">2</span><span className="lbl">Check drafts</span><span className="sub">{status && status.pieces > 0 ? `${status.pieces} ready` : "Confirm or fix"}</span></a>
-        </li>
-        <li className="upcoming">
-          <a aria-disabled="true"><span className="ic" aria-hidden="true">3</span><span className="lbl">Interview</span><span className="sub">Coming next</span></a>
-        </li>
-        <li className="upcoming">
-          <a href="/profile/search"><span className="ic" aria-hidden="true">4</span><span className="lbl">Your search</span><span className="sub">Check defaults</span></a>
-        </li>
-      </ol>
-    </nav>
+  return error ? (
+    <div className="banner error" role="alert"><span className="text"><b>Couldn't load setup.</b> {error}</span></div>
+  ) : status === undefined ? (
+    <p className="meta" role="status">Loading…</p>
+  ) : status === null || form ? (
+    <ImportForm onStarted={started} onBack={status ? () => setForm(false) : null} />
+  ) : (
+    <ImportRunView status={status} onStatus={receive} announce={announce} onImportMore={() => { setForm(true); window.setTimeout(() => document.getElementById("setup-h")?.focus(), 0); }} />
   );
 }
 
@@ -165,7 +204,7 @@ function ImportForm({ onStarted, onBack }: { onStarted: (s: ImportStatus) => voi
 
   return (
     <form className="stack setup-form" onSubmit={submit} noValidate>
-      <Steps status={null} />
+      <Steps current="import" />
       <div className="head">
         <h1 id="setup-h" tabIndex={-1}>Start with what you already have</h1>
         <p className="muted">Old CVs and your LinkedIn export give the coach something to question. Nothing needs to be up to date or polished. You can stop after any step.</p>
@@ -227,6 +266,7 @@ function ImportForm({ onStarted, onBack }: { onStarted: (s: ImportStatus) => voi
             <button className="btn primary" type="submit" disabled={busy}>{busy ? "Starting…" : label}</button>
             {onBack && <button className="btn ghost" type="button" onClick={onBack}>Back to the last import</button>}
           </div>
+          {!onBack && <SkipSetup />}
         </div>
         <aside className="col side">
           <div className="panel privacy">
@@ -254,12 +294,7 @@ function ImportForm({ onStarted, onBack }: { onStarted: (s: ImportStatus) => voi
 // ---------- Reading, partial, cap reached ----------
 
 const secondsLabel = (s: number) => (s < 60 ? `about ${s} s left` : `about ${Math.round(s / 60)} min left`);
-const usd = (n: number) => `$${n.toFixed(2)}`;
 /** The first day of the next month, when the budget resets: "1 Nov". */
-function resetDay(month: string): string {
-  const [y, m] = month.split("-").map(Number);
-  return new Date(Date.UTC(y!, m!, 1)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-}
 
 function ImportRunView({ status, onStatus, announce, onImportMore }: {
   status: ImportStatus;
@@ -270,6 +305,7 @@ function ImportRunView({ status, onStatus, announce, onImportMore }: {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const failureRef = useRef<HTMLDivElement>(null);
+  const nav = useNavLink();
   const items = status.items;
   const unreadable = items.filter((i) => i.state === "unreadable");
   const waiting = items.filter((i) => i.state === "waiting" && i.waitingFor === "budget");
@@ -296,11 +332,11 @@ function ImportRunView({ status, onStatus, announce, onImportMore }: {
     : status.state === "cancelled" ? "Import cancelled"
     : waiting.length > 0 ? "Reading your files"
     : `${status.done} of ${status.total} imported`;
-  const check = status.pieces > 0 && <a className="btn primary" href="/profile">Check {plural(status.pieces, "piece", "pieces")}</a>;
+  const check = status.pieces > 0 && <a className="btn primary" href={stepPath.review} onClick={nav}>Check {plural(status.pieces, "piece", "pieces")}</a>;
 
   return (
     <div className="stack setup-run">
-      <Steps status={status} />
+      <Steps current="import" reading={status.state === "running"} />
       <div className="head">
         <h1 id="setup-h" tabIndex={-1}>{heading}</h1>
         {running && <p className="muted">{settled} of {status.total} done{status.secondsLeft ? ` · ${secondsLabel(status.secondsLeft)}` : ""}</p>}
@@ -328,7 +364,7 @@ function ImportRunView({ status, onStatus, announce, onImportMore }: {
       {running && status.pieces > 0 && (
         <div className="banner info">
           <span className="text"><b>{plural(status.pieces, "piece is", "pieces are")} ready.</b> Start checking now; the rest join the list as they finish.</span>
-          <a className="btn primary sm" href="/profile">Start checking</a>
+          <a className="btn primary sm" href={stepPath.review} onClick={nav}>Start checking</a>
         </div>
       )}
 

@@ -9,7 +9,7 @@ const at = "2026-10-12T07:30:00.000Z";
 function piece(p: Partial<ProfilePiece> & Pick<ProfilePiece, "id" | "kind">): ProfilePiece {
   return {
     text: "", entry: null, belongsTo: null, tags: [], angles: ["security"], numberSource: null, status: "confirmed",
-    source: { from: "Added in Profile", quote: null }, alsoFrom: [], checkThis: false, createdAt: at, updatedAt: at, ...p,
+    source: { from: "Added in Profile", quote: null }, alsoFrom: [], checkThis: false, dispute: null, createdAt: at, updatedAt: at, ...p,
   };
 }
 

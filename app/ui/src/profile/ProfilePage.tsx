@@ -4,7 +4,7 @@
 import type { Angle, Contact, HealthSummary, PieceGroup, PieceKind, PieceList, ProfilePiece, ProfileSummary } from "@apply-kit/core";
 import { angles, pieceKinds } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { confirmPiece, deletePiece, fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileExportUrl } from "../api.ts";
+import { confirmPiece, discardPiece, fetchContact, fetchPieces, fetchProfileSummary, fetchSources, profileExportUrl } from "../api.ts";
 import { Icon } from "../icons.tsx";
 import { SearchSettingsPage } from "../settings/SearchSettingsPage.tsx";
 import { AnglesPage } from "./AnglesPage.tsx";
@@ -296,8 +296,8 @@ function PieceCard({ piece: p, go, changed, focusRef }: { piece: ProfilePiece; g
   const discard = async () => {
     setBusy(true);
     try {
-      await deletePiece(p.id);
-      changed(`Discarded ${name}.`);
+      await discardPiece(p.id);
+      changed(`Discarded ${name}. Restore it from Setup › Check drafts › Discarded.`);
     } catch (err) {
       setRefusal([message(err)]);
       setBusy(false);
@@ -310,7 +310,7 @@ function PieceCard({ piece: p, go, changed, focusRef }: { piece: ProfilePiece; g
         <div className="top">
           <span className="type">{kindLabel[p.kind].toUpperCase()}</span>
           {p.status === "unconfirmed" && <span className="chip ask"><Icon name="ask" />Unconfirmed</span>}
-          {p.status === "flagged" && <span className="chip partly"><Icon name="line" />Near the line</span>}
+          {p.status === "flagged" && <span className="chip partly"><Icon name="line" />{p.dispute ? "Sources disagree" : "Near the line"}</span>}
           {p.checkThis && <span className="chip partly"><Icon name="partly" />Check this: read from a scan</span>}
           <span>{p.source.from}{p.alsoFrom.length > 0 && ` · also in ${[...new Set(p.alsoFrom.map((s) => s.from))].join(", ")}`}</span>
           {p.numberSource && <span>{numberSourceLabel[p.numberSource]}</span>}
@@ -341,7 +341,8 @@ function PieceCard({ piece: p, go, changed, focusRef }: { piece: ProfilePiece; g
         <a className="btn ghost sm" href={`/profile/pieces/${encodeURIComponent(p.id)}`} onClick={navLink(go)}>
           Edit<span className="sr-only"> {name}</span>
         </a>
-        {p.status === "unconfirmed" && (
+        {p.dispute && <a className="btn sm" href="/setup/review">Pick the true version<span className="sr-only"> of {name}</span></a>}
+        {p.status !== "confirmed" && (
           <button className="btn ghost sm" type="button" disabled={busy} onClick={discard}>
             Discard<span className="sr-only"> {name}</span>
           </button>

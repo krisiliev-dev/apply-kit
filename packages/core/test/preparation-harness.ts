@@ -5,6 +5,7 @@
 import { createHash } from "node:crypto";
 import {
   createAiBudget, createEngine, createPreparationEngine, draftedPiecesSchema, tailoredCvSchema, type LearnedVoice, type VoiceLearningInput,
+  type CoachTopic, type CoachTurn, type CoachTurnInput,
   type AiBudget, type DiscoveryEngine, type DocumentRenderer, type DraftedPieces, type EngineDeps, type FileStore,
   type ImportedText, type TailorCvInput, type TailoredCv, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type SentExcerpt, type TextRecognizer, type Writer, type WriterRequest,
 } from "../src/index.ts";
@@ -23,6 +24,8 @@ type Recorded<I, O> = O | Error | ((input: I) => O | Error | Promise<O | Error>)
 export interface RecordedOutputs {
   draftPieces?: Recorded<ImportedText, DraftedPieces>;
   tailorCv?: Recorded<TailorCvInput, TailoredCv>;
+  /** By default the coach asks the next question in plain words and writes nothing. */
+  coachTurn?: Recorded<CoachTurnInput, CoachTurn>;
   /** No new rules by default. */
   learnVoice?: LearnedVoice | Error | ((input: VoiceLearningInput) => LearnedVoice | Error | Promise<LearnedVoice | Error>);
 }
@@ -62,8 +65,31 @@ export function fakeWriter(
       calls.push({ task: "tailor-cv", input });
       return answer(recorded.tailorCv, recordedTailoredCv, input);
     },
+    async coachTurn(input) {
+      calls.push({ task: "coach-turn", input });
+      return answer(recorded.coachTurn, plainCoachTurn(input), input);
+    },
   };
 }
+
+/** What the fake coach asks about a topic, so a transcript reads like one. */
+export function coachQuestion(topic: CoachTopic): string {
+  switch (topic.kind) {
+    case "check": return `Is this right: "${topic.piece.text || topic.piece.entry?.title}"?`;
+    case "gap": return `Nothing is listed from ${topic.from} to ${topic.to}. What were you doing then?`;
+    case "skill": return `Have you used ${topic.skill}?`;
+    case "standard": return topic.question;
+  }
+}
+
+/** The coach's turn when no output is recorded: a short reply, the next question, no pieces. */
+export const plainCoachTurn = (input: CoachTurnInput): CoachTurn => ({
+  reply: input.asked ? "Thanks." : "",
+  ask: input.next ? coachQuestion(input.next) : "",
+  followUp: false,
+  pieces: [],
+  answer: null,
+});
 
 /** The file store in memory: hash-named like the real one. */
 export function memoryFileStore(): FileStore & { files: Map<string, Uint8Array> } {

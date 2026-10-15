@@ -113,11 +113,87 @@ export const tailoredCvSchema = z.object({
 });
 export type TailoredCv = z.infer<typeof tailoredCvSchema>;
 
+/** A role or education entry as the coach sees it: its id (to put a piece under it or update it) and its facts. */
+export interface CoachEntry {
+  id: string;
+  kind: "role" | "education";
+  title: string;
+  organisation: string;
+  start: string;
+  end: string | null;
+}
+
+/**
+ * What one coach-interview question is about, as the engine scoped it: an imported piece to check
+ * (with each source's version when they disagree), a gap in the timeline (months as "YYYY-MM", the
+ * roles either side), a skill Kris likely has but never wrote down (with the pieces that suggest
+ * it), or a standard answer for the answer bank.
+ */
+export type CoachTopic =
+  | { kind: "check"; piece: { id: string; kind: string; text: string; entry: Omit<CoachEntry, "id" | "kind"> | null; from: string; quote: string | null }; versions: { from: string; text: string }[] }
+  | { kind: "gap"; from: string; to: string; months: number; before: CoachEntry | null; after: CoachEntry | null }
+  | { kind: "skill"; angle: string; skill: string; suggestedBy: { id: string; text: string }[] }
+  | { kind: "standard"; key: string; question: string };
+
+/** A line of the interview: the coach's, or Kris's own words (each of Kris's has an id pieces cite). */
+export interface CoachLine {
+  id: string;
+  who: "coach" | "you";
+  text: string;
+}
+
+/**
+ * One coach turn. `asked` is the question Kris just answered (its topic and its lines so far, Kris's
+ * answer last), or null when the coach only asks `next`. `next` is the question after it, or null
+ * when nothing is left. `entries` are the profile's roles and education, for placing pieces.
+ */
+export interface CoachTurnInput {
+  asked: { topic: CoachTopic; lines: CoachLine[] } | null;
+  next: CoachTopic | null;
+  entries: CoachEntry[];
+}
+
+/**
+ * The coach's turn: a short reply to Kris's answer (may be empty), then what it asks: a follow-up
+ * about the same question (`followUp`) or the next question (empty when nothing is left). Pieces
+ * and a standard answer are written only from Kris's own words, each citing the line it came from
+ * (`turn`). A piece updates an existing one (`updates`, its id) or is new; `role` is the id of the
+ * role or education it sits under. A claim stronger than what Kris said is marked "stronger", with
+ * the wording that keeps to what Kris said (`honest`).
+ */
+export const coachTurnSchema = z.object({
+  reply: z.string(),
+  ask: z.string(),
+  followUp: z.boolean(),
+  pieces: z.array(z.object({
+    turn: z.string(),
+    updates: z.string().nullable(),
+    kind: z.enum(["role", "achievement", "skill", "education"]),
+    text: z.string(),
+    entry: z.object({
+      title: z.string(),
+      organisation: z.string(),
+      city: z.string().nullable(),
+      start: z.string(),
+      end: z.string().nullable(),
+    }).nullable(),
+    role: z.string().nullable(),
+    tags: z.array(z.string()),
+    angles: z.array(z.enum(["developer", "security", "design"])),
+    numberSource: z.enum(["measured", "estimate", "told"]).nullable(),
+    claim: z.enum(["as-said", "stronger"]),
+    honest: z.string().nullable(),
+  })),
+  answer: z.object({ turn: z.string(), text: z.string() }).nullable(),
+});
+export type CoachTurn = z.infer<typeof coachTurnSchema>;
+
 /** Every writing task with its input, so one estimate covers them all. */
 export type WriterRequest =
   | { task: "draft-pieces"; input: ImportedText }
   | { task: "learn-voice"; input: VoiceLearningInput }
-  | { task: "tailor-cv"; input: TailorCvInput };
+  | { task: "tailor-cv"; input: TailorCvInput }
+  | { task: "coach-turn"; input: CoachTurnInput };
 
 export type WriterTask = WriterRequest["task"];
 
@@ -150,4 +226,6 @@ export interface Writer {
   /** Learns voice rules from the excerpts; reports exactly the excerpts it sent. */
   learnVoice(input: VoiceLearningInput): Promise<Written<LearnedVoice>>;
   tailorCv(input: TailorCvInput): Promise<Written<TailoredCv>>;
+  /** The coach interview's next turn: what the coach says, and the pieces it writes from Kris's answer. */
+  coachTurn(input: CoachTurnInput): Promise<Written<CoachTurn>>;
 }
