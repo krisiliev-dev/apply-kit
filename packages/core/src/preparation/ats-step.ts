@@ -4,6 +4,7 @@
 // checks themselves are in documents/ats.ts; the text was read from the PDF on this laptop.
 import type { AtsCheck, AtsCheckId, AtsKeyword } from "../documents/ats.ts";
 import type { PdfText } from "./ports.ts";
+import { words } from "../words.ts";
 
 export const atsCheckLabel: Record<AtsCheckId, string> = {
   "text-based": "Text-based PDF",
@@ -61,15 +62,19 @@ export interface AtsStepView {
 /** Leading words a posting wraps a keyword in ("Experience with Wazuh" → "Wazuh"). */
 const filler = /^(?:(?:hands-on|solid|strong|good|deep|proven|practical|working)\s+)*(?:experience|knowledge|familiarity|proficiency|expertise|skills?)\s+(?:with|in|of|using)\s+/i;
 
+/** A requirement longer than this many words describes work rather than naming a keyword. */
+const KEYWORD_WORDS = 3;
+
 /**
- * The posting keywords a parser searches the CV for: its skill and certificate requirements, as
- * named. A gap Kris decided to name or leave out, and a preferred item she doesn't hold, pass as
- * deliberate gaps with the reason.
+ * The posting keywords a parser searches the CV for: the skills and certificates it names ("Wazuh",
+ * "Incident response", "CISSP"), not the longer descriptions of work. A gap Kris decided to name or
+ * leave out, and a preferred item she doesn't hold, pass as deliberate gaps with the reason.
  */
 export function postingKeywords(requirements: { text: string; category?: string; gap?: string | null }[]): AtsKeyword[] {
   return requirements
     .filter((r) => r.category === "skill" || r.category === "certificate")
-    .map((r) => ({ term: r.text.trim().replace(filler, ""), ...(r.gap ? { gap: r.gap } : {}) }));
+    .map((r) => ({ term: r.text.trim().replace(filler, ""), ...(r.gap ? { gap: r.gap } : {}) }))
+    .filter((k) => words(k.term).length > 0 && words(k.term).length <= KEYWORD_WORDS);
 }
 
 export function atsStepView(input: {

@@ -22,6 +22,15 @@ describe("the ATS check (step 5)", () => {
   });
 });
 
+describe("posting keywords", () => {
+  it("are the skills and certificates the posting names; a longer requirement is a description, not a keyword", async () => {
+    const t = mira();
+    const pkg = await upToAts(t, kestrelJob({ requirements: [{ text: "Experience triaging alerts in a SIEM", category: "skill" }, { text: "Incident response", category: "skill" }] }));
+
+    expect(pkg.ats!.checks.find((c) => c.check === "keywords")).toMatchObject({ passed: true, problems: [], notes: [] });
+  });
+});
+
 describe("the ATS check's fix", () => {
   it("asks for the missing fact; ticked, it updates the master profile and the check runs again", async () => {
     const t = mira({ phone: "" });
