@@ -8,6 +8,10 @@ import type {
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
   FlagChoice, LearnedPiece, AtsFix,
+  AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, ApplicationContact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
+  EmailAnswer, EmailToMatch, TrackMailbox, StatusFilter, SinceLastVisit,
+  FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou, Interview, InterviewInput, PrepSheet,
+  Withdrawal, Withdrawals, OfferDetails, OfferView, RejectionReason, RejectionView,
 } from "@apply-kit/core";
 
 /** A Feed row as the service sends it: the Job with its package chip, if it has a package. */
@@ -19,11 +23,14 @@ export interface FeedOptions {
   relocation: boolean;
 }
 
-export async function fetchFeed(view: FeedView, options: FeedOptions, signal?: AbortSignal): Promise<FeedResult> {
+/** The Feed with what Track knows about each listed Job (keyed by Job id). */
+export type TrackedFeed = FeedResult & { markers: Record<string, JobMarker> };
+
+export async function fetchFeed(view: FeedView, options: FeedOptions, signal?: AbortSignal): Promise<TrackedFeed> {
   const q = new URLSearchParams({ view, sort: options.sort, ...(options.relocation && { relocation: "1" }) });
   const res = await fetch(`/api/feed?${q}`, { signal });
   if (!res.ok) throw new Error(`The service answered ${res.status}`);
-  return (await res.json()) as FeedResult;
+  return (await res.json()) as TrackedFeed;
 }
 
 /** Whether a check is running (progress, time estimate) and how the last one went. */
@@ -91,7 +98,10 @@ async function json<T>(res: Response): Promise<T> {
 const postJson = (url: string, body: unknown = {}) =>
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 
-export async function fetchJob(id: string, signal?: AbortSignal): Promise<JobDetail> {
+/** A Job with what Track knows: its Application and the History with its company. */
+export type TrackedJob = JobDetail & { track: JobMarker | null };
+
+export async function fetchJob(id: string, signal?: AbortSignal): Promise<TrackedJob> {
   return json(await fetch(jobPath(id), { signal }));
 }
 
@@ -548,3 +558,219 @@ export const redraftChangedLines = async (id: string): Promise<ChangeResult> => 
 /** An approved file, exactly as frozen. */
 export const frozenFileUrl = (id: string, which: "cv" | "letter", download = false) =>
   `${packagePath(id)}/files/${which}.pdf${download ? "?download=1" : ""}`;
+
+// ---------- Applications (Track) ----------
+
+/** Every Application grouped by Status. `all` lists the groups to show in full (Applied and Closed show 5 otherwise). */
+export async function fetchApplications(all: GroupKey[] = [], signal?: AbortSignal): Promise<ApplicationList> {
+  return fetchApplicationList({ all }, signal);
+}
+
+/** What Applications asks the list for: search, filters, groups shown in full and where each paged group starts. */
+export interface ApplicationListParams {
+  all?: GroupKey[];
+  /** Page groups over 25 rows. */
+  paged?: boolean;
+  at?: Partial<Record<GroupKey, number>>;
+  q?: string;
+  status?: StatusFilter | null;
+  angle?: Angle | null;
+  /** Applied in the last N days. */
+  within?: number | null;
+}
+
+export async function fetchApplicationList(p: ApplicationListParams, signal?: AbortSignal): Promise<ApplicationList> {
+  const q = new URLSearchParams();
+  if (p.all?.length) q.set("all", p.all.join(","));
+  if (p.paged) q.set("paged", "1");
+  const at = Object.entries(p.at ?? {}).filter(([, n]) => n);
+  if (at.length) q.set("at", at.map(([k, n]) => `${k}:${n}`).join(","));
+  if (p.q?.trim()) q.set("q", p.q.trim());
+  if (p.status) q.set("status", p.status);
+  if (p.angle) q.set("angle", p.angle);
+  if (p.within) q.set("within", String(p.within));
+  const qs = q.toString();
+  return json(await fetch(`/api/applications${qs ? `?${qs}` : ""}`, { signal }));
+}
+
+/** Records a visit to Applications: "Since your last visit" (Status changes made by email). */
+export async function visitApplications(): Promise<SinceLastVisit> {
+  return json(await postJson("/api/applications/visit"));
+}
+
+/** Jobs to pick from in Add application (passed and closed too). */
+export async function findJobsToApply(q: string, signal?: AbortSignal): Promise<JobChoice[]> {
+  return json(await fetch(`/api/applications/jobs?q=${encodeURIComponent(q)}`, { signal }));
+}
+
+/** "Add application": added (201), already open for that Job (200), or invalid with the field named (422). */
+export async function addApplication(input: AddApplicationInput): Promise<AddApplicationResult> {
+  const res = await postJson("/api/applications", input);
+  if (res.status === 422) return (await res.json()) as AddApplicationResult;
+  return json(res);
+}
+
+export async function setApplicationStatus(id: string, status: Status): Promise<{ application: ApplicationSummary; event: ApplicationEvent; cancelled: FollowUp | null }> {
+  return json(await postJson(`/api/applications/${encodeURIComponent(id)}/status`, { status }));
+}
+
+export async function undoApplicationEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }> {
+  return json(await postJson(`/api/applications/events/${encodeURIComponent(eventId)}/undo`));
+}
+
+const applicationPath = (id: string) => `/api/applications/${encodeURIComponent(id)}`;
+
+/** One Application in full (its page). Rejects with "No such application" when there isn't one. */
+export async function fetchApplication(id: string, signal?: AbortSignal): Promise<ApplicationDetail> {
+  return json(await fetch(applicationPath(id), { signal }));
+}
+
+export async function addApplicationNote(id: string, text: string): Promise<{ event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(id)}/notes`, { text }));
+}
+
+export async function addApplicationContact(id: string, value: string): Promise<{ contacts: ApplicationContact[] }> {
+  return json(await postJson(`${applicationPath(id)}/contacts`, { value }));
+}
+
+/** Attaches the CV sent (a PDF file) with the label it counts under as the CV version. */
+export async function attachApplicationCv(id: string, file: File, label: string): Promise<{ cv: AttachedCv; event: ApplicationEvent }> {
+  const q = new URLSearchParams({ name: file.name, label });
+  return json(await fetch(`${applicationPath(id)}/cv?${q}`, { method: "PUT", headers: { "content-type": "application/pdf" }, body: file }));
+}
+
+/** Where the attached CV opens. */
+export const applicationCvUrl = (id: string) => `${applicationPath(id)}/cv`;
+
+/** The Stats strip's numbers. */
+export async function fetchApplicationStats(signal?: AbortSignal): Promise<TrackStats> {
+  return json(await fetch("/api/applications/stats", { signal }));
+}
+
+/** Emails waiting in Needs you for you to say which Application they're about. */
+export async function fetchEmailsToMatch(signal?: AbortSignal): Promise<EmailToMatch[]> {
+  return json(await fetch("/api/applications/emails", { signal }));
+}
+
+/** Your answer to an email to match. Rejects with the reason in words (no choice: "Choose where this email belongs first."). */
+export async function answerEmail(emailId: string, answer: EmailAnswer): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }> {
+  return json(await postJson(`/api/applications/emails/${encodeURIComponent(emailId)}/answer`, answer));
+}
+
+/** "Looks right" on the moved-by-email banner. */
+export async function confirmEmailMove(eventId: string): Promise<void> {
+  await json(await postJson(`/api/applications/events/${encodeURIComponent(eventId)}/looks-right`));
+}
+
+/** The job mailbox's state, for Applications' banners. */
+export async function fetchTrackMailbox(signal?: AbortSignal): Promise<TrackMailbox> {
+  return json(await fetch("/api/applications/mailbox", { signal }));
+}
+
+// ---------- Follow-ups and Needs you (Track) ----------
+
+/** Needs you: follow-ups due, most urgent first, the count for the badge, and Coming up. */
+export async function fetchNeedsYou(signal?: AbortSignal): Promise<NeedsYou> {
+  return json(await fetch("/api/applications/needs-you", { signal }));
+}
+
+/** Tells the top bar that what needs the user changed, so its Applications badge counts again. */
+export function needsYouChanged(): void {
+  window.dispatchEvent(new Event("needs-you-changed"));
+}
+
+const followUpPath = (id: string) => `/api/follow-ups/${encodeURIComponent(id)}`;
+
+/** One follow-up to write: its outline, text as typed, and Open in Mail's recipient and subject. */
+export async function fetchFollowUp(id: string, signal?: AbortSignal): Promise<FollowUpDraft> {
+  return json(await fetch(followUpPath(id), { signal }));
+}
+
+/** Keeps the text as typed. */
+export async function saveFollowUpText(id: string, text: string): Promise<{ followUp: FollowUp }> {
+  return json(await fetch(`${followUpPath(id)}/text`, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }), keepalive: true,
+  }));
+}
+
+/** Marks it sent (from the user's own mail), skips it, or snoozes it: an Event, undone like any other. */
+export async function followUpAction(id: string, action: "sent" | "skip" | "snooze"): Promise<{ followUp: FollowUp; event: ApplicationEvent }> {
+  return json(await postJson(`${followUpPath(id)}/${action}`));
+}
+
+/** The thank-you note's topic: one thing discussed. Returns the outline built from it. */
+export async function saveFollowUpTopic(id: string, topic: string): Promise<{ followUp: FollowUp; outline: string[] }> {
+  return json(await fetch(`${followUpPath(id)}/topic`, {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ topic }),
+  }));
+}
+
+// ---------- Offers and closing (Track #34) ----------
+
+const putJson = (url: string, body: unknown) => fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+/** "I accepted this offer…" (and Accepted in any Status select): Accepted, with a withdrawal to send for each other open one. */
+export async function acceptOffer(id: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent; withdrawals: Withdrawal[] }> {
+  return json(await postJson(`${applicationPath(id)}/accept`));
+}
+
+/** The withdrawals of the offer accepted: still to send, and sent. */
+export async function fetchWithdrawals(signal?: AbortSignal): Promise<Withdrawals> {
+  return json(await fetch("/api/applications/withdrawals", { signal }));
+}
+
+/** "I declined it…": Withdrawn, with the reason "declined offer". */
+export async function declineOffer(id: string): Promise<{ application: ApplicationSummary; event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(id)}/decline`));
+}
+
+/** The optional reply declining the offer, drafted in the user's voice. */
+export async function fetchDeclineDraft(id: string, signal?: AbortSignal): Promise<FollowUpDraft> {
+  return json(await fetch(`${applicationPath(id)}/decline-draft`, { signal }));
+}
+
+export async function saveOfferDetails(id: string, details: OfferDetails): Promise<{ offer: OfferView }> {
+  return json(await putJson(`${applicationPath(id)}/offer`, details));
+}
+
+export async function saveRejectionNote(id: string, note: { lesson: string | null; reason: RejectionReason | null }): Promise<{ rejection: RejectionView }> {
+  return json(await putJson(`${applicationPath(id)}/rejection`, note));
+}
+
+// ---------- Interviews and the prep sheet (Track #33) ----------
+
+/** Adds an interview by hand, or edits one (with its id). Times are "YYYY-MM-DDTHH:mm" in its time zone. */
+export async function saveInterview(applicationId: string, input: InterviewInput & { interviewId?: string }): Promise<{ interview: Interview; event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(applicationId)}/interviews`, input));
+}
+
+/** The interview's calendar file. */
+export const interviewIcsUrl = (interviewId: string) => `/api/interviews/${encodeURIComponent(interviewId)}/ics`;
+
+export async function fetchPrepSheet(applicationId: string, signal?: AbortSignal): Promise<PrepSheet | null> {
+  return ((await json(await fetch(`${applicationPath(applicationId)}/prep`, { signal }))) as { sheet: PrepSheet | null }).sheet;
+}
+
+/** Builds the prep sheet (once, within the AI budget). A refusal throws with the service's words. */
+export async function buildPrepSheet(applicationId: string): Promise<PrepSheet> {
+  return ((await json(await postJson(`${applicationPath(applicationId)}/prep`))) as { sheet: PrepSheet }).sheet;
+}
+
+export async function markPractised(applicationId: string, questionId: string, practised: boolean): Promise<PrepSheet> {
+  return ((await json(await postJson(`${applicationPath(applicationId)}/prep/${encodeURIComponent(questionId)}/practised`, { practised }))) as { sheet: PrepSheet }).sheet;
+}
+
+export async function addPrepStory(applicationId: string, questionId: string, text: string): Promise<PrepSheet> {
+  return ((await json(await postJson(`${applicationPath(applicationId)}/prep/${encodeURIComponent(questionId)}/story`, { text }))) as { sheet: PrepSheet }).sheet;
+}
+
+/** The follow-up delays. */
+export async function fetchFollowUpSettings(signal?: AbortSignal): Promise<FollowUpSettings> {
+  return json(await fetch("/api/settings/follow-ups", { signal }));
+}
+
+export async function saveFollowUpSettings(settings: FollowUpSettings): Promise<FollowUpSettings> {
+  return json(await fetch("/api/settings/follow-ups", {
+    method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(settings),
+  }));
+}

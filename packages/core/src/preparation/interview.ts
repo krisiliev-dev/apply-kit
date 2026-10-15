@@ -313,7 +313,7 @@ export function createInterviewStore(deps: InterviewDeps): InterviewStore {
 
   interface Row { id: string; angle: Angle | null; currentKey: string | null; pausedAt: string | null; finishedAt: string | null; failures: number; error: string | null; retryAt: string | null; budget: boolean }
   const row = (id: string): Row | null => {
-    const r = db.prepare("SELECT * FROM interview WHERE id = ?").get(id);
+    const r = db.prepare("SELECT * FROM coach_interview WHERE id = ?").get(id);
     return r ? {
       id, angle: (r.angle ?? null) as Angle | null, currentKey: r.current_key == null ? null : String(r.current_key),
       pausedAt: r.paused_at == null ? null : String(r.paused_at), finishedAt: r.finished_at == null ? null : String(r.finished_at),
@@ -323,7 +323,7 @@ export function createInterviewStore(deps: InterviewDeps): InterviewStore {
   };
   const update = (id: string, fields: Record<string, string | number | null>) => {
     const keys = Object.keys(fields);
-    db.prepare(`UPDATE interview SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ?`).run(...keys.map((k) => fields[k]!), now(), id);
+    db.prepare(`UPDATE coach_interview SET ${keys.map((k) => `${k} = ?`).join(", ")}, updated_at = ? WHERE id = ?`).run(...keys.map((k) => fields[k]!), now(), id);
   };
 
   interface QuestionRow { key: string; kind: InterviewQuestionKind; topic: CoachTopic; state: InterviewQuestionState; endedAt: string | null }
@@ -550,7 +550,7 @@ export function createInterviewStore(deps: InterviewDeps): InterviewStore {
   function start(angle: Angle | null = null): InterviewView {
     const id = idOf(angle);
     if (!row(id)) {
-      db.prepare("INSERT INTO interview (id, angle, created_at, updated_at) VALUES (?, ?, ?, ?)").run(id, angle, now(), now());
+      db.prepare("INSERT INTO coach_interview (id, angle, created_at, updated_at) VALUES (?, ?, ?, ?)").run(id, angle, now(), now());
     } else {
       update(id, { paused_at: null, finished_at: null, waits_for_budget: 0 });
     }
