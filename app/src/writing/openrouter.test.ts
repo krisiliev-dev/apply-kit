@@ -63,6 +63,19 @@ describe("OpenRouter writer", () => {
     expect(estimate).toBeLessThan(0.05);
   });
 
+  it("takes a higher price ceiling for a stronger model (the tailoring evaluation's comparison), sent and estimated at that price", async () => {
+    const api = fakeOpenRouter();
+    const cheap = createOpenRouterWriter({ apiKey: "test-key", fetch: api.fetch });
+    const strong = createOpenRouterWriter({ apiKey: "test-key", model: "example/stronger-model", maxPrice: { prompt: 3, completion: 15 }, fetch: api.fetch });
+
+    await strong.draftPieces(cv);
+
+    expect(api.requests[0]!.body.model).toBe("example/stronger-model");
+    expect(api.requests[0]!.body.provider).toMatchObject({ max_price: { prompt: 3, completion: 15 }, data_collection: "deny", ignore: CHINA_HOSTED_PROVIDERS });
+    const request = { task: "draft-pieces" as const, input: cv };
+    expect(strong.estimateCostUsd(request)).toBeGreaterThan(cheap.estimateCostUsd(request) * 5);
+  });
+
   it("throws when the answer doesn't fit the schema, carrying what the call was billed", async () => {
     const writer = createOpenRouterWriter({ apiKey: "test-key", fetch: fakeOpenRouter('{"pieces": "lots"}').fetch });
 

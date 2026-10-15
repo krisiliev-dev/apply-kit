@@ -49,6 +49,13 @@ export type { ExpectedFacts, EvaluationCase } from "./evaluation/labels.ts";
 export { scoreCase, similarity, TEXT_MATCH } from "./evaluation/score.ts";
 export type { CaseScore, ListScore } from "./evaluation/score.ts";
 export { runEvaluation } from "./evaluation/run.ts";
+export { blindSheet, readVerdicts, formatTailoringReport } from "./evaluation/tailoring-sheet.ts";
+export type { BlindKey, Verdict, VerdictReading, ReportInfo as TailoringReportInfo } from "./evaluation/tailoring-sheet.ts";
+export { runTailoringEvaluation, tailoringProfileSchema, tailoringSetSchema, tailoringQuestionSchema, jobOf, estimatePackageUsd } from "./evaluation/tailoring.ts";
+export type {
+  TailoringProfile, TailoringSet, TailoringQuestion, TailoringCase, TailoringModel, TailoringEngine, TailoringOptions, TailoringReport,
+  PackageResult, ModelSummary, FlagResult as TailoringFlag, StockPhrase, AnswerResult as TailoringAnswer,
+} from "./evaluation/tailoring.ts";
 export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult, FactScore, ListFactScore, SingleFactScore } from "./evaluation/run.ts";
 export { createAiBudget } from "./budget.ts";
 export type { AiBudget, AiBudgetDeps, AiCharge, AiTask, BudgetInfo, BudgetOutcome } from "./budget.ts";
@@ -63,7 +70,7 @@ export type { TailorCvInput, TailoredCv, TailoredLine } from "./writing/writer.t
 export { writtenLetterSchema } from "./writing/writer.ts";
 export type { WriteLetterInput, WrittenLetter } from "./writing/writer.ts";
 export { checkWording, validateCv } from "./preparation/honesty.ts";
-export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
+export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, RejectedLine, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts, PrepareForApply, PrepareForTrack } from "./preparation/engine.ts";
 export type {

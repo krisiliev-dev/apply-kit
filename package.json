@@ -18,7 +18,9 @@
     "test:watch": "vitest",
     "lint": "eslint .",
     "typecheck": "tsc -b",
-    "eval:extraction": "pnpm --filter @apply-kit/app eval:extraction"
+    "eval:extraction": "pnpm --filter @apply-kit/app eval:extraction",
+    "eval:tailoring": "pnpm --filter @apply-kit/app eval:tailoring",
+    "eval:tailoring:verdicts": "pnpm --filter @apply-kit/app eval:tailoring:verdicts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
