@@ -41,6 +41,7 @@ const tailorCvInstructions = `You tailor Kris's CV to one job posting, as JSON m
 - Every line cites the ids of the pieces it relies on ("pieceIds"). Never cite an id that isn't given, and never put an achievement under a role it doesn't belong to.
 - You may use the posting's term for the same thing ("alert triage" for "alert monitoring"). Never add a skill, tool, employer, number or date that isn't in the cited pieces; numbers keep the precision of their piece ("about a third" stays about a third).
 - "claim" says how the line compares to its pieces: "as-written" (the piece's own words), "reworded" (same claim, different words) or "stronger" (a stronger verb or a rounder number than the piece states). Say "stronger" whenever it is.
+- A "stronger" line gives in "honest" a wording that keeps exactly to what its pieces state, in the posting's terms where they fit; Kris chooses between them. Otherwise "honest" is null.
 - "why" says in a few plain words why a line changed ("" when it didn't).
 - "skills" lists skill pieces by their exact text, the ones the posting asks for first.
 - "evidence" names, for each posting requirement (by its index in "requirements"), the pieces that back it; leave a requirement out when nothing does.
