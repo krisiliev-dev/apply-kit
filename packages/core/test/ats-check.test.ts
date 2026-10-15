@@ -111,6 +111,16 @@ describe("ATS check: contact details found", () => {
     expect(result(check({ text: onePage(lines) }), "contact")).toMatchObject({ passed: false, problems: ["Email not found: mira.petrova@example.com"] });
   });
 
+  it("fails a CV with no phone number or no location: a portal's contact fields are filled from them", () => {
+    const content = { ...cv, letterhead: { ...cv.letterhead, phone: undefined, location: undefined } };
+    const lines = readBack();
+    lines[2] = "mira.petrova@example.com · linkedin.com/in/mira-petrova-example";
+
+    expect(result(check({ text: onePage(lines), document: { kind: "cv", language: "en", title: "Mira Petrova · CV", content } }), "contact")).toMatchObject({
+      passed: false, problems: ["No phone number on the CV", "No city or country on the CV"],
+    });
+  });
+
   it("finds a phone number however the parser spaced it", () => {
     const lines = readBack();
     lines[2] = "Plovdiv, Bulgaria · mira.petrova@example.com · +35988 0000199 · linkedin.com/in/mira-petrova-example";

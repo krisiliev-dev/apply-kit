@@ -1,7 +1,8 @@
 // The Package's API (ticket #62): the Prepare button's state for a Job, starting the Job's package,
 // reading it, approving steps in order, the target posting, language and photo, stopping and
 // retrying parts, the CV version's changes (undo, redo) and fitting it on one page (#63), its flags
-// and gap questions (#64), the screening answers and the drafter Apply uses (#66), the cover letter's drafts, edits and PDF (#65), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
+// and gap questions (#64), the screening answers and the drafter Apply uses (#66), the cover letter's drafts, edits and PDF (#65), the CV's draft PDF,
+// and the ATS check's fix, Approve package and the frozen files (#67). Mutations need a JSON body type, like the rest of the
 // service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
 import { packageSteps, type DiscoveryEngine, type PackageStep, type PreparationEngine } from "@apply-kit/core";
@@ -122,6 +123,32 @@ export function mountPackageApi(app: Hono, engine: DiscoveryEngine, preparation:
     const result = await preparation.draftAnswer(id, { question: body.question, language: body.language, maxChars: n(body.maxChars), maxWords: n(body.maxWords) });
     return c.json(result, result.drafted ? 200 : 422);
   }));
+
+  // Step 5 and the finish (#67). { acceptFailingChecks? }: Approve package, freezing its files.
+  app.post("/api/packages/:id/approve", (c) => withPackage(c, (id, body) =>
+    preparation.approvePackage(id, { acceptFailingChecks: body.acceptFailingChecks === true })));
+  // { values: { phone?, city?, country? }, updateProfile }: the ATS check's fix.
+  app.post("/api/packages/:id/ats/fix", (c) => withPackage(c, (id, body) => {
+    const values = body.values && typeof body.values === "object" && !Array.isArray(body.values) ? (body.values as Record<string, unknown>) : null;
+    if (!values || typeof body.updateProfile !== "boolean") return c.json({ error: "Send { values, updateProfile }" }, 400);
+    const text = (v: unknown) => (typeof v === "string" ? v : undefined);
+    return preparation.fixAts(id, { values: { phone: text(values.phone), city: text(values.city), country: text(values.country) }, updateProfile: body.updateProfile });
+  }));
+  // "Redraft these lines" after a profile change.
+  app.post("/api/packages/:id/cv/redraft-changed", (c) => withPackage(c, (id) => preparation.redraftChangedLines(id)));
+
+  // An approved (frozen) file, exactly as approved: cv.pdf or letter.pdf, of the version approved now (or ?version=N).
+  app.get("/api/packages/:id/files/:file", async (c) => {
+    const which = c.req.param("file") === "cv.pdf" ? "cv" : c.req.param("file") === "letter.pdf" ? "letter" : null;
+    const version = c.req.query("version") ? Number(c.req.query("version")) : undefined;
+    const file = which && (version === undefined || Number.isInteger(version)) ? await preparation.packageFile(c.req.param("id"), which, version) : null;
+    if (!file) return c.json({ error: "No approved file there" }, 404);
+    return c.body(Buffer.from(file.bytes), 200, {
+      "content-type": "application/pdf",
+      "cache-control": "no-store",
+      "content-disposition": `${c.req.query("download") === "1" ? "attachment" : "inline"}; filename="${file.fileName}"`,
+    });
+  });
 
   // The CV's draft PDF, exactly as printed. ?download=1 saves it, named as a draft.
   app.get("/api/packages/:id/cv.pdf", async (c) => {

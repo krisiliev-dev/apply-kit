@@ -62,7 +62,7 @@ const preparation = createPreparationEngine({
   renderer,
   pdfReader: createPdfJsReader(),
   files: createFileStore(join(dirname(config.dbPath), "files")),
-  packages: createPackageFolder(dirname(config.dbPath)),
+  packages: createPackageFolder(dirname(config.dbPath), config.packagesDir),
   settings,
   // Import reads the public GitHub API and a portfolio page; scans are read by text recognition on
   // this laptop (macOS Vision).

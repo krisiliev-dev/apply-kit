@@ -31,7 +31,7 @@ function service(uiDir = "/nonexistent/") {
       get: async (sha256) => stored.get(sha256) ?? null,
       remove: async (sha256) => { stored.delete(sha256); },
     },
-    packages: { saveDraft: async () => noFiles(), read: async () => null },
+    packages: { saveDraft: async () => noFiles(), freeze: async () => noFiles(), read: async () => null },
   });
   const pairing = createPairing({ db, clock });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
@@ -310,6 +310,11 @@ describe("the Package's API", () => {
     expect((await s.request("/api/packages/nope/answers/question_1", { ...s.json({ text: "1 month" }), method: "PUT" })).status).toBe(404);
     expect((await s.request("/api/packages/nope/answers/question_1/save", s.json({}))).status).toBe(404);
     expect((await s.request("/api/packages/nope/draft-answer", s.json({ question: "Why us?" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/approve", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/approve", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/packages/nope/ats/fix", s.json({ values: { phone: "+359 88 000 0175" }, updateProfile: true }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/redraft-changed", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/files/cv.pdf")).status).toBe(404);
     expect(await (await s.request("/api/profile/learned")).json()).toEqual([]);
     expect((await s.request("/api/profile/learned/confirm", { method: "POST", body: "" })).status).toBe(415);
   });
@@ -377,7 +382,7 @@ describe("developer route: the demo documents", () => {
       renderer: { render: async (doc) => (rendered.push(doc), { pdf: new TextEncoder().encode(`%PDF ${doc.title}`), pages: 1 }) },
       pdfReader: { read: async (pdf) => ({ pages: [{ lines: [new TextDecoder().decode(pdf).slice(5)] }] }) },
       files: { put: async () => { throw new Error("unused"); }, get: async () => null, remove: async () => {} },
-      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), read: async () => null },
+      packages: { saveDraft: async (id, _kind, name) => ({ path: `packages/${id}/${name}` }), freeze: async (id, v, name) => ({ path: `packages/${id}/v${v}/${name}`, copy: null }), read: async () => null },
     });
     const scheduler = { status: () => ({}) } as unknown as Scheduler;
     const app = createServer({ engine, preparation, scheduler, pairing: createPairing({ db, clock }), uiDir: "/nonexistent/", port });

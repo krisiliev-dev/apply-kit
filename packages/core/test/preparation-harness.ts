@@ -4,7 +4,7 @@
 // service does. Never live AI in tests.
 import { createHash } from "node:crypto";
 import {
-  createAiBudget, createEngine, createPreparationEngine, draftedAnswerSchema, draftedPiecesSchema, tailoredCvSchema, writtenLetterSchema, type WriteLetterInput, type WrittenLetter, type DraftAnswerInput, type DraftedAnswer, type LearnedVoice, type VoiceLearningInput,
+  createAiBudget, createEngine, createPreparationEngine, formatRange, sectionTitles, draftedAnswerSchema, draftedPiecesSchema, tailoredCvSchema, writtenLetterSchema, type WriteLetterInput, type WrittenLetter, type DraftAnswerInput, type DraftedAnswer, type LearnedVoice, type VoiceLearningInput,
   type CoachTopic, type CoachTurn, type CoachTurnInput,
   type AiBudget, type DiscoveryEngine, type DocumentRenderer, type DraftedPieces, type EngineDeps, type FileStore,
   type ImportedText, type TailorCvInput, type TailoredCv, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type SentExcerpt, type TextRecognizer, type Writer, type WriterRequest,
@@ -141,6 +141,12 @@ export function memoryPackageFolder(): PackageFolder & { files: Map<string, Uint
       drafts.set(path, kind);
       return { path };
     },
+    async freeze(packageId, version, fileName, bytes) {
+      const path = `packages/${packageId}/v${version}/${fileName}`;
+      if (files.has(path)) throw new Error(`Already frozen: ${path}`);
+      files.set(path, new Uint8Array(bytes));
+      return { path, copy: `Packages/${fileName}` };
+    },
     read: async (path) => files.get(path) ?? null,
   };
 }
@@ -225,4 +231,27 @@ export function createTestPreparation(options: TestPreparationOptions = {}): Tes
   };
   const discovery = createEngine(discoveryDeps);
   return { preparation: createPreparationEngine(deps), discovery, budget, clock, writer: deps.writer, files: deps.files };
+}
+
+/**
+ * A renderer whose text reads back the way the real template prints (letterhead, section titles,
+ * "Title · Employer, Place  Jan 2023 – present" lines, bullets, skills on one line), so the ATS
+ * check passes on a well-formed CV. Letters print as the default stand-in.
+ */
+export function templateRenderer(): DocumentRenderer {
+  return fakeRenderer((doc) => {
+    if (doc.kind !== "cv") return { pages: [{ lines: [doc.title, JSON.stringify(doc.content)] }] };
+    const c = doc.content;
+    const h = c.letterhead;
+    const titles = sectionTitles[doc.language];
+    const lines = [h.name, h.headline, [h.location, h.email, h.phone, ...h.links].filter(Boolean).join(" · ")];
+    if (c.summary.trim()) lines.push(titles.summary, c.summary);
+    if (c.experience.length) {
+      lines.push(titles.experience);
+      for (const r of c.experience) lines.push(`${r.title} · ${r.employer}${r.place ? `, ${r.place}` : ""} ${formatRange(r.start, r.end, doc.language)}`, ...r.bullets);
+    }
+    if (c.skills.length) lines.push(titles.skills, c.skills.join(" · "));
+    if (c.education.length) lines.push(titles.education, ...c.education.map((e) => `${e.degree} · ${e.school} ${formatRange(e.start, e.end, doc.language)}`));
+    return { pages: [{ lines }] };
+  });
 }

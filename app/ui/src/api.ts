@@ -7,7 +7,7 @@ import type {
   Angle, FinishInterviewResult, InterviewChange, InterviewView,
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
-  FlagChoice, LearnedPiece,
+  FlagChoice, LearnedPiece, AtsFix,
 } from "@apply-kit/core";
 
 /** A Feed row as the service sends it: the Job with its package chip, if it has a package. */
@@ -535,3 +535,16 @@ export const writeLetterYourself = async (id: string): Promise<ChangeResult> => 
 /** The letter's draft PDF; `version` (its SHA-256) makes a re-printed letter load afresh. */
 export const packageLetterUrl = (id: string, version: string, download = false) =>
   `${packagePath(id)}/letter.pdf?v=${version.slice(0, 12)}${download ? "&download=1" : ""}`;
+
+// ---------- The ATS check and approval (#67) ----------
+
+/** Approve package: freezes the files. `acceptFailingChecks` approves knowing the failing checks fail. */
+export const approvePackage = async (id: string, acceptFailingChecks = false): Promise<ApproveResult> =>
+  orRefusal(await postJson(`${packagePath(id)}/approve`, { acceptFailingChecks }));
+/** The ATS check's fix: the facts asked for, saved to the master profile too when `updateProfile`. */
+export const fixAts = async (id: string, fix: AtsFix): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/ats/fix`, fix));
+/** "Redraft these lines" after a profile change. */
+export const redraftChangedLines = async (id: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/cv/redraft-changed`));
+/** An approved file, exactly as frozen. */
+export const frozenFileUrl = (id: string, which: "cv" | "letter", download = false) =>
+  `${packagePath(id)}/files/${which}.pdf${download ? "?download=1" : ""}`;

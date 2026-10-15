@@ -95,11 +95,14 @@ const digits = (s: string) => s.replace(/\D/g, "");
 
 function contactCheck(lines: string[], input: AtsInput): AtsCheckResult {
   const text = lines.join("\n").toLowerCase();
-  const { name, email, phone, links } = input.document.content.letterhead;
+  const { name, email, phone, location, links } = input.document.content.letterhead;
   const problems: string[] = [];
   if (!text.includes(name.toLowerCase())) problems.push(`Name not found: ${name}`);
   if (!text.includes(email.toLowerCase())) problems.push(`Email not found: ${email}`);
-  if (phone && !digits(lines.join("")).includes(digits(phone))) problems.push(`Phone not found: ${phone}`);
+  // A portal's parser fills its phone and location fields from the CV: one without them leaves them empty.
+  if (!phone?.trim()) problems.push("No phone number on the CV");
+  else if (!digits(lines.join("")).includes(digits(phone))) problems.push(`Phone not found: ${phone}`);
+  if (!location?.trim()) problems.push("No city or country on the CV");
   for (const link of links) if (!text.includes(link.toLowerCase())) problems.push(`Link not found: ${link}`);
   return result("contact", problems);
 }

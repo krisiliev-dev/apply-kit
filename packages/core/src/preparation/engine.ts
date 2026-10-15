@@ -34,9 +34,10 @@ import { demoDocument, demoFileName, type DemoOptions } from "../documents/demo.
 import type { PdfText, PreparationDeps } from "./ports.ts";
 import {
   createPackageStore, type ApproveResult, type ChangeResult, type DraftAnswerRequest, type DraftAnswerResult, type FlagChoice, type LearnedPiece, type PackageChip, type PackageJob, type PackageStep, type PackageView,
-  type PrepareStatus, type StartPackageResult,
+  type PrepareStatus, type StartPackageResult, type AtsFix,
 } from "./packages.ts";
 import type { DocumentLanguage } from "../documents/content.ts";
+import type { ApprovedPackage, FrozenFile, MarkSubmittedResult, PackageForApply, ProfileForApply, SubmittedVia } from "./contracts.ts";
 
 export interface DraftRequest {
   packageId: string;
@@ -376,7 +377,80 @@ export interface PreparationEngine {
    * resting only on profile pieces (returned), honesty-checked and within the monthly cap.
    */
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
+
+  // ---------- The ATS check and approval (#67) ----------
+
+  /**
+   * "Approve package", step 5's Approve: only when every step is approved and the ATS check passes,
+   * or Kris accepts its failing checks knowingly. The CV and letter PDFs are frozen by SHA-256 (and
+   * copied to the Packages folder) as the next approved version, which never changes after. Editing
+   * any part afterwards reopens its step and the package needs approving again.
+   */
+  approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
+  /**
+   * The ATS check's fix, which asks for facts rather than guess them: the contact details the CV
+   * lacks, saved to the master profile when Kris ticks it (so it doesn't come back) or used in this
+   * package only. The CV is printed again and checked again; its approval stays.
+   */
+  fixAts(id: string, fix: AtsFix): Promise<ChangeResult>;
+  /**
+   * "Redraft these lines", for "Your profile changed since this draft": the CV's lines that use a
+   * piece changed in Profile take the piece's new wording (no model call), the CV is printed again
+   * and its step reopens. Refused for an approved package, which never changes.
+   */
+  redraftChangedLines(id: string): Promise<ChangeResult>;
+  /**
+   * A frozen file of an approved version (the one approved now by default), exactly as approved:
+   * its name, SHA-256, size, where it is (and its copy in the Packages folder) and its bytes. Null
+   * when there's no such approved version or file. Never a draft.
+   */
+  packageFile(id: string, which: "cv" | "letter", version?: number): Promise<(FrozenFile & { bytes: Uint8Array }) | null>;
+
+  // ---------- The contract for Apply (#38, #39, #41; docs/contracts.md) ----------
+
+  /**
+   * The approved package for a Job (or by id), the way Apply fills from it; a draft, or a package
+   * reopened by an edit, answers "not approved yet" and is never returned for filling.
+   */
+  packageForApply(query: { jobId: string } | { packageId: string }): PackageForApply;
+  /** Every package approved now, newest first: what Apply matches a portal's job against. */
+  approvedPackages(): ApprovedPackage[];
+  /** The master profile as a portal's form asks for it: contact details split for forms, roles, education, skills. */
+  profileForApply(): ProfileForApply;
+  /**
+   * Track recorded the submission (Apply's "Mark as submitted", or the Job page's): the approved
+   * version becomes "submitted", once. A second mark returns the first with `alreadyMarked`; a draft
+   * is refused. Later edits make a new version; the submitted one never changes.
+   */
+  markPackageSubmitted(id: string, how: { via: SubmittedVia; portalUrl: string | null; at?: string }): MarkSubmittedResult;
+  /** Undoes the mark (Apply's Undo): the version is approved again, waiting for an Application. Null if it wasn't marked. */
+  undoPackageSubmitted(id: string): ApprovedPackage | null;
+
+  // ---------- The contract for Track (#35; docs/contracts.md) ----------
+
+  /** The package as sent: the version submitted, else the one approved now. Null for a package never approved. Never changes once submitted. */
+  packageSnapshot(id: string): ApprovedPackage | null;
+  /** Packages approved and not marked submitted: a confirmation email for one becomes a Needs-you question in Track. */
+  approvedWithoutApplication(): ApprovedPackage[];
+  /** A piece from another feature (an interview story): an unconfirmed achievement waiting in Profile, with its source. */
+  addUnconfirmedPiece(piece: { text: string; source: string }): { id: string };
 }
+
+/** What Track reads from Prepare: the package as sent, approved packages not yet submitted, adding a piece, and the voice. */
+export type PrepareForTrack = Pick<PreparationEngine,
+  | "packageSnapshot" | "approvedWithoutApplication" | "packageFile" | "markPackageSubmitted" | "undoPackageSubmitted"
+  | "addUnconfirmedPiece" | "voiceContext" | "recordVoiceEdit"
+>;
+
+/**
+ * What Apply's fill engine reads from Prepare (read-only, except adding to the answer bank):
+ * the master profile, approved packages with their frozen files, the answer bank and the drafter,
+ * and marking a package submitted. See docs/contracts.md.
+ */
+export type PrepareForApply = Pick<PreparationEngine,
+  | "profileForApply" | "packageForApply" | "approvedPackages" | "packageFile"
+  | "findAnswer" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit" | "draftAnswer" | "markPackageSubmitted" | "undoPackageSubmitted"
+>;
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */
 export type VoiceForDrafts = Pick<PreparationEngine, "voiceContext" | "recordVoiceEdit">;
@@ -433,6 +507,11 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     savePiece: (input, origin) => profile.save(input, origin),
     skipped: () => interview.skipped(),
     contact: () => contact.get(),
+    saveContact(details) {
+      const result = contact.save(details);
+      if (result.saved) seedAnswers();
+      return result;
+    },
     closestAngle: (posting) => angles.closest(posting),
     draftDocument,
     voice: {
@@ -486,6 +565,43 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     redraftScreeningAnswer: (id, questionId) => packages.redraftAnswer(id, questionId),
     saveScreeningAnswerToBank: (id, questionId) => packages.saveAnswerToBank(id, questionId),
     draftAnswer: (id, request) => packages.draftAnswer(id, request),
+    approvePackage: (id, options) => packages.approvePackage(id, options),
+    fixAts: (id, fix) => packages.fixAts(id, fix),
+    redraftChangedLines: (id) => packages.redraftChangedLines(id),
+    packageFile: (id, which, version) => packages.frozenFile(id, which, version),
+    packageForApply: (query) => packages.forApply(query),
+    approvedPackages: () => packages.approvedList(),
+    markPackageSubmitted: (id, how) => packages.markSubmitted(id, how),
+    undoPackageSubmitted: (id) => packages.undoSubmitted(id),
+    packageSnapshot: (id) => packages.snapshot(id),
+    approvedWithoutApplication: () => packages.withoutApplication(),
+    addUnconfirmedPiece({ text, source }) {
+      const saved = profile.save({ kind: "achievement", text }, { from: source, quote: text, status: "unconfirmed" });
+      if (!saved.saved) throw new Error(saved.problems[0]!.message);
+      return { id: saved.piece.id };
+    },
+    profileForApply() {
+      const c = contact.get();
+      const words = c.nameLatin.trim().split(/\s+/).filter(Boolean);
+      const phone = /^(\+\d{1,3})[\s-]*(.+)$/.exec(c.phone.trim());
+      const link = (host: RegExp) => c.links.find((l) => host.test(l)) ?? null;
+      const pieces = profile.all().filter((p) => p.status === "confirmed");
+      const byEnd = (a: ProfilePiece, b: ProfilePiece) => (b.entry!.end ?? "9999").localeCompare(a.entry!.end ?? "9999") || b.entry!.start.localeCompare(a.entry!.start);
+      const entries = (kind: "role" | "education") => pieces.filter((p) => p.kind === kind && p.entry).sort(byEnd)
+        .map((p) => ({ title: p.entry!.title, organisation: p.entry!.organisation, place: p.entry!.city, start: p.entry!.start, end: p.entry!.end, text: p.text }));
+      return {
+        contact: {
+          givenName: words.slice(0, -1).join(" ") || words[0] || "", familyName: words.length > 1 ? words[words.length - 1]! : "", fullName: words.join(" "),
+          fullNameCyrillic: c.nameCyrillic.trim() || null, email: c.email,
+          phone: c.phone.trim() ? { countryCode: phone?.[1] ?? "", national: phone?.[2] ?? c.phone.trim(), full: c.phone.trim() } : null,
+          city: c.city, country: c.country,
+          linkedin: link(/linkedin\.com/i), github: link(/github\.com/i), portfolio: c.links.find((l) => !/linkedin\.com|github\.com/i.test(l)) ?? null,
+        },
+        roles: entries("role").map(({ text, ...e }) => ({ ...e, description: text })),
+        education: entries("education").map((e) => ({ title: e.title, organisation: e.organisation, place: e.place, start: e.start, end: e.end, field: null })),
+        skills: pieces.filter((p) => p.kind === "skill").map((p) => p.text),
+      };
+    },
     keepHonestVersion(pieceId) {
       const learned = packages.learned().find((l) => l.piece.id === pieceId);
       const refuse = (message: string): SavePieceResult => ({ saved: false, problems: [{ field: "text", message, fixes: [] }] });

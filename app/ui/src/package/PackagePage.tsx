@@ -13,24 +13,28 @@
 // Ticket #65: step 3, the cover letter (LetterStep.tsx), and "Write the letter myself" where it failed or the cap stopped it.
 // Ticket #66: step 4, screening answers (AnswersStep.tsx); Approve with an answer that needs Kris
 // moves focus to that question.
+// Ticket #67: step 5, the ATS check (AtsStep.tsx), whose "Approve package" freezes the files and
+// opens the approved package (ApprovedView.tsx); "Your profile changed since this draft" on the CV.
 import type {
   BudgetInfo, CvFlagView, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
 } from "@apply-kit/core";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  answerGap, approveStep, decideFlag, fetchPackage, fetchPrepareStatus, fetchSources, fitCv, packageCvUrl, redoCvChange, retryPart, setPackageLanguage, setPackagePhoto,
+  answerGap, approvePackage, approveStep, decideFlag, redraftChangedLines, fetchPackage, fetchPrepareStatus, fetchSources, fitCv, packageCvUrl, redoCvChange, retryPart, setPackageLanguage, setPackagePhoto,
   setTargetPosting, startPackage, stopGenerating, undoCvChange,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Icon } from "../icons.tsx";
 import { LetterSide, LetterStep, writeOwnLetter, type LetterViewMode } from "./LetterStep.tsx";
 import { AnswersStep, questionElementId } from "./AnswersStep.tsx";
+import { AtsStep, atsBlockerId } from "./AtsStep.tsx";
+import { ApprovedView } from "./ApprovedView.tsx";
 // pdf.js is large: it loads only when a document is shown.
 const PdfPreview = lazy(() => import("./PdfPreview.tsx").then((m) => ({ default: m.PdfPreview })));
 
 const steps: PackageStep[] = ["target", "cv", "letter", "answers", "ats"];
-/** What Kris is looking at: the generating progress, or one step. */
-type Viewing = "progress" | PackageStep;
+/** What Kris is looking at: the generating progress, one step, or the approved package. */
+type Viewing = "progress" | PackageStep | "approved";
 
 type Load =
   | { state: "loading" }
@@ -41,9 +45,9 @@ type Load =
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 const hhmm = (iso: string) => new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
 const usd = (n: number) => `$${n.toFixed(n > 0 && n < 0.01 ? 3 : 2)}`;
-const fromHash = (): PackageStep | null => {
+const fromHash = (): PackageStep | "approved" | null => {
   const h = window.location.hash.slice(1);
-  return steps.includes(h as PackageStep) ? (h as PackageStep) : null;
+  return h === "approved" || steps.includes(h as PackageStep) ? (h as PackageStep | "approved") : null;
 };
 
 export function PackagePage({ jobId, onHealth }: { jobId: string; onHealth: (h: HealthSummary) => void }) {
@@ -66,7 +70,7 @@ export function PackagePage({ jobId, onHealth }: { jobId: string; onHealth: (h: 
       if (!status.package) return setLoad({ state: "status", status });
       const pkg = await fetchPackage(status.package.packageId, ctrl.signal);
       // The first view: the progress while parts are written, else the step in the address, else the current step.
-      setViewing(pkg.generating ? "progress" : fromHash() ?? pkg.steps.find((s) => !s.approvedAt)?.step ?? "ats");
+      setViewing(pkg.generating ? "progress" : fromHash() ?? (pkg.approved ? "approved" : pkg.steps.find((s) => !s.approvedAt)?.step ?? "ats"));
       setLoad({ state: "ready", pkg });
     })().catch((err: unknown) => { if (!ctrl.signal.aborted) setLoad({ state: "error", message: message(err) }); });
     return () => ctrl.abort();
@@ -127,7 +131,9 @@ export function PackagePage({ jobId, onHealth }: { jobId: string; onHealth: (h: 
       </nav>
       {shown === "progress"
         ? <Generating pkg={p} budget={p.budget} onChange={update} onGo={go} say={toaster.announce} />
-        : <Steps pkg={p} viewing={shown} jobPage={jobPage} onChange={update} onGo={go} say={toaster.announce} />}
+        : shown === "approved" && p.approved
+          ? <ApprovedView pkg={p} approved={p.approved} onEdit={() => go("target")} />
+          : <Steps pkg={p} viewing={shown === "approved" ? "ats" : shown} jobPage={jobPage} onChange={update} onGo={go} say={toaster.announce} />}
       {toaster.element}
     </section>
   );
@@ -336,11 +342,13 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
   };
 
   const [letterView, setLetterView] = useState<LetterViewMode>("edit");
+  // "Approve knowing it fails", for an ATS check Kris can't fix.
+  const [acceptFailing, setAcceptFailing] = useState(false);
   const content = viewing === "target" ? <TargetStep pkg={pkg} onChange={onChange} say={say} />
     : viewing === "cv" ? <CvStep pkg={pkg} view={cvView} onView={setCvView} flagAlert={flagAlert} onChange={onChange} onGo={onGo} say={say} />
     : viewing === "letter" ? <LetterStep pkg={pkg} view={letterView} onView={setLetterView} onChange={onChange} onGo={onGo} say={say} />
     : viewing === "answers" ? <AnswersStep pkg={pkg} onChange={onChange} say={say} />
-    : <LaterStep pkg={pkg} step={step} onGo={onGo} />;
+    : <AtsStep pkg={pkg} accept={acceptFailing} onAccept={setAcceptFailing} onChange={onChange} say={say} />;
 
   return (
     <>
@@ -355,7 +363,7 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
       <div className="cols">
         <div className="col">
           {content}
-          <ActionBar key={step.step} pkg={pkg} step={step} jobPage={jobPage} onChange={onChange} onGo={onGo} onFlagBlock={onFlagBlock} say={say} />
+          <ActionBar key={step.step} pkg={pkg} step={step} jobPage={jobPage} acceptFailing={acceptFailing} onChange={onChange} onGo={onGo} onFlagBlock={onFlagBlock} say={say} />
         </div>
         <aside className="col side" aria-label={viewing === "cv" ? (cvView === "changes" ? "Honesty check" : "File and template") : viewing === "letter" && pkg.letter ? "Checks and voice" : "This package"}>
           {viewing === "letter" && pkg.letter ? <LetterSide letter={pkg.letter} /> : viewing === "cv" ? (cvView === "changes" && pkg.cvVersion ? <CvHonesty cv={pkg.cvVersion} onPreview={() => setCvView("preview")} /> : <CvSide pkg={pkg} onChange={onChange} say={say} />) : (
@@ -393,8 +401,8 @@ function useMinutesSince(iso: string): number {
 }
 
 /** The step's one decision, in a sticky bar. An Approve that can't approve names why and moves focus there (PA-02, PA-10). */
-function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
-  pkg: PackageView; step: PackageStepView; jobPage: string; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; onFlagBlock: () => void; say: (m: string) => void;
+function ActionBar({ pkg, step, jobPage, acceptFailing, onChange, onGo, onFlagBlock, say }: {
+  pkg: PackageView; step: PackageStepView; jobPage: string; acceptFailing: boolean; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; onFlagBlock: () => void; say: (m: string) => void;
 }) {
   const [refused, setRefused] = useState<string | null>(null);
   const why = useRef<HTMLParagraphElement>(null);
@@ -408,10 +416,13 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
     el?.scrollIntoView({ block: "center" });
     el?.focus({ preventScroll: true });
   };
-  // What blocks it gets focus: the alert naming an open flag, the "how to fit one page" choices for a two-page CV, the answer that needs Kris, else the reason.
+  // Step 5: only failing ATS checks block it (the steps before are approved), and Kris may accept them knowingly.
+  const atsFailing = step.step === "ats" && !before && !!pkg.ats && pkg.ats.checks.some((c) => !c.passed && !pkg.ats!.accepted.includes(c.check));
+  // What blocks it gets focus: the alert naming an open flag, the "how to fit one page" choices for a two-page CV, the answer that needs Kris, the ATS fix, else the reason.
   const focusBlocker = () => {
     if (flagBlocked) return onFlagBlock();
     if (waiting) return goToAnswer();
+    if (atsFailing) return document.getElementById(atsBlockerId(pkg.ats))?.focus();
     const legend = step.step === "cv" && pkg.cvVersion?.fit.choices.length ? document.getElementById("tighten-legend") : null;
     (legend ?? why.current)?.focus();
   };
@@ -420,7 +431,30 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
   // With flags open, the bar says how many are left; the alert above has the whole reason.
   const reason = flagBlocked ? (openFlags.length === 1 ? `1 flag left: ${openFlags[0]!.title}` : `${openFlags.length} flags left to decide`) : refused ?? step.blocked;
 
+  async function approvePkg() {
+    if (step.blocked && !(atsFailing && acceptFailing)) {
+      focusBlocker();
+      say(`Can't approve yet: ${step.blocked}`);
+      return;
+    }
+    try {
+      const r = await approvePackage(pkg.id, atsFailing && acceptFailing);
+      onChange(r.package);
+      if (!r.approved) {
+        setRefused(r.reason);
+        window.setTimeout(focusBlocker, 0);
+        say(`Can't approve yet: ${r.reason}`);
+        return;
+      }
+      say("Package approved. Its files are frozen: they're exactly what the extension uploads.");
+      onGo("approved");
+    } catch (err) {
+      setRefused(`Couldn't approve: ${message(err)}`);
+    }
+  }
+
   async function approve() {
+    if (step.step === "ats" && !step.approvedAt) return approvePkg();
     if (step.approvedAt) {
       if (next) onGo(next);
       return;
@@ -464,10 +498,17 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, onFlagBlock, say }: {
         </p>
       )}
       {step.approvedAt
-        ? <><span className="chip met"><Icon name="met" />Approved {hhmm(step.approvedAt)}</span>{next && <button className="btn primary" type="button" onClick={() => onGo(next)}>Next step</button>}</>
+        ? <>
+          <span className="chip met"><Icon name="met" />Approved {hhmm(step.approvedAt)}</span>
+          {next && <button className="btn primary" type="button" onClick={() => onGo(next)}>Next step</button>}
+          {!next && pkg.approved && <button className="btn primary" type="button" onClick={() => onGo("approved")}>See the approved package</button>}
+        </>
         : (
-          <button className="btn primary" type="button" aria-disabled={step.blocked ? "true" : undefined} aria-describedby={reason ? `why-${step.step}` : undefined} onClick={() => void approve()}>
-            Approve and continue
+          <button
+            className="btn primary" type="button" aria-disabled={step.blocked && !(atsFailing && acceptFailing) ? "true" : undefined}
+            aria-describedby={reason ? `why-${step.step}` : undefined} onClick={() => void approve()}
+          >
+            {step.step === "ats" ? (atsFailing && acceptFailing ? "Approve package knowing it fails" : "Approve package") : "Approve and continue"}
           </button>
         )}
     </div>
@@ -549,6 +590,7 @@ function CvStep({ pkg, view, onView, flagAlert, onChange, onGo, say }: {
   return (
     <>
       {cv && flagAlert && <FlagAlert pkg={pkg} cv={cv} />}
+      {cv?.profileChanged && <ProfileChanged pkg={pkg} changed={cv.profileChanged} onChange={onChange} say={say} />}
       <div className="panel">
         <div className="sec-head">
           <div className="step-title grow"><h2 id="cv-title" tabIndex={-1}>CV version</h2><p className="muted">{lead}</p></div>
@@ -586,6 +628,41 @@ function CvStep({ pkg, view, onView, flagAlert, onChange, onGo, say }: {
         </>
       )}
     </>
+  );
+}
+
+/** A piece this draft CV uses changed in Profile: the lines it's on, and "Redraft these lines" (#67). */
+function ProfileChanged({ pkg, changed, onChange, say }: {
+  pkg: PackageView; changed: NonNullable<CvVersionView["profileChanged"]>; onChange: (p: PackageView) => void; say: (m: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function redraft() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await redraftChangedLines(pkg.id);
+      onChange(r.package);
+      if (!r.changed) { setError(r.reason); return; }
+      say(`Redrafted ${changed.lines.length === 1 ? "the line" : `${changed.lines.length} lines`} from your profile. The CV was printed again.`);
+      window.setTimeout(() => document.getElementById("cv-title")?.focus(), 0);
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const n = changed.lines.length;
+  return (
+    <div className="banner warning" role="note">
+      <span className="text">
+        <b>Your profile changed since this draft.</b>{" "}
+        {changed.pieces.length === 1 ? "A piece" : `${changed.pieces.length} pieces`} it uses changed: <PieceLinks pieces={changed.pieces} />.{" "}
+        {n === 1 ? "This line uses it" : `These ${n} lines use them`}: {changed.lines.map((l) => `"${l}"`).join(" · ")}.
+        {error && <span className="block" role="alert">{error}</span>}
+      </span>
+      <button className="btn sm" type="button" disabled={busy} onClick={() => void redraft()}>{busy ? "Redrafting…" : n === 1 ? "Redraft this line" : "Redraft these lines"}</button>
+    </div>
   );
 }
 
@@ -1035,23 +1112,6 @@ function CvSide({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Packag
         <p className="meta">Fixed layout from the design system. Only the words are written for this job.</p>
       </div>
     </>
-  );
-}
-
-function LaterStep({ pkg, step, onGo }: { pkg: PackageView; step: PackageStepView; onGo: (v: Viewing) => void }) {
-  const cvApproved = pkg.steps[1]!.approvedAt !== null;
-  return (
-    <div className="panel">
-      <div className="step-title">
-        <h2>{step.label}</h2>
-        <p className="muted">
-          {step.step === "ats"
-            ? cvApproved ? "The ATS check reads the approved CV PDF the way a parser does, on this laptop. It arrives with a later part of the rebuild." : "Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed."
-            : `The ${step.label.toLowerCase()} arrives with a later part of the rebuild.`}
-        </p>
-      </div>
-      <div className="row"><button className="btn" type="button" onClick={() => onGo("cv")}>Back to the CV</button></div>
-    </div>
   );
 }
 

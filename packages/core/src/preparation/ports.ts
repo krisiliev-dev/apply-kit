@@ -58,12 +58,18 @@ export interface FileStore {
 
 /**
  * Generated PDFs, in `packages/<package id>/` beside the database (ADR 0003). A draft render
- * replaces the previous draft of the same document; approved files are frozen elsewhere (#67).
+ * replaces the previous draft of the same document; approved files are frozen beside them (#67).
  */
 export interface PackageFolder {
   /** Writes the draft and returns where it is, relative to the data folder ("packages/<id>/<file name>"). */
   saveDraft(packageId: string, kind: DocumentKind, fileName: string, bytes: Uint8Array): Promise<{ path: string }>;
-  /** The file at a path `saveDraft` returned, or null if it isn't there (any other path is refused). */
+  /**
+   * Freezes an approved file: written once to "packages/<id>/v<version>/<file name>" and never
+   * rewritten, and copied to Kris's Packages folder (a setting, inside Documents by default). `copy`
+   * is where the copy went, or null if it couldn't be written (the frozen file still counts).
+   */
+  freeze(packageId: string, version: number, fileName: string, bytes: Uint8Array): Promise<{ path: string; copy: string | null }>;
+  /** The file at a path `saveDraft` or `freeze` returned, or null if it isn't there (any other path is refused). */
   read(path: string): Promise<Uint8Array | null>;
 }
 

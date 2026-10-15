@@ -65,7 +65,13 @@ export type { WriteLetterInput, WrittenLetter } from "./writing/writer.ts";
 export { checkWording, validateCv } from "./preparation/honesty.ts";
 export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
-export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts } from "./preparation/engine.ts";
+export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts, PrepareForApply, PrepareForTrack } from "./preparation/engine.ts";
+export type {
+  ApprovedPackage, FrozenFile, PortalJobReference, CvEntryAsSent, PackageState, SubmittedVia, PackageForApply, ProfileForApply, MarkSubmittedResult,
+} from "./preparation/contracts.ts";
+export { portalJobReference } from "./preparation/portal.ts";
+export { atsCheckLabel } from "./preparation/ats-step.ts";
+export type { AtsStepView, AtsCheckView, AtsLine, AtsFixView, AtsFixField } from "./preparation/ats-step.ts";
 export type { ProfileExport } from "./preparation/engine.ts";
 export type {
   ImportFile, ImportInput, ImportInputProblem, ImportField, ImportItem, ImportItemState, ImportMerge, ImportProblem, ImportRun, ImportSource,
@@ -94,7 +100,7 @@ export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts
 export type {
   PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
   TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult, CvChangeView, CvFit, CvVersionView, FlagChoice, LearnedPiece,
-  LetterView, LetterCheckView, LetterFileView,
+  LetterView, LetterCheckView, LetterFileView, AtsFix,
 } from "./preparation/packages.ts";
 export type {
   ScreeningOrigin, ScreeningNeed, ScreeningAnswerView, ScreeningAnswersView, SalaryView, DraftAnswerResult, DraftAnswerRequest,

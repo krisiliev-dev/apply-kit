@@ -22,7 +22,7 @@ import { evidenceLabel, matchEvidence, type RequirementCategory } from "../fit/e
 import type { AiBudget, BudgetInfo } from "../budget.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import type { CvContent, DocumentDate, DocumentLanguage, DocumentToRender, Letterhead } from "../documents/content.ts";
-import type { AtsCheck } from "../documents/ats.ts";
+import { checkAts, type AtsCheck, type AtsCheckId } from "../documents/ats.ts";
 import type { CoachTurnInput, DraftAnswerInput, SentExcerpt, TailorCvInput, TailoredCv, WriteLetterInput, Writer } from "../writing/writer.ts";
 import type { AnswerLanguage, AnswerStore } from "./answers.ts";
 import {
@@ -36,8 +36,12 @@ import {
 } from "./cv-version.ts";
 import { checkWording, validateCv, type HonestyProfile } from "./honesty.ts";
 import { nearTheLine, type NearTheLine, type SkippedQuestion } from "./interview.ts";
-import type { Contact } from "./contact.ts";
-import type { FileStore, PackageFolder } from "./ports.ts";
+import type { Contact, ContactDetails, SaveContactResult } from "./contact.ts";
+import type { FileStore, PackageFolder, PdfText } from "./ports.ts";
+import { atsCheckLabel, atsStepView, postingKeywords, type AtsFixField, type AtsStepView } from "./ats-step.ts";
+import type { ApprovedPackage, CvEntryAsSent, FrozenFile, MarkSubmittedResult, PackageForApply, SubmittedVia } from "./contracts.ts";
+import { portalJobReference } from "./portal.ts";
+import { createHash } from "node:crypto";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
 import type { DocumentDraft, DraftRequest } from "./engine.ts";
 import {
@@ -174,6 +178,9 @@ export interface CvDraftView {
   photo: boolean;
 }
 
+/** The CV's draft as stored: its view, and the text read back from it (for the ATS step). */
+type CvDraftStored = CvDraftView & { text?: PdfText; document?: Extract<DocumentToRender, { kind: "cv" }> };
+
 /** A change from the master profile, as the CV step lists it. */
 export interface CvChangeView {
   id: string;
@@ -205,6 +212,12 @@ export interface CvVersionView {
   education: CvLineView[];
   evidence: EvidenceRow[];
   changes: CvChangeView[];
+  /**
+   * "Your profile changed since this draft": pieces this unapproved CV uses that changed (or were
+   * deleted) in Profile since it was written, and its lines that use them. Null when none did, and
+   * always for an approved package, which never changes.
+   */
+  profileChanged: { pieces: PieceLink[]; lines: string[] } | null;
   /** Every flag, in the order of the requirements they sit inside; decided ones stay with their choice. */
   flags: CvFlagView[];
   /** The decisions made so far, in words: for the approved package's summary and the later steps. */
@@ -386,6 +399,10 @@ export interface PackageView {
   letter: LetterView | null;
   /** The screening answers, once they're written. */
   answers: ScreeningAnswersView | null;
+  /** The ATS check of the CV's PDF, once the CV is approved. */
+  ats: AtsStepView | null;
+  /** The package as approved, with its frozen files; null while a step is open (after an edit too). */
+  approved: ApprovedPackage | null;
   /** What the package has cost so far, and the estimate for what's still to be written. */
   costUsd: number;
   estimate: { costUsd: number; seconds: number };
@@ -408,6 +425,12 @@ export type ApproveResult =
 /** Kris's decision on a flag: one of its options, or her own wording (checked before it's used). */
 export type FlagChoice = { option: string } | { own: string };
 
+/** Kris's answer to the ATS check's fix: the facts asked for, and whether they go into the master profile too. */
+export interface AtsFix {
+  values: Partial<Record<AtsFixField, string>>;
+  updateProfile: boolean;
+}
+
 export type ChangeResult = { changed: true; package: PackageView } | { changed: false; reason: string; package: PackageView };
 
 export interface PackageStoreDeps {
@@ -423,6 +446,8 @@ export interface PackageStoreDeps {
   /** Interview questions Kris skipped, so a gap can say when it was one of them. */
   skipped: () => SkippedQuestion[];
   contact: () => Contact;
+  /** Saves contact details to the master profile (the ATS fix, when Kris ticks it). */
+  saveContact: (details: ContactDetails) => SaveContactResult;
   closestAngle: (posting: AnglePosting) => AngleChoice;
   draftDocument: (request: DraftRequest) => Promise<DocumentDraft>;
   /** The voice, as the letter uses it: the context a draft sends, Kris's edits as evidence, and where excerpts came from. */
@@ -481,6 +506,26 @@ export interface PackageStore {
   saveAnswerToBank(id: string, questionId: string): ChangeResult;
   /** The drafter, for Apply's needs-you questions: honesty-checked, citing pieces, within the limit and the monthly cap. */
   draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
+  /** "Redraft these lines": the lines using pieces changed in Profile take the pieces' new wording; the CV is printed again. */
+  redraftChangedLines(id: string): Promise<ChangeResult>;
+  /** The ATS check's fix: the missing contact facts, saved to the master profile or used in this package only; the CV is printed again. */
+  fixAts(id: string, fix: AtsFix): Promise<ChangeResult>;
+  /** Approves the package (step 5's Approve) and freezes its files as the next version. */
+  approvePackage(id: string, options?: { acceptFailingChecks?: boolean }): Promise<ApproveResult>;
+  /** Apply's read: the Job's (or package's) approved package, or why there isn't one. */
+  forApply(query: { jobId: string } | { packageId: string }): PackageForApply;
+  /** Every package approved now (not reopened), newest first. */
+  approvedList(): ApprovedPackage[];
+  /** Track's read: the version submitted, else the one approved now; null for a draft never approved. */
+  snapshot(id: string): ApprovedPackage | null;
+  /** Approved now and never submitted. */
+  withoutApplication(): ApprovedPackage[];
+  markSubmitted(id: string, how: { via: SubmittedVia; portalUrl: string | null; at?: string }): MarkSubmittedResult;
+  undoSubmitted(id: string): ApprovedPackage | null;
+  /** An approved version (the current one by default) and its frozen files. */
+  version(id: string, version?: number): ApprovedPackage | null;
+  /** A frozen file's bytes, exactly as approved. */
+  frozenFile(id: string, which: "cv" | "letter", version?: number): Promise<(FrozenFile & { bytes: Uint8Array }) | null>;
 }
 
 /** Sources that are the company's own careers system (an ATS, or a company's own jobs API). */
@@ -554,8 +599,9 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
 
   interface Row {
     id: string; jobId: string; job: PackageJob; angle: Angle; angleReason: string; language: DocumentLanguage;
-    targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftView | null;
+    targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftStored | null;
     cvVersion: CvVersionState | null; screening: ScreeningState | null; startedAt: string; stoppedAt: string | null; letterDraft: number | null; letterFile: LetterFileView | null;
+    approvedVersion: number | null; atsAccepted: AtsCheckId[]; contactFix: Partial<Record<AtsFixField, string>>;
   }
   interface PartRow { part: PackageStep; state: PartState; attempts: number; error: string | null; costUsd: number; output: unknown }
 
@@ -563,12 +609,15 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     id: String(r.id), jobId: String(r.job_id), job: JSON.parse(String(r.job)) as PackageJob, angle: r.angle as Angle,
     angleReason: String(r.angle_reason), language: r.language as DocumentLanguage, targetPostingId: String(r.target_posting_id),
     photo: Number(r.photo) === 1, approved: JSON.parse(String(r.approved)) as Row["approved"], reviewed: r.reviewed_at != null,
-    cvDraft: r.cv_draft == null ? null : (JSON.parse(String(r.cv_draft)) as CvDraftView),
+    cvDraft: r.cv_draft == null ? null : (JSON.parse(String(r.cv_draft)) as CvDraftStored),
     cvVersion: r.cv_version == null ? null : (JSON.parse(String(r.cv_version)) as CvVersionState),
     screening: r.screening == null ? null : (JSON.parse(String(r.screening)) as ScreeningState),
     startedAt: String(r.started_at), stoppedAt: r.stopped_at == null ? null : String(r.stopped_at),
     letterDraft: r.letter_draft == null ? null : Number(r.letter_draft),
     letterFile: r.letter_file == null ? null : (JSON.parse(String(r.letter_file)) as LetterFileView),
+    approvedVersion: r.approved_version == null ? null : Number(r.approved_version),
+    atsAccepted: JSON.parse(String(r.ats_accepted)) as AtsCheckId[],
+    contactFix: r.contact_fix == null ? {} : (JSON.parse(String(r.contact_fix)) as Row["contactFix"]),
   });
   const row = (id: string) => {
     const r = db.prepare("SELECT * FROM package WHERE id = ?").get(id);
@@ -623,8 +672,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
           : p.state === "not-written" ? "Not written: this month's AI budget would be crossed."
           : "From the target posting's form";
       }
-      case "ats":
-        return "Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed.";
+      case "ats": {
+        const checks = r.cvDraft?.ats?.checks ?? [];
+        return p.state === "done" ? `${checks.filter((c) => c.passed).length} of ${checks.length} checks pass · on this laptop`
+          : "Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed.";
+      }
     }
   };
 
@@ -667,6 +719,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
           return { reason: `This CV runs onto ${r.cvDraft.pages} pages. Choose how to fit one page, or keep ${r.cvDraft.pages}.`, by: step };
         }
         if (step === "letter") return letterBlock(r);
+        if (step === "ats") return atsBlock(r);
         return null;
       }
       case "working": return { reason: `The ${name} is still being written.`, by: step };
@@ -689,11 +742,13 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       const letter = step === "letter" && p.state === "done" ? currentLetter(r) : null;
       const toFix = letter ? letterChecks(r, letter).filter((c) => c.state === "problem").length : 0;
       const needs = step === "answers" && p.state === "done" ? openAnswers(r).length : 0;
+      const failing = step === "ats" && p.state === "done" ? failingChecks(r).length : 0;
       const [state, sub]: [StepState, string] = approvedAt ? ["done", "Approved"]
         : open ? [step === current ? "current" : "flagged", open === 1 ? "1 flag" : `${open} flags`]
         : needs ? [step === current ? "current" : "flagged", `${needs} need${needs === 1 ? "s" : ""} you`]
         : flags.length && step === current ? ["current", "Flags decided"]
         : toFix ? [step === current ? "current" : "flagged", `${toFix} to fix`]
+        : failing ? [step === current ? "current" : "flagged", `${failing} check${failing === 1 ? "" : "s"} fail${failing === 1 ? "s" : ""}`]
         : p.state === "working" ? ["working", "Writing…"]
         : p.state === "failed" ? ["failed", "Failed"]
         : step === current ? ["current", p.state === "done" ? (step === "target" ? "Choose" : step === "letter" ? "Review" : "Ready to check") : p.state === "later" ? "Not built yet" : "Not written"]
@@ -733,10 +788,12 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       generating: isGenerating(r, ps),
       stoppedAt: r.stoppedAt,
       steps: stepsOf(r, ps),
-      cv: r.cvDraft,
+      cv: r.cvDraft && cvDraftView(r.cvDraft),
       cvVersion: cvVersionView(r),
       letter: letterView(r),
       answers: answersView(r),
+      ats: atsView(r, ps),
+      approved: r.approvedVersion === null ? null : versionOf(r.id, r.approvedVersion),
       costUsd: Math.round(list.reduce((n, p) => n + p.costUsd, 0) * 1e6) / 1e6,
       estimate: {
         // Each part's own task: the CV's tailoring, the letter, and a few drafted screening answers.
@@ -812,12 +869,14 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const pieces = byId();
     const contact = deps.contact();
     const first = plan.roles.map((role) => pieces.get(role.roleId)?.entry).find((e) => e);
+    // Facts Kris gave the ATS fix for this package only fill what the profile lacks.
+    const fix = r.contactFix;
     return {
       name: r.language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin,
       headline: first?.title ?? "",
-      location: [contact.city, contact.country].filter(Boolean).join(", ") || undefined,
+      location: [contact.city || fix.city, contact.country || fix.country].filter(Boolean).join(", ") || undefined,
       email: contact.email,
-      phone: contact.phone || undefined,
+      phone: contact.phone || fix.phone || undefined,
       links: contact.links.map((l) => l.replace(/^https?:\/\//, "").replace(/\/$/, "")),
     };
   }
@@ -889,6 +948,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (m?.status === "gap") flag({ kind: "gap", requirement: i, place: null, pieceIds: [], piece: null, draft: null, honest: null });
     });
     const state: CvVersionState = {
+      seen: seenNow(),
       changes: deriveChanges(base, validated, byId(), () => crypto.randomUUID()),
       keepTwoPages: false,
       evidence: validated.evidence,
@@ -898,6 +958,41 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       flags,
     };
     db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
+  }
+
+  /** What a piece says, as far as a CV line can tell: its words and its facts. */
+  const said = (p: ProfilePiece) => JSON.stringify([p.text, p.entry]);
+  const seenNow = () => Object.fromEntries(deps.pieces().map((p) => [p.id, said(p)]));
+
+  /** The lines of the CV as planned, each with the pieces it uses. */
+  function planLines(r: Row): { text: string; pieceIds: string[] }[] {
+    const plan = planOf(r);
+    const pieces = byId();
+    return [
+      ...(plan.summary ? [{ text: plan.summary.text, pieceIds: plan.summary.pieceIds }] : []),
+      ...plan.roles.flatMap((role) => {
+        const entry = pieces.get(role.roleId)?.entry;
+        return [...(entry ? [{ text: entryLabel(entry), pieceIds: [role.roleId] }] : []), ...role.bullets.map((b) => ({ text: b.text, pieceIds: b.pieceIds }))];
+      }),
+      ...plan.skills.map((sid) => ({ text: plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "", pieceIds: [sid] })),
+      ...plan.education.map((eid) => { const e = pieces.get(eid)?.entry; return { text: e ? `${e.title} · ${e.organisation}` : "", pieceIds: [eid] }; }),
+    ].filter((l) => l.text);
+  }
+
+  /** Pieces the draft CV uses that changed since it was written, and the lines that use them; null when none (or once approved). */
+  function profileChangedOf(r: Row): { ids: string[]; pieces: PieceLink[]; lines: string[] } | null {
+    const seen = r.cvVersion?.seen;
+    if (!seen || r.approvedVersion !== null) return null;
+    const now = byId();
+    const lines = planLines(r);
+    const used = new Set([...lines.flatMap((l) => l.pieceIds), ...(r.cvVersion!.changes.flatMap((c) => ("line" in c ? c.line.pieceIds : "bullet" in c ? c.bullet.pieceIds : [])))]);
+    const ids = [...used].filter((pid) => seen[pid] !== undefined && (!now.has(pid) || said(now.get(pid)!) !== seen[pid]));
+    if (!ids.length) return null;
+    return {
+      ids,
+      pieces: ids.map((pid) => (now.has(pid) ? evidenceLabel(now.get(pid)!) : { id: pid, label: "A piece you deleted" })),
+      lines: lines.filter((l) => l.pieceIds.some((pid) => ids.includes(pid))).map((l) => l.text),
+    };
   }
 
   const saveVersion = (id: string, state: CvVersionState) => db.prepare("UPDATE package SET cv_version = ? WHERE id = ?").run(JSON.stringify(state), id);
@@ -959,6 +1054,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       }),
       evidence,
       changes: state.changes.map(({ id, origin, flagId, label, was, is, detail, why, undone }) => ({ id, origin, flagId: flagId ?? null, label, was, is, detail, why, undone })),
+      profileChanged: (() => { const c = profileChangedOf(r); return c && { pieces: c.pieces, lines: c.lines }; })(),
       flags: flagsOf(r),
       decisions: decisionsOf(state.flags ?? [], (f) => flagView(f, requirementText(r, f)).title),
       honesty: honestyChecks(state, evidence),
@@ -972,20 +1068,76 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     };
   }
 
-  /** Prints the CV and keeps it as the package's draft. */
+  /**
+   * The posting keywords the ATS check looks for: the skill and certificate requirements. A gap Kris
+   * chose to name in the letter or leave out, and a preferred item she doesn't hold, are deliberate.
+   */
+  function keywordsOf(r: Row) {
+    const flags = r.cvVersion?.flags ?? [];
+    const now = clock.now();
+    return postingKeywords(r.job.requirements.map((q, i) => {
+      const decided = flags.find((f) => f.kind === "gap" && f.requirement === i)?.decision?.option;
+      const notHeld = q.kind === "preferred" && matchEvidence({ text: q.text, kind: "preferred", category: q.category ?? "other" }, deps.pieces(), now).status === "not-held";
+      const gap = decided === "letter" ? "a gap you chose to name in the letter" : decided === "leave-out" ? "a gap you chose to leave out" : notHeld ? "preferred, and not claimed" : null;
+      return { text: q.text, category: q.category, gap };
+    }));
+  }
+
+  /** Prints the CV and keeps it as the package's draft, with the text read back for the ATS check. */
   async function renderCv(id: string): Promise<void> {
     const r = row(id)!;
+    const document = await cvDocument(r);
     const draft = await deps.draftDocument({
       packageId: id,
-      document: await cvDocument(r),
+      document,
       fileName: { name: deps.contact().nameLatin, company: r.job.company, role: r.job.title },
-      keywords: [],
+      keywords: keywordsOf(r),
     });
-    const cv: CvDraftView = {
+    const cv: CvDraftStored = {
       fileName: draft.fileName, path: draft.path, sha256: draft.sha256, size: draft.size, pages: draft.pages,
       overflow: draft.overflow, ats: draft.ats, language: r.language, photo: r.photo,
+      // What the ATS check reads (the photo aside: parsers skip it), so it can run again as decisions change.
+      text: draft.text, document: document.kind === "cv" ? { ...document, content: { ...document.content, photo: undefined } } : undefined,
     };
     db.prepare("UPDATE package SET cv_draft = ? WHERE id = ?").run(JSON.stringify(cv), id);
+  }
+
+  const cvDraftView = (d: CvDraftStored): CvDraftView => ({
+    fileName: d.fileName, path: d.path, sha256: d.sha256, size: d.size, pages: d.pages, overflow: d.overflow, ats: d.ats, language: d.language, photo: d.photo,
+  });
+
+  /** The ATS check over the CV's PDF as read back, with the posting keywords as Kris's decisions stand now. */
+  function atsCheckOf(r: Row): AtsCheck | null {
+    const cv = r.cvDraft;
+    if (!cv?.text || !cv.document) return cv?.ats ?? null;
+    return checkAts({ text: cv.text, document: cv.document, fileName: cv.fileName, keywords: keywordsOf(r) });
+  }
+
+  /** The ATS checks that fail now and that Kris hasn't accepted knowingly. */
+  const failingChecks = (r: Row) => (atsCheckOf(r)?.checks ?? []).filter((c) => !c.passed && !r.atsAccepted.includes(c.check));
+
+  /** Why the package can't be approved at the ATS check: a check fails (Kris may accept it knowingly). */
+  function atsBlock(r: Row): { reason: string; by: PackageStep; failing: AtsCheckId[] } | null {
+    const failing = failingChecks(r);
+    if (!failing.length) return null;
+    const names = failing.map((c) => lower(atsCheckLabel[c.check])).join(", ");
+    return { reason: `${failing.length === 1 ? "1 check fails" : `${failing.length} checks fail`}: ${names}. Fix it, or approve knowing it fails.`, by: "ats", failing: failing.map((c) => c.check) };
+  }
+
+  /** Contact details the CV's letterhead lacks (in the profile and in this package), which the ATS check's fix asks for. */
+  function missingContact(r: Row): AtsFixField[] {
+    const c = deps.contact();
+    const has = (f: AtsFixField) => !!(c[f].trim() || r.contactFix[f]?.trim());
+    return (["phone", "city", "country"] as const).filter((f) => !has(f));
+  }
+
+  /** The ATS step: shown once the CV is approved, over the CV's current PDF. */
+  function atsView(r: Row, ps: Map<PackageStep, PartRow>): AtsStepView | null {
+    const cv = r.cvDraft;
+    if (ps.get("ats")!.state !== "done" || !cv?.text || !cv.document) return null;
+    return atsStepView({
+      ats: atsCheckOf(r)!, text: cv.text, headings: cv.document.content.experience.map((x) => `${x.title} · ${x.employer}`), missing: missingContact(r), accepted: r.atsAccepted,
+    });
   }
 
   // ---- the cover letter (#65) ---------------------------------------------------------------
@@ -1294,7 +1446,10 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   const reopenFrom = (r: Row, step: PackageStep) => {
     const from = packageSteps.indexOf(step);
     const approved = Object.fromEntries(Object.entries(r.approved).filter(([s]) => packageSteps.indexOf(s as PackageStep) < from));
-    db.prepare("UPDATE package SET approved = ? WHERE id = ?").run(JSON.stringify(approved), r.id);
+    // The package is a draft again: its approved version stays as it was, frozen; the next approval is a new one.
+    db.prepare("UPDATE package SET approved = ?, approved_version = NULL, ats_accepted = '[]' WHERE id = ?").run(JSON.stringify(approved), r.id);
+    // The ATS check reads the approved CV: a CV open again waits for approval before it's checked.
+    if (from <= packageSteps.indexOf("cv")) setPart(r.id, "ats", { state: "waiting" });
   };
 
   /** Undoes (or redoes) one change, reopens the CV step and prints the CV again. */
@@ -1855,6 +2010,141 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     };
   }
 
+  // ---- approving the package (#67) ---------------------------------------------------------
+
+  const fixAsk: Record<AtsFixField, string> = { phone: "Give your phone number, with the country code.", city: "Give the city you live in.", country: "Give the country you live in." };
+
+  async function redraftChangedLines(id: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
+    if (r.approvedVersion !== null) return refuse("This package is approved: what it sends stays as you approved it.");
+    const changed = profileChangedOf(r);
+    if (!changed || !r.cvVersion) return refuse("Nothing in your profile changed since this CV was written.");
+    // The tailoring's wording of a changed piece gives way to the piece as it is now; Kris's own decisions stay.
+    const touches = (c: CvChange) => !c.flagId && ("line" in c ? c.line.pieceIds : "bullet" in c ? c.bullet.pieceIds : []).some((pid) => changed.ids.includes(pid));
+    saveVersion(id, { ...r.cvVersion, changes: r.cvVersion.changes.filter((c) => !touches(c)), seen: seenNow() });
+    reopenFrom(r, "cv");
+    await renderCv(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
+  async function fixAts(id: string, fix: AtsFix): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
+    const asked = missingContact(r);
+    if (!asked.length) return refuse("There's nothing for this fix to add: the CV has your contact details.");
+    const values: Partial<Record<AtsFixField, string>> = {};
+    for (const field of asked) {
+      const value = fix.values[field]?.trim() ?? "";
+      // Nothing is guessed: every fact asked for comes from Kris.
+      if (!value) return refuse(fixAsk[field]);
+      if (field === "phone" && !/^\+\d[\d\s()-]{5,}$/.test(value)) return refuse("Give the phone number with the country code, like +359 88 000 0000.");
+      values[field] = value;
+    }
+    if (fix.updateProfile) {
+      const c = deps.contact();
+      const saved = deps.saveContact({ nameLatin: c.nameLatin, nameCyrillic: c.nameCyrillic, email: c.email, phone: c.phone, city: c.city, country: c.country, links: c.links, ...values });
+      if (!saved.saved) return refuse(saved.problems[0]!.message);
+    } else {
+      db.prepare("UPDATE package SET contact_fix = ? WHERE id = ?").run(JSON.stringify({ ...r.contactFix, ...values }), id);
+    }
+    // The check runs again on the CV printed with the new facts; the CV keeps its approval (its words didn't change).
+    await renderCv(id);
+    if (currentLetter(row(id)!)) await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
+  const toApproved = (x: Record<string, unknown>): ApprovedPackage => {
+    const snapshot = JSON.parse(String(x.snapshot)) as ApprovedPackage;
+    const submitted = x.submitted_at == null ? null
+      : { at: String(x.submitted_at), via: x.submitted_via as "extension" | "app", portalUrl: x.portal_url == null ? null : String(x.portal_url) };
+    return { ...snapshot, state: submitted ? "submitted" : "approved", submitted };
+  };
+
+  /** The version that was submitted (one per package: the snapshot Track shows as sent). */
+  const submittedRow = (id: string) => db.prepare("SELECT * FROM package_version WHERE package_id = ? AND submitted_at IS NOT NULL ORDER BY version DESC").get(id) ?? null;
+
+  function versionOf(id: string, version: number): ApprovedPackage | null {
+    const x = db.prepare("SELECT * FROM package_version WHERE package_id = ? AND version = ?").get(id, version);
+    return x ? toApproved(x) : null;
+  }
+
+  const entryAsSent = (e: { title: string; organisation: string; city: string | null; start: string; end: string | null }): CvEntryAsSent =>
+    ({ title: e.title, organisation: e.organisation, place: e.city, start: e.start, end: e.end });
+
+  /** The package as Apply and Track read it, frozen with its files at approval. */
+  function snapshotOf(r: Row, version: number, at: string, files: { cv: FrozenFile; letter: FrozenFile | null }, accepted: AtsCheckId[]): ApprovedPackage {
+    const plan = planOf(r);
+    const pieces = byId();
+    const target = r.job.postings.find((p) => p.id === r.targetPostingId);
+    const checks = atsCheckOf(r)?.checks ?? [];
+    const letter = currentLetter(r);
+    const decisions = [
+      ...decisionsOf(r.cvVersion?.flags ?? [], (f) => flagView(f, requirementText(r, f)).title).map(({ title, decision }) => ({ title, decision })),
+      ...accepted.map((c) => ({ title: `ATS check: ${lower(atsCheckLabel[c])}`, decision: "Fails; approved knowing it does" })),
+    ];
+    return {
+      id: r.id, jobId: r.jobId, version, state: "approved", approvedAt: at, submitted: null,
+      job: { title: r.job.titleTranslation ?? r.job.title, company: r.job.company },
+      targetPosting: { url: target?.url ?? "", site: target?.site ?? "", jobRef: target ? portalJobReference(target.url) : null },
+      language: r.language,
+      angle: r.angle,
+      cv: {
+        label: `${angleLabel[r.angle]} · ${r.job.company}`,
+        file: files.cv,
+        ats: { passed: checks.filter((c) => c.passed).length, total: checks.length, accepted },
+        skills: plan.skills.map((sid) => plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "").filter(Boolean),
+        roles: plan.roles.map((x) => pieces.get(x.roleId)?.entry).filter((e) => !!e).map(entryAsSent),
+        education: plan.education.map((x) => pieces.get(x)?.entry).filter((e) => !!e).map(entryAsSent),
+      },
+      letter: letter && files.letter ? { text: letterText(letter.content), file: files.letter } : null,
+      answers: (r.screening?.answers ?? []).filter((a) => a.text).map((a) => ({ question: a.question, answer: a.text })),
+      decisions,
+    };
+  }
+
+  /**
+   * Approves the package: every step approved and the ATS check passing (or its failing checks
+   * accepted knowingly). The CV and letter PDFs are frozen by SHA-256 as the next version.
+   */
+  async function approvePackage(id: string, { acceptFailingChecks = false }: { acceptFailingChecks?: boolean } = {}): Promise<ApproveResult> {
+    const r = mustGet(id);
+    if (r.approvedVersion !== null) return { approved: true, package: view(r) };
+    const block = blockOf(r, parts(id), "ats");
+    const ats = atsBlock(r);
+    const acceptable = acceptFailingChecks && ats && block?.reason === ats.reason;
+    if (block && !acceptable) return { approved: false, reason: block.reason, blockedBy: block.by, flagId: block.flag ?? null, package: view(r) };
+    const refuse = (reason: string): ApproveResult => ({ approved: false, reason, blockedBy: "ats", flagId: null, package: view(row(id)!) });
+    const cvBytes = r.cvDraft ? await deps.packages.read(r.cvDraft.path) : null;
+    if (!r.cvDraft || !cvBytes) return refuse("The CV's PDF isn't there to freeze. Print it again: undo and redo a change, or Retry the CV.");
+    const letter = currentLetter(r);
+    const letterFile = letter && r.letterFile?.draft === letter.number ? r.letterFile : null;
+    const letterBytes = letterFile ? await deps.packages.read(letterFile.path) : null;
+    if (letter && !letterBytes) return refuse("The cover letter's PDF isn't there to freeze. Show the draft again to print it.");
+
+    const version = Number(db.prepare("SELECT COALESCE(MAX(version), 0) + 1 AS v FROM package_version WHERE package_id = ?").get(id)!.v);
+    const freeze = async (fileName: string, bytes: Uint8Array): Promise<FrozenFile> => {
+      const { path, copy } = await deps.packages.freeze(id, version, fileName, bytes);
+      return { fileName, sha256: createHash("sha256").update(bytes).digest("hex"), size: bytes.byteLength, path, copy };
+    };
+    const files = { cv: await freeze(r.cvDraft.fileName, cvBytes), letter: letterFile && letterBytes ? await freeze(letterFile.fileName, letterBytes) : null };
+    const now = clock.now().toISOString();
+    const current = row(id)!;
+    const accepted = acceptable ? [...new Set([...current.atsAccepted, ...ats.failing])] : current.atsAccepted;
+    const snapshot = snapshotOf(current, version, now, files, accepted);
+    db.exec("BEGIN");
+    try {
+      db.prepare("INSERT INTO package_version (package_id, version, approved_at, snapshot) VALUES (?, ?, ?, ?)").run(id, version, now, JSON.stringify(snapshot));
+      db.prepare("UPDATE package SET approved = ?, approved_version = ?, ats_accepted = ? WHERE id = ?")
+        .run(JSON.stringify({ ...current.approved, ats: now }), version, JSON.stringify(accepted), id);
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+    return { approved: true, package: view(row(id)!) };
+  }
+
   const mustGet = (id: string) => {
     const r = row(id);
     if (!r) throw new Error("No such package");
@@ -1885,8 +2175,12 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (r.approved[step]) return { approved: true, package: view(r) };
       const block = blockOf(r, parts(id), step);
       if (block) return { approved: false, reason: block.reason, blockedBy: block.by, flagId: block.flag ?? null, package: view(r) };
+      // Step 5's Approve is the package's: it freezes the files.
+      if (step === "ats") return { approved: false, reason: "Approve the package to finish: approving it freezes the files.", blockedBy: "ats", flagId: null, package: view(r) };
       const now = clock.now().toISOString();
       db.prepare("UPDATE package SET approved = ?, reviewed_at = COALESCE(reviewed_at, ?) WHERE id = ?").run(JSON.stringify({ ...r.approved, [step]: now }), now, id);
+      // The ATS check runs on the approved CV's PDF, on this laptop.
+      if (step === "cv") setPart(id, "ats", { state: "done", error: null });
       // The bank's answers this package uses count as used once Kris approves them.
       if (step === "answers") for (const a of r.screening?.answers ?? []) if (a.bank && a.text) deps.answers.recordUse(a.bank.answerId);
       return { approved: true, package: view(row(id)!) };
@@ -2001,6 +2295,56 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     redraftAnswer,
     saveAnswerToBank,
     draftAnswer,
+    approvePackage,
+    fixAts,
+    redraftChangedLines,
+    forApply(query) {
+      const r = "jobId" in query ? forJob(query.jobId) : row(query.packageId);
+      if (!r) return { kind: "none" };
+      const pkg = r.approvedVersion === null ? null : versionOf(r.id, r.approvedVersion);
+      return pkg ? { kind: "approved", package: pkg } : { kind: "not-approved", packageId: r.id, jobId: r.jobId, reason: "Your package isn't approved yet · open it to approve" };
+    },
+    approvedList() {
+      return db.prepare("SELECT v.* FROM package p JOIN package_version v ON v.package_id = p.id AND v.version = p.approved_version ORDER BY v.approved_at DESC, p.rowid DESC")
+        .all().map(toApproved);
+    },
+    snapshot(id) {
+      const x = submittedRow(id);
+      if (x) return toApproved(x);
+      const r = row(id);
+      return r && r.approvedVersion !== null ? versionOf(id, r.approvedVersion) : null;
+    },
+    withoutApplication() {
+      return this.approvedList().filter((p) => !submittedRow(p.id));
+    },
+    markSubmitted(id, { via, portalUrl, at }) {
+      const done = submittedRow(id);
+      if (done) return { marked: true, alreadyMarked: true, package: toApproved(done) };
+      const r = row(id);
+      if (!r || r.approvedVersion === null) return { marked: false, reason: "Your package isn't approved yet · open it to approve" };
+      db.prepare("UPDATE package_version SET submitted_at = ?, submitted_via = ?, portal_url = ? WHERE package_id = ? AND version = ?")
+        .run(at ?? clock.now().toISOString(), via, portalUrl, id, r.approvedVersion);
+      return { marked: true, alreadyMarked: false, package: versionOf(id, r.approvedVersion)! };
+    },
+    undoSubmitted(id) {
+      const x = submittedRow(id);
+      if (!x) return null;
+      db.prepare("UPDATE package_version SET submitted_at = NULL, submitted_via = NULL, portal_url = NULL WHERE package_id = ? AND version = ?").run(id, Number(x.version));
+      return versionOf(id, Number(x.version));
+    },
+    version(id, version) {
+      const r = row(id);
+      const v = version ?? r?.approvedVersion ?? null;
+      return r && v !== null ? versionOf(id, v) : null;
+    },
+    async frozenFile(id, which, version) {
+      const r = row(id);
+      const v = version ?? r?.approvedVersion ?? null;
+      const pkg = r && v !== null ? versionOf(id, v) : null;
+      const file = which === "cv" ? pkg?.cv.file : pkg?.letter?.file;
+      const bytes = file ? await deps.packages.read(file.path) : null;
+      return file && bytes ? { ...file, bytes } : null;
+    },
 
   };
 }

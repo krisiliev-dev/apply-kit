@@ -196,7 +196,7 @@ describe("approving steps in order", () => {
     expect(await t.preparation.packageCv(pkg.id)).not.toBeNull();
   });
 
-  it("approves step 1, step 2 and the cover letter, and stops at a step not built yet", async () => {
+  it("approves step 1, step 2 and the cover letter; the approved CV goes to the ATS check", async () => {
     const t = miraProfile();
     const pkg = await started(t);
 
@@ -207,7 +207,8 @@ describe("approving steps in order", () => {
     expect(cv).toMatchObject({ approved: true });
     expect(letter).toMatchObject({ approved: true });
     expect(letter.package.steps.map((s) => [s.state, s.sub])).toEqual([
-      ["done", "Approved"], ["done", "Approved"], ["done", "Approved"], ["current", "3 need you"], ["upcoming", "After the CV"],
+      // The default stand-in PDF is JSON, which a parser can't read as a CV.
+      ["done", "Approved"], ["done", "Approved"], ["done", "Approved"], ["current", "3 need you"], ["flagged", "3 checks fail"],
     ]);
   });
 

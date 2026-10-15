@@ -451,3 +451,17 @@ h2[tabindex="-1"]:focus { outline: none }
 .package-page .q fieldset { border: 0; margin: 0; padding: 0; min-width: 0 }
 .package-page .q select.input { appearance: auto; max-width: calc(var(--s-10) * 5) }
 .package-page .money { display: flex; gap: var(--s-3); align-items: center; max-width: calc(var(--s-10) * 5) }
+/* Step 5, the ATS check, and the approved package (#67) */
+.package-page .parse { font-family: var(--font-text); font-size: var(--fs-small); line-height: 1.6; background: var(--surface-sunken); border-radius: var(--r-control); padding: var(--s-5); margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink) }
+.package-page .parse:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page .parse .lost { background: var(--gap-soft); color: var(--gap); font-weight: 600; padding: 0 var(--s-1); border-radius: var(--s-1) }
+.package-page .two { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--s-6); align-items: start }
+@media (max-width: 860px) { .package-page .two { grid-template-columns: minmax(0, 1fr) } }
+.package-page .selects { display: flex; flex-wrap: wrap; gap: var(--s-4) }
+.package-page .selects .field { min-width: calc(var(--s-10) * 3); flex: 1 1 calc(var(--s-10) * 3) }
+.package-page .flag .check, .package-page .stack > .check { display: flex; align-items: flex-start; gap: var(--s-3) }
+.package-page .check input { margin-top: var(--s-1); flex: none }
+.package-page .files-out { display: grid; gap: var(--s-3) }
+.package-page .files-out a.btn { justify-content: flex-start }
+.package-page .kv.wide { grid-template-columns: minmax(calc(var(--s-10) * 2), max-content) minmax(0, 1fr) }
+@media (max-width: 520px) { .package-page .kv.wide { grid-template-columns: minmax(0, 1fr) } .package-page .kv.wide dd { margin-bottom: var(--s-3) } }
