@@ -426,3 +426,21 @@ h2[tabindex="-1"]:focus { outline: none }
 .signals { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-1); font-size: var(--fs-small); color: var(--ink-2) }
 .strip .tile.stale .value { color: var(--ink-3) }
 .timeline li.not-a-change .ev b { text-decoration: none }
+
+/* Applications at scale (hi-fi applications.html, "214 applications"; track.css "toolbar and grouped
+   list"): search, Status chips, angle and date selects, the active-filters line, and the quiet lines
+   for "Since your last visit" and a held mailbox update. Tokens only. */
+.list-tools { display: grid; gap: var(--s-3); padding: 0 var(--s-6) var(--s-4) }
+.list-tools .search { width: min(300px, 100%) }
+.list-tools .toolbar select.input { width: auto; min-height: 36px; padding: var(--s-2) var(--s-4); font-size: var(--fs-small); border-radius: var(--r-pill) }
+.active-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); font-size: var(--fs-small); color: var(--ink-2); margin: 0 }
+.since-visit, .held { font-size: var(--fs-small); color: var(--ink-2); margin: 0; overflow-wrap: anywhere }
+.since-visit b { color: var(--ink); font-weight: 600 }
+.held { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: 0 var(--s-6) var(--s-4) }
+.needs-sub { list-style: none }
+.none-match { margin: 0 var(--s-6) var(--s-5) }
+@media (max-width: 760px) {
+  .list-tools, .held { padding-inline: var(--s-5) }
+  .none-match { margin-inline: var(--s-5) }
+  .list-tools .search { width: 100% }
+}

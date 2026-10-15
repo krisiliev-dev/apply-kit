@@ -15,7 +15,10 @@ const addressOf = (from: string) => /<([^>]+)>/.exec(from)?.[1] ?? from;
 /** Bulgarian text is marked as such, so screen readers read it in Bulgarian. */
 const langOf = (text: string) => (/[Ѐ-ӿ]/.test(text) ? "bg" : undefined);
 
-/** The emails to match, as items of Needs you's queue (newest first). */
+/** From this many on, emails to match are one grouped item ("3 emails to match") that opens to each one. */
+export const groupFrom = 3;
+
+/** The emails to match, as items of Needs you's queue (newest first); at volume, one grouped item that opens to each. */
 export function EmailToMatchItems({ emails, total, toaster, onAnswered }: {
   emails: EmailToMatch[];
   /** Every Application, for "Search all N". */
@@ -24,11 +27,30 @@ export function EmailToMatchItems({ emails, total, toaster, onAnswered }: {
   /** Reloads the list, Needs you and the emails after an answer or its undo. */
   onAnswered: () => Promise<unknown>;
 }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const cards = emails.map((e) => (
+    <li key={e.email.id} className="needs wide"><EmailCard item={e} total={total} toaster={toaster} onAnswered={onAnswered} /></li>
+  ));
+  if (emails.length < groupFrom) return <>{cards}</>;
+  const senders = [...new Set(emails.map((e) => addressOf(e.email.from)))];
   return (
     <>
-      {emails.map((e) => (
-        <li key={e.email.id} className="needs wide"><EmailCard item={e} total={total} toaster={toaster} onAnswered={onAnswered} /></li>
-      ))}
+      <li className="needs">
+        <div className="stack" style={{ gap: "var(--s-1)" }}>
+          <span className="kind">{emails.length} emails to match</span>
+          <span className="what">From {senders.length > 2 ? `${senders.slice(0, 2).join(", ")} and ${senders.length - 2} more` : senders.join(" and ")}</span>
+          <span className="why">None could be matched to one Application confidently. Nothing has changed; you say where each belongs.</span>
+        </div>
+        <div className="acts">
+          <button className="btn primary sm" type="button" aria-expanded={open} aria-controls={listId} onClick={() => setOpen((o) => !o)}>
+            {open ? "Hide the emails" : `Match ${emails.length} emails`}
+          </button>
+        </div>
+      </li>
+      <li className="needs-sub" id={listId} hidden={!open}>
+        <ul className="needs-queue" aria-label="Emails to match">{cards}</ul>
+      </li>
     </>
   );
 }

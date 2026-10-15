@@ -2,7 +2,7 @@ import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, Contact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
-  EmailAnswer, EmailToMatch, TrackMailbox,
+  EmailAnswer, EmailToMatch, TrackMailbox, StatusFilter, Angle, SinceLastVisit,
   FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou,
 } from "@apply-kit/core";
 
@@ -256,8 +256,39 @@ export async function unpairDevice(id: string): Promise<void> {
 
 /** Every Application grouped by Status. `all` lists the groups to show in full (Applied and Closed show 5 otherwise). */
 export async function fetchApplications(all: GroupKey[] = [], signal?: AbortSignal): Promise<ApplicationList> {
-  const q = all.length ? `?all=${all.join(",")}` : "";
-  return json(await fetch(`/api/applications${q}`, { signal }));
+  return fetchApplicationList({ all }, signal);
+}
+
+/** What Applications asks the list for: search, filters, groups shown in full and where each paged group starts. */
+export interface ApplicationListParams {
+  all?: GroupKey[];
+  /** Page groups over 25 rows. */
+  paged?: boolean;
+  at?: Partial<Record<GroupKey, number>>;
+  q?: string;
+  status?: StatusFilter | null;
+  angle?: Angle | null;
+  /** Applied in the last N days. */
+  within?: number | null;
+}
+
+export async function fetchApplicationList(p: ApplicationListParams, signal?: AbortSignal): Promise<ApplicationList> {
+  const q = new URLSearchParams();
+  if (p.all?.length) q.set("all", p.all.join(","));
+  if (p.paged) q.set("paged", "1");
+  const at = Object.entries(p.at ?? {}).filter(([, n]) => n);
+  if (at.length) q.set("at", at.map(([k, n]) => `${k}:${n}`).join(","));
+  if (p.q?.trim()) q.set("q", p.q.trim());
+  if (p.status) q.set("status", p.status);
+  if (p.angle) q.set("angle", p.angle);
+  if (p.within) q.set("within", String(p.within));
+  const qs = q.toString();
+  return json(await fetch(`/api/applications${qs ? `?${qs}` : ""}`, { signal }));
+}
+
+/** Records a visit to Applications: "Since your last visit" (Status changes made by email). */
+export async function visitApplications(): Promise<SinceLastVisit> {
+  return json(await postJson("/api/applications/visit"));
 }
 
 /** Jobs to pick from in Add application (passed and closed too). */

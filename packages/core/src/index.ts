@@ -34,6 +34,7 @@ export type { LdJobPosting } from "./capture/jsonld.ts";
 export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts";
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
+export { angles } from "./fit/angles.ts";
 export type { Angle } from "./fit/angles.ts";
 export type { Place, LocationTier } from "./locations.ts";
 export { defaultSearchSettings } from "./search-settings.ts";
@@ -50,7 +51,7 @@ export type { EvaluationOptions, EvaluationReport, EvaluationSummary, CaseResult
 export { createTracker, statuses, happyPath, maxCvBytes, statusName, isClosed, TrackerError } from "./tracker.ts";
 export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
-  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
+  AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact, TargetPosting, AttachedCv, AttachCvInput,
   NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft,
 } from "./tracker.ts";
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
@@ -61,5 +62,5 @@ export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";
 export { draftOutputSchema, emailKinds, emailClassificationSchema, highConfidence } from "./track-mail.ts";
 export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } from "./track-mail.ts";
 export type {
-  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed,
+  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";

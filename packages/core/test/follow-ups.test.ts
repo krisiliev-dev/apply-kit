@@ -288,12 +288,14 @@ describe("follow-up delays as settings", () => {
 });
 
 describe("at volume", () => {
-  it("groups same-kind follow-ups due once there are 4 or more, most urgent first; fewer stay one by one", async () => {
+  it("groups same-kind follow-ups due once there are 3 or more, most urgent first; fewer stay one by one", async () => {
     const { tracker } = tracked();
-    for (const [company, appliedOn] of [["Lumio Maps", "2026-10-03"], ["Tidewater Pay", "2026-10-01"], ["Velta Logistics", "2026-10-02"]] as const) {
+    for (const [company, appliedOn] of [["Lumio Maps", "2026-10-03"], ["Tidewater Pay", "2026-10-01"]] as const) {
       await add(tracker, { company, appliedOn });
     }
     expect((await tracker.needsYou()).groups).toEqual([]);
+    await add(tracker, { company: "Velta Logistics", appliedOn: "2026-10-02" });
+    expect((await tracker.needsYou()).groups[0]).toMatchObject({ count: 3 });
 
     const medora = await add(tracker, { company: "Medora", appliedOn: "2026-10-05" });
     const needs = await tracker.needsYou();
