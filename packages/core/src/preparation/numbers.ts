@@ -1,6 +1,8 @@
 // Numbers in a profile piece and in its source, compared so a piece never states more than its source
 // does. Percentages and fractions in words ("about a third", "half") are proportions; other numbers
-// are counts. Years (1950–2099) are dates, not claims. Bulgarian fraction words are read too.
+// are counts. A year (1950–2099 written where a date goes: "in 2023", "since 2019", "March 2024",
+// "2019–2022") is a date, not a claim; the same digits elsewhere ("onboarded 2000 customers") are a
+// count. Bulgarian fraction words and dates are read too.
 
 export type QuantityKind = "proportion" | "count";
 
@@ -40,6 +42,17 @@ const wordPattern = (words: string[]) => new RegExp(String.raw`(?<![\p{L}\p{N}])
 const claimWords = wordPattern(Object.keys(countWords));
 const sourceWords = wordPattern([...Object.keys(countWords), ...Object.keys(oneWords)]);
 
+// Where a four-digit number reads as a year: after a date word or a month, in a range of years, or
+// before the Bulgarian year mark ("2024 г."). "From" and "to" alone are too often counts ("from 1200
+// to 2000 users"), so they count only in a range of two years.
+const month = String.raw`jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември`;
+const dateBefore = new RegExp(
+  String.raw`(?:(?<![\p{L}])(?:in|since|until|till|during|в|във|през)\s+(?:(?:early|late|mid|the\s+(?:spring|summer|autumn|fall|winter)\s+of|spring|summer|autumn|fall|winter|началото\s+на|края\s+на)\s+|mid-)?|(?<![\p{L}])(?:${month})\.?\s+|(?<![\p{L}])[QH][1-4]\s+|\d{1,2}[./]|(?:19|20)\d\d\s*(?:[–—-]|to|until|till|до)\s*)$`,
+  "iu",
+);
+const dateAfter = /^(?:\s*(?:[–—-]|to|until|till|до)\s*(?:(?:19|20)\d\d(?!\d)|present|now|today|днес|сега)|\s*г\.?(?![\p{L}])|\s+год(?:ина|\.)|-\d\d(?!\d)|\/\d\d(?!\d))/iu;
+const isDate = (before: string, after: string) => dateBefore.test(before) || dateAfter.test(after);
+
 /** The numbers in a piece's text, or (with `source`) in the words a piece came from, which also reads "one". */
 export function quantities(text: string, { source = false }: { source?: boolean } = {}): Quantity[] {
   const found: Quantity[] = [];
@@ -55,7 +68,7 @@ export function quantities(text: string, { source = false }: { source?: boolean 
       continue;
     }
     const n = Number(sep ? digits!.split(sep).join("") : digits!.replace(",", ".")) * (thousands ? 1000 : 1);
-    if (!percent && !thousands && /^\d{4}$/.test(digits!) && n >= 1950 && n <= 2099) continue;
+    if (!percent && !thousands && /^\d{4}$/.test(digits!) && n >= 1950 && n <= 2099 && isDate(text.slice(0, m.index), text.slice(m.index + raw.length))) continue;
     found.push({ kind: percent ? "proportion" : "count", value: percent ? n / 100 : n, raw: raw.trim(), index: m.index });
   }
   return found.sort((a, b) => a.index - b.index);

@@ -171,6 +171,15 @@ describe("the honesty checks on saving a piece", () => {
 
     expect(saved).toMatchObject({ saved: true, piece: { numberSource: null } });
   });
+
+  it("asks where a number in the 1950–2099 range comes from when it's a count, not a date", () => {
+    const t = createTestPreparation();
+
+    const saved = t.preparation.savePiece({ kind: "achievement", text: "Onboarded 2000 customers to the alert portal." });
+
+    expect(saved).toEqual({ saved: false, problems: [{ field: "numberSource", message: "This piece has a number, so pick where it comes from.", fixes: [] }] });
+    expect(t.preparation.savePiece({ kind: "achievement", text: "Moved the SOC's runbooks to the wiki in March 2024." })).toMatchObject({ saved: true });
+  });
 });
 
 describe("deleting a piece", () => {

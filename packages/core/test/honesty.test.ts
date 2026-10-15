@@ -243,6 +243,7 @@ describe("numbers as people write them (review fixes)", () => {
       ...pieces,
       piece({ id: "regions", kind: "achievement", belongsTo: "analyst", text: "Served customers in 2 regions.", numberSource: "measured" }),
       piece({ id: "users", kind: "achievement", belongsTo: "analyst", text: "Rolled out phishing training to 1,500 users.", numberSource: "measured" }),
+      piece({ id: "onboarded", kind: "achievement", belongsTo: "analyst", text: "Onboarded 200 customers to the alert portal.", numberSource: "measured" }),
       piece({ id: "respond", kind: "achievement", belongsTo: "analyst", text: "Cut the time to respond to 2,5 hours.", numberSource: "told" }),
     ],
   };
@@ -253,5 +254,17 @@ describe("numbers as people write them (review fixes)", () => {
     expect(checkWording("Rolled out phishing training to 1 500 users", ["users"], counted)).toEqual([]);
     // A comma before fewer (or more) than three digits is still a decimal comma.
     expect(checkWording("Cut the time to respond to 2.5 hours", ["respond"], counted)).toEqual([]);
+  });
+
+  it("reads a four-digit number as a count unless it reads like a date", () => {
+    expect(checkWording("Onboarded 2000 customers to the alert portal", ["onboarded"], counted)).toEqual([{ rule: "number", message: "says \"2000\", which its piece doesn't back" }]);
+    for (const dated of [
+      "In 2023 onboarded 200 customers to the alert portal",
+      "Onboarded 200 customers to the alert portal since 2019",
+      "Onboarded 200 customers to the alert portal (2019–2022)",
+      "Onboarded 200 customers to the alert portal from 2019 to 2022",
+      "Onboarded 200 customers to the alert portal, 2024 г.",
+      "През 2024 onboarded 200 customers to the alert portal",
+    ]) expect(checkWording(dated, ["onboarded"], counted), dated).toEqual([]);
   });
 });
