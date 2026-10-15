@@ -4,7 +4,8 @@
 // (docs/contracts.md). The extension reads and fills the page; this decides.
 import { randomUUID } from "node:crypto";
 import type { PrepareForApply } from "../preparation/engine.ts";
-import { sameJobReference, type ApprovedPackage, type PageJobReference } from "../preparation/contracts.ts";
+import { sameJobReference, type ApprovedPackage, type PageJobReference, type SubmittedVia } from "../preparation/contracts.ts";
+import { TrackerError, type ApplicationSummary, type Submission, type Tracker } from "../tracker.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import { migrate } from "../schema.ts";
 import { contactValue } from "./contact.ts";
@@ -13,7 +14,9 @@ import { countOutcomes, type FieldAnswer, type FieldOutcome, type PageReading, t
 export interface FillDeps {
   db: SqlDatabase;
   clock: Clock;
-  prepare: Pick<PrepareForApply, "approvedPackages" | "packageForApply" | "profileForApply">;
+  prepare: Pick<PrepareForApply, "approvedPackages" | "packageForApply" | "profileForApply" | "markPackageSubmitted" | "undoPackageSubmitted">;
+  /** Track: "Mark as submitted" creates the Application through its record submission. */
+  track: Pick<Tracker, "recordSubmission" | "undoSubmission">;
 }
 
 /** The page Kris is on, as the extension recognised it from the tab's address. */
@@ -71,6 +74,15 @@ export interface FillOptions {
   packageId?: string;
 }
 
+/** The Application "Mark as submitted" made (or found), as the panel and the Job page show it. */
+export type SubmittedApplication = ApplicationSummary & { submission: Submission };
+
+export type MarkResult =
+  /** `alreadyMarked`: the package had its Application already; this is it ("Already marked as submitted on …"). */
+  | { marked: true; alreadyMarked: boolean; application: SubmittedApplication; package: PackageInBrief }
+  /** Nothing was created: why, and the Application to open instead when the Job already has one. */
+  | { marked: false; reason: string; application: ApplicationSummary | null };
+
 export interface FillEngine {
   /** Which package fits the page, without opening or ending anything (what the panel shows before Fill). */
   matchPage(page: FillPage, options?: FillOptions): Promise<FillStart>;
@@ -84,15 +96,23 @@ export interface FillEngine {
   pages(sessionId: string): RecordedPage[];
   session(sessionId: string): FillSession | null;
   endSession(sessionId: string, reason: SessionEnd): FillSession | null;
+  /**
+   * Mark as submitted, for the tab's session (the panel) or a package (the Job page): Track creates
+   * the Application in Applied with the package, portal, address, time and how; the package becomes
+   * "submitted"; the session ends. Once per package: marking again returns the first, `alreadyMarked`.
+   */
+  markSubmitted(target: { sessionId: string } | { packageId: string }, how: { portalUrl: string | null; via: SubmittedVia }): Promise<MarkResult>;
+  /** Undo after marking: the Application goes and the package is approved again. Refused (FillError) once the Application has a later Event. */
+  undoMarkSubmitted(applicationId: string): Promise<{ packageId: string }>;
 }
 
 export class FillError extends Error {
-  constructor(readonly problem: "no-session" | "session-ended", message: string) {
+  constructor(readonly problem: "no-session" | "session-ended" | "not-found" | "not-undoable", message: string) {
     super(message);
   }
 }
 
-export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
+export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillEngine {
   migrate(db);
 
   const toSession = (r: Record<string, unknown>): FillSession => ({
@@ -222,6 +242,38 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
 
     session,
     endSession,
+
+    async markSubmitted(target, { portalUrl, via }) {
+      const s = "sessionId" in target ? session(target.sessionId) : null;
+      if ("sessionId" in target && !s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
+      const packageId = s ? s.packageId : (target as { packageId: string }).packageId;
+      const found = prepare.packageForApply({ packageId });
+      if (found.kind !== "approved") {
+        return { marked: false, reason: found.kind === "not-approved" ? found.reason : "There's no such package.", application: null };
+      }
+      const pkg = found.package;
+      const submittedAt = clock.now().toISOString();
+      const recorded = await track.recordSubmission({
+        jobId: pkg.jobId, job: pkg.job, angle: pkg.angle, packageId: pkg.id,
+        portal: s?.portal ?? pkg.targetPosting.jobRef?.portal ?? null, portalUrl, submittedAt, via,
+      });
+      if (recorded.outcome === "already-open") return { marked: false, reason: recorded.message, application: recorded.application };
+      const marked = recorded.alreadyRecorded ? null : prepare.markPackageSubmitted(pkg.id, { via, portalUrl, at: submittedAt });
+      if (s && !s.endedAt) endSession(s.id, "submitted");
+      const now = marked?.marked ? marked.package : pkg;
+      return { marked: true, alreadyMarked: recorded.alreadyRecorded, application: recorded.application, package: brief(now) };
+    },
+
+    async undoMarkSubmitted(applicationId) {
+      try {
+        const { packageId } = await track.undoSubmission(applicationId);
+        prepare.undoPackageSubmitted(packageId);
+        return { packageId };
+      } catch (err) {
+        if (err instanceof TrackerError) throw new FillError(err.problem === "not-found" ? "not-found" : "not-undoable", err.message);
+        throw err;
+      }
+    },
   };
 }
 

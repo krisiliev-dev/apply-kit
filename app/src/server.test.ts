@@ -36,7 +36,7 @@ function service(uiDir = "/nonexistent/") {
   const pairing = createPairing({ db, clock });
   const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const fill = createFillEngine({ db, clock, prepare: preparation });
+  const fill = createFillEngine({ db, clock, prepare: preparation, track: tracker });
   const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),

@@ -799,6 +799,13 @@ const migrations: string[] = [
      counts TEXT NOT NULL,
      fields TEXT NOT NULL
    );`,
+  // Apply #41: "Mark as submitted" creates the Application through the tracker's record submission
+  // (which Track #35 extends): the package it was made from (package_id, portal_url, already there),
+  // the portal, when it was submitted and how ("extension" or "app").
+  `ALTER TABLE application ADD COLUMN portal TEXT;
+   ALTER TABLE application ADD COLUMN submitted_at TEXT;
+   ALTER TABLE application ADD COLUMN submitted_via TEXT;
+   CREATE INDEX application_package ON application(package_id);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

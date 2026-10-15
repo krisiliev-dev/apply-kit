@@ -2,18 +2,20 @@
 // Prepare's engine seeded through its own interface (Mira Petrova, made up). The extension reads the
 // page and fills it; the engine decides which package a page belongs to and what goes in each field.
 import { describe, expect, it } from "vitest";
-import { createFillEngine, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
+import { createFillEngine, createTracker, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
 import { fixtureFetch, memoryDb } from "./harness.ts";
 import { approved, kestrelJob, mira, started } from "./package-fixtures.ts";
 
 const questions = (id: string) => `https://boards-api.greenhouse.io/v1/boards/kestrel/jobs/${id}?questions=true`;
+const kestrelBoard = "https://boards-api.greenhouse.io/v1/boards/kestrel/jobs?content=true";
 
 /** Mira with the fill engine on the same database and clock; Kestrel's two Greenhouse jobs answer the same recorded form. */
 function setup() {
   const db = memoryDb();
-  const t = mira({ db, fetch: fixtureFetch({ [questions("4410")]: "greenhouse-kestrel-4410-questions.json", [questions("4420")]: "greenhouse-kestrel-4410-questions.json" }) });
-  const fill = createFillEngine({ db, clock: t.clock, prepare: t.preparation });
-  return { ...t, fill };
+  const t = mira({ db, fetch: fixtureFetch({ [questions("4410")]: "greenhouse-kestrel-4410-questions.json", [questions("4420")]: "greenhouse-kestrel-4410-questions.json", [kestrelBoard]: "greenhouse-kestrel.json" }) });
+  const tracker = createTracker({ db, clock: t.clock, discovery: t.discovery });
+  const fill = createFillEngine({ db, clock: t.clock, prepare: t.preparation, track: tracker });
+  return { ...t, fill, tracker };
 }
 
 /** A second made-up Kestrel job on the same board: the same role in Plovdiv. */
@@ -219,5 +221,124 @@ describe("recording a page", () => {
     expect(recorded).toEqual(expected);
     expect(t.fill.pages(t.sessionId)).toEqual([expected]);
     expect(JSON.stringify(t.fill.pages(t.sessionId))).not.toMatch(/Mira|old@example|mira\.petrova/);
+  });
+});
+
+/** A fill session for a package whose Job is in Discover, as every package's Job is outside these tests (Kestrel's board, recorded). */
+async function submitting() {
+  const t = setup();
+  await t.discovery.addSource({ kind: "greenhouse", config: "kestrel" });
+  await t.discovery.checkAll();
+  const job = (await t.discovery.queryFeed({ view: "new" })).jobs.find((j) => j.title === "Security Engineer")!;
+  const pkg = await approved(t, kestrelJob({ id: job.id }));
+  const r = await t.fill.startFill(page("4410"));
+  if (r.kind !== "matched") throw new Error(r.kind);
+  return { ...t, pkg, jobId: job.id, sessionId: r.session!.id };
+}
+
+describe("marking as submitted", () => {
+  const confirmation = "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation";
+
+  it("creates one Application in Applied with the job, package, portal, address and time, and ends the session", async () => {
+    const t = await submitting();
+    await t.clock.advance(5 * 60_000);
+
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+
+    expect(r).toMatchObject({
+      marked: true, alreadyMarked: false,
+      application: {
+        title: "Security Engineer", company: "Kestrel Payments", status: "applied", appliedOn: "2026-10-12",
+        submission: { packageId: t.pkg.id, portal: "greenhouse", portalUrl: confirmation, submittedAt: "2026-10-12T07:35:00.000Z", via: "extension" },
+      },
+      package: { id: t.pkg.id, version: 1 },
+    });
+    if (!r.marked) throw new Error(r.reason);
+    expect(await t.tracker.get(r.application.id)).toMatchObject({
+      jobId: t.jobId, status: "applied", createdHow: "submission",
+      submission: { packageId: t.pkg.id, portal: "greenhouse", portalUrl: confirmation, submittedAt: "2026-10-12T07:35:00.000Z", via: "extension" },
+    });
+    expect((await t.tracker.list()).total).toBe(1);
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "submitted", submitted: { via: "extension", portalUrl: confirmation } } });
+    expect(t.fill.session(t.sessionId)).toMatchObject({ endedAt: "2026-10-12T07:35:00.000Z", endReason: "submitted" });
+  });
+
+  it("marks a package once: marking again, from the next Fill or the Job page, returns the first Application", async () => {
+    const t = await submitting();
+    const first = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+    await t.clock.advance(60 * 60_000);
+    const next = await t.fill.startFill(page("4410"), { sessionId: t.sessionId });
+    if (next.kind !== "matched") throw new Error(next.kind);
+
+    const again = await t.fill.markSubmitted({ sessionId: next.session!.id }, { portalUrl: confirmation, via: "extension" });
+    const fromApp = await t.fill.markSubmitted({ packageId: t.pkg.id }, { portalUrl: null, via: "app" });
+
+    if (!first.marked) throw new Error(first.reason);
+    for (const r of [again, fromApp]) {
+      expect(r).toMatchObject({ marked: true, alreadyMarked: true, application: { id: first.application.id, submission: { submittedAt: "2026-10-12T07:30:00.000Z", via: "extension" } } });
+    }
+    expect((await t.tracker.list()).total).toBe(1);
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { submitted: { at: "2026-10-12T07:30:00.000Z", via: "extension" } } });
+  });
+
+  it("ends the tab's session, so the next Fill in the tab starts a new match", async () => {
+    const t = await submitting();
+    await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+
+    const next = await t.fill.startFill(page("4410"), { sessionId: t.sessionId });
+
+    expect(next).toMatchObject({ kind: "matched", continued: false, session: { packageId: t.pkg.id, endedAt: null } });
+    if (next.kind !== "matched") throw new Error(next.kind);
+    expect(next.session!.id).not.toBe(t.sessionId);
+  });
+
+  it("marks from the Job page for an application sent elsewhere", async () => {
+    const t = await submitting();
+
+    const r = await t.fill.markSubmitted({ packageId: t.pkg.id }, { portalUrl: null, via: "app" });
+
+    expect(r).toMatchObject({ marked: true, alreadyMarked: false, application: { status: "applied", submission: { portal: "greenhouse", portalUrl: null, via: "app" } } });
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "submitted", submitted: { via: "app" } } });
+    // The tab's session is the extension's: marking in the app leaves it.
+    expect(t.fill.session(t.sessionId)).toMatchObject({ endedAt: null });
+  });
+
+  it("undo removes the Application and makes the package approved again", async () => {
+    const t = await submitting();
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+    if (!r.marked) throw new Error(r.reason);
+
+    expect(await t.fill.undoMarkSubmitted(r.application.id)).toEqual({ packageId: t.pkg.id });
+
+    expect(await t.tracker.get(r.application.id)).toBeNull();
+    expect((await t.tracker.list()).total).toBe(0);
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "approved", submitted: null } });
+    // Marked again afterwards, it is a new Application.
+    const again = await t.fill.markSubmitted({ packageId: t.pkg.id }, { portalUrl: null, via: "app" });
+    expect(again).toMatchObject({ marked: true, alreadyMarked: false });
+  });
+
+  it("refuses undo once the Application has a later Event", async () => {
+    const t = await submitting();
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+    if (!r.marked) throw new Error(r.reason);
+    await t.tracker.addNote(r.application.id, "Recruiter is Alex Doe");
+
+    await expect(t.fill.undoMarkSubmitted(r.application.id)).rejects.toMatchObject({ problem: "not-undoable", message: expect.stringMatching(/can't be undone here/) });
+
+    expect(await t.tracker.get(r.application.id)).toMatchObject({ status: "applied" });
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "submitted" } });
+  });
+
+  it("creates nothing when the Job already has an open Application added by hand, and names it", async () => {
+    const t = await submitting();
+    const byHand = await t.tracker.addByHand({ job: { jobId: t.jobId }, appliedOn: "2026-10-12", status: "applied", how: "i-applied" });
+    if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+
+    expect(r).toMatchObject({ marked: false, reason: expect.stringMatching(/already have an open Application/), application: { id: byHand.application.id } });
+    expect((await t.tracker.list()).total).toBe(1);
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "approved" } });
   });
 });
