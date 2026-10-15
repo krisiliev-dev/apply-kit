@@ -93,6 +93,7 @@ export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts
 export type {
   PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
   TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult, CvChangeView, CvFit, CvVersionView, FlagChoice, LearnedPiece,
+  LetterView, LetterCheckView, LetterFileView,
 } from "./preparation/packages.ts";
 export type {
   CvLineView, EvidenceRow, HonestyCheckView, HonestyCheckState, PieceLink, TightenChoice, CvFlagView, FlagKind, FlagOption,

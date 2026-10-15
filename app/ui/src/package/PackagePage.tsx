@@ -10,6 +10,7 @@
 // Ticket #64: flags (near the line, gaps, lines from Kris's answers) listed with jump links at the
 // top of the step and sitting inside their requirement, none pre-selected; resolved ones stay with
 // the choice; Approve with an open flag moves focus to an alert naming it, linking to the flag.
+// Ticket #65: step 3, the cover letter (LetterStep.tsx), and "Write the letter myself" where it failed or the cap stopped it.
 import type {
   BudgetInfo, CvFlagView, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
 } from "@apply-kit/core";
@@ -20,6 +21,7 @@ import {
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Icon } from "../icons.tsx";
+import { LetterSide, LetterStep, writeOwnLetter, type LetterViewMode } from "./LetterStep.tsx";
 // pdf.js is large: it loads only when a document is shown.
 const PdfPreview = lazy(() => import("./PdfPreview.tsx").then((m) => ({ default: m.PdfPreview })));
 
@@ -213,6 +215,10 @@ function Generating({ pkg, budget, onChange, onGo, say }: {
     }
   }
 
+  async function writeOwn() {
+    if (await writeOwnLetter(pkg, onChange, say)) onGo("letter");
+  }
+
   async function retry(part: PackageStep) {
     const r = await retryPart(pkg.id, part).catch((err: unknown) => ({ changed: false as const, reason: message(err), package: pkg }));
     onChange(r.package);
@@ -226,11 +232,13 @@ function Generating({ pkg, budget, onChange, onGo, say }: {
         <div className="banner error" role="alert">
           <span className="text"><b>The {failed.label.toLowerCase()} wasn't written.</b> {failed.error ?? "The model didn't answer"}{failed.attempts > 1 ? `, ${failed.attempts} times` : ""}. Everything else is finished and saved; nothing was lost.</span>
           <button className="btn sm" type="button" onClick={() => void retry(failed.part)}>Try again</button>
+          {failed.part === "letter" && <button className="btn sm" type="button" onClick={() => void writeOwn()}>Write the letter myself</button>}
         </div>
       )}
       {capped && (
         <div className="banner warning" role="status">
           <span className="text"><b>This month's AI budget would be crossed: {usd(budget.spentUsd)} of {usd(budget.capUsd)} spent.</b> The {capped.label.toLowerCase()} wasn't started. Everything finished so far is saved. The app never raises the cap by itself: raise it in Settings, or wait for next month.</span>
+          {capped.part === "letter" && <button className="btn sm" type="button" onClick={() => void writeOwn()}>Write the letter myself</button>}
         </div>
       )}
       <div className="cols">
@@ -324,8 +332,10 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
     window.setTimeout(() => document.getElementById("flag-alert")?.focus(), 0);
   };
 
+  const [letterView, setLetterView] = useState<LetterViewMode>("edit");
   const content = viewing === "target" ? <TargetStep pkg={pkg} onChange={onChange} say={say} />
     : viewing === "cv" ? <CvStep pkg={pkg} view={cvView} onView={setCvView} flagAlert={flagAlert} onChange={onChange} onGo={onGo} say={say} />
+    : viewing === "letter" ? <LetterStep pkg={pkg} view={letterView} onView={setLetterView} onChange={onChange} onGo={onGo} say={say} />
     : <LaterStep pkg={pkg} step={step} onGo={onGo} />;
 
   return (
@@ -343,8 +353,8 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
           {content}
           <ActionBar key={step.step} pkg={pkg} step={step} jobPage={jobPage} onChange={onChange} onGo={onGo} onFlagBlock={onFlagBlock} say={say} />
         </div>
-        <aside className="col side" aria-label={viewing === "cv" ? (cvView === "changes" ? "Honesty check" : "File and template") : "This package"}>
-          {viewing === "cv" ? (cvView === "changes" && pkg.cvVersion ? <CvHonesty cv={pkg.cvVersion} onPreview={() => setCvView("preview")} /> : <CvSide pkg={pkg} onChange={onChange} say={say} />) : (
+        <aside className="col side" aria-label={viewing === "cv" ? (cvView === "changes" ? "Honesty check" : "File and template") : viewing === "letter" && pkg.letter ? "Checks and voice" : "This package"}>
+          {viewing === "letter" && pkg.letter ? <LetterSide letter={pkg.letter} /> : viewing === "cv" ? (cvView === "changes" && pkg.cvVersion ? <CvHonesty cv={pkg.cvVersion} onPreview={() => setCvView("preview")} /> : <CvSide pkg={pkg} onChange={onChange} say={say} />) : (
             <div className="panel">
               <h2>This package</h2>
               <dl className="kv">
