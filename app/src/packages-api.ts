@@ -1,7 +1,7 @@
 // The Package's API (ticket #62): the Prepare button's state for a Job, starting the Job's package,
 // reading it, approving steps in order, the target posting, language and photo, stopping and
 // retrying parts, the CV version's changes (undo, redo) and fitting it on one page (#63), its flags
-// and gap questions (#64), the screening answers and the drafter Apply uses (#66), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
+// and gap questions (#64), the screening answers and the drafter Apply uses (#66), the cover letter's drafts, edits and PDF (#65), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
 // service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
 import { packageSteps, type DiscoveryEngine, type PackageStep, type PreparationEngine } from "@apply-kit/core";
@@ -86,6 +86,29 @@ export function mountPackageApi(app: Hono, engine: DiscoveryEngine, preparation:
   app.post("/api/packages/:id/cv/flags/:flag/answer", (c) => withPackage(c, (id, body) =>
     typeof body.answer === "string" ? preparation.answerGap(id, c.req.param("flag")!, body.answer) : c.json({ error: "answer must be text" }, 400)));
 
+  // The cover letter (#65). { instruction }: a new draft; the earlier ones are kept.
+  app.post("/api/packages/:id/letter/drafts", (c) => withPackage(c, (id, body) =>
+    typeof body.instruction === "string" ? preparation.redraftLetter(id, body.instruction) : c.json({ error: "instruction must be text" }, 400)));
+  // { text }: Kris's text for a draft.
+  app.put("/api/packages/:id/letter/drafts/:n", (c) => withPackage(c, (id, body) =>
+    typeof body.text === "string" ? preparation.editLetter(id, Number(c.req.param("n")), body.text) : c.json({ error: "text must be text" }, 400)));
+  // { draft }: page to another draft.
+  app.put("/api/packages/:id/letter/current", (c) => withPackage(c, (id, body) =>
+    typeof body.draft === "number" ? preparation.showLetterDraft(id, body.draft) : c.json({ error: "draft must be a draft number" }, 400)));
+  // "Write it myself": an empty draft with the greeting and closing.
+  app.post("/api/packages/:id/letter/own", (c) => withPackage(c, (id) => preparation.writeLetterYourself(id)));
+
+  // The letter's draft PDF, exactly as printed. ?download=1 saves it, named as a draft.
+  app.get("/api/packages/:id/letter.pdf", async (c) => {
+    const file = await preparation.packageLetter(c.req.param("id"));
+    if (!file) return c.json({ error: "This package has no cover letter yet" }, 404);
+    const download = c.req.query("download") === "1";
+    return c.body(Buffer.from(file.pdf), 200, {
+      "content-type": "application/pdf",
+      "cache-control": "no-store",
+      "content-disposition": `${download ? "attachment" : "inline"}; filename="${download ? `DRAFT_${file.fileName}` : file.fileName}"`,
+    });
+  });
   // Screening answers (#66). { text }: Kris's answer to a question (her number, an option, her words).
   app.put("/api/packages/:id/answers/:question", (c) => withPackage(c, (id, body) =>
     typeof body.text === "string" ? preparation.setScreeningAnswer(id, c.req.param("question")!, body.text) : c.json({ error: "text must be text" }, 400)));

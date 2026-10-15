@@ -3,7 +3,7 @@
 // output per task. Each task sends only the text it needs (extracted text, never files).
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import type { z } from "zod";
-import { coachTurnSchema, draftedAnswerSchema, draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
+import { coachTurnSchema, draftedAnswerSchema, writtenLetterSchema, draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
 import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
@@ -58,6 +58,17 @@ const coachTurnInstructions = `You are the coach in Kris's setup interview: you 
 - "claim" is "stronger" when a piece says more than Kris did (a stronger verb, a rounder or more precise number); then "honest" is the wording that keeps to what Kris said. Otherwise "as-said" and "honest" null.
 - For a standard question, "answer" is Kris's answer in short form, citing the line; otherwise null.`;
 
+const writeLetterInstructions = `You write Kris's cover letter for one job posting, in Kris's own voice, as JSON matching the schema. Rules:
+- Follow the voice rules given, and sound like the excerpts of Kris's writing (they show how Kris writes, not what to say).
+- The body is about "words" words in three short paragraphs: open with the company's problem (not with Kris), then one concrete example from the pieces with its number, then what Kris wants to do in this role. Close in one sentence.
+- Use only the pieces given and the CV's wording as given in "cv": never a stronger claim than the CV makes ("led 1 of 3" stays "led 1 of 3"). Never add a skill, tool, employer, number or date that isn't in the cited pieces.
+- Name every gap in "gaps" honestly, in one sentence, as something Kris hasn't done yet and wants to learn. Never claim experience with it.
+- No stock phrases: never "passionate", "excited to apply", "thrilled", "results-driven", "dynamic", "synergy", "I believe", "I think", "I feel", and no contact-me filler.
+- Each sentence cites in "pieceIds" the pieces it relies on (none for a sentence about the company), and "forCompany" is true for a sentence written specifically for this company or posting.
+- "greeting" is the salutation ("Dear Kestrel hiring team,"); "closing" is the sign-off ("Kind regards,"), without the name.
+- With an "instruction", rewrite "previous" as asked, keeping everything else to these rules.
+- Write in the language given ("en" English, "bg" Bulgarian); tool names stay in Latin script.`;
+
 const draftAnswerInstructions = `You answer one question from a job application form for Kris, as JSON matching the schema, using only the profile pieces given. Rules:
 - Answer the question asked, in Kris's first person, plainly. Stay within the limit given ("words" or "chars"; null means none): shorter is better.
 - Use only what the cited pieces state. Never add a skill, tool, employer, number, date or result that isn't in them; numbers keep the precision of their piece.
@@ -83,6 +94,10 @@ function promptOf(request: WriterRequest): { instructions: string; prompt: strin
       return { instructions: tailorCvInstructions, prompt: JSON.stringify(request.input) };
     case "coach-turn":
       return { instructions: coachTurnInstructions, prompt: JSON.stringify(request.input) };
+    case "write-letter": {
+      const { excerpts, ...rest } = request.input;
+      return { instructions: writeLetterInstructions, prompt: `${JSON.stringify(rest)}\n\nExcerpts of Kris's writing:\n\n${excerptLines(excerpts)}` };
+    }
     case "draft-answer":
       return { instructions: draftAnswerInstructions, prompt: JSON.stringify(request.input) };
   }
@@ -122,6 +137,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
     learnVoice: (input) => write({ task: "learn-voice", input }, learnedVoiceSchema, "learned_voice", input.excerpts),
     tailorCv: (input) => write({ task: "tailor-cv", input }, tailoredCvSchema, "tailored_cv"),
     coachTurn: (input) => write({ task: "coach-turn", input }, coachTurnSchema, "coach_turn"),
+    writeLetter: (input) => write({ task: "write-letter", input }, writtenLetterSchema, "cover_letter", input.excerpts),
     draftAnswer: (input) => write({ task: "draft-answer", input }, draftedAnswerSchema, "drafted_answer"),
   };
 }

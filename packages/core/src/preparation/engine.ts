@@ -330,6 +330,27 @@ export interface PreparationEngine {
    * in this package; the line drafted from it comes back as a new flag before the CV changes.
    */
   answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
+  // ---------- The cover letter (#65) ----------
+
+  /**
+   * "Write draft N": a new letter with Kris's instruction ("Shorter", "Name the Kubernetes security
+   * gap"), within the cap. Earlier drafts are kept and paged; a failure keeps the draft there is.
+   */
+  redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
+  /** Pages to another draft: it becomes the letter (printed, and the one approved). An approved letter step reopens. */
+  showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
+  /**
+   * Kris's text for a letter draft (greeting, paragraphs and closing, separated by blank lines):
+   * saved and printed. A sentence she changed is hers (no longer highlighted, held to the whole
+   * profile). Her changes to the writer's draft are voice evidence unless learning from edits is
+   * paused. An approved letter step reopens.
+   */
+  editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
+  /** "Write it myself": an empty draft with the letterhead, greeting and closing; earlier drafts are kept. */
+  writeLetterYourself(id: string): Promise<ChangeResult>;
+  /** The letter's draft PDF (the draft shown, with the CV's letterhead), for the preview and the draft download. */
+  packageLetter(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
+
   /** Profile › Learned during packages: pieces learned from answers in packages, waiting for Kris, newest first. */
   learnedPieces(): LearnedPiece[];
   /** A near-the-line learned piece: its suggested honest version becomes the piece, confirmed. */
@@ -414,6 +435,12 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     contact: () => contact.get(),
     closestAngle: (posting) => angles.closest(posting),
     draftDocument,
+    voice: {
+      context: (request) => voice.context(request),
+      saveEdit: (edit, previous) => voice.saveEdit(edit, previous),
+      learnedFrom: () => voice.view().learnedFrom,
+      sourceLabel: (source) => voice.sourceLabel(source),
+    },
     answers,
   });
 
@@ -450,6 +477,11 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     decideFlag: (id, flagId, choice) => packages.decideFlag(id, flagId, choice),
     answerGap: (id, flagId, answer) => packages.answerGap(id, flagId, answer),
     learnedPieces: () => packages.learned(),
+    redraftLetter: (id, instruction) => packages.redraftLetter(id, instruction),
+    showLetterDraft: (id, draft) => packages.showLetterDraft(id, draft),
+    editLetter: (id, draft, text) => packages.editLetter(id, draft, text),
+    packageLetter: (id) => packages.letterFile(id),
+    writeLetterYourself: (id) => packages.writeLetterYourself(id),
     setScreeningAnswer: (id, questionId, text) => packages.setAnswer(id, questionId, text),
     redraftScreeningAnswer: (id, questionId) => packages.redraftAnswer(id, questionId),
     saveScreeningAnswerToBank: (id, questionId) => packages.saveAnswerToBank(id, questionId),

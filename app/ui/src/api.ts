@@ -526,3 +526,12 @@ export const saveScreeningAnswerToBank = async (id: string, questionId: string):
 /** The CV's draft PDF; `version` (its SHA-256) makes a re-printed CV load afresh. */
 export const packageCvUrl = (id: string, version: string, download = false) =>
   `${packagePath(id)}/cv.pdf?v=${version.slice(0, 12)}${download ? "&download=1" : ""}`;
+
+// The cover letter (#65): a new draft with an instruction, Kris's edits, paging, writing it herself, and its draft PDF.
+export const redraftLetter = async (id: string, instruction: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/letter/drafts`, { instruction }));
+export const editLetter = async (id: string, draft: number, text: string): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/letter/drafts/${draft}`, { text }));
+export const showLetterDraft = async (id: string, draft: number): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/letter/current`, { draft }));
+export const writeLetterYourself = async (id: string): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/letter/own`));
+/** The letter's draft PDF; `version` (its SHA-256) makes a re-printed letter load afresh. */
+export const packageLetterUrl = (id: string, version: string, download = false) =>
+  `${packagePath(id)}/letter.pdf?v=${version.slice(0, 12)}${download ? "&download=1" : ""}`;

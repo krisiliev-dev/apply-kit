@@ -193,6 +193,41 @@ export const coachTurnSchema = z.object({
 });
 export type CoachTurn = z.infer<typeof coachTurnSchema>;
 
+/** What a cover letter is written from (#65): the posting, the voice, the CV's decided wording and the gaps to name. */
+export interface WriteLetterInput {
+  posting: { title: string; company: string; requirements: string[] };
+  language: "en" | "bg";
+  /** About how many words the letter's body should have. */
+  words: number;
+  /** The voice rules for the language: how Kris writes. */
+  voice: string[];
+  /** A few short excerpts of Kris's own writing (at most the voice's excerpt limit), recorded as sent. */
+  excerpts: SentExcerpt[];
+  /** The CV as Kris decided it: its summary and lines, each with the pieces it relies on. The letter repeats this wording, never a stronger one. */
+  cv: { summary: string | null; lines: { text: string; pieceIds: string[] }[] };
+  /** Required items with no evidence that Kris chose to name in the letter, as something to learn. */
+  gaps: string[];
+  /** The pieces the letter may cite (as for the CV). */
+  pieces: TailorCvInput["pieces"];
+  /** Kris's instruction for a new draft ("Shorter"), and the draft it replaces; null for the first. */
+  instruction: string | null;
+  previous: string | null;
+}
+
+/**
+ * A cover letter: the greeting, the body's paragraphs as sentences, and the closing (the template
+ * signs the name under it). Each sentence says whether it was written for this company (`forCompany`,
+ * highlighted for Kris to check first) and the piece ids it relies on (none for one that claims
+ * nothing about Kris).
+ */
+export const writtenLetterSchema = z.object({
+  greeting: z.string(),
+  paragraphs: z.array(z.object({
+    sentences: z.array(z.object({ text: z.string(), forCompany: z.boolean(), pieceIds: z.array(z.string()) })),
+  })),
+  closing: z.string(),
+});
+export type WrittenLetter = z.infer<typeof writtenLetterSchema>;
 /**
  * What a screening answer is drafted from (#66): the form's question, the job, the package's
  * language and the form's limit, the pieces it may cite (as for the CV), and the CV's decisions so
@@ -230,6 +265,7 @@ export type WriterRequest =
   | { task: "learn-voice"; input: VoiceLearningInput }
   | { task: "tailor-cv"; input: TailorCvInput }
   | { task: "coach-turn"; input: CoachTurnInput }
+  | { task: "write-letter"; input: WriteLetterInput }
   | { task: "draft-answer"; input: DraftAnswerInput };
 
 export type WriterTask = WriterRequest["task"];
@@ -265,6 +301,8 @@ export interface Writer {
   tailorCv(input: TailorCvInput): Promise<Written<TailoredCv>>;
   /** The coach interview's next turn: what the coach says, and the pieces it writes from Kris's answer. */
   coachTurn(input: CoachTurnInput): Promise<Written<CoachTurn>>;
+  /** A cover letter in Kris's voice; reports exactly the excerpts it sent. */
+  writeLetter(input: WriteLetterInput): Promise<Written<WrittenLetter>>;
   /** A screening answer drafted (or translated) from the pieces, within the form's limit. */
   draftAnswer(input: DraftAnswerInput): Promise<Written<DraftedAnswer>>;
 }

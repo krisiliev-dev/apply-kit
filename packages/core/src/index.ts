@@ -60,6 +60,8 @@ export { tailoredCvSchema, coachTurnSchema, draftedAnswerSchema } from "./writin
 export type { DraftAnswerInput, DraftedAnswer } from "./writing/writer.ts";
 export type { CoachTurn, CoachTurnInput, CoachTopic, CoachLine, CoachEntry } from "./writing/writer.ts";
 export type { TailorCvInput, TailoredCv, TailoredLine } from "./writing/writer.ts";
+export { writtenLetterSchema } from "./writing/writer.ts";
+export type { WriteLetterInput, WrittenLetter } from "./writing/writer.ts";
 export { checkWording, validateCv } from "./preparation/honesty.ts";
 export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, ValidatedLine, ValidatedCv } from "./preparation/honesty.ts";
 export { createPreparationEngine } from "./preparation/engine.ts";
@@ -92,6 +94,7 @@ export { packageSteps, stepLabel, packageRules } from "./preparation/packages.ts
 export type {
   PackageJob, PackageView, PackageChip, PackagePart, PackageStep, PackageStepView, PartState, StepState, PrepareStatus, PrepareProblem,
   TargetOption, CvDraftView, StartPackageResult, ApproveResult, ChangeResult, CvChangeView, CvFit, CvVersionView, FlagChoice, LearnedPiece,
+  LetterView, LetterCheckView, LetterFileView,
 } from "./preparation/packages.ts";
 export type {
   ScreeningOrigin, ScreeningNeed, ScreeningAnswerView, ScreeningAnswersView, SalaryView, DraftAnswerResult, DraftAnswerRequest,

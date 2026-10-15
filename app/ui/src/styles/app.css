@@ -429,6 +429,15 @@ h2[tabindex="-1"]:focus { outline: none }
 .package-page legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }
 /* Profile › Learned during packages (#64): a near-the-line piece's choice, as in the hi-fi */
 .piece fieldset legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+/* the cover letter (#65): a plain textarea over a backdrop that draws the same text with the
+   sentences written for the company highlighted; both share one grid cell, font and wrapping */
+.letter-editor { display: grid; border-radius: var(--r-control); border: 1px solid var(--border-control); background: var(--surface) }
+.letter-editor:focus-within { outline: 2px solid var(--focus); outline-offset: 1px }
+.letter-editor .backdrop, .letter-editor textarea { grid-area: 1 / 1; margin: 0; padding: var(--s-5); font: inherit; font-size: var(--fs-body); line-height: var(--lh-body); white-space: pre-wrap; overflow-wrap: break-word; min-height: calc(var(--s-10) * 8) }
+.letter-editor .backdrop { color: var(--ink); pointer-events: none }
+.letter-editor .backdrop mark { background: var(--bloom-soft); color: var(--ink); box-shadow: inset 0 -1.5px 0 var(--bloom); border-radius: var(--r-small) }
+.letter-editor textarea { border: 0; background: transparent; color: transparent; caret-color: var(--ink); resize: none; overflow: hidden; outline: none }
+.letter-editor textarea::selection { background: var(--bloom-soft); color: transparent }
 
 /* Package · screening answers (#66, hi-fi package.html state 4). Tokens only. */
 .package-page .qs { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-4) }

@@ -1,0 +1,24 @@
+{
+  "greeting": "Dear Kestrel Payments hiring team,",
+  "paragraphs": [
+    {
+      "sentences": [
+        { "text": "Every false alert in a payments SOC costs an analyst's time, and every missed one can cost a merchant.", "forCompany": true, "pieceIds": [] },
+        { "text": "Telling those apart is the work I do as a security analyst at Northwind Bank, and it is why the Security Engineer role stood out to me.", "forCompany": false, "pieceIds": ["piece-analyst"] }
+      ]
+    },
+    {
+      "sentences": [
+        { "text": "At Northwind Bank I wrote 30 detection rules that cut false alerts by a quarter.", "forCompany": false, "pieceIds": ["piece-detections"] },
+        { "text": "I also ran the response to a phishing campaign against the claims team.", "forCompany": false, "pieceIds": ["piece-phishing"] }
+      ]
+    },
+    {
+      "sentences": [
+        { "text": "Your posting asks for alert triage in a SIEM and for incident response, which is the work I want to keep doing.", "forCompany": true, "pieceIds": [] },
+        { "text": "I would like to hear where the team wants its detections to be a year from now.", "forCompany": false, "pieceIds": [] }
+      ]
+    }
+  ],
+  "closing": "Kind regards,"
+}

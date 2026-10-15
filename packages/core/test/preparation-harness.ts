@@ -4,7 +4,7 @@
 // service does. Never live AI in tests.
 import { createHash } from "node:crypto";
 import {
-  createAiBudget, createEngine, createPreparationEngine, draftedAnswerSchema, draftedPiecesSchema, tailoredCvSchema, type DraftAnswerInput, type DraftedAnswer, type LearnedVoice, type VoiceLearningInput,
+  createAiBudget, createEngine, createPreparationEngine, draftedAnswerSchema, draftedPiecesSchema, tailoredCvSchema, writtenLetterSchema, type WriteLetterInput, type WrittenLetter, type DraftAnswerInput, type DraftedAnswer, type LearnedVoice, type VoiceLearningInput,
   type CoachTopic, type CoachTurn, type CoachTurnInput,
   type AiBudget, type DiscoveryEngine, type DocumentRenderer, type DraftedPieces, type EngineDeps, type FileStore,
   type ImportedText, type TailorCvInput, type TailoredCv, type PackageFolder, type PdfText, type PdfTextReader, type PreparationDeps, type PreparationEngine, type SentExcerpt, type TextRecognizer, type Writer, type WriterRequest,
@@ -17,6 +17,8 @@ export const recordedDraftPieces: DraftedPieces = draftedPiecesSchema.parse(JSON
 /** What the writer tailored for a made-up security posting (fictional person), checked in as a fixture. */
 export const recordedTailoredCv: TailoredCv = tailoredCvSchema.parse(JSON.parse(loadFixture("writer-tailor-cv.json")));
 
+/** The cover letter the writer wrote for the same made-up posting (fictional person), checked in as a fixture. */
+export const recordedLetter: WrittenLetter = writtenLetterSchema.parse(JSON.parse(loadFixture("writer-letter.json")));
 /** What the writer drafted for a made-up incident question (fictional person), checked in as a fixture. */
 export const recordedDraftAnswer: DraftedAnswer = draftedAnswerSchema.parse(JSON.parse(loadFixture("writer-draft-answer.json")));
 
@@ -30,6 +32,8 @@ type Recorded<I, O> = O | Error | ((input: I) => O | Error | Promise<O | Error>)
 export interface RecordedOutputs {
   draftPieces?: Recorded<ImportedText, DraftedPieces>;
   tailorCv?: Recorded<TailorCvInput, TailoredCv>;
+  /** The recorded letter by default (its placeholder piece ids are left as they are). */
+  writeLetter?: Recorded<WriteLetterInput, WrittenLetter>;
   /** By default the coach asks the next question in plain words and writes nothing. */
   coachTurn?: Recorded<CoachTurnInput, CoachTurn>;
   /** The recorded incident answer by default. */
@@ -76,6 +80,10 @@ export function fakeWriter(
     async coachTurn(input) {
       calls.push({ task: "coach-turn", input });
       return answer(recorded.coachTurn, plainCoachTurn(input), input);
+    },
+    async writeLetter(input) {
+      calls.push({ task: "write-letter", input });
+      return answer(recorded.writeLetter, recordedLetter, input);
     },
     async draftAnswer(input) {
       calls.push({ task: "draft-answer", input });

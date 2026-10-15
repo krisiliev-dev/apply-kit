@@ -10,6 +10,9 @@
 // answer to a gap question each wait for Kris's decision, and the CV step can't be approved while
 // one is open. A gap answer becomes an unconfirmed piece used only in this package until Kris
 // confirms it in Profile (Profile › Learned during packages).
+// The cover letter (#65) is written after the CV, in Kris's voice, from the CV as decided; its
+// drafts are kept and paged, Kris's edits teach the voice, and it is checked (letter.ts) and printed
+// with the CV's letterhead.
 // Screening answers (#66): the target posting's questions (screening.ts), each answered from the
 // answer bank, adapted from it (whole sentences removed to fit, nothing added), newly drafted by the
 // drafter (honesty-checked, citing pieces, within the form's limit) or left for Kris; salary always
@@ -18,9 +21,9 @@ import { angleLabel, type Angle } from "../fit/angles.ts";
 import { evidenceLabel, matchEvidence, type RequirementCategory } from "../fit/evidence.ts";
 import type { AiBudget, BudgetInfo } from "../budget.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
-import type { CvContent, DocumentDate, DocumentLanguage, DocumentToRender } from "../documents/content.ts";
+import type { CvContent, DocumentDate, DocumentLanguage, DocumentToRender, Letterhead } from "../documents/content.ts";
 import type { AtsCheck } from "../documents/ats.ts";
-import type { CoachTurnInput, DraftAnswerInput, TailorCvInput, TailoredCv, Writer } from "../writing/writer.ts";
+import type { CoachTurnInput, DraftAnswerInput, SentExcerpt, TailorCvInput, TailoredCv, WriteLetterInput, Writer } from "../writing/writer.ts";
 import type { AnswerLanguage, AnswerStore } from "./answers.ts";
 import {
   euros, fits, formQuestions, heardFrom, isHeardQuestion, isSalaryQuestion, monthlyRange, suggestSalary, trimToFit, wordCount,
@@ -37,6 +40,11 @@ import type { Contact } from "./contact.ts";
 import type { FileStore, PackageFolder } from "./ports.ts";
 import { entryLabel, type PieceInput, type PieceKind, type PieceOrigin, type ProfilePiece, type SavePieceResult } from "./profile.ts";
 import type { DocumentDraft, DraftRequest } from "./engine.ts";
+import {
+  bodyParagraphs, bodyWords, checkLetter, emptyLetter, forCompanyCount, forCompanyPlaces, fromWritten, LETTER_WORDS, letterText, mentions, parseLetterText,
+  type LetterCheck, type LetterDraft,
+} from "./letter.ts";
+import { wordCount as voiceWords, type VoiceContext, type VoiceContextRequest, type VoiceEditInput } from "./voice.ts";
 
 export const packageSteps = ["target", "cv", "letter", "answers", "ats"] as const;
 export type PackageStep = (typeof packageSteps)[number];
@@ -206,6 +214,56 @@ export interface CvVersionView {
   fit: CvFit;
 }
 
+/** The cover letter's printed draft: the exact PDF, for the draft it was printed from. */
+export interface LetterFileView {
+  fileName: string;
+  path: string;
+  sha256: string;
+  size: number;
+  pages: number;
+  overflow: DocumentDraft["overflow"];
+  draft: number;
+}
+
+/** One of the letter's checks. A problem stops Approve; a warning is advice. */
+export interface LetterCheckView {
+  id: "trace" | "decisions" | "gaps" | "stock" | "example";
+  state: "ok" | "problem" | "warning";
+  label: string;
+  /** What's wrong and where, in plain words; null when it passes. */
+  detail: string | null;
+}
+
+/** The cover letter: the draft shown, its text, highlights, word count, checks, the voice it was written with and its file. */
+export interface LetterView {
+  /** The draft shown (the one approved and printed), from 1, and how many there are. Earlier ones are kept. */
+  draft: number;
+  drafts: number;
+  /** Written by the writer, or by Kris herself ("Write it myself"). */
+  origin: "writer" | "own";
+  /** What Kris asked this draft for; null for the first. */
+  instruction: string | null;
+  /** As Kris edits it: the greeting, the paragraphs and the closing, separated by blank lines. */
+  text: string;
+  greeting: string;
+  /** The body as sentences, each marked when it was written for this company. */
+  paragraphs: { text: string; forCompany: boolean }[][];
+  closing: string;
+  words: number;
+  target: number;
+  /** The sentences written for this company, counted and named in words (highlights are never only a colour). */
+  forCompany: { count: number; where: string | null };
+  checks: LetterCheckView[];
+  /** What the voice was learned from, and exactly what this draft sent. */
+  voice: { samples: number; edits: number; sent: { text: string; from: string }[]; sentWords: number };
+  /** Quick instructions for a new draft. */
+  quick: string[];
+  /** The printed draft; null until it's printed. */
+  file: LetterFileView | null;
+  /** When Kris last changed it, if she did. */
+  editedAt: string | null;
+}
+
 /** A piece learned from Kris's answer inside a package, waiting in Profile › Learned during packages. */
 export interface LearnedPiece {
   piece: ProfilePiece;
@@ -324,6 +382,8 @@ export interface PackageView {
   cv: CvDraftView | null;
   /** The tailored CV version, once the CV is written. */
   cvVersion: CvVersionView | null;
+  /** The cover letter, once a draft exists. */
+  letter: LetterView | null;
   /** The screening answers, once they're written. */
   answers: ScreeningAnswersView | null;
   /** What the package has cost so far, and the estimate for what's still to be written. */
@@ -365,6 +425,13 @@ export interface PackageStoreDeps {
   contact: () => Contact;
   closestAngle: (posting: AnglePosting) => AngleChoice;
   draftDocument: (request: DraftRequest) => Promise<DocumentDraft>;
+  /** The voice, as the letter uses it: the context a draft sends, Kris's edits as evidence, and where excerpts came from. */
+  voice: {
+    context: (request: VoiceContextRequest) => VoiceContext;
+    saveEdit: (edit: VoiceEditInput, previous: string | null) => string | null;
+    learnedFrom: () => { samples: number; edits: number };
+    sourceLabel: (source: string) => string;
+  };
   /** The answer bank, for the screening answers. */
   answers: Pick<AnswerStore, "find" | "get" | "save" | "recordUse" | "list">;
   /** For the target posting's form (the Greenhouse and Ashby questions APIs). Missing: the standard questions. */
@@ -394,6 +461,16 @@ export interface PackageStore {
   decideFlag(id: string, flagId: string, choice: FlagChoice): Promise<ChangeResult>;
   /** Kris's answer to a gap's question: the coach writes a piece from it, and its line comes back as a new flag. */
   answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
+  /** A new letter draft with Kris's instruction; the earlier drafts are kept. */
+  redraftLetter(id: string, instruction: string): Promise<ChangeResult>;
+  /** Shows another draft: the one approved and printed. */
+  showLetterDraft(id: string, draft: number): Promise<ChangeResult>;
+  /** Kris's text for a draft: saved, printed, and recorded as voice evidence unless learning is paused. */
+  editLetter(id: string, draft: number, text: string): Promise<ChangeResult>;
+  /** An empty draft with the greeting and closing, for Kris to write herself. */
+  writeLetterYourself(id: string): Promise<ChangeResult>;
+  /** The letter's draft PDF, as printed from the draft shown. */
+  letterFile(id: string): Promise<{ fileName: string; pdf: Uint8Array } | null>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
   learned(): LearnedPiece[];
   /** Kris's answer to a screening question (her salary number, an option, her own words), checked against the form. */
@@ -478,7 +555,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   interface Row {
     id: string; jobId: string; job: PackageJob; angle: Angle; angleReason: string; language: DocumentLanguage;
     targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftView | null;
-    cvVersion: CvVersionState | null; screening: ScreeningState | null; startedAt: string; stoppedAt: string | null;
+    cvVersion: CvVersionState | null; screening: ScreeningState | null; startedAt: string; stoppedAt: string | null; letterDraft: number | null; letterFile: LetterFileView | null;
   }
   interface PartRow { part: PackageStep; state: PartState; attempts: number; error: string | null; costUsd: number; output: unknown }
 
@@ -490,6 +567,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     cvVersion: r.cv_version == null ? null : (JSON.parse(String(r.cv_version)) as CvVersionState),
     screening: r.screening == null ? null : (JSON.parse(String(r.screening)) as ScreeningState),
     startedAt: String(r.started_at), stoppedAt: r.stopped_at == null ? null : String(r.stopped_at),
+    letterDraft: r.letter_draft == null ? null : Number(r.letter_draft),
+    letterFile: r.letter_file == null ? null : (JSON.parse(String(r.letter_file)) as LetterFileView),
   });
   const row = (id: string) => {
     const r = db.prepare("SELECT * FROM package WHERE id = ?").get(id);
@@ -511,7 +590,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       .run(...sets.map(([, v]) => v as string | number | null), clock.now().toISOString(), id, part);
   };
 
-  const modelParts: PackageStep[] = ["cv", "answers"];
+  const modelParts: PackageStep[] = ["cv", "letter", "answers"];
   const partWhat = (r: Row, p: PartRow): string => {
     const target = r.job.postings.find((x) => x.id === r.targetPostingId);
     const language = r.language === "bg" ? "Bulgarian" : "English";
@@ -525,8 +604,15 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
           : p.state === "stopped" ? "Stopped before it was written. Generate it again when you like."
           : p.state === "not-written" ? "Not written: this month's AI budget would be crossed."
           : `${angleLabel[r.angle]} angle`;
-      case "letter":
-        return "Arrives with a later part of the rebuild.";
+      case "letter": {
+        const l = currentLetter(r);
+        return p.state === "working" ? "In your voice · writing from your CV and profile"
+          : p.state === "done" && l ? `Draft ${l.number} · ${bodyWords(l.content)} words${l.origin === "own" ? ", written by you" : ""}`
+          : p.state === "failed" ? `Not written: ${p.error ?? "the model didn't answer"}. The rest is saved.`
+          : p.state === "stopped" ? "Stopped before it was written. Write it again, or write it yourself."
+          : p.state === "not-written" ? "Not written: this month's AI budget would be crossed."
+          : "In your voice, once the CV is written";
+      }
       case "answers": {
         const a = r.screening?.answers ?? [];
         const fromBank = a.filter((x) => x.origin === "bank" || x.origin === "adapted").length;
@@ -580,6 +666,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         if (step === "cv" && r.cvDraft?.overflow && !r.cvVersion?.keepTwoPages) {
           return { reason: `This CV runs onto ${r.cvDraft.pages} pages. Choose how to fit one page, or keep ${r.cvDraft.pages}.`, by: step };
         }
+        if (step === "letter") return letterBlock(r);
         return null;
       }
       case "working": return { reason: `The ${name} is still being written.`, by: step };
@@ -599,14 +686,17 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       const block = blockOf(r, ps, step);
       const flags = step === "cv" && p.state === "done" ? r.cvVersion?.flags ?? [] : [];
       const open = flags.filter((f) => !f.decision).length;
+      const letter = step === "letter" && p.state === "done" ? currentLetter(r) : null;
+      const toFix = letter ? letterChecks(r, letter).filter((c) => c.state === "problem").length : 0;
       const needs = step === "answers" && p.state === "done" ? openAnswers(r).length : 0;
       const [state, sub]: [StepState, string] = approvedAt ? ["done", "Approved"]
         : open ? [step === current ? "current" : "flagged", open === 1 ? "1 flag" : `${open} flags`]
         : needs ? [step === current ? "current" : "flagged", `${needs} need${needs === 1 ? "s" : ""} you`]
         : flags.length && step === current ? ["current", "Flags decided"]
+        : toFix ? [step === current ? "current" : "flagged", `${toFix} to fix`]
         : p.state === "working" ? ["working", "Writing…"]
         : p.state === "failed" ? ["failed", "Failed"]
-        : step === current ? ["current", p.state === "done" ? (step === "target" ? "Choose" : "Ready to check") : p.state === "later" ? "Not built yet" : "Not written"]
+        : step === current ? ["current", p.state === "done" ? (step === "target" ? "Choose" : step === "letter" ? "Review" : "Ready to check") : p.state === "later" ? "Not built yet" : "Not written"]
         : p.state === "later" ? ["upcoming", "Not built yet"]
         : p.state === "stopped" || p.state === "not-written" ? ["upcoming", "Not written"]
         : step === "ats" ? ["upcoming", "After the CV"]
@@ -645,13 +735,12 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       steps: stepsOf(r, ps),
       cv: r.cvDraft,
       cvVersion: cvVersionView(r),
+      letter: letterView(r),
       answers: answersView(r),
       costUsd: Math.round(list.reduce((n, p) => n + p.costUsd, 0) * 1e6) / 1e6,
       estimate: {
-        // Each part's own task: the CV's tailoring, and a few drafted screening answers.
-        costUsd: Math.round(toWrite.reduce((n, p) => n + (p.part === "cv"
-          ? deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) })
-          : deps.writer.estimateCostUsd({ task: "draft-answer", input: draftInput(r, "", { words: null, chars: null }, null) }) * packageRules.draftsExpected), 0) * 1e6) / 1e6,
+        // Each part's own task: the CV's tailoring, the letter, and a few drafted screening answers.
+        costUsd: Math.round(toWrite.reduce((n, p) => n + estimateOf(r, p.part), 0) * 1e6) / 1e6,
         seconds: toWrite.reduce((n, p) => n + packageRules.seconds[p.part], 0),
       },
       budget: deps.budget.info(),
@@ -717,22 +806,32 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   /** The CV as printed: the baseline with the changes that aren't undone. */
   const planOf = (r: Row): CvPlan => applyChanges(baseline(r), r.cvVersion?.changes ?? []);
 
+  /** The letterhead the CV and the letter share: Kris's name for the language, the current title, the contact details. */
+  function letterheadOf(r: Row): Letterhead {
+    const plan = planOf(r);
+    const pieces = byId();
+    const contact = deps.contact();
+    const first = plan.roles.map((role) => pieces.get(role.roleId)?.entry).find((e) => e);
+    return {
+      name: r.language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin,
+      headline: first?.title ?? "",
+      location: [contact.city, contact.country].filter(Boolean).join(", ") || undefined,
+      email: contact.email,
+      phone: contact.phone || undefined,
+      links: contact.links.map((l) => l.replace(/^https?:\/\//, "").replace(/\/$/, "")),
+    };
+  }
+
   /** The CV through its template: the plan's words, with roles' and education's facts exactly as in the profile. */
   async function cvDocument(r: Row): Promise<DocumentToRender> {
     const plan = planOf(r);
     const pieces = byId();
     const contact = deps.contact();
     const entries = plan.roles.map((role) => ({ role, entry: pieces.get(role.roleId)?.entry })).filter((x) => x.entry);
-    const name = r.language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin;
+    const letterhead = letterheadOf(r);
+    const name = letterhead.name;
     const content: CvContent = {
-      letterhead: {
-        name,
-        headline: entries[0]?.entry?.title ?? "",
-        location: [contact.city, contact.country].filter(Boolean).join(", ") || undefined,
-        email: contact.email,
-        phone: contact.phone || undefined,
-        links: contact.links.map((l) => l.replace(/^https?:\/\//, "").replace(/\/$/, "")),
-      },
+      letterhead,
       summary: plan.summary?.text ?? "",
       experience: entries.map(({ role, entry }) => ({
         title: entry!.title,
@@ -889,53 +988,223 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     db.prepare("UPDATE package SET cv_draft = ? WHERE id = ?").run(JSON.stringify(cv), id);
   }
 
+  // ---- the cover letter (#65) ---------------------------------------------------------------
+
+  interface LetterRow {
+    number: number; origin: "writer" | "own"; instruction: string | null; written: LetterDraft | null; content: LetterDraft;
+    excerpts: SentExcerpt[]; voiceEditId: string | null; costUsd: number; createdAt: string; editedAt: string | null;
+  }
+  const toLetter = (x: Record<string, unknown>): LetterRow => ({
+    number: Number(x.number), origin: x.origin as LetterRow["origin"], instruction: x.instruction == null ? null : String(x.instruction),
+    written: x.written == null ? null : (JSON.parse(String(x.written)) as LetterDraft), content: JSON.parse(String(x.content)) as LetterDraft,
+    excerpts: JSON.parse(String(x.excerpts)) as SentExcerpt[], voiceEditId: x.voice_edit_id == null ? null : String(x.voice_edit_id),
+    costUsd: Number(x.cost_usd), createdAt: String(x.created_at), editedAt: x.edited_at == null ? null : String(x.edited_at),
+  });
+  const letters = (id: string) => db.prepare("SELECT * FROM package_letter WHERE package_id = ? ORDER BY number").all(id).map(toLetter);
+  const letterOf = (id: string, n: number | null) => {
+    const x = n === null ? undefined : db.prepare("SELECT * FROM package_letter WHERE package_id = ? AND number = ?").get(id, n);
+    return x ? toLetter(x) : null;
+  };
+  const currentLetter = (r: Row) => letterOf(r.id, r.letterDraft);
+
+  /** Keeps a new draft (earlier ones stay) and shows it. */
+  function addLetter(id: string, draft: Omit<LetterRow, "number" | "voiceEditId" | "createdAt" | "editedAt">): number {
+    const n = Number(db.prepare("SELECT COALESCE(MAX(number), 0) + 1 AS n FROM package_letter WHERE package_id = ?").get(id)!.n);
+    db.prepare(
+      `INSERT INTO package_letter (package_id, number, origin, instruction, written, content, excerpts, cost_usd, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, n, draft.origin, draft.instruction, draft.written && JSON.stringify(draft.written), JSON.stringify(draft.content), JSON.stringify(draft.excerpts), draft.costUsd, clock.now().toISOString());
+    db.prepare("UPDATE package SET letter_draft = ? WHERE id = ?").run(n, id);
+    return n;
+  }
+
+  /** The gaps Kris chose to name in the letter, by their requirement's words. */
+  const namedGaps = (r: Row) => (r.cvVersion?.flags ?? []).filter((f) => f.kind === "gap" && f.decision?.option === "letter")
+    .map((f) => requirementText(r, f)).filter((t): t is string => !!t);
+
+  /** What the letter is written from: the posting, the voice, the CV as decided, the gaps to name and the pieces. */
+  function letterInput(r: Row, voice: { rules: string[]; excerpts: SentExcerpt[] }, instruction: string | null, previous: string | null): WriteLetterInput {
+    const plan = planOf(r);
+    return {
+      posting: { title: r.job.title, company: r.job.company, requirements: r.job.requirements.map((q) => q.text) },
+      language: r.language,
+      words: LETTER_WORDS,
+      voice: voice.rules,
+      excerpts: voice.excerpts,
+      cv: { summary: plan.summary?.text ?? null, lines: plan.roles.flatMap((x) => x.bullets.map((b) => ({ text: b.text, pieceIds: b.pieceIds }))) },
+      gaps: namedGaps(r),
+      pieces: tailorInput(r).pieces,
+      instruction,
+      previous,
+    };
+  }
+
+  /** The letter's checks against the profile, the CV's decisions and the gaps Kris chose to name or leave out. */
+  function letterChecks(r: Row, l: LetterRow): LetterCheck[] {
+    const flags = r.cvVersion?.flags ?? [];
+    const decisions = flags.filter((f) => f.draft && f.decision?.text && f.decision.option !== "experience")
+      .map((f) => ({ chosen: f.decision!.text!, draft: f.draft!, pieceIds: f.pieceIds, piece: f.piece }));
+    const gapAt = new Set(flags.filter((f) => f.kind === "gap").map((f) => f.requirement));
+    const leftOut = flags.filter((f) => f.kind === "gap" && f.decision?.option === "leave-out").map((f) => requirementText(r, f)).filter((t): t is string => !!t);
+    // Besides the profile, the letter may name the company, the role and what the posting asks for (gaps only as gaps).
+    const alsoNamed = [r.job.company, r.job.title, ...r.job.requirements.filter((_, i) => !gapAt.has(i)).map((q) => q.text)];
+    return checkLetter(l.content, { profile: { ...honestyProfile(r), alsoNamed }, decisions, named: namedGaps(r), leftOut, language: r.language });
+  }
+
+  /** Why the letter can't be approved: no draft, an empty one, a check's problem, or more than one page. */
+  function letterBlock(r: Row): { reason: string; by: PackageStep } | null {
+    const l = currentLetter(r);
+    if (!l) return { reason: "There's no cover letter to approve yet.", by: "letter" };
+    if (bodyWords(l.content) === 0) return { reason: "The letter is empty. Write it, or ask for a draft.", by: "letter" };
+    const problem = letterChecks(r, l).find((c) => c.state === "problem");
+    if (problem) return { reason: `The cover letter can't be approved yet: ${problem.because}`, by: "letter" };
+    const file = r.letterFile?.draft === l.number ? r.letterFile : null;
+    if (file?.overflow) return { reason: `The letter runs onto ${file.pages} pages. Shorten it to fit one.`, by: "letter" };
+    return null;
+  }
+
+  function estimateOf(r: Row, part: PackageStep): number {
+    if (part === "cv") return deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) });
+    if (part === "letter") return deps.writer.estimateCostUsd({ task: "write-letter", input: letterInput(r, { rules: [], excerpts: [] }, null, null) });
+    if (part === "answers") return deps.writer.estimateCostUsd({ task: "draft-answer", input: draftInput(r, "", { words: null, chars: null }, null) }) * packageRules.draftsExpected;
+    return 0;
+  }
+
+  /**
+   * One letter call within the cap. The voice context (rules and excerpts) is taken, and recorded as
+   * sent, only once the call goes ahead.
+   */
+  async function letterCall(id: string, instruction: string | null, previous: string | null) {
+    const r = row(id)!;
+    return deps.budget.call({ task: "write-letter", estimateUsd: estimateOf(r, "letter") }, () => {
+      const voice = deps.voice.context({ language: r.language, purpose: "cover-letter" });
+      return deps.writer.writeLetter(letterInput(r, { rules: voice.rules.map((x) => x.text), excerpts: voice.excerpts }, instruction, previous));
+    });
+  }
+
+  function letterView(r: Row): LetterView | null {
+    const l = currentLetter(r);
+    if (!l) return null;
+    const learned = deps.voice.learnedFrom();
+    const sent = l.excerpts.map((e) => ({ text: e.text, from: deps.voice.sourceLabel(e.source) }));
+    return {
+      draft: l.number,
+      drafts: letters(r.id).length,
+      origin: l.origin,
+      instruction: l.instruction,
+      text: letterText(l.content),
+      greeting: l.content.greeting,
+      paragraphs: l.content.paragraphs.map((p) => p.map((x) => ({ text: x.text, forCompany: x.forCompany }))),
+      closing: l.content.closing,
+      words: bodyWords(l.content),
+      target: LETTER_WORDS,
+      forCompany: { count: forCompanyCount(l.content), where: forCompanyPlaces(l.content) },
+      checks: letterChecks(r, l).map(({ id, state, label, detail }) => ({ id, state, label, detail })),
+      voice: { samples: learned.samples, edits: learned.edits, sent, sentWords: sent.reduce((n, e) => n + voiceWords(e.text), 0) },
+      quick: [
+        ...namedGaps(r).filter((gap) => !mentions(bodyParagraphs(l.content).join(" "), gap)).map((gap) => `Name the ${gap} gap`),
+        "Shorter", "More direct",
+      ],
+      file: r.letterFile && r.letterFile.draft === l.number ? r.letterFile : null,
+      editedAt: l.editedAt,
+    };
+  }
+
+  /** The letter through its template: the CV's letterhead, the date, recipient and "Re:" line from the job, and Kris's words. */
+  function letterDocument(r: Row, d: LetterDraft): DocumentToRender {
+    const letterhead = letterheadOf(r);
+    return {
+      kind: "cover-letter",
+      language: r.language,
+      title: `${letterhead.name} · Cover letter · ${r.job.company}`,
+      content: {
+        letterhead,
+        date: clock.now().toISOString().slice(0, 10),
+        recipient: { company: r.job.company, place: r.job.location ?? undefined },
+        re: { role: r.job.title },
+        greeting: d.greeting,
+        paragraphs: d.paragraphs.map((p) => p.map((x) => x.text).join(" ")),
+        closing: d.closing,
+      },
+    };
+  }
+
+  /** Prints the draft shown and keeps it as the package's letter draft. */
+  async function renderLetter(id: string): Promise<void> {
+    const r = row(id)!;
+    const l = currentLetter(r);
+    if (!l) return;
+    const draft = await deps.draftDocument({
+      packageId: id,
+      document: letterDocument(r, l.content),
+      fileName: { name: deps.contact().nameLatin, company: r.job.company, role: r.job.title },
+    });
+    const file: LetterFileView = { fileName: draft.fileName, path: draft.path, sha256: draft.sha256, size: draft.size, pages: draft.pages, overflow: draft.overflow, draft: l.number };
+    db.prepare("UPDATE package SET letter_file = ? WHERE id = ?").run(JSON.stringify(file), id);
+  }
+
   // ---- generating ----------------------------------------------------------------------------
 
   const stopped = (id: string) => row(id)?.stoppedAt != null;
   const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
-  /** Writes the CV part: the tailoring call (retried once on failure) within the cap, then the PDF. */
-  async function writeCv(id: string): Promise<void> {
-    let { attempts, costUsd } = parts(id).get("cv")!;
-    setPart(id, "cv", { state: "working", error: null });
+  /**
+   * Writes a part: its model call (retried once on failure) within the cap, then `keep` with the
+   * answer (which prints the PDF). A part that would cross the cap isn't started.
+   */
+  async function writePart<T>(
+    id: string, part: PackageStep,
+    call: () => Promise<{ refused: true } | { refused: false; result: { output: T; costUsd: number; excerpts: SentExcerpt[] } }>,
+    keep: (written: { output: T; costUsd: number; excerpts: SentExcerpt[] }) => void,
+    print: () => Promise<void>,
+  ): Promise<void> {
+    let { attempts, costUsd } = parts(id).get(part)!;
+    setPart(id, part, { state: "working", error: null });
     for (let tries = 0; tries < packageRules.attempts; tries++) {
       if (stopped(id)) return;
-      const input = tailorInput(row(id)!);
       attempts += 1;
       let outcome;
       try {
-        outcome = await deps.budget.call(
-          { task: "tailor-cv", estimateUsd: deps.writer.estimateCostUsd({ task: "tailor-cv", input }) },
-          () => deps.writer.tailorCv(input),
-        );
+        outcome = await call();
       } catch (err) {
         const billed = (err as { costUsd?: unknown } | null)?.costUsd;
         if (typeof billed === "number" && billed > 0) costUsd += billed;
         const last = tries === packageRules.attempts - 1;
-        if (stopped(id)) { setPart(id, "cv", { attempts, costUsd, error: message(err) }); return; }
-        setPart(id, "cv", { attempts, costUsd, error: message(err), ...(last && { state: "failed" }) });
+        if (stopped(id)) { setPart(id, part, { attempts, costUsd, error: message(err) }); return; }
+        setPart(id, part, { attempts, costUsd, error: message(err), ...(last && { state: "failed" }) });
         if (last) return;
         continue;
       }
       if (outcome.refused) {
-        setPart(id, "cv", { state: "not-written", attempts: attempts - 1, error: null });
+        setPart(id, part, { state: "not-written", attempts: attempts - 1, error: null });
         return;
       }
       costUsd += outcome.result.costUsd;
       // Stopped while the model was writing: the call is paid for, but its answer isn't used.
-      if (stopped(id)) { setPart(id, "cv", { attempts, costUsd }); return; }
-      setPart(id, "cv", { attempts, costUsd, output: outcome.result.output });
-      keepTailored(id, outcome.result.output);
+      if (stopped(id)) { setPart(id, part, { attempts, costUsd }); return; }
+      setPart(id, part, { attempts, costUsd, output: outcome.result.output });
+      keep(outcome.result);
       try {
-        await renderCv(id);
+        await print();
       } catch (err) {
-        setPart(id, "cv", { state: "failed", error: `The PDF couldn't be printed: ${message(err)}` });
+        setPart(id, part, { state: "failed", error: `The PDF couldn't be printed: ${message(err)}` });
         return;
       }
-      setPart(id, "cv", { state: "done", error: null });
+      setPart(id, part, { state: "done", error: null });
       return;
     }
   }
+
+  /** The CV part: the tailoring, checked by the honesty validator, then printed. */
+  const writeCv = (id: string) => writePart(id, "cv", () => {
+    const input = tailorInput(row(id)!);
+    return deps.budget.call({ task: "tailor-cv", estimateUsd: deps.writer.estimateCostUsd({ task: "tailor-cv", input }) }, () => deps.writer.tailorCv(input));
+  }, (written) => keepTailored(id, written.output), () => renderCv(id));
+
+  /** The letter part: the first draft, in Kris's voice, from the CV as it stands. */
+  const writeLetter = (id: string) => writePart(id, "letter", () => letterCall(id, null, null), (written) => {
+    addLetter(id, { origin: "writer", instruction: null, written: fromWritten(written.output), content: fromWritten(written.output), excerpts: written.excerpts, costUsd: written.costUsd });
+  }, () => renderLetter(id));
 
   function generate(id: string): void {
     // Parts about to be written show as working at once, so the package never looks idle.
@@ -944,7 +1213,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const run = before.then(async () => {
       for (const part of modelParts) {
         const state = parts(id).get(part)!.state;
-        if (state === "working" && !stopped(id)) await (part === "cv" ? writeCv(id) : writeAnswers(id));
+        if (state !== "working" || stopped(id)) continue;
+        await (part === "cv" ? writeCv(id) : part === "letter" ? writeLetter(id) : writeAnswers(id));
       }
     }).catch((err: unknown) => {
       // Never leave a part spinning: whatever broke, the part shows as failed with Retry.
@@ -1007,7 +1277,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         `INSERT INTO package (id, job_id, job, angle, angle_reason, language, target_posting_id, started_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, job.id, JSON.stringify(snapshot), angle.angle, angle.reason, job.packageLanguage, target?.id ?? "", now);
-      const initial: Record<PackageStep, PartState> = { target: "done", cv: "waiting", letter: "later", answers: "waiting", ats: "waiting" };
+      const initial: Record<PackageStep, PartState> = { target: "done", cv: "waiting", letter: "waiting", answers: "waiting", ats: "waiting" };
       for (const step of packageSteps) {
         db.prepare("INSERT INTO package_part (package_id, part, state, updated_at) VALUES (?, ?, ?, ?)").run(id, step, initial[step], now);
       }
@@ -1185,6 +1455,76 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
           nearTheLine: x.near != null && piece.status === "flagged" ? (JSON.parse(String(x.near)) as NearTheLine) : null,
         }];
       });
+  }
+
+  // ---- the cover letter's operations (#65) ----------------------------------------------------
+
+  /** Adds a call's cost to the letter part. */
+  const chargeLetter = (id: string, usd: number) => setPart(id, "letter", { costUsd: parts(id).get("letter")!.costUsd + usd });
+
+  async function redraftLetter(id: string, instruction: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(row(id)!) });
+    const said = instruction.trim();
+    if (!said) return refuse("Say what to change, or pick one of the quick instructions.");
+    if (parts(id).get("letter")!.state === "working") return refuse("The letter is still being written. Ask for a new draft once it's there.");
+    const current = currentLetter(r);
+    const kept = current ? ` Draft ${current.number} is kept.` : "";
+    let outcome;
+    try {
+      outcome = await letterCall(id, said, current ? letterText(current.content) : null);
+    } catch (err) {
+      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+      if (typeof billed === "number" && billed > 0) chargeLetter(id, billed);
+      return refuse(`The new draft wasn't written: ${message(err)}.${kept} Try again, or edit this one yourself.`);
+    }
+    if (outcome.refused) return refuse(`This month's AI budget would be crossed, so a new draft can't be written now.${kept} Edit it, or write it yourself.`);
+    const written = outcome.result;
+    chargeLetter(id, written.costUsd);
+    addLetter(id, { origin: "writer", instruction: said, written: fromWritten(written.output), content: fromWritten(written.output), excerpts: written.excerpts, costUsd: written.costUsd });
+    setPart(id, "letter", { state: "done", error: null });
+    reopenFrom(r, "letter");
+    await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
+  async function showLetterDraft(id: string, draft: number): Promise<ChangeResult> {
+    const r = mustGet(id);
+    if (!letterOf(id, draft)) return { changed: false, reason: `There's no draft ${draft}.`, package: view(r) };
+    if (draft !== r.letterDraft) {
+      db.prepare("UPDATE package SET letter_draft = ? WHERE id = ?").run(draft, id);
+      reopenFrom(r, "letter");
+      await renderLetter(id);
+    }
+    return { changed: true, package: view(row(id)!) };
+  }
+
+  async function writeLetterYourself(id: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    if (parts(id).get("letter")!.state === "working") return { changed: false, reason: "The letter is still being written. Stop generating first, or wait for it.", package: view(r) };
+    addLetter(id, { origin: "own", instruction: null, written: null, content: emptyLetter(r.job.company, r.language), excerpts: [], costUsd: 0 });
+    setPart(id, "letter", { state: "done", error: null });
+    reopenFrom(r, "letter");
+    await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
+  }
+
+  async function editLetter(id: string, draft: number, text: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const l = letterOf(id, draft);
+    if (!l) return { changed: false, reason: `There's no draft ${draft}.`, package: view(r) };
+    const content = parseLetterText(text, l.content);
+    if (letterText(content) === letterText(l.content) && draft === r.letterDraft) return { changed: true, package: view(r) };
+    // Kris's changes to what the writer wrote teach the voice, kept as one piece of evidence per draft.
+    const voiceEdit = l.written
+      ? deps.voice.saveEdit({ purpose: "cover-letter", language: r.language, before: letterText(l.written), after: letterText(content), source: `package:${id}` }, l.voiceEditId)
+      : l.voiceEditId;
+    db.prepare("UPDATE package_letter SET content = ?, voice_edit_id = ?, edited_at = ? WHERE package_id = ? AND number = ?")
+      .run(JSON.stringify(content), voiceEdit, clock.now().toISOString(), id, draft);
+    db.prepare("UPDATE package SET letter_draft = ? WHERE id = ?").run(draft, id);
+    reopenFrom(r, "letter");
+    await renderLetter(id);
+    return { changed: true, package: view(row(id)!) };
   }
 
   // ---- screening answers (#66) -----------------------------------------------------------------
@@ -1571,6 +1911,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         reopenFrom(r, "target");
         // The CV is printed again in the new language, and the answers written again in it.
         if (parts(id).get("cv")!.state === "done") await renderCv(id);
+        if (currentLetter(row(id)!)) await renderLetter(id);
         rewriteAnswers(id);
       }
       return { changed: true, package: view(row(id)!) };
@@ -1645,6 +1986,17 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     decideFlag,
     answerGap,
     learned,
+    redraftLetter,
+    showLetterDraft,
+    editLetter,
+    writeLetterYourself,
+    async letterFile(id) {
+      const r = row(id);
+      const file = r?.letterFile;
+      if (!file || file.draft !== r.letterDraft) return null;
+      const pdf = await deps.packages.read(file.path);
+      return pdf ? { fileName: file.fileName, pdf } : null;
+    },
     setAnswer,
     redraftAnswer,
     saveAnswerToBank,

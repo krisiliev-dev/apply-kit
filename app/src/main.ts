@@ -28,7 +28,7 @@ const extractor: Extractor = config.ai.openRouterApiKey
 
 const writer: Writer = config.ai.openRouterApiKey
   ? createOpenRouterWriter({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
-  : { estimateCostUsd: () => 0, draftPieces: async () => { throw noKey(); }, learnVoice: async () => { throw noKey(); }, tailorCv: async () => { throw noKey(); }, coachTurn: async () => { throw noKey(); }, draftAnswer: async () => { throw noKey(); } };
+  : { estimateCostUsd: () => 0, draftPieces: async () => { throw noKey(); }, learnVoice: async () => { throw noKey(); }, tailorCv: async () => { throw noKey(); }, coachTurn: async () => { throw noKey(); }, writeLetter: async () => { throw noKey(); }, draftAnswer: async () => { throw noKey(); } };
 
 // PDFs: the fixed templates printed by headless Chromium (started on first use) and read back with
 // pdf.js, both on this laptop (ADR 0003).

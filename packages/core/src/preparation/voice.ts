@@ -123,6 +123,15 @@ export interface VoiceStore {
   context(request: VoiceContextRequest): VoiceContext;
   removeRule(id: string): boolean;
   recordEdit(edit: VoiceEditInput): boolean;
+  /**
+   * Keeps Kris's latest changes to one draft as a single piece of evidence: `previous` (the id this
+   * returned last time for the draft) is updated while it waits to be learned from; once learned, a
+   * new edit starts from what was learned. Returns the id to pass next time (null when nothing is
+   * recorded: learning paused, or the draft is back to what it was).
+   */
+  saveEdit(edit: VoiceEditInput, previous: string | null): string | null;
+  /** Where an excerpt came from, in words: the sample's file name, or "An edit you made to a draft". */
+  sourceLabel(source: string): string;
   setLearning(fromEdits: boolean): VoiceView;
   remove(id: string): Promise<boolean>;
   replace(id: string, file: VoiceSampleFile): Promise<VoiceSample | null>;
@@ -470,6 +479,35 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     return true;
   }
 
+  function saveEdit(edit: VoiceEditInput, previous: string | null): string | null {
+    const old = previous ? db.prepare("SELECT * FROM voice_edit WHERE id = ?").get(previous) : undefined;
+    if (!learnFromEdits()) return old ? previous : null;
+    if (old && old.learned_at == null) {
+      if (!editExcerpt(String(old.before), edit.after)) {
+        db.prepare("DELETE FROM voice_edit WHERE id = ?").run(previous);
+        return null;
+      }
+      db.prepare("UPDATE voice_edit SET after = ?, at = ? WHERE id = ?").run(edit.after, now(), previous);
+      return previous;
+    }
+    // What was learned already is the new starting point.
+    const before = old ? String(old.after) : edit.before;
+    if (!editExcerpt(before, edit.after)) return old ? previous : null;
+    const id = `voice-edit:${crypto.randomUUID()}`;
+    db.prepare("INSERT INTO voice_edit (id, at, draft, language, source, before, after) VALUES (?, ?, ?, ?, ?, ?, ?)").run(
+      id, now(), edit.purpose, edit.language, edit.source ?? null, before, edit.after,
+    );
+    return id;
+  }
+
+  function sourceLabel(source: string): string {
+    if (source.startsWith("sample:")) {
+      const r = db.prepare("SELECT file_name FROM voice_sample WHERE id = ?").get(source.slice("sample:".length));
+      return r ? String(r.file_name) : "A sample you removed since";
+    }
+    return "An edit you made to a draft";
+  }
+
   function setLearning(fromEdits: boolean): VoiceView {
     db.prepare("UPDATE voice_settings SET learn_from_edits = ? WHERE id = 1").run(fromEdits ? 1 : 0);
     return view();
@@ -497,6 +535,8 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
     context,
     removeRule,
     recordEdit,
+    saveEdit,
+    sourceLabel,
     setLearning,
     remove,
     replace,
