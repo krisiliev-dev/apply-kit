@@ -1067,6 +1067,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       snoozedTo,
       state: done ? (done.kind === "follow-up-sent" ? "sent" : "skipped") : "pending",
       doneAt: done ? String(done.at) : null,
+      doneBy: done ? (done.cause === "email" ? "email" : "you") : null,
       text: String(r.text),
     };
   }
@@ -1432,10 +1433,41 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return `${reads}, but ${domain} hasn't written before and nothing ties it to one Application. ${target ? "That's too important to guess, so nothing has changed." : "Nothing has changed."}`;
   }
 
+  /**
+   * A sent copy the user BCC'd to the job mailbox: when it went to a contact of exactly one open
+   * Application (its job title decides between several at one contact) whose follow-up was due by
+   * the day it was sent, that follow-up is marked sent, by email. Returns the Application, or null.
+   */
+  function markSentByCopy(m: MailMessage): string | null {
+    const recipients = [...m.to, ...m.cc].map((r) => senderOf({ from: r }).address).filter(Boolean);
+    if (!recipients.length) return null;
+    const isContact = (id: string) => contactsOf(id).some((k) => recipients.some((a) => k.kind === "address"
+      ? a === k.value
+      : domainOf(a) === k.value || domainOf(a).endsWith(`.${k.value}`)));
+    let apps = db.prepare("SELECT * FROM application WHERE removed_at IS NULL").all().filter((r) => !isClosed(r.status as Status) && isContact(String(r.id)));
+    if (apps.length > 1) {
+      const text = `${m.subject}\n${quoteOf(m, 4000)}`;
+      apps = apps.filter((r) => namesTitle(String(r.title), text));
+    }
+    if (apps.length !== 1) return null;
+    const app = apps[0]!;
+    const f = currentFollowUp(app);
+    const sentOn = sofiaDay(m.receivedAt);
+    if (!f || f.kind !== "nudge" || f.state !== "pending" || !(f.dueOn <= sentOn || f.snoozedTo)) return null;
+    addEvent({
+      applicationId: f.applicationId, kind: "follow-up-sent", cause: "email", from: null, to: null,
+      text: "Follow-up sent: apply-kit saw your sent copy", undoes: null, followUpId: f.id, emailId: m.id, emailKind: null,
+    });
+    return f.applicationId;
+  }
+
   /** Decides one email. Returns what happened to it. */
   async function processOne(m: MailMessage): Promise<keyof MailProcessed> {
     const address = senderOf(m).address;
-    if (own.has(address)) { decide(m.id, { state: "left", reason: "sent-copy" }); return "left"; }
+    if (own.has(address)) {
+      decide(m.id, { state: "left", reason: "sent-copy", applicationId: markSentByCopy(m) });
+      return "left";
+    }
     if (isJobAlert(m)) { decide(m.id, { state: "left", reason: "alert" }); return "left"; }
     const rule = ruleFor(address);
     if (rule && rule.applicationId === null) { decide(m.id, { state: "not-application", reason: "taught", how: "auto" }); return "left"; }

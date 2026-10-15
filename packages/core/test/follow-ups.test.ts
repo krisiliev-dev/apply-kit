@@ -113,7 +113,7 @@ describe("a Status change", () => {
 
     expect((await tracker.get(id))!.followUp).toEqual({
       id: nudge.id, applicationId: id, kind: "nudge", anchorOn: "2026-10-01", dueOn: "2026-10-15", snoozedTo: "2026-10-15",
-      state: "pending", doneAt: null, text: "Still keen on the role.",
+      state: "pending", doneAt: null, doneBy: null, text: "Still keen on the role.",
     });
   });
 });

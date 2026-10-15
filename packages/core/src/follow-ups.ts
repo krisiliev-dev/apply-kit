@@ -23,6 +23,8 @@ export interface FollowUp {
   state: "pending" | "sent" | "skipped";
   /** When it was marked sent or skipped, or null. */
   doneAt: string | null;
+  /** Who marked it: you, or apply-kit on seeing your sent copy in the job mailbox ("email"); null while pending. */
+  doneBy: "you" | "email" | null;
   /** The text as the user typed it ("" until they type). */
   text: string;
 }
