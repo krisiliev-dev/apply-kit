@@ -75,7 +75,7 @@ describe("the extension only acts when Kris clicks", () => {
   it("keeps in the browser's session storage only which fill session each tab is in", () => {
     const users = files.filter((f) => /storage\.session/.test(read(f))).map((f) => f.slice(root.length));
     expect(users).toEqual(["src/entrypoints/sidepanel/main.ts"]);
-    expect(read(join(root, "src/entrypoints/sidepanel/main.ts")).match(/storage\.session[^\n]*/g)).toEqual([expect.stringMatching(/createTabSessions\(browser\.storage\.session\)/)]);
+    expect(read(join(root, "src/entrypoints/sidepanel/main.ts")).match(/.*storage\.session.*/g)).toEqual([expect.stringMatching(/createTabSessions\(browser\.storage\.session\)/)]);
   });
 
   it("declares no content scripts and no background beyond opening the panel", () => {
