@@ -250,3 +250,143 @@ describe("interview details from the invite email", () => {
     expect(app.thankYous).toEqual([]);
   });
 });
+
+describe("the prep sheet", () => {
+  const stories: ProfileStory[] = [
+    { id: "piece-ts", text: "Moved the Velora dashboard's 40k lines to strict TypeScript", where: "Velora · 2023" },
+    { id: "piece-remote", text: "Weekly written updates on a remote team", where: "Velora" },
+  ];
+  const output = (): PrepSheetDraft => ({
+    facts: [
+      { text: "Booking software for private clinics.", source: "posting" },
+      { text: "Raised a Series B in 2025.", source: "unverified" },
+      { text: "You liked that the posting lists salary.", source: "notes" },
+    ],
+    questions: [
+      { requirement: "TypeScript, 2+ yrs", question: "Walk me through a codebase you made safer with TypeScript.", storyId: "piece-ts" },
+      { requirement: "Postgres (preferred)", question: "Tell me about a slow query you tracked down.", storyId: "piece-made-up" },
+      { requirement: "Testing (preferred)", question: "How do you decide what to test?", storyId: null },
+    ],
+  });
+
+  it("never holds a story the Master profile doesn't have: an unknown story is \"No story yet\"", async () => {
+    const { tracker, ai } = withMail({ prep: output, stories });
+    const id = await add(tracker as Tracker);
+
+    const sheet = await tracker.buildPrepSheet(id);
+
+    expect(sheet.questions.map((q) => [q.requirement, q.story?.text ?? "No story yet"])).toEqual([
+      ["TypeScript, 2+ yrs", "Moved the Velora dashboard's 40k lines to strict TypeScript"],
+      ["Postgres (preferred)", "No story yet"],
+      ["Testing (preferred)", "No story yet"],
+    ]);
+    expect(ai.prepCalls[0]!.stories).toEqual(stories);
+  });
+
+  it("tags each company fact with its source; one claimed from the posting or your notes when there's neither is unverified", async () => {
+    const { tracker } = withMail({ prep: output, stories });
+    const id = await add(tracker as Tracker);
+
+    expect((await tracker.buildPrepSheet(id)).facts).toEqual([
+      { text: "Booking software for private clinics.", tag: "unverified" },
+      { text: "Raised a Series B in 2025.", tag: "unverified" },
+      { text: "You liked that the posting lists salary.", tag: "unverified" },
+    ]);
+
+    const other = await add(tracker as Tracker, { company: "Ostwind Cloud" });
+    await tracker.addNote(other, "Liked that the posting lists salary.");
+    expect((await tracker.buildPrepSheet(other)).facts.map((f) => f.tag)).toEqual(["unverified", "unverified", "notes"]);
+  });
+
+  it("is built once per Application", async () => {
+    const { tracker, ai } = withMail({ prep: output, stories });
+    const id = await add(tracker as Tracker);
+    expect(await tracker.prepSheet(id)).toBeNull();
+
+    await tracker.buildPrepSheet(id);
+    await tracker.buildPrepSheet(id);
+
+    expect(ai.prepCalls).toHaveLength(1);
+    expect(await tracker.prepSheet(id)).toMatchObject({ applicationId: id, builtAt: "2026-10-12T07:30:00.000Z" });
+  });
+
+  it("isn't built when the AI budget is out: no assistant call", async () => {
+    const { tracker, ai } = withMail({ prep: output, stories, cap: 0 });
+    const id = await add(tracker as Tracker);
+
+    await expect(tracker.buildPrepSheet(id)).rejects.toMatchObject({ problem: "budget" });
+    expect(ai.prepCalls).toEqual([]);
+    expect(await tracker.prepSheet(id)).toBeNull();
+  });
+
+  it("keeps practised marks, and a story you add goes to the Master profile as an unconfirmed piece", async () => {
+    const { tracker, me } = withMail({ prep: output, stories });
+    const id = await add(tracker as Tracker);
+    const sheet = await tracker.buildPrepSheet(id);
+
+    await tracker.markPractised(id, sheet.questions[0]!.id, true);
+    const after = await tracker.addPrepStory(id, sheet.questions[2]!.id, "  Wrote the test plan for the booking API at Velora.  ");
+
+    expect(after.questions.map((q) => q.practised)).toEqual([true, false, false]);
+    expect(after.questions[2]).toMatchObject({ story: null, yourStory: { text: "Wrote the test plan for the booking API at Velora." } });
+    expect(me.added).toEqual([{
+      text: "Wrote the test plan for the booking API at Velora.",
+      source: "Prep sheet for Full-stack Engineer at Medora: \"How do you decide what to test?\"",
+    }]);
+    await expect(tracker.addPrepStory(id, sheet.questions[1]!.id, " ")).rejects.toMatchObject({ problem: "invalid" });
+  });
+});
+
+describe("Needs you and Stats with interviews", () => {
+  it("Needs you lists interviews in the next 7 days with their prep sheet, and counts them", async () => {
+    const { tracker } = withMail();
+    const id = await add(tracker as Tracker);
+    await tracker.setInterview(id, at("2026-10-15T14:00", "2026-10-15T15:00"));
+    const later = await add(tracker as Tracker, { company: "Ostwind Cloud" });
+    await tracker.setInterview(later, at("2026-10-26T10:00"));
+
+    const n = await tracker.needsYou();
+
+    expect(n.interviews.map((i) => `${i.application.company} ${i.interview.startAt}`)).toEqual(["Medora 2026-10-15T11:00:00.000Z"]);
+    expect(n.interviews[0]!.prep).toBeNull();
+    expect(n.count).toBe(1);
+    expect((await tracker.get(id))!.next).toEqual({ kind: "interview", startAt: "2026-10-15T11:00:00.000Z", start: "2026-10-15T14:00", timeZone: "Europe/Sofia" });
+  });
+
+  it("Stats counts interviews upcoming and held so far", async () => {
+    const { tracker, clock } = withMail();
+    const id = await add(tracker as Tracker);
+    await tracker.setInterview(id, at("2026-10-13T10:00"));
+    await tracker.setInterview(id, at("2026-10-20T10:00"));
+    const closed = await add(tracker as Tracker, { company: "Pixelmoor", status: "rejected" });
+    await tracker.setInterview(closed, at("2026-10-21T10:00"));
+    await add(tracker as Tracker, { company: "Lumio Maps", status: "offer" });
+
+    clock.set("2026-10-14T08:00:00Z");
+
+    expect((await tracker.stats()).interviews).toEqual({ upcoming: 1, soFar: 2, companies: 2 });
+  });
+});
+
+describe("writing a thank-you note", () => {
+  it("asks for one thing discussed and builds the outline from it; Open in Mail has the contact and subject; Mark sent stops it", async () => {
+    const { tracker, clock } = withMail();
+    const id = await add(tracker as Tracker, { company: "Ostwind Cloud", title: "Cloud Security Engineer", contact: "ivo.marinov@ostwind.example" });
+    await tracker.setInterview(id, { ...at("2026-10-12T16:00", "2026-10-12T17:00"), people: ["Ivo Marinov"] });
+    clock.set("2026-10-12T14:05:00Z");
+    const thanks = (await tracker.get(id))!.thankYous[0]!;
+
+    const { outline } = await tracker.saveFollowUpTopic(thanks.id, "Catching IAM drift between Terraform and the live accounts");
+    const draft = (await tracker.followUp(thanks.id))!;
+
+    expect(outline[0]).toBe("Thank Ivo Marinov for the interview for Cloud Security Engineer on Mon 12 Oct.");
+    expect(draft.outline[1]).toBe("The thing you discussed: \"Catching IAM drift between Terraform and the live accounts\". Say in a sentence why it interested you.");
+    expect(draft.mail).toEqual({ to: "ivo.marinov@ostwind.example", subject: "Thank you: Cloud Security Engineer interview" });
+    expect(draft.words).toEqual({ min: 70, max: 130 });
+    expect((await tracker.get(id))!.nextStep).toMatchObject({ kind: "follow-up", followUp: { id: thanks.id } });
+
+    const { event } = await tracker.markFollowUpSent(thanks.id);
+    expect(event).toMatchObject({ kind: "follow-up-sent", text: "Thank-you note sent" });
+    expect((await tracker.needsYou()).items).toEqual([expect.objectContaining({ done: true })]);
+  });
+});
