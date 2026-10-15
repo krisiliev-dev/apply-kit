@@ -99,9 +99,9 @@ export function mountProfileApi(app: Hono, preparation: PreparationEngine): void
   });
 }
 
-const jsonOnly = (c: Context) => c.req.header("content-type")?.startsWith("application/json") ?? false;
+export const jsonOnly = (c: Context) => c.req.header("content-type")?.startsWith("application/json") ?? false;
 
-async function jsonBody(c: Context): Promise<Body | null> {
+export async function jsonBody(c: Context): Promise<Body | null> {
   if (!jsonOnly(c)) return null;
   const body: unknown = await c.req.json().catch(() => null);
   return body && typeof body === "object" && !Array.isArray(body) ? (body as Body) : null;

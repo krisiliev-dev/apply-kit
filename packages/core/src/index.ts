@@ -25,7 +25,7 @@ export type {
   PostingFacts, SourceQuote, ExtractedRequirement, ExtractedYears, ExtractedLanguage, ExtractedCertificate,
   ExtractedWorkAuthorisation, ExtractedRemote, ExtractedSalary, ExtractionInput, ExtractionResult,
 } from "./extraction/facts.ts";
-export type { FeedRequirement, RequirementStatus, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening, FactAnswer } from "./extraction/reading.ts";
+export type { FeedRequirement, RequirementStatus, RequirementEvidence, JobRequirement, KeyFact, FactSource, NeedsYouItem, Screening, FactAnswer } from "./extraction/reading.ts";
 export type { EngineDeps, Clock, Timers, SqlDatabase, SqlStatement, SqlValue, Extractor, MailReader, AlertEmail, Settings } from "./ports.ts";
 export type { SourceAdapter, SourceCategory, FoundPosting, AdapterContext, EmailAlertAdapter } from "./sources/adapter.ts";
 export { adapters } from "./sources/registry.ts";
@@ -35,6 +35,8 @@ export { createScheduler, defaultSchedule, parseSchedule } from "./scheduler.ts"
 export type { Scheduler, SchedulerOptions, Schedule, SchedulerStatus, CheckProgress } from "./scheduler.ts";
 export type { Fit, FitReason, FitPart, FitBand, FitAdjustment } from "./fit/fit.ts";
 export { angles } from "./fit/angles.ts";
+export { matchEvidence, withEvidence } from "./fit/evidence.ts";
+export type { Evidence, EvidencePiece, RequirementToMatch, RequirementCategory } from "./fit/evidence.ts";
 export type { Angle } from "./fit/angles.ts";
 export type { Place, LocationTier } from "./locations.ts";
 export { defaultSearchSettings } from "./search-settings.ts";
@@ -64,6 +66,11 @@ export type {
   ProfilePiece, PieceKind, PieceStatus, NumberSource, PieceEntry, PieceSource, PieceInput, PieceOrigin, PieceField, PieceFix,
   PieceProblem, SavePieceResult, PieceQuery, PieceGroup, PieceList, DeletedPiece, ProfileSummary,
 } from "./preparation/profile.ts";
+export { answerLanguages, answerCategories, answerKinds, answerModes, languageOf, minMatchConfidence, answerPageSize } from "./preparation/answers.ts";
+export type {
+  Answer, AnswerInput, AnswerOrigin, AnswerLanguage, AnswerCategory, AnswerKind, AnswerMode, AnswerRule, SalaryRule, Wording,
+  AnswerSource, PortalEdit, PortalEditInput, AnswerChange, AnswerQuery, AnswerList, AnswerField, AnswerProblem, SaveAnswerResult, AnswerFill, AnswerMatch,
+} from "./preparation/answers.ts";
 export { angleRules } from "./preparation/angles.ts";
 export type { AngleView, AngleChoice, AnglePosting, SaveAngleInput, SaveAngleResult, AngleProblem } from "./preparation/angles.ts";
 export type { Contact, ContactDetails, ContactPhoto, ContactField, ContactProblem, SaveContactResult, PhotoInput } from "./preparation/contact.ts";

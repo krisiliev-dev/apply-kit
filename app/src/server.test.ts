@@ -279,6 +279,50 @@ describe("Profile's API", () => {
   });
 });
 
+describe("the answer bank's API", () => {
+  it("answers a refused answer with its problems, and lists a saved one", async () => {
+    const s = service();
+    const answer = { question: "Notice period", wordings: ["When could you start?"], versions: { en: "1 month", bg: "1 месец" }, category: "standard", kind: "text", mode: "fill" };
+
+    const refused = await s.request("/api/profile/answers", s.json({ ...answer, versions: {} }));
+    const saved = await s.request("/api/profile/answers", s.json(answer));
+    const list = await s.request("/api/profile/answers?category=standard&q=notice");
+
+    expect(refused.status).toBe(422);
+    expect(saved.status).toBe(201);
+    expect(await list.json()).toMatchObject({ total: 1, answers: [{ question: "Notice period", versions: { en: "1 month", bg: "1 месец" } }] });
+  });
+
+  it("resolves a portal edit and shows the history with the answer", async () => {
+    const s = service();
+    const r = s.preparation.saveAnswer({ question: "Kubernetes experience", versions: { en: "None in production." }, category: "screening" });
+    if (!r.saved) throw new Error("not saved");
+    s.preparation.recordPortalEdit(r.answer.id, { language: "en", text: "One personal k3s project.", portal: "Halden Systems Workday form" });
+    const path = `/api/profile/answers/${encodeURIComponent(r.answer.id)}`;
+
+    const resolved = await s.request(`${path}/portal-edit`, s.json({ keep: "keep-new" }));
+    const detail = await (await s.request(path)).json();
+
+    expect(resolved.status).toBe(200);
+    expect(detail).toMatchObject({ answer: { versions: { en: "One personal k3s project." }, portalEdit: null }, history: [{ event: "changed", before: "None in production." }, { event: "created" }] });
+    expect(s.preparation.profileSummary().needsYou.answerBank).toBe(0);
+  });
+
+  it("only deletes an answer through a JSON request", async () => {
+    const s = service();
+    const r = s.preparation.saveAnswer({ question: "Notice period", versions: { en: "1 month" }, category: "standard" });
+    if (!r.saved) throw new Error("not saved");
+    const path = `/api/profile/answers/${encodeURIComponent(r.answer.id)}/delete`;
+
+    const form = await s.request(path, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const json = await s.request(path, s.json({}));
+
+    expect(form.status).toBe(415);
+    expect(json.status).toBe(200);
+    expect(s.preparation.answer(r.answer.id)).toBeNull();
+  });
+});
+
 describe("developer route: the demo documents", () => {
   /** The service with a preparation engine whose renderer prints the document's title as its only line. */
   function withPreparation() {

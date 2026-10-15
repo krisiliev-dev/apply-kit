@@ -7,6 +7,7 @@ import type {
   PreparationEngine, Scheduler,
 } from "@apply-kit/core";
 import { mountImportApi } from "./import-api.ts";
+import { mountAnswerApi } from "./answers-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
@@ -343,6 +344,8 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
   // Profile: the master profile's pieces, contact details, section counts and export.
   if (preparation) mountProfileApi(app, preparation);
   if (preparation) mountImportApi(app, preparation);
+  // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
+  if (preparation) mountAnswerApi(app, preparation);
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 
