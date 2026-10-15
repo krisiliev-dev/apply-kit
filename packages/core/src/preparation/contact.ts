@@ -2,6 +2,7 @@
 // city, links and an optional photo, so every CV, letter and portal uses the same ones. One row in
 // SQLite; the photo is a hash-named copy in the file store (ADR 0003).
 import type { Clock, SqlDatabase } from "../ports.ts";
+import { isFileReferenced } from "./file-references.ts";
 import type { FileStore } from "./ports.ts";
 
 export interface ContactDetails {
@@ -108,7 +109,7 @@ export function createContactStore({ db, clock, files }: { db: SqlDatabase; cloc
     const before = get();
     const stored = await files.put(bytes);
     write(detailsOf(before), { fileName: fileName.trim() || "photo", sha256: stored.sha256, size: stored.size });
-    if (before.photo && before.photo.sha256 !== stored.sha256) await files.remove(before.photo.sha256);
+    if (before.photo && before.photo.sha256 !== stored.sha256 && !isFileReferenced(db, before.photo.sha256)) await files.remove(before.photo.sha256);
     return { saved: true, contact: get() };
   }
 
@@ -116,7 +117,7 @@ export function createContactStore({ db, clock, files }: { db: SqlDatabase; cloc
     const before = get();
     if (!before.photo) return before;
     write(detailsOf(before), null);
-    await files.remove(before.photo.sha256);
+    if (!isFileReferenced(db, before.photo.sha256)) await files.remove(before.photo.sha256);
     return get();
   }
 

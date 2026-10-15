@@ -319,6 +319,19 @@ describe("contact details and links", () => {
     expect((t.files as ReturnType<typeof memoryFileStore>).files.size).toBe(0);
   });
 
+  it("keeps the photo's copy when something else still uses the same file", async () => {
+    const t = createTestPreparation();
+    t.preparation.saveContact(mira);
+    // The same picture was also added, by mistake, as a voice sample.
+    await t.preparation.addVoiceSamples([{ fileName: "mira.png", bytes: png }]);
+    const set = await t.preparation.setPhoto({ fileName: "mira.png", bytes: png });
+    if (!set.saved) throw new Error("not saved");
+
+    await t.preparation.removePhoto();
+
+    expect(await t.files.get(set.contact.photo!.sha256)).toEqual(png);
+  });
+
   it("refuses a photo that isn't a JPEG or PNG", async () => {
     const t = createTestPreparation();
 
