@@ -10,6 +10,7 @@ import { fits, wordCount } from "@apply-kit/core/screening";
 import { useId, useState } from "react";
 import { redraftScreeningAnswer, saveScreeningAnswerToBank, setScreeningAnswer } from "../api.ts";
 import { Icon } from "../icons.tsx";
+import { langOf } from "./lang.ts";
 
 type Props = { pkg: PackageView; onChange: (p: PackageView) => void; say: (m: string) => void };
 
@@ -81,12 +82,12 @@ function Question({ pkg, q, onChange, say }: Props & { answers: ScreeningAnswers
 
   return (
     <li className={`q${q.needsYou ? " q-needs" : ""}`} id={questionElementId(q.id)} tabIndex={-1} aria-labelledby={headId}>
-      <div className="qh"><b id={headId}>{q.question}{q.required && <span className="meta"> (required)</span>}</b>{chip}</div>
+      <div className="qh"><b id={headId} lang={langOf(q.question)}>{q.question}{q.required && <span className="meta"> (required)</span>}</b>{chip}</div>
       {q.salary ? <Salary q={q} busy={busy} errId={errId} error={error} onAnswer={answer} />
         : q.type === "select" ? <Choice q={q} headId={headId} busy={busy} onAnswer={answer} />
         // A bank answer as it is: changed in the answer bank, so every form gets the same one.
-        : q.origin === "bank" && !q.yours ? <p className="ans">{q.text || <span className="meta">Left blank</span>}</p>
-        : <Words q={q} headId={headId} busy={busy} errId={errId} error={error} onAnswer={answer} />}
+        : q.origin === "bank" && !q.yours ? <p className="ans" lang={langOf(q.text)}>{q.text || <span className="meta">Left blank</span>}</p>
+        : <Words q={q} lang={pkg.language} headId={headId} busy={busy} errId={errId} error={error} onAnswer={answer} />}
       {error && !q.salary && q.type === "select" && <p className="why-off" id={errId} role="alert">{error}</p>}
       <Foot pkg={pkg} q={q} busy={busy} onSend={send} />
     </li>
@@ -149,7 +150,7 @@ function Choice({ q, headId, busy, onAnswer }: { q: ScreeningAnswerView; headId:
 }
 
 /** A text or paragraph question, saved when focus leaves it; a paragraph counts its words live against the form's limit. */
-function Words({ q, headId, busy, errId, error, onAnswer }: { q: ScreeningAnswerView; headId: string; busy: boolean; errId: string; error: string | null; onAnswer: (t: string, done?: string) => Promise<boolean> }) {
+function Words({ q, lang, headId, busy, errId, error, onAnswer }: { q: ScreeningAnswerView; lang: string; headId: string; busy: boolean; errId: string; error: string | null; onAnswer: (t: string, done?: string) => Promise<boolean> }) {
   const [text, setText] = useState(q.text);
   const countId = useId();
   const words = wordCount(text);
@@ -160,8 +161,8 @@ function Words({ q, headId, busy, errId, error, onAnswer }: { q: ScreeningAnswer
   const described = [q.type === "long-text" ? countId : "", error ? errId : ""].filter(Boolean).join(" ") || undefined;
   const save = () => { if (text.trim() !== q.text && !over) void onAnswer(text); };
   const field = q.type === "long-text"
-    ? <textarea className="textarea" rows={Math.max(3, Math.ceil(text.length / 70))} aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />
-    : <input className="input" aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />;
+    ? <textarea className="textarea" lang={lang} rows={Math.max(3, Math.ceil(text.length / 70))} aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />
+    : <input className="input" lang={lang} aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />;
   return (
     <>
       {field}
