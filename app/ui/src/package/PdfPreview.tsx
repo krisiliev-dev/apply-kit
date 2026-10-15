@@ -23,13 +23,15 @@ function rememberedZoom(): Zoom {
   }
 }
 
-export function PdfPreview({ url, name, pages, overflow }: {
+export function PdfPreview({ url, name, pages, overflow, linesOnPage2 }: {
   url: string;
   /** "CV": the region is named "CV preview, page 1 of 1". */
   name: string;
   /** Page count, read from the PDF by the service. */
   pages: number;
   overflow: boolean;
+  /** For an overflowing CV: how many lines are on page 2. */
+  linesOnPage2?: number;
 }) {
   const [zoom, setZoomState] = useState<Zoom>(rememberedZoom);
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
@@ -94,7 +96,7 @@ export function PdfPreview({ url, name, pages, overflow }: {
   return (
     <div ref={frame} className={`doc-frame${zoom === "fit" ? " fit" : ""}`} tabIndex={0} role="region" aria-label={`${name} preview, ${overflow ? `runs onto page ${pages}` : `page 1 of ${pages}`}`}>
       <div className="bar">
-        <span className={`page-chip${overflow ? " over" : ""}`}>{overflow ? `Runs onto ${pageWord}` : pageWord}</span>
+        <span className={`page-chip${overflow ? " over" : ""}`}>{overflow ? (linesOnPage2 ? `${pageWord} · ${linesOnPage2} ${linesOnPage2 === 1 ? "line" : "lines"} on page 2` : `Runs onto ${pageWord}`) : pageWord}</span>
         <span className="meta">A4 · the exact file</span>
         <span className="grow" />
         <div className="segmented" role="group" aria-label="Zoom">
