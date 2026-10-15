@@ -76,6 +76,7 @@ export function Interview({ imported }: { imported: number | null }) {
   const retryAt = view?.status === "failed" ? view.failure?.retryAt ?? null : null;
   useEffect(() => {
     if (!retryAt) return;
+    setNow(Date.now());
     const t = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(t);
   }, [retryAt]);

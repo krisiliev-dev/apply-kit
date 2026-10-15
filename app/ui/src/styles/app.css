@@ -348,6 +348,8 @@ h2[tabindex="-1"]:focus { outline: none }
 .setup .scope { display: flex; flex-wrap: wrap; gap: var(--s-2); margin: 0; padding: 0; list-style: none }
 .setup .composer { display: grid; gap: var(--s-3) }
 .setup .msg { overflow-wrap: anywhere; white-space: pre-wrap }
+.setup .side .piece { grid-template-columns: minmax(0, 1fr) }
+.setup .side .piece .acts { justify-content: start }
 .setup .piece fieldset { border: 0; margin: 0; padding: 0; min-width: 0 }
 .setup .pk-steps a[aria-disabled="true"] { color: var(--ink-3); cursor: default }
 .setup .pk-steps a[aria-disabled="true"]:hover { border-color: var(--rule) }
