@@ -274,6 +274,28 @@ describe("Profile's API", () => {
   });
 });
 
+describe("the Package's API", () => {
+  it("says why a package can't start for an unread job, refuses to start it, and has no package to show", async () => {
+    const s = service();
+    const added = await s.engine.addJobLink("https://kestrel.example.com/jobs/security-engineer", {
+      title: "Security Engineer", company: "Kestrel Payments", text: "Security Engineer at Kestrel Payments. Experience with a SIEM.",
+    });
+    if (!("jobId" in added)) throw new Error("not added");
+    const jobId = encodeURIComponent(added.jobId as string);
+
+    const status = await s.request(`/api/jobs/${jobId}/prepare`);
+    const start = await s.request(`/api/jobs/${jobId}/package`, s.json({}));
+    const form = await s.request(`/api/jobs/${jobId}/package`, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    const feed = await (await s.request("/api/feed?view=new")).json() as { jobs: { package: unknown }[] };
+
+    expect(await status.json()).toMatchObject({ canStart: false, problem: "not-read", package: null });
+    expect(start.status).toBe(422);
+    expect(form.status).toBe(415);
+    expect(feed.jobs.map((j) => j.package)).toEqual([null]);
+    expect((await s.request("/api/packages/nope")).status).toBe(404);
+  });
+});
+
 describe("the answer bank's API", () => {
   it("answers a refused answer with its problems, and lists a saved one", async () => {
     const s = service();
