@@ -108,3 +108,43 @@ describe("a check-in when interviews go quiet", () => {
     expect((await due(tracker)).filter((d) => d.includes("check-in"))).toEqual(["Medora:check-in:2026-10-17"]);
   });
 });
+
+describe("the interview as a calendar file (.ics)", () => {
+  /** The .ics with folded lines joined again, one property per line. */
+  const unfold = (text: string) => text.replace(/\r\n /g, "").split("\r\n");
+
+  it("keeps the interview's own time zone and its details", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+    const { interview } = await tracker.setInterview(id, {
+      start: "2026-10-20T14:00", end: "2026-10-20T15:00", timeZone: "Europe/London", format: "video", place: "Google Meet",
+      people: ["Mara Ivanova, Engineering Manager", "Teo Lindqvist"], round: "1 of 2", notes: "Teo is in Stockholm; bring the take-home questions.",
+    });
+
+    const ics = (await tracker.interviewIcs(interview.id))!;
+
+    expect(ics.fileName).toBe("interview-medora-2026-10-20.ics");
+    const lines = unfold(ics.text);
+    expect(lines).toEqual(expect.arrayContaining([
+      "BEGIN:VCALENDAR", "BEGIN:VEVENT", "END:VEVENT", "END:VCALENDAR",
+      "TZID:Europe/London", "TZOFFSETTO:+0100",
+      "DTSTART;TZID=Europe/London:20261020T140000",
+      "DTEND;TZID=Europe/London:20261020T150000",
+      "SUMMARY:Interview: Full-stack Engineer at Medora (1 of 2)",
+      "LOCATION:Google Meet",
+      "DESCRIPTION:Round: 1 of 2\\nFormat: Video call\\nWith: Mara Ivanova\\, Engineering Manager\\; Teo Lindqvist\\nNotes: Teo is in Stockholm\\; bring the take-home questions.",
+    ]));
+    expect(ics.text.split("\r\n").every((l) => new TextEncoder().encode(l).length <= 75)).toBe(true);
+  });
+
+  it("uses the offset of the day itself (Sofia after the clocks go back), an hour when no end is given, and isn't there without a time", async () => {
+    const { tracker } = tracked();
+    const id = await add(tracker);
+    const { interview } = await tracker.setInterview(id, at("2026-11-02T10:00"));
+    const lines = unfold((await tracker.interviewIcs(interview.id))!.text);
+    expect(lines).toEqual(expect.arrayContaining(["TZOFFSETTO:+0200", "DTSTART;TZID=Europe/Sofia:20261102T100000", "DTEND;TZID=Europe/Sofia:20261102T110000"]));
+
+    const { interview: none } = await tracker.setInterview(id, { ...at("2026-11-02T10:00"), start: null });
+    expect(await tracker.interviewIcs(none.id)).toBeNull();
+  });
+});
