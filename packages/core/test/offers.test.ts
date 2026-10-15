@@ -20,6 +20,8 @@ function fakeAssistant({ body = withdrawalBody }: { body?: string | ((i: DraftIn
     estimateClassifyUsd: () => 0.0005,
     classify: async () => { throw new Error("not in these tests"); },
     estimateDraftUsd: () => 0.002,
+    estimatePrepSheetUsd: () => 0.002,
+    buildPrepSheet: async () => { throw new Error("not in these tests"); },
     async draft(input) {
       inputs.push(input);
       return { draft: { body: typeof body === "function" ? body(input) : body }, costUsd: 0.002, model: "fake/track-assistant" };
@@ -219,7 +221,7 @@ describe("offer details", () => {
     attachments: [{ name: "offer-letter.pdf", type: "application/pdf" }],
   });
   const reading: EmailClassification = {
-    kind: "offer", confidence: 0.95, company: "Ardent Labs", jobTitle: "Detection Engineer", stage: null, language: "en", summary: null,
+    kind: "offer", confidence: 0.95, company: "Ardent Labs", jobTitle: "Detection Engineer", stage: null, language: "en", summary: null, interview: null,
     offer: { baseSalary: "€3,100 gross / month", startDate: "2026-12-01", workPattern: "Hybrid, 2 days a week in the Sofia office", contract: "Permanent, 6-month probation", other: "Reply by 6 November" },
   };
 
@@ -232,6 +234,8 @@ describe("offer details", () => {
       classify: async () => ({ classification: reading, costUsd: 0.0005, model: "fake/track-assistant" }),
       estimateDraftUsd: () => 0.002,
       draft: async () => { throw new Error("no drafts here"); },
+      estimatePrepSheetUsd: () => 0.002,
+      buildPrepSheet: async () => { throw new Error("not in these tests"); },
     };
     let tracker: Tracker | null = null;
     const t = createTestEngine({

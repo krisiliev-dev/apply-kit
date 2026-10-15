@@ -391,6 +391,41 @@ const migrations: string[] = [
      language TEXT,
      saved_at TEXT NOT NULL
    );`,
+  // Track #33: interviews (local time plus IANA time zone, with the instants beside them; the invite
+  // email they were read from until edited), the details an invite's classification read, thank-you
+  // notes and check-ins tied to an interview (a follow-up's `interview_id`; the topic the user gives),
+  // and the prep sheet (built once per Application; practised marks and the user's own stories kept
+  // in its questions).
+  `CREATE TABLE interview (
+     id TEXT PRIMARY KEY,
+     application_id TEXT NOT NULL REFERENCES application(id),
+     created_by TEXT NOT NULL REFERENCES application_event(id),
+     start_local TEXT,
+     end_local TEXT,
+     time_zone TEXT NOT NULL,
+     start_at TEXT,
+     end_at TEXT,
+     format TEXT,
+     place TEXT,
+     people TEXT NOT NULL DEFAULT '[]',
+     round TEXT,
+     notes TEXT,
+     email_id TEXT,
+     edited_at TEXT,
+     created_at TEXT NOT NULL
+   );
+   CREATE INDEX interview_app ON interview(application_id);
+   ALTER TABLE email_classification ADD COLUMN interview TEXT;
+   ALTER TABLE follow_up ADD COLUMN interview_id TEXT REFERENCES interview(id);
+   ALTER TABLE follow_up ADD COLUMN topic TEXT NOT NULL DEFAULT '';
+   ALTER TABLE application_event ADD COLUMN interview_id TEXT;
+   CREATE TABLE prep_sheet (
+     application_id TEXT PRIMARY KEY REFERENCES application(id),
+     facts TEXT NOT NULL,
+     questions TEXT NOT NULL,
+     model TEXT,
+     built_at TEXT NOT NULL
+   );`,
   // Track #34: offers and closing. A withdrawal is a follow-up on another open Application, offered
   // by the Event that accepted an offer (`accepted_by`); it stands while that Event does. A Status
   // Event may carry a reason ("declined offer"). Offer details are pre-filled from the offer email

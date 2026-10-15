@@ -1,5 +1,6 @@
 // Settings · Follow-ups: the delays follow-ups come due after (spec #24 "Follow-up rules"; defaults 7
-// days for a nudge, 1 day for the note to self after an Offer, 3 days of snooze). Pending follow-ups
+// days for a nudge, 1 day for the note to self after an Offer, 3 days of snooze, 7 days for a check-in
+// after the last interview; the thank-you note's 24 hours are fixed by decision). Pending follow-ups
 // follow the new delays at once. Same form pattern as Dealbreakers and search.
 import type { FollowUpSettings, HealthSummary } from "@apply-kit/core";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -7,15 +8,17 @@ import { fetchFollowUpSettings, fetchSources, needsYouChanged, saveFollowUpSetti
 import { SettingsRail } from "./SettingsRail.tsx";
 
 /** The defaults (core's defaultFollowUpSettings; the UI imports only types from core). */
-const defaultFollowUpSettings: FollowUpSettings = { nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3 };
+const defaultFollowUpSettings: FollowUpSettings = { nudgeAfterDays: 7, offerNoteAfterDays: 1, snoozeDays: 3, checkInAfterDays: 7 };
 const message = (err: unknown) => (err instanceof Error ? err.message : String(err));
 type Draft = Record<keyof FollowUpSettings, string>;
 const draftOf = (s: FollowUpSettings): Draft => ({
   nudgeAfterDays: String(s.nudgeAfterDays), offerNoteAfterDays: String(s.offerNoteAfterDays), snoozeDays: String(s.snoozeDays),
+  checkInAfterDays: String(s.checkInAfterDays),
 });
 
 const fields: { key: keyof FollowUpSettings; label: string; help: string }[] = [
   { key: "nudgeAfterDays", label: "Follow-up after applying, in days", help: "With no reply, a follow-up comes due this many days after the date applied (and after moving to Screening). Only one per stage." },
+  { key: "checkInAfterDays", label: "Check-in after the last interview, in days", help: "While Interviewing with no news, a polite check-in comes due this many days after your last interview ends. A thank-you note is always due within 24 hours of an interview's start." },
   { key: "offerNoteAfterDays", label: "Note to self after an offer, in days", help: "A short note on the deadline, one question and one action, so you decide deliberately." },
   { key: "snoozeDays", label: "Snooze, in days", help: "How far \"Snooze\" moves a follow-up from today." },
 ];

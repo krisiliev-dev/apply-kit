@@ -31,7 +31,7 @@ const socAnalyst = cannedFacts({
 const evidence: ProfileEvidence[] = [
   { text: "Ran threat-modelling sessions for card-payment services; 40 tracked fixes", origin: "Velora · Security Engineer (2022–2024)" },
 ];
-const profile: MasterProfile = { evidence: async () => evidence };
+const profile: MasterProfile = { evidence: async () => evidence, stories: async () => [], addUnconfirmedPiece: async () => ({ id: "piece" }) };
 
 const nudgeBody = (detail: string) =>
   `I applied for the Security Engineer role on 5 October and I'm still keen on it. ${detail} At Velora I ran threat-modelling sessions for our card-payment services and turned the findings into 40 tracked fixes, so it's work I'd enjoy doing again. I'm happy to share more about it, and I'm free for a call any weekday this month.`;
@@ -42,6 +42,8 @@ function fakeAssistant({ costUsd = 0.002, body = nudgeBody("Your posting's focus
   const assistant: TrackAssistant = {
     estimateClassifyUsd: () => 0.0005,
     classify: async () => { throw new Error("not in these tests"); },
+    estimatePrepSheetUsd: () => 0.002,
+    buildPrepSheet: async () => { throw new Error("not in these tests"); },
     estimateDraftUsd: () => costUsd,
     async draft(input) {
       inputs.push(input);

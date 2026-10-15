@@ -28,6 +28,8 @@ function fakeAssistant({ costUsd = 0.0005 } = {}) {
     },
     estimateDraftUsd: () => costUsd,
     draft: async () => { throw new Error("no drafts in these tests"); },
+    estimatePrepSheetUsd: () => costUsd,
+    buildPrepSheet: async () => { throw new Error("no prep sheet in these tests"); },
   };
   return { assistant, calls };
 }

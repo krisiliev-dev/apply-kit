@@ -40,7 +40,8 @@
       },
       "classification": {
         "kind": "interview-invitation", "confidence": 0.93, "company": "Northwind Labs", "jobTitle": "Security Engineer",
-        "stage": "screening", "language": "en", "summary": null
+        "stage": "screening", "language": "en", "summary": null,
+        "interview": { "start": null, "end": null, "timeZone": null, "format": "video", "place": null, "people": ["Mira Petrova"], "round": "20-minute intro call", "notes": "No time yet: she asks for one this week." }
       }
     },
     "unsure-invitation": {
@@ -68,7 +69,8 @@
       },
       "classification": {
         "kind": "interview-invitation", "confidence": 0.92, "company": null, "jobTitle": null,
-        "stage": "interview", "language": "en", "summary": null
+        "stage": "interview", "language": "en", "summary": null,
+        "interview": { "start": "2026-10-20T14:00", "end": "2026-10-20T15:00", "timeZone": "Europe/Berlin", "format": "video", "place": null, "people": ["Two engineers from the team"], "round": "Technical interview", "notes": "The email says 14:00 CET." }
       }
     },
     "bulgarian-call": {
@@ -83,7 +85,8 @@
       "classification": {
         "kind": "interview-invitation", "confidence": 0.9, "company": "Варна Тръст Банк", "jobTitle": "Специалист информационна сигурност",
         "stage": "screening", "language": "bg",
-        "summary": "Thanks you for applying for IT Security Specialist and asks for a short phone call on Thu 15 Oct at 10:00."
+        "summary": "Thanks you for applying for IT Security Specialist and asks for a short phone call on Thu 15 Oct at 10:00.",
+        "interview": { "start": "2026-10-15T10:00", "end": null, "timeZone": "Europe/Sofia", "format": "phone", "place": null, "people": ["Галина Иванова"], "round": "Short phone call", "notes": null }
       }
     },
     "thread-reply": {
