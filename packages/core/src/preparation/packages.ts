@@ -10,13 +10,22 @@
 // answer to a gap question each wait for Kris's decision, and the CV step can't be approved while
 // one is open. A gap answer becomes an unconfirmed piece used only in this package until Kris
 // confirms it in Profile (Profile › Learned during packages).
+// Screening answers (#66): the target posting's questions (screening.ts), each answered from the
+// answer bank, adapted from it (whole sentences removed to fit, nothing added), newly drafted by the
+// drafter (honesty-checked, citing pieces, within the form's limit) or left for Kris; salary always
+// waits for Kris. The same drafter answers Apply's needs-you questions (`draftAnswer`).
 import { angleLabel, type Angle } from "../fit/angles.ts";
 import { evidenceLabel, matchEvidence, type RequirementCategory } from "../fit/evidence.ts";
 import type { AiBudget, BudgetInfo } from "../budget.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import type { CvContent, DocumentDate, DocumentLanguage, DocumentToRender } from "../documents/content.ts";
 import type { AtsCheck } from "../documents/ats.ts";
-import type { CoachTurnInput, TailorCvInput, TailoredCv, Writer } from "../writing/writer.ts";
+import type { CoachTurnInput, DraftAnswerInput, TailorCvInput, TailoredCv, Writer } from "../writing/writer.ts";
+import type { AnswerLanguage, AnswerStore } from "./answers.ts";
+import {
+  euros, fits, formQuestions, heardFrom, isHeardQuestion, isSalaryQuestion, monthlyRange, suggestSalary, trimToFit, wordCount,
+  type AnswerLimit, type FormQuestion, type PostingSalary, type QuestionType,
+} from "./screening.ts";
 import type { AngleChoice, AnglePosting } from "./angles.ts";
 import {
   applyChanges, decisionsOf, deriveChanges, flagView, honestyChecks, keepTwoPages, offers, openReason, placesOnCv, tightenChange, tightenChoices,
@@ -48,6 +57,8 @@ export const packageRules = {
   seconds: { target: 0, cv: 20, letter: 15, answers: 15, ats: 2 } satisfies Record<PackageStep, number>,
   /** The time goal from opening the job to an approved package, in minutes (shown neutrally). */
   goalMinutes: 10,
+  /** About how many screening answers a form needs drafted, for the cost estimate. */
+  draftsExpected: 3,
 } as const;
 
 /** The Job a package is for, as Discover reads it: a JobDetail fits. */
@@ -63,10 +74,14 @@ export interface PackageJob {
   reading: { state: string };
   /** How the posting asks for each (required unless it says), and what kind of thing it is, for the evidence matcher. */
   requirements: { text: string; kind?: "required" | "preferred"; category?: RequirementCategory }[];
+  /** The posting's reading, for salary's range (#66); null until it's read. */
+  screening?: { salary: PostingSalary | null } | null;
   postings: {
     id: string;
     site: string;
     url: string;
+    /** When Discover first saw it, for "How did you hear about us?". */
+    firstSeenAt?: string;
     source: { name: string; kind: string; label: string; category: string };
   }[];
   target: { postingId: string };
@@ -208,6 +223,81 @@ export interface LearnedPiece {
   nearTheLine: NearTheLine | null;
 }
 
+/** Where a screening answer came from: the bank as it is, adapted from it, newly drafted, waiting for Kris, or translated from the bank. */
+export type ScreeningOrigin = "bank" | "adapted" | "new" | "needs-you" | "translated";
+
+/** Why an answer waits for Kris. */
+export type ScreeningNeed = "salary" | "ask" | "missing" | "choose" | "failed" | "budget" | "too-long" | "unsafe" | "translated";
+
+/** Salary's question: never filled from the bank. The posting's range, the floor, the last answer and the rule's suggestion. */
+export interface SalaryView {
+  /** "€2,800–3,600 gross", or null when the posting states none. */
+  range: string | null;
+  floor: number | null;
+  last: { amount: number; company: string } | null;
+  suggested: number | null;
+  /** The rule in Kris's words, from the answer bank. */
+  rule: string | null;
+  /** All of it in one line, as the step shows it. */
+  text: string;
+}
+
+export interface ScreeningAnswerView {
+  id: string;
+  question: string;
+  required: boolean;
+  type: QuestionType;
+  options: string[];
+  limit: AnswerLimit;
+  origin: ScreeningOrigin;
+  /** The origin as its chip says it: "Answer bank", "Answer bank · adapted", "New draft", "New · from your sources", "Needs you", "Translated · check it". */
+  label: string;
+  text: string;
+  words: number;
+  /** True while it waits for Kris (Approve waits for it). */
+  needsYou: boolean;
+  /** Set when Kris answered or confirmed it herself. */
+  yours: boolean;
+  /** What to know about it, in plain words (where it came from, why it waits). */
+  note: string;
+  /** An adapted answer: exactly the sentences removed, and that nothing was added. */
+  changed: { removed: string[]; note: string } | null;
+  /** The pieces a drafted answer rests on. */
+  pieces: PieceLink[];
+  salary: SalaryView | null;
+  /** The bank's answer it came from, with its use. */
+  bank: { answerId: string; useCount: number; lastUsedAt: string | null } | null;
+  /** Whether "Save to answer bank" is offered (never for company-specific answers), and once saved, the bank answer. */
+  save: { offered: boolean; note: string | null; savedTo: string | null };
+  /** "Write another draft" is offered (a paragraph the drafter can write). */
+  redraft: boolean;
+}
+
+export interface ScreeningAnswersView {
+  from: "form" | "standard";
+  site: string;
+  /** Why the form's own questions couldn't be read, when they couldn't. */
+  problem: string | null;
+  /** "6 questions from kestrel.greenhouse.io, in the form's order · 3 from your answer bank · 2 new drafts · 1 needs you." */
+  summary: string;
+  questions: ScreeningAnswerView[];
+  /** The first answer Approve waits for, and why ("1 answer needs you: salary"); null when none. */
+  waiting: { questionId: string; reason: string } | null;
+}
+
+/** What Apply's drafter answers: the text and the pieces it rests on, or why it couldn't. */
+export type DraftAnswerResult =
+  | { drafted: true; text: string; pieces: PieceLink[]; companySpecific: boolean; costUsd: number }
+  | { drafted: false; reason: string };
+
+export interface DraftAnswerRequest {
+  question: string;
+  /** The package's language when left out. */
+  language?: DocumentLanguage;
+  maxChars?: number | null;
+  maxWords?: number | null;
+}
+
 export interface PackageView {
   id: string;
   jobId: string;
@@ -234,6 +324,8 @@ export interface PackageView {
   cv: CvDraftView | null;
   /** The tailored CV version, once the CV is written. */
   cvVersion: CvVersionView | null;
+  /** The screening answers, once they're written. */
+  answers: ScreeningAnswersView | null;
   /** What the package has cost so far, and the estimate for what's still to be written. */
   costUsd: number;
   estimate: { costUsd: number; seconds: number };
@@ -273,6 +365,10 @@ export interface PackageStoreDeps {
   contact: () => Contact;
   closestAngle: (posting: AnglePosting) => AngleChoice;
   draftDocument: (request: DraftRequest) => Promise<DocumentDraft>;
+  /** The answer bank, for the screening answers. */
+  answers: Pick<AnswerStore, "find" | "get" | "save" | "recordUse" | "list">;
+  /** For the target posting's form (the Greenhouse and Ashby questions APIs). Missing: the standard questions. */
+  fetch?: typeof fetch;
 }
 
 export interface PackageStore {
@@ -300,6 +396,14 @@ export interface PackageStore {
   answerGap(id: string, flagId: string, answer: string): Promise<ChangeResult>;
   /** Pieces learned in packages that wait for Kris (unconfirmed or near the line), newest first. */
   learned(): LearnedPiece[];
+  /** Kris's answer to a screening question (her salary number, an option, her own words), checked against the form. */
+  setAnswer(id: string, questionId: string, text: string): ChangeResult;
+  /** "Write another draft" for a paragraph question. */
+  redraftAnswer(id: string, questionId: string): Promise<ChangeResult>;
+  /** "Save to answer bank": a reusable answer becomes a screening answer in the bank; a company-specific one never does. */
+  saveAnswerToBank(id: string, questionId: string): ChangeResult;
+  /** The drafter, for Apply's needs-you questions: honesty-checked, citing pieces, within the limit and the monthly cap. */
+  draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult>;
 }
 
 /** Sources that are the company's own careers system (an ATS, or a company's own jobs API). */
@@ -320,6 +424,47 @@ function consequence(p: PackageJob["postings"][number]): string {
 
 const lower = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 
+/** A question as a reason names it: its first few words. */
+const shortQuestion = (q: string) => {
+  const t = q.replace(/\([^)]*\)/g, "").replace(/[?.:]\s*$/, "").trim();
+  return t.length <= 40 ? lower(t) : `${lower(t.slice(0, 37).replace(/\s+\S*$/, ""))}…`;
+};
+
+/** One screening question's answer as stored with the package. */
+interface ScreeningAnswer {
+  id: string;
+  question: string;
+  required: boolean;
+  type: QuestionType;
+  options: string[];
+  limit: AnswerLimit;
+  origin: ScreeningOrigin;
+  /** Why it waits for Kris; null when it doesn't. */
+  needs: ScreeningNeed | null;
+  text: string;
+  pieceIds: string[];
+  bank: { answerId: string } | null;
+  /** An adapted answer's removed sentences. */
+  removed: string[];
+  companySpecific: boolean;
+  /** Answered from where the job was first seen. */
+  heard?: boolean;
+  note: string;
+  /** Kris answered or confirmed it herself, and when. */
+  yours: boolean;
+  at: string | null;
+  /** The bank answer it was saved as. */
+  savedTo: string | null;
+}
+
+interface ScreeningState {
+  from: "form" | "standard";
+  site: string;
+  problem: string | null;
+  language: DocumentLanguage;
+  answers: ScreeningAnswer[];
+}
+
 export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   const { db, clock } = deps;
   /** The generation running for each package, so callers (and tests) can wait for it. */
@@ -333,7 +478,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   interface Row {
     id: string; jobId: string; job: PackageJob; angle: Angle; angleReason: string; language: DocumentLanguage;
     targetPostingId: string; photo: boolean; approved: Partial<Record<PackageStep, string>>; reviewed: boolean; cvDraft: CvDraftView | null;
-    cvVersion: CvVersionState | null; startedAt: string; stoppedAt: string | null;
+    cvVersion: CvVersionState | null; screening: ScreeningState | null; startedAt: string; stoppedAt: string | null;
   }
   interface PartRow { part: PackageStep; state: PartState; attempts: number; error: string | null; costUsd: number; output: unknown }
 
@@ -343,6 +488,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     photo: Number(r.photo) === 1, approved: JSON.parse(String(r.approved)) as Row["approved"], reviewed: r.reviewed_at != null,
     cvDraft: r.cv_draft == null ? null : (JSON.parse(String(r.cv_draft)) as CvDraftView),
     cvVersion: r.cv_version == null ? null : (JSON.parse(String(r.cv_version)) as CvVersionState),
+    screening: r.screening == null ? null : (JSON.parse(String(r.screening)) as ScreeningState),
     startedAt: String(r.started_at), stoppedAt: r.stopped_at == null ? null : String(r.stopped_at),
   });
   const row = (id: string) => {
@@ -365,7 +511,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       .run(...sets.map(([, v]) => v as string | number | null), clock.now().toISOString(), id, part);
   };
 
-  const modelParts: PackageStep[] = ["cv"];
+  const modelParts: PackageStep[] = ["cv", "answers"];
   const partWhat = (r: Row, p: PartRow): string => {
     const target = r.job.postings.find((x) => x.id === r.targetPostingId);
     const language = r.language === "bg" ? "Bulgarian" : "English";
@@ -380,8 +526,17 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
           : p.state === "not-written" ? "Not written: this month's AI budget would be crossed."
           : `${angleLabel[r.angle]} angle`;
       case "letter":
-      case "answers":
         return "Arrives with a later part of the rebuild.";
+      case "answers": {
+        const a = r.screening?.answers ?? [];
+        const fromBank = a.filter((x) => x.origin === "bank" || x.origin === "adapted").length;
+        return p.state === "working" ? "Reading the form's questions and drafting answers"
+          : p.state === "done" ? `${a.length === 1 ? "1 question" : `${a.length} questions`} · ${fromBank} from your answer bank`
+          : p.state === "failed" ? `Not written: ${p.error ?? "the model didn't answer"}. The rest is saved.`
+          : p.state === "stopped" ? "Stopped before they were written. Generate them again when you like."
+          : p.state === "not-written" ? "Not written: this month's AI budget would be crossed."
+          : "From the target posting's form";
+      }
       case "ats":
         return "Reads the CV PDF once you approve the CV. Runs on this laptop, no model needed.";
     }
@@ -401,7 +556,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
   }
 
   /** Why a step can't be approved now, and the step that blocks it; null when it can. */
-  function blockOf(r: Row, ps: Map<PackageStep, PartRow>, step: PackageStep): { reason: string; by: PackageStep; flag?: string } | null {
+  function blockOf(r: Row, ps: Map<PackageStep, PartRow>, step: PackageStep): { reason: string; by: PackageStep; flag?: string; question?: string } | null {
     const n = packageSteps.indexOf(step);
     const before = packageSteps.slice(0, n).find((s) => !r.approved[s]);
     if (before) {
@@ -420,6 +575,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
             by: step, flag: f.id,
           };
         }
+        const waiting = step === "answers" ? waitingAnswer(r) : null;
+        if (waiting) return { reason: waiting.reason, by: step, question: waiting.questionId };
         if (step === "cv" && r.cvDraft?.overflow && !r.cvVersion?.keepTwoPages) {
           return { reason: `This CV runs onto ${r.cvDraft.pages} pages. Choose how to fit one page, or keep ${r.cvDraft.pages}.`, by: step };
         }
@@ -442,8 +599,10 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       const block = blockOf(r, ps, step);
       const flags = step === "cv" && p.state === "done" ? r.cvVersion?.flags ?? [] : [];
       const open = flags.filter((f) => !f.decision).length;
+      const needs = step === "answers" && p.state === "done" ? openAnswers(r).length : 0;
       const [state, sub]: [StepState, string] = approvedAt ? ["done", "Approved"]
         : open ? [step === current ? "current" : "flagged", open === 1 ? "1 flag" : `${open} flags`]
+        : needs ? [step === current ? "current" : "flagged", `${needs} need${needs === 1 ? "s" : ""} you`]
         : flags.length && step === current ? ["current", "Flags decided"]
         : p.state === "working" ? ["working", "Writing…"]
         : p.state === "failed" ? ["failed", "Failed"]
@@ -486,10 +645,13 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       steps: stepsOf(r, ps),
       cv: r.cvDraft,
       cvVersion: cvVersionView(r),
+      answers: answersView(r),
       costUsd: Math.round(list.reduce((n, p) => n + p.costUsd, 0) * 1e6) / 1e6,
       estimate: {
-        // Only the CV needs the model so far; later parts add their own task's estimate here.
-        costUsd: toWrite.length ? Math.round(deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) }) * 1e6) / 1e6 : 0,
+        // Each part's own task: the CV's tailoring, and a few drafted screening answers.
+        costUsd: Math.round(toWrite.reduce((n, p) => n + (p.part === "cv"
+          ? deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) })
+          : deps.writer.estimateCostUsd({ task: "draft-answer", input: draftInput(r, "", { words: null, chars: null }, null) }) * packageRules.draftsExpected), 0) * 1e6) / 1e6,
         seconds: toWrite.reduce((n, p) => n + packageRules.seconds[p.part], 0),
       },
       budget: deps.budget.info(),
@@ -782,7 +944,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const run = before.then(async () => {
       for (const part of modelParts) {
         const state = parts(id).get(part)!.state;
-        if (state === "working" && !stopped(id)) await writeCv(id);
+        if (state === "working" && !stopped(id)) await (part === "cv" ? writeCv(id) : writeAnswers(id));
       }
     }).catch((err: unknown) => {
       // Never leave a part spinning: whatever broke, the part shows as failed with Retry.
@@ -832,7 +994,11 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       id: job.id, title: job.title, titleTranslation: job.titleTranslation, company: job.company, location: job.location,
       packageLanguage: job.packageLanguage, closed: null, reading: { state: job.reading.state },
       requirements: job.requirements.map((q) => ({ text: q.text, kind: q.kind ?? "required", category: q.category ?? "other" })),
-      postings: job.postings.map((p) => ({ id: p.id, site: p.site, url: p.url, source: { name: p.source.name, kind: p.source.kind, label: p.source.label, category: p.source.category } })),
+      screening: job.screening?.salary ? { salary: { min: job.screening.salary.min, max: job.screening.salary.max, currency: job.screening.salary.currency, period: job.screening.salary.period, basis: job.screening.salary.basis } } : null,
+      postings: job.postings.map((p) => ({
+        id: p.id, site: p.site, url: p.url, ...(p.firstSeenAt ? { firstSeenAt: p.firstSeenAt } : {}),
+        source: { name: p.source.name, kind: p.source.kind, label: p.source.label, category: p.source.category },
+      })),
       target: { postingId: job.target.postingId },
     };
     db.exec("BEGIN");
@@ -841,7 +1007,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         `INSERT INTO package (id, job_id, job, angle, angle_reason, language, target_posting_id, started_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(id, job.id, JSON.stringify(snapshot), angle.angle, angle.reason, job.packageLanguage, target?.id ?? "", now);
-      const initial: Record<PackageStep, PartState> = { target: "done", cv: "waiting", letter: "later", answers: "later", ats: "waiting" };
+      const initial: Record<PackageStep, PartState> = { target: "done", cv: "waiting", letter: "later", answers: "waiting", ats: "waiting" };
       for (const step of packageSteps) {
         db.prepare("INSERT INTO package_part (package_id, part, state, updated_at) VALUES (?, ?, ?, ?)").run(id, step, initial[step], now);
       }
@@ -1021,6 +1187,334 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       });
   }
 
+  // ---- screening answers (#66) -----------------------------------------------------------------
+
+  /** Answers still waiting for Kris, in the form's order. */
+  const openAnswers = (r: Row) => (r.screening?.answers ?? []).filter((a) => a.needs && !a.yours);
+
+  /** What Approve waits for on the screening answers: the first answer that needs Kris. */
+  function waitingAnswer(r: Row): { questionId: string; reason: string } | null {
+    const open = openAnswers(r);
+    if (!open.length) return null;
+    const names = open.map((a) => (a.needs === "salary" ? "salary" : shortQuestion(a.question)));
+    return { questionId: open[0]!.id, reason: `${open.length === 1 ? "1 answer needs" : `${open.length} answers need`} you: ${names.join(", ")}` };
+  }
+
+  /** Writes the package's screening answers: the form's questions, then an answer for each. */
+  async function writeAnswers(id: string): Promise<void> {
+    const before = parts(id).get("answers")!;
+    let costUsd = before.costUsd;
+    let attempts = before.attempts;
+    setPart(id, "answers", { state: "working", error: null });
+    const r = row(id)!;
+    const target = r.job.postings.find((p) => p.id === r.targetPostingId) ?? null;
+    const form = await formQuestions(target, r.language, deps.fetch);
+    // Kris's own answers stay when the questions are read again in the same language.
+    const kept = r.screening && r.screening.language === r.language ? r.screening.answers.filter((a) => a.yours) : [];
+    const answers: ScreeningAnswer[] = [];
+    for (const q of form.questions) {
+      if (stopped(id)) return;
+      const mine = kept.find((a) => a.id === q.id && a.question === q.question);
+      if (mine) { answers.push(mine); continue; }
+      const a = await answerFor(row(id)!, q);
+      costUsd += a.costUsd;
+      attempts += a.calls;
+      answers.push(a.answer);
+    }
+    // Stopped while the last draft was written: it's paid for, but not used.
+    if (stopped(id)) { setPart(id, "answers", { attempts, costUsd }); return; }
+    const state: ScreeningState = { from: form.from, site: form.from === "form" ? target?.site ?? "" : "", problem: form.problem, language: r.language, answers };
+    db.prepare("UPDATE package SET screening = ? WHERE id = ?").run(JSON.stringify(state), id);
+    setPart(id, "answers", { state: "done", attempts, costUsd, error: null });
+  }
+
+  /** Writes the answers again (new target posting or language); an approved answers step reopens. */
+  function rewriteAnswers(id: string): void {
+    const p = parts(id).get("answers")!;
+    if (p.state === "working" || p.state === "waiting") return;
+    setPart(id, "answers", { state: "waiting", error: null });
+    generate(id);
+  }
+
+  const bankRule = () => deps.answers.list({ pageSize: 10_000 }).answers.find((a) => a.rule?.params?.kind === "salary") ?? null;
+
+  /** The last salary Kris gave in another package, for salary's question. */
+  function lastSalary(id: string): { amount: number; company: string } | null {
+    let best: { amount: number; company: string; at: string } | null = null;
+    for (const x of db.prepare("SELECT id, job, screening FROM package WHERE id != ? AND screening IS NOT NULL").all(id)) {
+      const state = JSON.parse(String(x.screening)) as ScreeningState;
+      for (const a of state.answers) {
+        if (a.needs !== "salary" || !a.yours || !a.text || !a.at) continue;
+        if (!best || a.at > best.at) best = { amount: Number(a.text), company: (JSON.parse(String(x.job)) as PackageJob).company, at: a.at };
+      }
+    }
+    return best && { amount: best.amount, company: best.company };
+  }
+
+  /** The package's language as the answer bank names it. */
+  const bankLanguage = (r: Row): AnswerLanguage => r.language;
+
+  /** A question without the form's notes in brackets, for finding it in the bank. */
+  const plainQuestion = (q: string) => q.replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim();
+
+  /** An option of the form that says the same as the bank's answer, ignoring case. */
+  const optionFor = (q: FormQuestion, value: string) => q.options.find((o) => o.toLowerCase() === value.trim().toLowerCase()) ?? null;
+
+  const blank = (q: FormQuestion): Omit<ScreeningAnswer, "origin" | "needs" | "text" | "note"> => ({
+    id: q.id, question: q.question, required: q.required, type: q.type, options: q.options, limit: q.limit,
+    pieceIds: [], bank: null, removed: [], companySpecific: false, yours: false, savedTo: null, at: null,
+  });
+
+  /** One question's answer, and what drafting it cost. */
+  async function answerFor(r: Row, q: FormQuestion): Promise<{ answer: ScreeningAnswer; costUsd: number; calls: number }> {
+    const base = blank(q);
+    const done = (answer: ScreeningAnswer, costUsd = 0, calls = 0) => ({ answer, costUsd, calls });
+    const needs = (need: ScreeningNeed, note: string, extra: Partial<ScreeningAnswer> = {}) => done({ ...base, origin: "needs-you", needs: need, text: "", note, ...extra });
+    if (isSalaryQuestion(q.question)) return needs("salary", "Salary depends on the job, so you decide it each time. The number itself is never saved to the answer bank.");
+
+    const language = bankLanguage(r);
+    const match = deps.answers.find(plainQuestion(q.question), language);
+    if (match) {
+      const bank = { answerId: match.answerId };
+      const fill = match.fill;
+      if (fill.action === "ask") return needs("ask", `Your answer bank asks you each time${fill.rule ? `: ${fill.rule.text}` : ""}.`, { bank });
+      if (fill.action === "leave-blank") {
+        const value = q.required && fill.whenRequired ? (q.type === "select" ? optionFor(q, fill.whenRequired) ?? "" : fill.whenRequired) : "";
+        return done({ ...base, bank, origin: "bank", needs: null, text: value, note: value ? "A voluntary question the form requires: answered \"Prefer not to say\"." : "Left blank: a voluntary question." });
+      }
+      if (fill.action === "fill") {
+        if (q.type === "select") {
+          const option = optionFor(q, fill.value);
+          return option ? done({ ...base, bank, origin: "bank", needs: null, text: option, note: "From your answer bank." })
+            : needs("choose", `Your answer bank says "${fill.value}", which isn't one of the form's options. Choose one.`, { bank });
+        }
+        if (fits(fill.value, q.limit)) return done({ ...base, bank, origin: "bank", needs: null, text: fill.value, note: "From your answer bank." });
+        const trimmed = trimToFit(fill.value, q.limit);
+        if (!trimmed) return needs("too-long", "Your answer bank's answer is longer than the form allows, even its first sentence. Shorten it here.", { bank });
+        const n = trimmed.removed.length;
+        return done({ ...base, bank, origin: "adapted", needs: null, text: trimmed.text, removed: trimmed.removed, note: `Your answer, trimmed by ${n === 1 ? "1 sentence" : `${n} sentences`} to fit. No facts added.` });
+      }
+      // The bank has it only in another language: a translation, for Kris to check.
+      const other = fill.languages[0]!;
+      const source = deps.answers.get(match.answerId)?.versions[other] ?? "";
+      if (q.type === "long-text" || q.type === "text") {
+        const d = await draft(r, q.question, q.limit, { language: other, text: source });
+        if (!d.ok) return { answer: { ...base, bank, origin: "needs-you", needs: d.need, text: "", note: d.note }, costUsd: d.costUsd, calls: d.calls };
+        return { answer: { ...base, bank, origin: "translated", needs: "translated", text: d.text, pieceIds: d.pieceIds, note: `Translated from your ${other === "bg" ? "Bulgarian" : "English"} answer: check it, then confirm.` }, costUsd: d.costUsd, calls: d.calls };
+      }
+      return needs("choose", `Your answer bank has this only in ${other === "bg" ? "Bulgarian" : "English"}. Choose an option.`, { bank });
+    }
+
+    if (isHeardQuestion(q.question)) {
+      const first = [...r.job.postings].sort((a, b) => (a.firstSeenAt ?? "9999").localeCompare(b.firstSeenAt ?? "9999"))[0];
+      const value = heardFrom(first, q.options);
+      const when = first?.firstSeenAt ? ` on ${new Date(first.firstSeenAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" })}` : "";
+      const seen = first ? (first.source.category === "email" ? `a ${first.source.label} alert` : first.site) : "";
+      if (value) return done({ ...base, origin: "new", needs: null, text: value, note: `First seen in ${seen}${when}.`, heard: true });
+    }
+    if (q.type === "select") return needs("choose", "Not in your answer bank. Choose an option.");
+    if (q.type === "text") return needs("missing", "Not in your answer bank. Answer it here; you can save it to the bank.");
+
+    const d = await draft(r, q.question, q.limit, null);
+    if (!d.ok) return { answer: { ...base, origin: "needs-you", needs: d.need, text: "", note: d.note }, costUsd: d.costUsd, calls: d.calls };
+    return {
+      answer: { ...base, origin: "new", needs: null, text: d.text, pieceIds: d.pieceIds, companySpecific: d.companySpecific, note: "Drafted from your profile." },
+      costUsd: d.costUsd, calls: d.calls,
+    };
+  }
+
+  function draftInput(r: Row, question: string, limit: AnswerLimit, translate: DraftAnswerInput["translate"]): DraftAnswerInput {
+    const state = r.cvVersion;
+    return {
+      question,
+      job: { title: r.job.title, company: r.job.company, requirements: r.job.requirements.map((q) => q.text) },
+      language: r.language,
+      limit,
+      pieces: tailorInput(r).pieces,
+      decisions: state ? decisionsOf(state.flags ?? [], (f) => flagView(f, requirementText(r, f)).title).map((d) => `${d.title}: ${d.decision}`) : [],
+      translate,
+    };
+  }
+
+  type Drafted =
+    | { ok: true; text: string; pieceIds: string[]; companySpecific: boolean; costUsd: number; calls: number }
+    | { ok: false; need: ScreeningNeed; note: string; costUsd: number; calls: number };
+
+  /**
+   * The drafter: one answer from the pieces (or a translation of the bank's), tried twice on failure,
+   * within the cap. A stronger claim gives way to its honest wording; an answer the honesty rules
+   * refuse, or one that can't be trimmed to the limit, is never offered.
+   */
+  async function draft(r: Row, question: string, limit: AnswerLimit, translate: DraftAnswerInput["translate"]): Promise<Drafted> {
+    const input = draftInput(r, question, limit, translate);
+    let costUsd = 0;
+    let calls = 0;
+    let error = "";
+    for (let tries = 0; tries < packageRules.attempts; tries++) {
+      let outcome;
+      calls += 1;
+      try {
+        outcome = await deps.budget.call({ task: "draft-answer", estimateUsd: deps.writer.estimateCostUsd({ task: "draft-answer", input }) }, () => deps.writer.draftAnswer(input));
+      } catch (err) {
+        const billed = (err as { costUsd?: unknown } | null)?.costUsd;
+        if (typeof billed === "number" && billed > 0) costUsd += billed;
+        error = message(err);
+        continue;
+      }
+      if (outcome.refused) return { ok: false, need: "budget", note: "Not drafted: this month's AI budget would be crossed. Write it yourself.", costUsd, calls: calls - 1 };
+      costUsd += outcome.result.costUsd;
+      const out = outcome.result.output;
+      const profile = honestyProfile(r);
+      const text = out.claim === "stronger" ? out.honest?.trim() ?? "" : out.text.trim();
+      if (!text || checkWording(text, out.pieceIds, profile).length) {
+        return { ok: false, need: "unsafe", note: "The draft claimed more than your profile backs, so it isn't offered. Write it yourself, or ask for another draft.", costUsd, calls };
+      }
+      const trimmed = fits(text, limit) ? { text } : trimToFit(text, limit);
+      if (!trimmed) return { ok: false, need: "too-long", note: "The draft didn't fit the form's limit. Write it yourself, or ask for another draft.", costUsd, calls };
+      const company = r.job.company.toLowerCase();
+      const companySpecific = out.companySpecific || trimmed.text.toLowerCase().includes(company) || question.toLowerCase().includes(company);
+      return { ok: true, text: trimmed.text, pieceIds: out.pieceIds, companySpecific, costUsd, calls };
+    }
+    return { ok: false, need: "failed", note: `The draft failed (${error}). Write it yourself, or ask for another draft.`, costUsd, calls };
+  }
+
+  function salaryView(r: Row): SalaryView {
+    const range = monthlyRange(r.job.screening?.salary ?? null);
+    const rule = bankRule();
+    const params = rule?.rule?.params ?? null;
+    const floor = params?.floor ?? null;
+    const last = lastSalary(r.id);
+    const suggested = suggestSalary(range, floor);
+    const rangeText = range ? `${euros(range.low)}–${range.high.toLocaleString("en-GB")}${range.basis === "not-stated" ? "" : ` ${range.basis}`}` : null;
+    const parts = [
+      rangeText ? `Posting range ${rangeText}` : "The posting states no range",
+      floor ? `your minimum ${euros(floor)}` : null,
+      last ? `last asked at ${last.company}: ${euros(last.amount)}` : null,
+    ].filter(Boolean);
+    const suggestion = suggested !== null
+      ? ` Suggested ${euros(suggested)} by your answer-bank rule (${rule?.rule?.text.toLowerCase() ?? "upper half of a stated range"}).`
+      : rule ? " Your rule needs a stated range, so it has nothing to suggest." : "";
+    return { range: rangeText, floor, last, suggested, rule: rule?.rule?.text ?? null, text: `${parts.join(" · ")}.${suggestion}` };
+  }
+
+  const originLabel = (a: ScreeningAnswer): string =>
+    a.origin === "bank" ? "Answer bank" : a.origin === "adapted" ? "Answer bank · adapted" : a.origin === "translated" ? "Translated · check it"
+      : a.origin === "needs-you" ? "Needs you" : a.heard ? "New · from your sources" : "New draft";
+
+  function answersView(r: Row): ScreeningAnswersView | null {
+    const s = r.screening;
+    if (!s || parts(r.id).get("answers")!.state !== "done") return null;
+    const pieces = byId();
+    const link = (pid: string): PieceLink | null => { const p = pieces.get(pid); return p ? evidenceLabel(p) : null; };
+    const questions = s.answers.map((a): ScreeningAnswerView => {
+      const banked = a.bank ? deps.answers.get(a.bank.answerId) : null;
+      const reusable = !a.companySpecific && (a.origin === "new" || a.origin === "needs-you" || a.origin === "translated") && a.needs !== "salary" && !a.heard;
+      return {
+        id: a.id, question: a.question, required: a.required, type: a.type, options: a.options, limit: a.limit,
+        origin: a.origin, label: originLabel(a), text: a.text, words: wordCount(a.text), needsYou: !!a.needs && !a.yours, yours: a.yours,
+        note: a.companySpecific ? `${a.note} Written for this company: not saved to the answer bank.` : a.note,
+        changed: a.origin === "adapted" ? { removed: a.removed, note: "Your answer bank keeps the full version." } : null,
+        pieces: a.pieceIds.map(link).filter((l): l is PieceLink => l !== null),
+        salary: a.needs === "salary" ? salaryView(r) : null,
+        bank: banked ? { answerId: banked.id, useCount: banked.useCount, lastUsedAt: banked.lastUsedAt } : null,
+        save: { offered: reusable && !a.savedTo, note: a.companySpecific ? "Written for this company: not saved to the answer bank." : null, savedTo: a.savedTo },
+        redraft: a.type === "long-text" && a.needs !== "salary" && !a.heard,
+      };
+    });
+    const fromBank = s.answers.filter((a) => a.origin === "bank" || a.origin === "adapted").length;
+    const drafts = s.answers.filter((a) => a.origin === "new" || a.origin === "translated").length;
+    const needs = openAnswers(r).length;
+    const where = s.from === "form" ? `from ${s.site}, in the form's order` : "most forms ask";
+    const count = `${s.answers.length === 1 ? "1 question" : `${s.answers.length} questions`}`;
+    return {
+      from: s.from, site: s.site, problem: s.problem,
+      summary: `${count} ${where} · ${fromBank} from your answer bank · ${drafts === 1 ? "1 new draft" : `${drafts} new drafts`} · ${needs} need${needs === 1 ? "s" : ""} you.`,
+      questions,
+      waiting: waitingAnswer(r),
+    };
+  }
+
+  const saveScreening = (id: string, s: ScreeningState) => db.prepare("UPDATE package SET screening = ? WHERE id = ?").run(JSON.stringify(s), id);
+
+  /** The answers with one question's answer replaced; an approved answers step reopens. */
+  function putAnswer(r: Row, a: ScreeningAnswer): ChangeResult {
+    saveScreening(r.id, { ...r.screening!, answers: r.screening!.answers.map((x) => (x.id === a.id ? a : x)) });
+    reopenFrom(r, "answers");
+    return { changed: true, package: view(row(r.id)!) };
+  }
+
+  function setAnswer(id: string, questionId: string, text: string): ChangeResult {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
+    const a = r.screening?.answers.find((x) => x.id === questionId);
+    if (!a) return refuse("That question isn't in this package's screening answers.");
+    let value = text.trim();
+    if (!value && a.required) return refuse("The form requires an answer to this question.");
+    if (a.needs === "salary" && value) {
+      const n = Number(value.replace(/[€\s,.]/g, ""));
+      if (!Number.isFinite(n) || n <= 0 || !/^[€\s\d,.]+$/.test(value)) return refuse("Give one number: the form takes a number, not a range.");
+      value = String(n);
+    }
+    if (a.type === "select" && value) {
+      const option = optionFor(a, value);
+      if (!option) return refuse("Choose one of the form's options.");
+      value = option;
+    }
+    if (!fits(value, a.limit)) {
+      return refuse(a.limit.words !== null && wordCount(value) > a.limit.words
+        ? `The form takes at most ${a.limit.words} words; this is ${wordCount(value)}.`
+        : `The form takes at most ${a.limit.chars} characters; this is ${value.length}.`);
+    }
+    return putAnswer(r, { ...a, text: value, yours: true, at: clock.now().toISOString() });
+  }
+
+  async function redraftAnswer(id: string, questionId: string): Promise<ChangeResult> {
+    const r = mustGet(id);
+    const a = r.screening?.answers.find((x) => x.id === questionId);
+    if (!a || a.type !== "long-text" || a.needs === "salary" || a.heard) return { changed: false, reason: "There's nothing to draft for that question.", package: view(r) };
+    const d = await draft(r, a.question, a.limit, null);
+    const p = parts(id).get("answers")!;
+    setPart(id, "answers", { costUsd: p.costUsd + d.costUsd });
+    if (!d.ok) return { changed: false, reason: d.note, package: view(row(id)!) };
+    return putAnswer(row(id)!, {
+      ...a, origin: "new", needs: null, text: d.text, pieceIds: d.pieceIds, companySpecific: d.companySpecific, removed: [], bank: null,
+      note: "Drafted from your profile.", yours: false, savedTo: null, at: null,
+    });
+  }
+
+  function saveAnswerToBank(id: string, questionId: string): ChangeResult {
+    const r = mustGet(id);
+    const refuse = (reason: string): ChangeResult => ({ changed: false, reason, package: view(r) });
+    const a = r.screening?.answers.find((x) => x.id === questionId);
+    if (!a) return refuse("That question isn't in this package's screening answers.");
+    if (a.companySpecific) return refuse(`Written for ${r.job.company}: answers like this are written fresh for each job, so they aren't saved to the answer bank.`);
+    if (a.needs === "salary") return refuse("Salary depends on the job, so the number is never saved to the answer bank.");
+    if (a.origin === "bank" || a.origin === "adapted" || a.heard) return refuse("This answer comes from your answer bank or your sources already.");
+    if (a.savedTo) return refuse("It's in your answer bank already.");
+    if (!a.text) return refuse("Answer it first.");
+    const saved = deps.answers.save(
+      { question: plainQuestion(a.question), versions: { [bankLanguage(r)]: a.text }, category: "screening", kind: a.type === "select" ? "choice" : "text" },
+      { from: `${r.job.company} package`, jobId: r.jobId },
+    );
+    if (!saved.saved) return refuse(saved.problems[0]!.message);
+    saveScreening(id, { ...r.screening!, answers: r.screening!.answers.map((x) => (x.id === a.id ? { ...x, savedTo: saved.answer.id } : x)) });
+    return { changed: true, package: view(row(id)!) };
+  }
+
+  async function draftAnswer(id: string, request: DraftAnswerRequest): Promise<DraftAnswerResult> {
+    const r = mustGet(id);
+    const question = request.question.trim();
+    if (!question) return { drafted: false, reason: "Give the question to draft an answer for." };
+    const limit = { words: request.maxWords ?? null, chars: request.maxChars ?? null };
+    const d = await draft({ ...r, language: request.language ?? r.language }, question, limit, null);
+    if (!d.ok) return { drafted: false, reason: d.note };
+    const pieces = byId();
+    return {
+      drafted: true, text: d.text, companySpecific: d.companySpecific, costUsd: d.costUsd,
+      pieces: d.pieceIds.map((pid) => pieces.get(pid)).filter((p): p is ProfilePiece => !!p).map(evidenceLabel),
+    };
+  }
+
   const mustGet = (id: string) => {
     const r = row(id);
     if (!r) throw new Error("No such package");
@@ -1053,6 +1547,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (block) return { approved: false, reason: block.reason, blockedBy: block.by, flagId: block.flag ?? null, package: view(r) };
       const now = clock.now().toISOString();
       db.prepare("UPDATE package SET approved = ?, reviewed_at = COALESCE(reviewed_at, ?) WHERE id = ?").run(JSON.stringify({ ...r.approved, [step]: now }), now, id);
+      // The bank's answers this package uses count as used once Kris approves them.
+      if (step === "answers") for (const a of r.screening?.answers ?? []) if (a.bank && a.text) deps.answers.recordUse(a.bank.answerId);
       return { approved: true, package: view(row(id)!) };
     },
 
@@ -1062,6 +1558,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (postingId !== r.targetPostingId) {
         db.prepare("UPDATE package SET target_posting_id = ? WHERE id = ?").run(postingId, id);
         reopenFrom(r, "target");
+        // The questions come from the posting Kris applies through.
+        rewriteAnswers(id);
       }
       return { changed: true, package: view(row(id)!) };
     },
@@ -1071,8 +1569,9 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       if (language !== r.language) {
         db.prepare("UPDATE package SET language = ? WHERE id = ?").run(language, id);
         reopenFrom(r, "target");
-        // Until the other parts exist, switching only prints the CV again in the new language.
+        // The CV is printed again in the new language, and the answers written again in it.
         if (parts(id).get("cv")!.state === "done") await renderCv(id);
+        rewriteAnswers(id);
       }
       return { changed: true, package: view(row(id)!) };
     },
@@ -1146,6 +1645,10 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     decideFlag,
     answerGap,
     learned,
+    setAnswer,
+    redraftAnswer,
+    saveAnswerToBank,
+    draftAnswer,
 
   };
 }

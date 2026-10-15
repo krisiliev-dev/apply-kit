@@ -1,0 +1,25 @@
+{
+  "id": 4410,
+  "internal_job_id": 2204410,
+  "title": "Security Engineer",
+  "absolute_url": "https://job-boards.greenhouse.io/kestrel/jobs/4410",
+  "location": { "name": "Sofia" },
+  "updated_at": "2026-10-09T08:00:00-04:00",
+  "questions": [
+    { "required": true, "private": false, "label": "First Name", "description": null, "fields": [{ "name": "first_name", "type": "input_text", "values": [] }] },
+    { "required": true, "private": false, "label": "Last Name", "description": null, "fields": [{ "name": "last_name", "type": "input_text", "values": [] }] },
+    { "required": true, "private": false, "label": "Email", "description": null, "fields": [{ "name": "email", "type": "input_text", "values": [] }] },
+    { "required": false, "private": false, "label": "Phone", "description": null, "fields": [{ "name": "phone", "type": "input_text", "values": [] }] },
+    { "required": true, "private": false, "label": "Resume/CV", "description": null, "fields": [{ "name": "resume", "type": "input_file", "values": [] }, { "name": "resume_text", "type": "textarea", "values": [] }] },
+    { "required": false, "private": false, "label": "Cover Letter", "description": null, "fields": [{ "name": "cover_letter", "type": "input_file", "values": [] }, { "name": "cover_letter_text", "type": "textarea", "values": [] }] },
+    { "required": true, "private": false, "label": "Do you have the right to work in Bulgaria?", "description": null, "fields": [{ "name": "question_31001", "type": "multi_value_single_select", "values": [{ "label": "Yes", "value": 1 }, { "label": "No", "value": 0 }] }] },
+    { "required": true, "private": false, "label": "What is your notice period?", "description": null, "fields": [{ "name": "question_31002", "type": "input_text", "values": [] }] },
+    { "required": true, "private": false, "label": "What are your salary expectations? (gross monthly, EUR)", "description": "<p>One number, please.</p>", "fields": [{ "name": "question_31003", "type": "input_text", "values": [] }] },
+    { "required": true, "private": false, "label": "Why Kestrel Payments?", "description": "<p>Max 150 words.</p>", "fields": [{ "name": "question_31004", "type": "textarea", "values": [] }] },
+    { "required": false, "private": false, "label": "Describe a security incident you handled.", "description": "<p>Max 40 words.</p>", "fields": [{ "name": "question_31005", "type": "textarea", "values": [] }] },
+    { "required": false, "private": false, "label": "How did you hear about us?", "description": null, "fields": [{ "name": "question_31006", "type": "multi_value_single_select", "values": [{ "label": "LinkedIn", "value": 1 }, { "label": "Company website", "value": 2 }, { "label": "Job board", "value": 3 }, { "label": "Referral", "value": 4 }] }] },
+    { "required": false, "private": false, "label": "LinkedIn Profile", "description": null, "fields": [{ "name": "question_31007", "type": "input_text", "values": [] }] }
+  ],
+  "location_questions": [],
+  "compliance": []
+}

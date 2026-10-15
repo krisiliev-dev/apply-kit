@@ -514,6 +514,9 @@ const migrations: string[] = [
      near TEXT,
      created_at TEXT NOT NULL
    );`,
+  // #66: the package's screening answers (JSON): where the questions came from and each question's
+  // answer with its origin (bank, adapted, new, needs you, translated).
+  `ALTER TABLE package ADD COLUMN screening TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

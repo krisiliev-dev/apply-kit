@@ -106,12 +106,13 @@ describe("starting a package", () => {
         language: "en", postingLanguage: "en", angle: { angle: "security", label: "Security" },
         targetPostingId: "posting-gh", generating: true, photo: false,
         chip: { kind: "preparing", label: "Preparing package", step: 1 },
-        estimate: { costUsd: 0.002, seconds: 20 },
+        // The CV's tailoring, and about three drafted screening answers.
+        estimate: { costUsd: 0.008, seconds: 35 },
       },
     });
     if (!r.started) return;
     expect(r.package.parts.map((p) => [p.part, p.state])).toEqual([
-      ["target", "done"], ["cv", "working"], ["letter", "later"], ["answers", "later"], ["ats", "waiting"],
+      ["target", "done"], ["cv", "working"], ["letter", "later"], ["answers", "working"], ["ats", "waiting"],
     ]);
     expect(r.package.targetOptions).toEqual([
       { postingId: "posting-gh", site: "job-boards.greenhouse.io", url: "https://job-boards.greenhouse.io/kestrel/jobs/4410", recommended: true, consequence: "The company's own page. Your CV goes straight into their system and no account is needed." },
@@ -124,7 +125,7 @@ describe("starting a package", () => {
 
     const pkg = await started(t);
 
-    expect(pkg).toMatchObject({ generating: false, partsReady: 2, costUsd: 0.002, estimate: { costUsd: 0, seconds: 0 }, chip: { kind: "ready", label: "Package ready" } });
+    expect(pkg).toMatchObject({ generating: false, partsReady: 3, costUsd: 0.002, estimate: { costUsd: 0, seconds: 0 }, chip: { kind: "ready", label: "Package ready" } });
     expect(pkg.cv).toMatchObject({ fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", pages: 1, overflow: null, language: "en", photo: false });
     const printed = await printedCv(t, pkg.id);
     expect(printed).toContain("Ran the incident response to a phishing campaign against the claims team");
@@ -182,7 +183,7 @@ describe("approving steps in order", () => {
       reason: "Approve step 1, Target posting, first. Steps are approved in order, so a later part never contradicts an earlier decision.",
     });
     expect(refused.package.steps.map((s) => [s.state, s.sub])).toEqual([
-      ["current", "Choose"], ["upcoming", "Drafted"], ["upcoming", "Not built yet"], ["upcoming", "Not built yet"], ["upcoming", "After the CV"],
+      ["current", "Choose"], ["upcoming", "Drafted"], ["upcoming", "Not built yet"], ["flagged", "3 need you"], ["upcoming", "After the CV"],
     ]);
   });
 
@@ -205,7 +206,7 @@ describe("approving steps in order", () => {
     expect(cv).toMatchObject({ approved: true });
     expect(letter).toMatchObject({ approved: false, blockedBy: "letter", reason: "The cover letter arrives with a later part of the rebuild." });
     expect(letter.package.steps.map((s) => [s.state, s.sub])).toEqual([
-      ["done", "Approved"], ["done", "Approved"], ["current", "Not built yet"], ["upcoming", "Not built yet"], ["upcoming", "After the CV"],
+      ["done", "Approved"], ["done", "Approved"], ["current", "Not built yet"], ["flagged", "3 need you"], ["upcoming", "After the CV"],
     ]);
   });
 
@@ -217,7 +218,9 @@ describe("approving steps in order", () => {
 
     const changed = t.preparation.setTargetPosting(pkg.id, "posting-devbg");
 
-    expect(changed).toMatchObject({ changed: true, package: { targetPostingId: "posting-devbg", chip: { label: "Continue package · step 1 of 5" } } });
+    // The screening answers are written again from the new posting.
+    expect(changed).toMatchObject({ changed: true, package: { targetPostingId: "posting-devbg", chip: { label: "Preparing package" } } });
+    expect(await t.preparation.packageSettled(pkg.id)).toMatchObject({ chip: { label: "Continue package · step 1 of 5" } });
     expect(changed.package.steps.slice(0, 2).map((s) => s.state)).toEqual(["current", "upcoming"]);
   });
 });
@@ -284,7 +287,7 @@ describe("stopping, the cap and failures", () => {
     const after = await t.preparation.packageSettled(r.package.id);
 
     expect(stopped.parts.map((p) => [p.part, p.state])).toEqual([
-      ["target", "done"], ["cv", "stopped"], ["letter", "later"], ["answers", "later"], ["ats", "waiting"],
+      ["target", "done"], ["cv", "stopped"], ["letter", "later"], ["answers", "stopped"], ["ats", "waiting"],
     ]);
     expect(after).toMatchObject({ generating: false, cv: null, stoppedAt: "2026-10-12T07:30:00.000Z", chip: { kind: "continue", label: "Continue package · step 1 of 5" } });
     expect(after!.parts[1]).toMatchObject({ state: "stopped", what: "Stopped before it was written. Generate it again when you like." });
@@ -302,6 +305,7 @@ describe("stopping, the cap and failures", () => {
     await t.preparation.packageSettled(r.package.id);
 
     expect(t.preparation.retryPart(r.package.id, "cv")).toMatchObject({ changed: true, package: { generating: true, stoppedAt: null } });
+    t.preparation.retryPart(r.package.id, "answers");
     const after = await t.preparation.packageSettled(r.package.id);
     expect(after).toMatchObject({ chip: { label: "Package ready" } });
     expect(after!.parts[1]).toMatchObject({ state: "done" });
