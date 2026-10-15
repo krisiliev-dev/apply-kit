@@ -70,6 +70,16 @@ export interface ValidatedCv {
   /** Stronger wordings held back for Kris's decision. */
   heldBack: number;
   heldSummary: HeldSummary | null;
+  /** Every draft line the hard rules refused, word for word, where it was and why (for the tailoring evaluation). */
+  rejected: RejectedLine[];
+}
+
+/** A draft line the hard rules refused: where it was ("Summary", "Bullet under Northwind Bank", "Role", "Skills"), its words and why. */
+export interface RejectedLine {
+  where: string;
+  line: string;
+  /** Each problem, finishing "The draft …". */
+  problems: string[];
 }
 
 const norm = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim().replace(/[.;]$/, "").toLowerCase();
@@ -189,6 +199,9 @@ function roleProblems(role: TailoredCv["roles"][number], entry: NonNullable<Prof
   return changed;
 }
 
+/** A role as the draft states it: "Title · Employer, 2022-03 – present". */
+const roleLine = (r: TailoredCv["roles"][number]) => `${r.title.trim()} · ${r.employer.trim()}, ${r.start.trim()} – ${r.end?.trim() || "present"}`;
+
 function contextOf(profile: HonestyProfile): Context {
   const usable = new Map(profile.pieces.filter((p) => p.status === "confirmed" || profile.packagePieces?.includes(p.id)).map((p) => [p.id, p]));
   const vocabulary = [
@@ -220,6 +233,9 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
   const notes = output.notes.map((n) => n.trim()).filter(Boolean);
   const caught: Record<HonestyRule, number> = { role: 0, skill: 0, number: 0, citation: 0 };
   let heldBack = 0;
+  const rejected: RejectedLine[] = [];
+  const refuse = (where: string, line: string, problems: string[]) => rejected.push({ where, line: line.trim(), problems });
+  const under = (role: string | null) => `Bullet under ${(role && usable.get(role)?.entry?.organisation) || "a role"}`;
 
   /**
    * A checked line: the draft's words when they pass; otherwise the first cited piece's own words
@@ -230,11 +246,14 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
     const own = line.pieceIds.map((id) => usable.get(id)).filter((p): p is ProfilePiece => !!p);
     if (role !== null && own.some((p) => p.kind === "achievement" && p.belongsTo !== role)) {
       caught.role += 1;
+      refuse(under(role), line.text, ["puts it under a role it isn't from"]);
       notes.push(`Left out "${quoteOf(line.text)}": the draft puts it under a role it isn't from.`);
       return null;
     }
     const fallback = own.find((p) => p.kind === "achievement" && lineText(p));
     for (const p of problems) caught[p.rule] += 1;
+    if (problems.length) refuse(under(role), line.text, problems.map((p) => p.message));
+    else if (own.length === 0) refuse(under(role), line.text, ["cites no piece from your profile"]);
     if (problems.length === 0 && own.length > 0) {
       if (line.claim !== "stronger") return { text: line.text.trim(), pieceIds: own.map((p) => p.id), why: line.why.trim(), kept: null };
       if (role !== null && fallback) {
@@ -262,12 +281,14 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
     const p = usable.get(role.pieceId);
     if (!p || p.kind !== "role" || !p.entry) {
       caught.role += 1;
+      refuse("Role", roleLine(role), ["lists a role that isn't in your profile"]);
       notes.push(`The draft listed a role at ${role.employer.trim() || "an employer"}, which isn't in your profile. It was left out.`);
       continue;
     }
     const changed = roleProblems(role, p.entry);
     if (changed.length) {
       caught.role += 1;
+      refuse("Role", roleLine(role), [`changes the ${changed.join(", ")}`]);
       notes.push(`The draft changed ${p.entry.title} at ${p.entry.organisation} (${changed.join(", ")}). The CV keeps it exactly as in your profile.`);
     }
     const bullets = role.bullets.map((b) => check(b, p.id)).filter((b): b is ValidatedLine => b !== null);
@@ -282,6 +303,7 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
   if (summaryProblems.length || summaryPieces.length === 0) {
     for (const p of summaryProblems) caught[p.rule] += 1;
     if (summaryPieces.length === 0 && !summaryProblems.some((p) => p.rule === "citation")) caught.citation += 1;
+    refuse("Summary", output.summary.text, summaryProblems.length ? summaryProblems.map((p) => p.message) : ["cites no piece from your profile"]);
     notes.push(`Kept your angle's summary: the draft ${summaryProblems[0]?.message ?? "cites no piece from your profile"}.`);
   } else if (output.summary.claim === "stronger") {
     heldBack += 1;
@@ -298,6 +320,7 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
       .sort((a, b) => Number(skill.pieceIds.includes(b.id)) - Number(skill.pieceIds.includes(a.id)))[0];
     if (!own) {
       caught.skill += 1;
+      refuse("Skills", skill.text, ["lists a skill that isn't in your profile"]);
       notes.push(`Left "${skill.text.trim()}" off the skills: it isn't a skill in your profile.`);
     } else if (!skills.includes(own.id)) skills.push(own.id);
   }
@@ -306,5 +329,5 @@ export function validateCv(output: TailoredCv, profile: HonestyProfile): Validat
     .map((e) => ({ requirement: e.requirement, pieceIds: [...new Set(e.pieceIds.filter((id) => usable.has(id)))] }))
     .filter((e) => e.pieceIds.length > 0);
 
-  return { summary, roles, skills, evidence, notes, caught, heldBack, heldSummary };
+  return { summary, roles, skills, evidence, notes, caught, heldBack, heldSummary, rejected };
 }

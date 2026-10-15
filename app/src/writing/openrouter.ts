@@ -120,10 +120,10 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
         maxRetries: 1,
         timeout: TIMEOUT_MS,
       });
-      return { output: result.output, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS), model: result.response.modelId || modelId, excerpts };
+      return { output: result.output, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS, options.maxPrice), model: result.response.modelId || modelId, excerpts };
     } catch (err) {
       // The model answered but not in the schema's shape: the call was billed all the same.
-      if (NoObjectGeneratedError.isInstance(err) && err.usage) Object.assign(err, { costUsd: billedUsd({ usage: err.usage }, MAX_OUTPUT_TOKENS) });
+      if (NoObjectGeneratedError.isInstance(err) && err.usage) Object.assign(err, { costUsd: billedUsd({ usage: err.usage }, MAX_OUTPUT_TOKENS, options.maxPrice) });
       throw err;
     }
   }
@@ -131,7 +131,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
   return {
     estimateCostUsd(request) {
       const { instructions, prompt } = promptOf(request);
-      return usdFor(tokensIn(instructions.length + prompt.length + SCHEMA_CHARS), EXPECTED_OUTPUT_TOKENS);
+      return usdFor(tokensIn(instructions.length + prompt.length + SCHEMA_CHARS), EXPECTED_OUTPUT_TOKENS, options.maxPrice);
     },
     draftPieces: (input) => write({ task: "draft-pieces", input }, draftedPiecesSchema, "drafted_pieces"),
     learnVoice: (input) => write({ task: "learn-voice", input }, learnedVoiceSchema, "learned_voice", input.excerpts),

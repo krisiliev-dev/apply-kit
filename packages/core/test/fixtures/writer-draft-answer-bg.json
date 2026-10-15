@@ -1,0 +1,7 @@
+{
+  "text": "В Northwind Bank проведох реакцията при фишинг кампания срещу екипа по искове: проследих кой е кликнал, прекратихме сесиите им и описах какво променихме след това.",
+  "pieceIds": ["piece-phishing"],
+  "claim": "reworded",
+  "honest": null,
+  "companySpecific": false
+}

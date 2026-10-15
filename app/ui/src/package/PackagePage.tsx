@@ -16,7 +16,7 @@
 // Ticket #67: step 5, the ATS check (AtsStep.tsx), whose "Approve package" freezes the files and
 // opens the approved package (ApprovedView.tsx); "Your profile changed since this draft" on the CV.
 import type {
-  BudgetInfo, CvFlagView, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
+  BudgetInfo, CvFlagView, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, LanguageOption, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
 } from "@apply-kit/core";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -29,6 +29,7 @@ import { LetterSide, LetterStep, writeOwnLetter, type LetterViewMode } from "./L
 import { AnswersStep, questionElementId } from "./AnswersStep.tsx";
 import { AtsStep, atsBlockerId } from "./AtsStep.tsx";
 import { ApprovedView } from "./ApprovedView.tsx";
+import { langOf } from "./lang.ts";
 // pdf.js is large: it loads only when a document is shown.
 const PdfPreview = lazy(() => import("./PdfPreview.tsx").then((m) => ({ default: m.PdfPreview })));
 
@@ -515,6 +516,24 @@ function ActionBar({ pkg, step, jobPage, acceptFailing, onChange, onGo, onFlagBl
   );
 }
 
+const languageName = { en: "English", bg: "Bulgarian" } as const;
+
+/** What a language option means, in words: what the package is written in, and what switching to it costs or brings back. */
+function languageText(o: LanguageOption, pkg: PackageView): string {
+  const posting = o.fromPosting ? `The posting is in ${languageName[o.language]}. ` : "";
+  const whole = o.language === "bg" ? "Writes the whole package in Bulgarian, not only the headings." : "The CV, cover letter and screening answers are all written in English.";
+  if (o.current) return `${posting}${whole}`;
+  if (o.kept) {
+    const kept = [
+      o.kept.letterDrafts ? `${o.kept.letterDrafts} letter ${o.kept.letterDrafts === 1 ? "draft" : "drafts"}` : null,
+      o.kept.decisions ? `${o.kept.decisions} ${o.kept.decisions === 1 ? "decision" : "decisions"}` : null,
+      o.kept.answers ? `${o.kept.answers} of your ${o.kept.answers === 1 ? "answer" : "answers"}` : null,
+    ].filter(Boolean).join(", ");
+    return `${posting}Your ${languageName[o.language]} drafts from ${hhmm(o.kept.at)} are kept${kept ? ` (${kept})` : ""}. Switching back brings them back as they were, at no cost; your ${languageName[pkg.language]} drafts are kept too.`;
+  }
+  return `${posting}${whole} Switching rewrites the CV, letter and answers together so they never mix languages: about ${usd(Math.max(o.costUsd, 0.01))}, and your current drafts and decisions are kept as earlier drafts.`;
+}
+
 function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: PackageView) => void; say: (m: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   const reopened = (before: PackageView, after: PackageView) => before.steps.some((s) => s.approvedAt) && !after.steps[0]!.approvedAt;
@@ -528,14 +547,18 @@ function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Pa
   }
 
   async function language(lang: "en" | "bg") {
-    say(lang === "bg" ? "Switching to Bulgarian…" : "Switching to English…");
+    const option = pkg.languageOptions.find((o) => o.language === lang)!;
+    say(option.kept ? `Bringing back your ${languageName[lang]} drafts…` : `Switching to ${languageName[lang]}…`);
     const r = await setPackageLanguage(pkg.id, lang).catch((err: unknown) => ({ changed: false as const, reason: message(err), package: pkg }));
     onChange(r.package);
     setError(r.changed ? null : r.reason);
-    if (r.changed) say(`The package is now in ${lang === "bg" ? "Bulgarian" : "English"}. The CV was printed again.`);
+    if (!r.changed) return;
+    const other = languageName[pkg.language];
+    say(option.kept
+      ? `The package is in ${languageName[lang]} again, with the drafts and decisions you had. Your ${other} drafts are kept.`
+      : `Writing the CV, cover letter and screening answers in ${languageName[lang]}. Your ${other} drafts and decisions are kept.`);
   }
 
-  const fromPosting = (lang: "en" | "bg") => pkg.postingLanguage === lang;
   return (
     <>
       <div className="panel">
@@ -552,20 +575,19 @@ function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Pa
         </fieldset>
       </div>
       <div className="panel">
-        <div className="sec-head"><h2>Language</h2><span className="chip neutral">From the posting: {pkg.postingLanguage === "bg" ? "Bulgarian" : "English"}</span></div>
-        <fieldset className="choices">
+        <div className="sec-head"><h2>Language</h2><span className="chip neutral">From the posting: {languageName[pkg.postingLanguage]}</span></div>
+        <fieldset className="choices" aria-describedby={pkg.generating ? "lang-wait" : undefined}>
           <legend className="sr-only">Package language</legend>
-          <label className="choice">
-            <input type="radio" name="lang" checked={pkg.language === "en"} onChange={() => void language("en")} />
-            <b>English</b>
-            <span className="muted">{fromPosting("en") ? "The posting is in English. " : ""}The CV, cover letter and screening answers are all written in English.</span>
-          </label>
-          <label className="choice" lang="en">
-            <input type="radio" name="lang" checked={pkg.language === "bg"} onChange={() => void language("bg")} />
-            <b>Bulgarian</b>
-            <span className="muted">{fromPosting("bg") ? "The posting is in Bulgarian. " : ""}The whole package in Bulgarian, not only the headings. For now switching prints the CV and the cover letter again with the Bulgarian titles and your name as stored in Cyrillic (the letter keeps its words: ask for a new draft in Bulgarian), and writes the screening answers again; nothing is lost.</span>
-          </label>
+          {pkg.languageOptions.map((o) => (
+            <label className="choice" key={o.language}>
+              <input type="radio" name="lang" checked={o.current} aria-disabled={pkg.generating && !o.current ? "true" : undefined}
+                onChange={() => { if (pkg.generating) say("The language can be switched once the parts being written are done."); else void language(o.language); }} />
+              <b>{languageName[o.language]}</b>
+              <span className="muted">{languageText(o, pkg)}</span>
+            </label>
+          ))}
         </fieldset>
+        {pkg.generating && <p className="help" id="lang-wait">The language can be switched once the parts being written are done.</p>}
       </div>
       {error && <p className="why-off" role="alert">{error}</p>}
     </>
@@ -606,7 +628,7 @@ function CvStep({ pkg, view, onView, flagAlert, onChange, onGo, say }: {
         {cv && cv.fit.keepTwoPages && <KeptTwo pkg={pkg} onChange={onChange} say={say} />}
         {pkg.cv && (view === "preview" || !cv) ? (
           <Suspense fallback={<p className="meta" role="status">Opening the PDF…</p>}>
-            <PdfPreview key={pkg.cv.sha256} url={packageCvUrl(pkg.id, pkg.cv.sha256)} name="CV" pages={pkg.cv.pages} overflow={pkg.cv.overflow !== null} linesOnPage2={pkg.cv.overflow?.linesAfterFirstPage} />
+            <PdfPreview key={pkg.cv.sha256} url={packageCvUrl(pkg.id, pkg.cv.sha256)} name="CV" lang={pkg.cv.language} pages={pkg.cv.pages} overflow={pkg.cv.overflow !== null} linesOnPage2={pkg.cv.overflow?.linesAfterFirstPage} />
           </Suspense>
         ) : pkg.cv ? null : part.state === "working" || part.state === "waiting" ? (
           <div className="stack" role="status"><p className="meta">Writing the CV…</p><span className="skel w70" /><span className="skel w90" /><span className="skel w50" /></div>
@@ -690,7 +712,7 @@ function Evidence({ pkg, cv, must, onChange, say }: { pkg: PackageView; cv: CvVe
           return (
             <div className="ev-row" key={i} id={`req-${i}`}>
               <div className="req">
-                <b>{r.requirement}{r.kind === "preferred" && <> <span className="meta">preferred</span></>}</b>
+                <b lang={langOf(r.requirement)}>{r.requirement}{r.kind === "preferred" && <> <span className="meta">preferred</span></>}</b>
                 <span className={`chip ${cls}`}><Icon name={icon as "met"} />{label}</span>
               </div>
               <div className="used">
@@ -850,7 +872,7 @@ function Flag({ pkg, flag, must, onChange, say }: { pkg: PackageView; flag: CvFl
               aria-controls={o.id === "experience" ? `${h}-question` : undefined}
               onChange={() => setPicked(o.id)}
             />
-            <span><b>{flag.kind === "near-the-line" || o.id === "use" ? `"${o.label}"` : o.label}</b><span className="meta">{o.holdsUp}</span></span>
+            <span><b lang={langOf(o.label)}>{flag.kind === "near-the-line" || o.id === "use" ? `"${o.label}"` : o.label}</b><span className="meta">{o.holdsUp}</span></span>
           </label>
         ))}
         {flag.ownWording && (
@@ -925,8 +947,8 @@ function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionVi
             <li key={c.id} className={`edit${c.undone ? " undone" : ""}`}>
               <div className="what">
                 <b>{c.label}{c.undone && <span className="meta"> · undone</span>}</b>
-                {c.was && <del>{c.was}</del>}
-                {c.is && <ins>{c.is}</ins>}
+                {c.was && <del lang={langOf(c.was)}>{c.was}</del>}
+                {c.is && <ins lang={langOf(c.is)}>{c.is}</ins>}
                 {c.detail && <span>{c.detail}</span>}
                 <span className="why">{c.why}</span>
               </div>
@@ -943,8 +965,8 @@ function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionVi
             <li key={f.id} className="edit">
               <div className="what">
                 <b>{f.title}</b>
-                {f.piece && <del>{f.piece}</del>}
-                {f.draft && <ins>{f.draft}</ins>}
+                {f.piece && <del lang={langOf(f.piece)}>{f.piece}</del>}
+                {f.draft && <ins lang={langOf(f.draft)}>{f.draft}</ins>}
                 <span className="why"><span className="chip partly"><Icon name="line" />Flagged</span> near the line: decide it above. Until then your profile's wording is used.</span>
               </div>
               <a className="btn ghost sm" href={`#flag-${f.id}`} onClick={(e) => { e.preventDefault(); goToFlag(f.id); }}>Decide<span className="sr-only"> {f.title}</span></a>
@@ -957,7 +979,7 @@ function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionVi
 }
 
 function LineRow({ line }: { line: CvLineView }) {
-  return <li><span>{line.text}</span> <span className="meta">· <PieceLinks pieces={line.pieces} /></span></li>;
+  return <li><span lang={langOf(line.text)}>{line.text}</span> <span className="meta">· <PieceLinks pieces={line.pieces} /></span></li>;
 }
 
 /** Every line on the CV with the pieces it relies on: nothing on it that the profile doesn't back. */

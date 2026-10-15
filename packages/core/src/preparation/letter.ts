@@ -145,6 +145,12 @@ export const stockPhrases: Record<"en" | "bg", string[]> = {
   bg: ["страстен", "страстна", "развълнуван", "развълнувана", "ориентиран към резултати", "ориентирана към резултати", "динамичен", "динамична", "синергия", "отборен играч", "с нетърпение очаквам", "не се колебайте да се свържете"],
 };
 
+/** The stock phrases a text uses, as whole words, in the list's order. */
+export function stockPhrasesIn(text: string, language: "en" | "bg"): string[] {
+  return stockPhrases[language].filter((phrase) =>
+    new RegExp(`(?<![\\p{L}])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/'/g, "['’]")}(?![\\p{L}])`, "iu").test(text));
+}
+
 const words = (s: string) => (s.toLowerCase().match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu) ?? []).map((w) => w.replace(/['’]s$/, ""));
 
 /** A word's stem, roughly: enough that "led", "leads" and "leading" are one claim. */
@@ -256,8 +262,7 @@ export function checkLetter(d: LetterDraft, ctx: LetterCheckContext): LetterChec
   // Stock phrases, as rules.
   const all = [d.greeting, ...sentences.map((s) => s.text), d.closing];
   const stock = stockPhrases[ctx.language].flatMap((phrase) => {
-    const re = new RegExp(`(?<![\\p{L}])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/'/g, "['’]")}(?![\\p{L}])`, "iu");
-    const at = all.find((t) => re.test(t));
+    const at = all.find((t) => stockPhrasesIn(t, ctx.language).includes(phrase));
     return at ? [{ phrase, at }] : [];
   });
   const stockCheck: LetterCheck = stock.length === 0 ? ok("stock", ctx.language === "bg" ? "No stock phrases (\"страстен\", \"развълнуван\")" : "No stock phrases (\"passionate\", \"excited to apply\")") : {

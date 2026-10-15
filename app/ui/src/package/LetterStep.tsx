@@ -103,13 +103,15 @@ export function LetterStep({ pkg, view, onView, onChange, onGo, say }: {
   );
 }
 
+const languageNames = { en: "English", bg: "Bulgarian" } as const;
+
 function LetterPreview({ pkg, letter }: { pkg: PackageView; letter: LetterView }) {
   const file = letter.file;
   if (!file) return <p className="meta" role="status">Printing the letter…</p>;
   return (
     <>
       <Suspense fallback={<p className="meta" role="status">Opening the PDF…</p>}>
-        <PdfPreview key={file.sha256} url={packageLetterUrl(pkg.id, file.sha256)} name="Cover letter" pages={file.pages} overflow={file.overflow !== null} />
+        <PdfPreview key={file.sha256} url={packageLetterUrl(pkg.id, file.sha256)} name="Cover letter" lang={letter.language} pages={file.pages} overflow={file.overflow !== null} />
       </Suspense>
       <div className="row">
         <a className="btn sm" href={packageLetterUrl(pkg.id, file.sha256, true)} download>Download draft PDF</a>
@@ -206,7 +208,7 @@ function LetterEditor({ pkg, letter, onChange, say }: { pkg: PackageView; letter
       <div className="toolbar">
         <div className="row" role="group" aria-label="Drafts">
           <button className="btn ghost sm" type="button" aria-label="Previous draft" aria-disabled={letter.draft === 1 ? "true" : undefined} onClick={() => { if (letter.draft > 1) void page(letter.draft - 1); }}>‹</button>
-          <span className="meta num">Draft {letter.draft} of {letter.drafts}</span>
+          <span className="meta num">Draft {letter.draft} of {letter.drafts}{letter.language !== pkg.language && ` · ${languageNames[letter.language]}`}</span>
           <button className="btn ghost sm" type="button" aria-label="Next draft" aria-disabled={letter.draft === letter.drafts ? "true" : undefined} onClick={() => { if (letter.draft < letter.drafts) void page(letter.draft + 1); }}>›</button>
         </div>
         <span className="grow" />
@@ -215,11 +217,16 @@ function LetterEditor({ pkg, letter, onChange, say }: { pkg: PackageView; letter
         )}
         <span className={`count num${words > letter.target * 1.15 ? " over" : ""}`} id="letter-count" aria-live="polite">{words} words · target {letter.target}</span>
       </div>
+      {letter.language !== pkg.language && (
+        <div className="banner warning" role="note">
+          <span className="text"><b>This draft is in {languageNames[letter.language]}, kept from before you switched.</b> The package is in {languageNames[pkg.language]}, so it can't be approved. Show {pkg.language === "en" ? "an" : "a"} {languageNames[pkg.language]} draft, or ask for a new one.</span>
+        </div>
+      )}
       {letter.instruction && <p className="meta">Asked for: "{letter.instruction}"</p>}
       <div className="letter-editor">
         <div className="backdrop" aria-hidden="true">{highlight ? marked(text, marks) : text}{"\n"}</div>
         <textarea
-          value={text} spellCheck lang={pkg.language} aria-label="Cover letter text" aria-describedby="letter-count letter-marks"
+          value={text} spellCheck lang={letter.language} aria-label="Cover letter text" aria-describedby="letter-count letter-marks"
           onChange={(e) => edit(e.target.value)} onBlur={() => void save()}
         />
       </div>
