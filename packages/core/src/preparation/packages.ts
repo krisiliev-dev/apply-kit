@@ -5,7 +5,7 @@
 // cap isn't started, a failed part is retried once and then waits for Retry, and stopping keeps
 // what's finished. Stored in SQLite (ADR 0003); the CV's draft PDF is in the packages folder.
 import { angleLabel, type Angle } from "../fit/angles.ts";
-import type { AiBudget } from "../budget.ts";
+import type { AiBudget, BudgetInfo } from "../budget.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import type { CvContent, DocumentDate, DocumentLanguage, DocumentToRender } from "../documents/content.ts";
 import type { AtsCheck } from "../documents/ats.ts";
@@ -164,6 +164,8 @@ export interface PackageView {
   /** What the package has cost so far, and the estimate for what's still to be written. */
   costUsd: number;
   estimate: { costUsd: number; seconds: number };
+  /** This month's AI spending against the shared cap. */
+  budget: BudgetInfo;
   chip: PackageChip;
 }
 
@@ -377,6 +379,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         costUsd: toWrite.length ? Math.round(deps.writer.estimateCostUsd({ task: "tailor-cv", input: tailorInput(r) }) * 1e6) / 1e6 : 0,
         seconds: toWrite.reduce((n, p) => n + packageRules.seconds[p.part], 0),
       },
+      budget: deps.budget.info(),
       chip: chipOf(r, ps),
     };
   }

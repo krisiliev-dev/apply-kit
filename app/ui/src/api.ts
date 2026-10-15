@@ -3,7 +3,11 @@ import type {
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult,
+  ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
 } from "@apply-kit/core";
+
+/** A Feed row as the service sends it: the Job with its package chip, if it has a package. */
+export type FeedRow = FeedJob & { package?: PackageChip | null };
 
 /** How the Feed is listed: the sort, and whether relocation Jobs follow the main list. */
 export interface FeedOptions {
@@ -340,3 +344,39 @@ export async function saveAngle({ angle, ...change }: SaveAngleInput): Promise<S
   const res = await fetch(`/api/profile/angles/${angle}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(change) });
   return res.status === 422 ? ((await res.json()) as SaveAngleResult) : json(res);
 }
+
+// ---------- Packages (#62) ----------
+
+const packagePath = (id: string) => `/api/packages/${encodeURIComponent(id)}`;
+const put = (url: string, body: unknown) =>
+  fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+/** A refusal (422) resolves with its reason; anything else not OK throws. */
+const orRefusal = async <T>(res: Response): Promise<T> => (res.status === 422 ? ((await res.json()) as T) : json<T>(res));
+
+/** What the Job's Prepare button shows: whether a package can start (or why not) and its package chip. */
+export async function fetchPrepareStatus(jobId: string, signal?: AbortSignal): Promise<PrepareStatus> {
+  return json(await fetch(`${jobPath(jobId)}/prepare`, { signal }));
+}
+
+/** Starts the Job's package (or returns the one it has); a package that can't start resolves with the reason. */
+export async function startPackage(jobId: string): Promise<StartPackageResult> {
+  return orRefusal(await postJson(`${jobPath(jobId)}/package`));
+}
+
+export async function fetchPackage(id: string, signal?: AbortSignal): Promise<PackageView> {
+  return json(await fetch(packagePath(id), { signal }));
+}
+
+export async function approveStep(id: string, step: PackageStep): Promise<ApproveResult> {
+  return orRefusal(await postJson(`${packagePath(id)}/steps/${step}/approve`));
+}
+
+export const setTargetPosting = async (id: string, postingId: string): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/target`, { postingId }));
+export const setPackageLanguage = async (id: string, language: DocumentLanguage): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/language`, { language }));
+export const setPackagePhoto = async (id: string, on: boolean): Promise<ChangeResult> => orRefusal(await put(`${packagePath(id)}/photo`, { on }));
+export const stopGenerating = async (id: string): Promise<PackageView> => json(await postJson(`${packagePath(id)}/stop`));
+export const retryPart = async (id: string, part: PackageStep): Promise<ChangeResult> => orRefusal(await postJson(`${packagePath(id)}/parts/${part}/retry`));
+
+/** The CV's draft PDF; `version` (its SHA-256) makes a re-printed CV load afresh. */
+export const packageCvUrl = (id: string, version: string, download = false) =>
+  `${packagePath(id)}/cv.pdf?v=${version.slice(0, 12)}${download ? "&download=1" : ""}`;
