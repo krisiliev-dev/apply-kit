@@ -330,3 +330,4 @@ h2[tabindex="-1"]:focus { outline: none }
 .setup .merges summary { cursor: pointer; font-weight: 600; color: var(--action) }
 .setup .merges ul { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: var(--s-3) }
 .setup .merges li { display: grid; gap: var(--s-1); padding-top: var(--s-3); border-top: 1px solid var(--rule) }
+.setup legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }

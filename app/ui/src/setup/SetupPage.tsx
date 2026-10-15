@@ -305,6 +305,7 @@ function ImportRunView({ status, onStatus, announce, onImportMore }: {
         <h1 id="setup-h" tabIndex={-1}>{heading}</h1>
         {running && <p className="muted">{settled} of {status.total} done{status.secondsLeft ? ` · ${secondsLabel(status.secondsLeft)}` : ""}</p>}
       </div>
+      <div className="cols"><div className="col">
       {failure && <div className="banner error" role="alert" tabIndex={-1} ref={failureRef}><span className="text"><b>That didn't work.</b> {failure}</span></div>}
 
       {!running && waiting.length > 0 && (
@@ -381,6 +382,7 @@ function ImportRunView({ status, onStatus, announce, onImportMore }: {
           {status.state === "cancelled" && <span className="meta">Pieces already drafted are kept.</span>}
         </div>
       )}
+      </div></div>
     </div>
   );
 }

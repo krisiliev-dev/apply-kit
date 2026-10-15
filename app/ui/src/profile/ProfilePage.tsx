@@ -271,18 +271,17 @@ function PieceCard({ piece: p, go, changed, focusRef }: { piece: ProfilePiece; g
   const [refusal, setRefusal] = useState<string[] | null>(null);
   const refusalRef = useRef<HTMLDivElement>(null);
   const name = `${kindLabel[p.kind].toLowerCase()}: ${pieceName(p)}`;
+  // Focus follows a refusal to its reason.
+  useEffect(() => { if (refusal) refusalRef.current?.focus(); }, [refusal]);
 
   const confirm = async () => {
     setBusy(true);
     try {
       const result = await confirmPiece(p.id);
       if (result.saved) return changed(`Confirmed ${name}.`);
-      // Focus follows the refusal to its reason.
       setRefusal(result.problems.map((x) => x.message));
-      window.setTimeout(() => refusalRef.current?.focus(), 0);
     } catch (err) {
       setRefusal([message(err)]);
-      window.setTimeout(() => refusalRef.current?.focus(), 0);
     } finally {
       setBusy(false);
     }
