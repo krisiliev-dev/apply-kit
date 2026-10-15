@@ -306,6 +306,52 @@ const migrations: string[] = [
      answer_id TEXT NOT NULL,
      value TEXT NOT NULL
    );`,
+  // #54: imports. A run holds its sources in order (files, the LinkedIn export, GitHub, a portfolio),
+  // each with its state, the text extracted from it (ADR 0003: the file itself is in the file store
+  // under its SHA-256), why it couldn't be read and what Kris chose, and how many pieces it gave.
+  // Merges record each source that said the same as a piece already there, so they can be shown.
+  // Pieces read by text recognition are marked "check this" until confirmed.
+  `CREATE TABLE import_run (
+     id TEXT PRIMARY KEY,
+     started_at TEXT NOT NULL,
+     finished_at TEXT,
+     cancelled_at TEXT
+   );
+   CREATE TABLE import_item (
+     id TEXT PRIMARY KEY,
+     import_id TEXT NOT NULL REFERENCES import_run(id),
+     position INTEGER NOT NULL,
+     source TEXT NOT NULL,
+     name TEXT NOT NULL,
+     type TEXT NOT NULL,
+     sha256 TEXT,
+     size INTEGER,
+     link TEXT,
+     state TEXT NOT NULL,
+     problem TEXT,
+     waiting_for TEXT,
+     detail TEXT,
+     text TEXT,
+     recognised INTEGER NOT NULL DEFAULT 0,
+     pieces INTEGER NOT NULL DEFAULT 0,
+     merged INTEGER NOT NULL DEFAULT 0,
+     estimate_usd REAL,
+     started_at TEXT,
+     finished_at TEXT
+   );
+   CREATE INDEX import_item_import ON import_item(import_id, position);
+   CREATE TABLE import_merge (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     import_id TEXT NOT NULL,
+     item_id TEXT NOT NULL,
+     piece_id TEXT NOT NULL,
+     source_from TEXT NOT NULL,
+     source_quote TEXT,
+     text TEXT NOT NULL,
+     at TEXT NOT NULL
+   );
+   CREATE INDEX import_merge_piece ON import_merge(piece_id);
+   ALTER TABLE profile_piece ADD COLUMN check_this INTEGER NOT NULL DEFAULT 0;`,
   // #62: packages, one per Job. `job` (JSON) is the Job as it was when the package started (title,
   // company, requirements, postings), so the package reads the same however Discover changes later.
   // `approved` (JSON) maps each approved step to when, `reviewed_at` is Kris's first approval; `cv_draft` (JSON) is the CV's current draft file.

@@ -602,8 +602,8 @@ function NoPackage({ jobId, status, onStarted }: { jobId: string; status: Prepar
           <h1 style={{ fontSize: "var(--fs-h3)" }}>A package needs your master profile first</h1>
           <p>Every CV, cover letter and screening answer is built from it, and nothing is ever written that it doesn't back. Setup imports your old CVs, lets a coach question them, and takes about 30–45 minutes; you can stop any time.</p>
           <div className="row">
-            <a className="btn primary" href="/profile">Set up your profile</a>
-            <a className="btn" href="/profile">Import one CV and start this package</a>
+            <a className="btn primary" href="/setup">Set up your profile</a>
+            <a className="btn" href="/setup">Import one CV and start this package</a>
           </div>
           <p className="meta">The quick start works, but this first package will be thinner and ask you more questions.</p>
         </div>

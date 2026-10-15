@@ -18,7 +18,10 @@ export type OpenRouterWriterOptions = OpenRouterOptions;
 const draftPiecesInstructions = `You read the text of one of Kris's old CVs and draft profile pieces from it, as JSON matching the schema. Rules:
 - Only what the text says. Never add a skill, number, employer, title or date that isn't in it.
 - One piece per role, achievement, skill or education entry.
-- Every "quote" is copied word for word from the text: the line the piece came from.`;
+- Every "quote" is copied word for word from the text: the line the piece came from.
+- A role or education entry fills "entry": title (or degree), organisation (employer or school), city or null, start and end as "YYYY-MM", or "YYYY" when the text gives only the year; end is null while it's current. Its "text" is its description, or "".
+- An achievement is one sentence of at most 200 characters, in the text's own words. Achievements and skills set "role" to the index of the role or education entry they sit under, or null.
+- Other pieces have "entry": null; roles and education have "role": null.`;
 
 const tailorCvInstructions = `You tailor Kris's CV to one job posting, as JSON matching the schema, using only the profile pieces given. Rules:
 - Every line cites the ids of the pieces it relies on ("pieceIds"). Never cite an id that isn't given.

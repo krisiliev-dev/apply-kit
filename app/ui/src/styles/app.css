@@ -336,6 +336,23 @@ h2[tabindex="-1"]:focus { outline: none }
 .lead-order .acts { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--s-1) }
 @media (min-width: 640px) { .lead-order li { grid-template-columns: auto minmax(0, 1fr) auto } .lead-order .acts { grid-column: auto } }
 
+/* ---------- Setup · import (#54, hi-fi onboarding.html) ---------- */
+.setup { gap: var(--s-6) }
+.setup .stack { gap: var(--s-6) }
+.setup .head { display: grid; gap: var(--s-2); max-width: 72ch }
+.setup .panel h2 { font-size: var(--fs-title); font-weight: 600; letter-spacing: 0 }
+.setup .col { display: grid; gap: var(--s-6); min-width: 0; align-content: start }
+@media (min-width: 961px) and (min-height: 820px) { .setup .side { position: sticky; top: 96px } }
+.setup .privacy ul, .setup .next ol { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.setup .links { display: grid; gap: var(--s-4) }
+.setup .pk-steps a[aria-disabled="true"] { color: var(--ink-3); cursor: default }
+.setup .pk-steps a[aria-disabled="true"]:hover { border-color: var(--rule) }
+.setup .merges { margin-top: var(--s-4); font-size: var(--fs-small) }
+.setup .merges summary { cursor: pointer; font-weight: 600; color: var(--action) }
+.setup .merges ul { list-style: none; margin: var(--s-3) 0 0; padding: 0; display: grid; gap: var(--s-3) }
+.setup .merges li { display: grid; gap: var(--s-1); padding-top: var(--s-3); border-top: 1px solid var(--rule) }
+.setup legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-2) }
+
 /* Package (#62, hi-fi package.html): header, the step's two columns, the exact PDF. Tokens only. */
 .pk-head { display: grid; gap: var(--s-3) }
 .pk-head h1 { overflow-wrap: anywhere }

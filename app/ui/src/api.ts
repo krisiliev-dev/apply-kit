@@ -1,6 +1,7 @@
 import type {
   LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
+  ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
@@ -343,6 +344,58 @@ export async function fetchAngles(signal?: AbortSignal): Promise<AngleView[]> {
 export async function saveAngle({ angle, ...change }: SaveAngleInput): Promise<SaveAngleResult> {
   const res = await fetch(`/api/profile/angles/${angle}`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(change) });
   return res.status === 422 ? ((await res.json()) as SaveAngleResult) : json(res);
+}
+
+// ---------- Import (#54) ----------
+
+/** A file as the service takes it: its name and its bytes in base64. */
+export interface UploadFile {
+  fileName: string;
+  base64: string;
+}
+
+export async function toUpload(file: File): Promise<UploadFile> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let s = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return { fileName: file.name, base64: btoa(s) };
+}
+
+export type StartImportAnswer = { started: true; status: ImportStatus } | { started: false; problems: ImportInputProblem[] };
+
+export async function startImport(input: { files: UploadFile[]; linkedIn: UploadFile | null; github: string; portfolio: string }): Promise<StartImportAnswer> {
+  const res = await postJson("/api/import", input);
+  if (res.status === 422) return (await res.json()) as StartImportAnswer;
+  return { started: true, status: await json<ImportStatus>(res) };
+}
+
+/** The latest import, or null before the first. */
+export async function fetchLatestImport(signal?: AbortSignal): Promise<ImportStatus | null> {
+  const res = await fetch("/api/import", { signal });
+  return res.status === 204 ? null : json(res);
+}
+
+export async function fetchImport(id: string, signal?: AbortSignal): Promise<ImportStatus> {
+  return json(await fetch(`/api/import/${encodeURIComponent(id)}`, { signal }));
+}
+
+export const cancelImport = async (id: string): Promise<ImportStatus> => json(await postJson(`/api/import/${encodeURIComponent(id)}/cancel`));
+export const resumeImport = async (id: string): Promise<ImportStatus> => json(await postJson(`/api/import/${encodeURIComponent(id)}/resume`));
+
+export async function fetchImportMerges(id: string, signal?: AbortSignal): Promise<ImportMerge[]> {
+  return json(await fetch(`/api/import/${encodeURIComponent(id)}/merges`, { signal }));
+}
+
+/** What to do with a file that couldn't be read. */
+export async function resolveImportItem(itemId: string, action: UnreadableAction, file?: UploadFile): Promise<ImportStatus> {
+  return json(await postJson(`/api/import/items/${encodeURIComponent(itemId)}`, { action, ...(file && { file }) }));
+}
+
+/** Confirms a drafted piece; a refusal comes back with what it still needs. */
+export async function confirmPiece(id: string): Promise<SavePieceResult> {
+  const res = await postJson(`/api/profile/pieces/${encodeURIComponent(id)}/confirm`);
+  if (res.status === 422) return (await res.json()) as SavePieceResult;
+  return json(res);
 }
 
 // ---------- Packages (#62) ----------

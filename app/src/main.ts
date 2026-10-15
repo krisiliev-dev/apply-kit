@@ -11,6 +11,7 @@ import { createFileStore } from "./files.ts";
 import { createChromiumRenderer } from "./documents/chromium.ts";
 import { createPdfJsReader } from "./documents/pdf-text.ts";
 import { createPackageFolder } from "./packages.ts";
+import { createVisionRecognizer } from "./import/recognise.ts";
 import type { Extractor, Writer } from "@apply-kit/core";
 
 loadEnv();
@@ -63,6 +64,10 @@ const preparation = createPreparationEngine({
   files: createFileStore(join(dirname(config.dbPath), "files")),
   packages: createPackageFolder(dirname(config.dbPath)),
   settings,
+  // Import reads the public GitHub API and a portfolio page; scans are read by text recognition on
+  // this laptop (macOS Vision).
+  fetch: globalThis.fetch,
+  recognizer: createVisionRecognizer(),
 });
 
 // Sources from config seed the watchlist on each start, but only ones never added before: a Source
