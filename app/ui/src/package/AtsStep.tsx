@@ -58,7 +58,7 @@ export function AtsStep({ pkg, accept, onAccept, onChange, say }: {
                 <span>
                   {c.passed ? c.label : <b>{c.label}</b>}
                   {c.problems.length > 0 && <span className="meta block">{c.problems.join(". ")}</span>}
-                  {c.notes.length > 0 && <span className="meta block">Deliberate: {c.notes.join("; ")}</span>}
+                  {c.notes.length > 0 && <span className="meta block">Missing on purpose: {c.notes.join("; ")}</span>}
                 </span>
               </li>
             ))}

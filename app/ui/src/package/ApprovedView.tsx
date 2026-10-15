@@ -3,7 +3,7 @@
 // honesty decisions in words (to answer for them in an interview); the frozen files to download;
 // and what happens next. Editing any part reopens its step for approval.
 import type { ApprovedPackage, PackageView, PairedDevice } from "@apply-kit/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchPairedDevices, frozenFileUrl } from "../api.ts";
 import { Icon } from "../icons.tsx";
 
@@ -18,6 +18,9 @@ const portalName: Record<NonNullable<ApprovedPackage["targetPosting"]["jobRef"]>
 
 export function ApprovedView({ pkg, approved, onEdit }: { pkg: PackageView; approved: ApprovedPackage; onEdit: () => void }) {
   const [devices, setDevices] = useState<PairedDevice[] | null>(null);
+  // Arriving here (after Approve package, or from a link), focus starts at the heading.
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { heading.current?.focus({ preventScroll: true }); }, []);
   useEffect(() => {
     const ctrl = new AbortController();
     fetchPairedDevices(ctrl.signal).then(setDevices).catch(() => setDevices(null));
@@ -36,7 +39,7 @@ export function ApprovedView({ pkg, approved, onEdit }: { pkg: PackageView; appr
   return (
     <>
       <div className="pk-head">
-        <h1 tabIndex={-1}>Package approved</h1>
+        <h1 tabIndex={-1} ref={heading}>Package approved</h1>
         <div className="sub">
           <span><b>{approved.job.title}</b> at {approved.job.company}</span>
           <span className="num">Approved {hhmm(approved.approvedAt)} · {minutes} {minutes === 1 ? "minute" : "minutes"} since the package started</span>
@@ -89,12 +92,12 @@ export function ApprovedView({ pkg, approved, onEdit }: { pkg: PackageView; appr
             <a className="btn" href={frozenFileUrl(pkg.id, "cv", true)} download>Download CV (PDF)<span className="sr-only">, {approved.cv.file.fileName}</span></a>
             {approved.letter && <a className="btn" href={frozenFileUrl(pkg.id, "letter", true)} download>Download cover letter (PDF)<span className="sr-only">, {approved.letter.file.fileName}</span></a>}
             <p className="meta file-name">{approved.cv.file.fileName} · {kb(approved.cv.file.size)}</p>
-            {approved.cv.file.copy && <p className="meta file-name">Also in your Packages folder: {approved.cv.file.copy}</p>}
+            {approved.cv.file.copy && <p className="meta file-name" title={approved.cv.file.copy}>Also copied to your Packages folder ({approved.cv.file.copy.split("/").slice(-2, -1)[0]}).</p>}
           </div>
           <div className="panel">
             <h2>What happens next</h2>
             <ul className="notes">
-              <li>When you press Submit in the portal, mark it submitted: the application goes under Applications.</li>
+              <li>When you press Submit in the portal, the extension's Mark as submitted logs the application under Applications.</li>
               <li>Until then the job sits in Saved with "Package ready".</li>
               <li>Editing any part reopens that step for approval; these files stay as they are.</li>
             </ul>

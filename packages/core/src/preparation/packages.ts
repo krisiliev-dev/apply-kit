@@ -1078,7 +1078,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     return postingKeywords(r.job.requirements.map((q, i) => {
       const decided = flags.find((f) => f.kind === "gap" && f.requirement === i)?.decision?.option;
       const notHeld = q.kind === "preferred" && matchEvidence({ text: q.text, kind: "preferred", category: q.category ?? "other" }, deps.pieces(), now).status === "not-held";
-      const gap = decided === "letter" ? "a deliberate gap, named in the letter" : decided === "leave-out" ? "a deliberate gap, left out" : notHeld ? "preferred, and not claimed" : null;
+      const gap = decided === "letter" ? "a gap you chose to name in the letter" : decided === "leave-out" ? "a gap you chose to leave out" : notHeld ? "preferred, and not claimed" : null;
       return { text: q.text, category: q.category, gap };
     }));
   }

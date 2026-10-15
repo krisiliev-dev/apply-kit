@@ -99,7 +99,7 @@ describe("approving the package", () => {
 
     const ready = await upToAts(t, job);
 
-    expect(ready.ats!.checks.find((c) => c.check === "keywords")).toMatchObject({ passed: true, notes: ["Kubernetes: a deliberate gap, left out"] });
+    expect(ready.ats!.checks.find((c) => c.check === "keywords")).toMatchObject({ passed: true, notes: ["Kubernetes: a gap you chose to leave out"] });
     expect(await t.preparation.approvePackage(ready.id)).toMatchObject({ approved: true });
   });
 });
