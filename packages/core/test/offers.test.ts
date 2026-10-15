@@ -243,7 +243,7 @@ describe("offer details", () => {
       onMailStored: (emails) => tracker!.processMail(emails),
     });
     tracker = createTracker({ db: t.deps.db, clock, discovery: t.engine, assistant, aiMonthlyCapUsd: 10 });
-    return { ...t, tracker, mailbox };
+    return { ...t, clock, tracker, mailbox };
   }
 
   it("are pre-filled from the offer email that moved it to Offer, and the base salary is compared with the floor", async () => {
@@ -251,7 +251,7 @@ describe("offer details", () => {
     const r = await s.tracker.addByHand({ job: { company: "Ardent Labs", title: "Detection Engineer" }, appliedOn: "2026-10-01", status: "interviewing", contact: "ardentlabs.example" });
     const id = r.outcome === "added" ? r.application.id : "";
     s.mailbox.deliver(offerEmail);
-    await s.clock.advance(4 * 60 * 60_000);
+    s.clock.set("2026-10-12T11:30:00Z");
     await s.engine.checkAll();
 
     const app = (await s.tracker.get(id))!;
