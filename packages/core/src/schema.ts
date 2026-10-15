@@ -500,6 +500,9 @@ const migrations: string[] = [
      settled_at TEXT,
      created_at TEXT NOT NULL
    );`,
+  // #63: the package's CV version: the changes tailoring made to the master profile's CV (each
+  // undoable), how it fits one page, and what the honesty validator caught.
+  `ALTER TABLE package ADD COLUMN cv_version TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

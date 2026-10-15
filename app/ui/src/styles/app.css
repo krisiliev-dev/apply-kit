@@ -417,3 +417,13 @@ h2[tabindex="-1"]:focus { outline: none }
 .pdf-page .textLayer .markedContent { display: contents }
 .pdf-page .textLayer ::selection { background: var(--bloom-soft) }
 .pkg-chip svg { width: 11px; height: 11px }
+/* the CV version (#63): notes, and every line with its pieces */
+.package-page .notes { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.package-page .cv-lines summary { cursor: pointer }
+.package-page .cv-lines summary h2 { display: inline }
+.package-page .cv-lines summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page .cv-lines .stack { margin-top: var(--s-4); gap: var(--s-4) }
+.package-page .cv-lines h3 { font-size: var(--fs-small); font-weight: 600; margin: 0 0 var(--s-2) }
+.package-page .cv-lines ul { margin: 0; padding-left: var(--s-6); display: grid; gap: var(--s-2); font-size: var(--fs-small) }
+.package-page legend:focus { outline: 2px solid var(--focus); outline-offset: 2px }
+.package-page legend { font-weight: 600; font-size: var(--fs-small); padding: 0; margin-bottom: var(--s-3) }

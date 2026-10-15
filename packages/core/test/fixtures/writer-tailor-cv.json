@@ -1,8 +1,28 @@
 {
-  "summary": "Security analyst who writes detection rules and runs phishing response at an insurer.",
-  "lines": [
-    { "text": "Wrote 30 detection rules that cut false alerts by a quarter", "pieceIds": ["piece-detections"], "claim": "as-written" },
-    { "text": "Triaged about 20 SIEM alerts a day for a team of 5", "pieceIds": ["piece-triage"], "claim": "reworded" }
+  "summary": {
+    "text": "Security analyst who writes SIEM detection rules and runs incident response at a bank.",
+    "pieceIds": ["piece-detections", "piece-phishing"],
+    "claim": "reworded",
+    "why": "Leads with SIEM work, the posting's first requirement."
+  },
+  "roles": [
+    {
+      "pieceId": "piece-analyst",
+      "title": "Security Analyst",
+      "employer": "Northwind Bank",
+      "start": "2022-03",
+      "end": null,
+      "bullets": [
+        { "text": "Ran the incident response to a phishing campaign against the claims team", "pieceIds": ["piece-phishing"], "claim": "reworded", "why": "The posting's term for the same work." },
+        { "text": "Wrote 30 detection rules that cut false alerts by a quarter", "pieceIds": ["piece-detections"], "claim": "as-written", "why": "" }
+      ],
+      "why": "Incident response first: the posting asks for it by name."
+    }
   ],
-  "notes": ["Led with detection work because the posting asks for SIEM experience first."]
+  "skills": [{ "text": "Wazuh", "pieceIds": ["piece-wazuh"] }],
+  "evidence": [
+    { "requirement": 0, "pieceIds": ["piece-detections", "piece-wazuh"] },
+    { "requirement": 1, "pieceIds": ["piece-phishing"] }
+  ],
+  "notes": ["Led with incident response and SIEM work, the two things the posting asks for."]
 }

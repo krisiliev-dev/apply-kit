@@ -4,11 +4,16 @@
 // and language; step 2, the CV as the exact PDF with Fit / 100%, the photo switch, the file name and
 // the draft download; the empty state without a master profile. The sticky action bar holds the
 // step's Approve, which explains itself when it can't approve and moves focus to the reason.
-import type { BudgetInfo, HealthSummary, PackagePart, PackageStep, PackageStepView, PackageView, PrepareStatus } from "@apply-kit/core";
+// Ticket #63: the CV step's Changes view (requirements → evidence, every change with Undo, every
+// line and its pieces; beside it the honesty check and tailoring notes) and Preview (the exact PDF
+// with the parse check), and a CV that runs onto page 2 with the ways to tighten it.
+import type {
+  BudgetInfo, CvLineView, CvVersionView, EvidenceRow, HealthSummary, HonestyCheckView, PackagePart, PackageStep, PackageStepView, PackageView, PieceLink, PrepareStatus,
+} from "@apply-kit/core";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  approveStep, fetchPackage, fetchPrepareStatus, fetchSources, packageCvUrl, retryPart, setPackageLanguage, setPackagePhoto,
-  setTargetPosting, startPackage, stopGenerating,
+  approveStep, fetchPackage, fetchPrepareStatus, fetchSources, fitCv, packageCvUrl, redoCvChange, retryPart, setPackageLanguage, setPackagePhoto,
+  setTargetPosting, startPackage, stopGenerating, undoCvChange,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
 import { Icon } from "../icons.tsx";
@@ -306,9 +311,11 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
   const step = pkg.steps.find((s) => s.step === viewing)!;
   const minutes = useMinutesSince(pkg.startedAt);
   const goal = 10;
+  // The CV step shows its changes, or the exact PDF; a CV on two pages opens on the PDF.
+  const [cvView, setCvView] = useState<CvView>(() => (pkg.cvVersion?.fit.choices.length ? "preview" : "changes"));
 
   const content = viewing === "target" ? <TargetStep pkg={pkg} onChange={onChange} say={say} />
-    : viewing === "cv" ? <CvStep pkg={pkg} onChange={onChange} onGo={onGo} say={say} />
+    : viewing === "cv" ? <CvStep pkg={pkg} view={cvView} onView={setCvView} onChange={onChange} onGo={onGo} say={say} />
     : <LaterStep pkg={pkg} step={step} onGo={onGo} />;
 
   return (
@@ -326,8 +333,8 @@ function Steps({ pkg, viewing, jobPage, onChange, onGo, say }: {
           {content}
           <ActionBar key={step.step} pkg={pkg} step={step} jobPage={jobPage} onChange={onChange} onGo={onGo} say={say} />
         </div>
-        <aside className="col side" aria-label={viewing === "cv" ? "File and template" : "This package"}>
-          {viewing === "cv" ? <CvSide pkg={pkg} onChange={onChange} say={say} /> : (
+        <aside className="col side" aria-label={viewing === "cv" ? (cvView === "changes" ? "Honesty check" : "File and template") : "This package"}>
+          {viewing === "cv" ? (cvView === "changes" && pkg.cvVersion ? <CvHonesty cv={pkg.cvVersion} onPreview={() => setCvView("preview")} /> : <CvSide pkg={pkg} onChange={onChange} say={say} />) : (
             <div className="panel">
               <h2>This package</h2>
               <dl className="kv">
@@ -367,6 +374,11 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, say }: {
 }) {
   const [refused, setRefused] = useState<string | null>(null);
   const why = useRef<HTMLParagraphElement>(null);
+  // What blocks it gets focus: the "how to fit one page" choices for a two-page CV, else the reason.
+  const focusBlocker = () => {
+    const legend = step.step === "cv" && pkg.cvVersion?.fit.choices.length ? document.getElementById("tighten-legend") : null;
+    (legend ?? why.current)?.focus();
+  };
   const index = steps.indexOf(step.step);
   const next = steps[index + 1];
   const reason = refused ?? step.blocked;
@@ -377,7 +389,7 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, say }: {
       return;
     }
     if (step.blocked) {
-      why.current?.focus();
+      focusBlocker();
       say(`Can't approve yet: ${step.blocked}`);
       return;
     }
@@ -386,7 +398,7 @@ function ActionBar({ pkg, step, jobPage, onChange, onGo, say }: {
       onChange(r.package);
       if (!r.approved) {
         setRefused(r.reason);
-        window.setTimeout(() => why.current?.focus(), 0);
+        window.setTimeout(focusBlocker, 0);
         say(`Can't approve yet: ${r.reason}`);
         return;
       }
@@ -479,31 +491,241 @@ function TargetStep({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: Pa
   );
 }
 
-function CvStep({ pkg, onChange, onGo, say }: { pkg: PackageView; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; say: (m: string) => void }) {
+type CvView = "changes" | "preview";
+
+function CvStep({ pkg, view, onView, onChange, onGo, say }: {
+  pkg: PackageView; view: CvView; onView: (v: CvView) => void; onChange: (p: PackageView) => void; onGo: (v: Viewing) => void; say: (m: string) => void;
+}) {
   const part = pkg.parts.find((p) => p.part === "cv")!;
+  const cv = pkg.cvVersion;
   const retry = async () => {
     const r = await retryPart(pkg.id, "cv").catch((err: unknown) => ({ changed: false as const, reason: message(err), package: pkg }));
     onChange(r.package);
     say(r.changed ? "Writing the CV again…" : r.reason);
   };
+  const lead = view === "changes"
+    ? `Tailored from your ${pkg.angle.label} angle: what the CV uses for each requirement, and every change from your master profile.`
+    : "The exact PDF the extension uploads. Undoing a change prints it again.";
+  return (
+    <>
+      <div className="panel">
+        <div className="sec-head">
+          <div className="step-title grow"><h2 id="cv-title" tabIndex={-1}>CV version</h2><p className="muted">{lead}</p></div>
+          {cv && (
+            <div className="segmented" role="group" aria-label="View">
+              <button type="button" aria-pressed={view === "changes"} onClick={() => onView("changes")}>Changes</button>
+              <button type="button" aria-pressed={view === "preview"} onClick={() => onView("preview")}>Preview</button>
+            </div>
+          )}
+        </div>
+        {cv && cv.fit.choices.length > 0 && <FitChoices pkg={pkg} cv={cv} onChange={onChange} say={say} />}
+        {cv && cv.fit.keepTwoPages && <KeptTwo pkg={pkg} onChange={onChange} say={say} />}
+        {pkg.cv && (view === "preview" || !cv) ? (
+          <Suspense fallback={<p className="meta" role="status">Opening the PDF…</p>}>
+            <PdfPreview key={pkg.cv.sha256} url={packageCvUrl(pkg.id, pkg.cv.sha256)} name="CV" pages={pkg.cv.pages} overflow={pkg.cv.overflow !== null} linesOnPage2={pkg.cv.overflow?.linesAfterFirstPage} />
+          </Suspense>
+        ) : pkg.cv ? null : part.state === "working" || part.state === "waiting" ? (
+          <div className="stack" role="status"><p className="meta">Writing the CV…</p><span className="skel w70" /><span className="skel w90" /><span className="skel w50" /></div>
+        ) : (
+          <div className={`banner ${part.state === "failed" ? "error" : "warning"}`} role="alert">
+            <span className="text"><b>The CV wasn't written.</b> {part.what} The target posting and everything else are saved.</span>
+            {part.state === "not-written"
+              ? <button className="btn sm" type="button" onClick={() => onGo("progress")}>See the budget</button>
+              : <button className="btn sm" type="button" onClick={() => void retry()}>Try again</button>}
+          </div>
+        )}
+      </div>
+      {cv && view === "changes" && (
+        <>
+          <Evidence rows={cv.evidence} />
+          <Changes pkg={pkg} cv={cv} onChange={onChange} say={say} />
+          <Lines cv={cv} />
+        </>
+      )}
+    </>
+  );
+}
+
+const pieceHref = (id: string) => `/profile/pieces/${encodeURIComponent(id)}`;
+
+function PieceLinks({ pieces }: { pieces: PieceLink[] }) {
+  return <>{pieces.map((p, i) => <span key={p.id}>{i > 0 && " · "}<a href={pieceHref(p.id)}>{p.label}</a></span>)}</>;
+}
+
+const statusChip: Record<EvidenceRow["status"], [string, string, string]> = {
+  met: ["met", "met", "Met"], partly: ["partly", "partly", "Partly"], gap: ["gap", "gap", "Gap"], "not-held": ["partly", "partly", "Not held"], unknown: ["neutral", "unknown", "Unknown"],
+};
+
+function Evidence({ rows }: { rows: EvidenceRow[] }) {
+  if (rows.length === 0) return null;
+  const count = (st: EvidenceRow["status"]) => rows.filter((r) => r.status === st).length;
+  const summary = [`${rows.length} from the posting`, ...(["met", "partly", "gap", "not-held"] as const).filter((st) => count(st)).map((st) => `${count(st)} ${statusChip[st][2].toLowerCase()}`)].join(" · ");
   return (
     <div className="panel">
-      <div className="step-title"><h2>CV version</h2><p className="muted">The exact PDF the extension uploads. For now it's your {pkg.angle.label.toLowerCase()} angle's pieces as they are in your profile; tailoring for this job comes with a later part of the rebuild.</p></div>
-      {pkg.cv ? (
-        <Suspense fallback={<p className="meta" role="status">Opening the PDF…</p>}>
-          <PdfPreview key={pkg.cv.sha256} url={packageCvUrl(pkg.id, pkg.cv.sha256)} name="CV" pages={pkg.cv.pages} overflow={pkg.cv.overflow !== null} />
-        </Suspense>
-      ) : part.state === "working" || part.state === "waiting" ? (
-        <div className="stack" role="status"><p className="meta">Writing the CV…</p><span className="skel w70" /><span className="skel w90" /><span className="skel w50" /></div>
-      ) : (
-        <div className={`banner ${part.state === "failed" ? "error" : "warning"}`} role="alert">
-          <span className="text"><b>The CV wasn't written.</b> {part.what} The target posting and everything else are saved.</span>
-          {part.state === "not-written"
-            ? <button className="btn sm" type="button" onClick={() => onGo("progress")}>See the budget</button>
-            : <button className="btn sm" type="button" onClick={() => void retry()}>Try again</button>}
-        </div>
+      <div className="sec-head"><h2>Requirements → evidence</h2><span className="meta">{summary}</span></div>
+      <div className="evmap">
+        {rows.map((r, i) => {
+          const [cls, icon, label] = statusChip[r.status];
+          return (
+            <div className="ev-row" key={i}>
+              <div className="req">
+                <b>{r.requirement}{r.kind === "preferred" && <> <span className="meta">preferred</span></>}</b>
+                <span className={`chip ${cls}`}><Icon name={icon as "met"} />{label}</span>
+              </div>
+              <div className="used">
+                <span className="piece-ref">
+                  {r.pieces.length > 0 ? <>Evidence: <PieceLinks pieces={r.pieces} /></> : r.status === "gap" ? "No piece in your profile backs it." : "Nothing in your profile claims it."}
+                  {r.note && r.pieces.length > 0 && <span className="meta block">{r.note}</span>}
+                </span>
+                <span className="cvline">{r.onCv.join(" · ")}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function Changes({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionView; onChange: (p: PackageView) => void; say: (m: string) => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  async function toggle(id: string, undo: boolean, label: string) {
+    if (busy) return;
+    setBusy(id);
+    try {
+      const r = await (undo ? undoCvChange : redoCvChange)(pkg.id, id);
+      onChange(r.package);
+      say(r.changed ? `${undo ? "Undone" : "Redone"}: ${label.toLowerCase()}. The CV is printed again.` : r.reason);
+    } catch (err) {
+      say(`Couldn't ${undo ? "undo" : "redo"} it: ${message(err)}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+  const live = cv.changes.filter((c) => !c.undone).length;
+  return (
+    <div className="panel">
+      <div className="sec-head"><h2>Changes from your master profile</h2><span className="meta">{cv.changes.length === 0 ? "None: the CV is your profile as it is" : `${live} of ${cv.changes.length} in use · each can be undone`}</span></div>
+      {cv.changes.length > 0 && (
+        <ol className="edits">
+          {cv.changes.map((c) => (
+            <li key={c.id} className={`edit${c.undone ? " undone" : ""}`}>
+              <div className="what">
+                <b>{c.label}{c.undone && <span className="meta"> · undone</span>}</b>
+                {c.was && <del>{c.was}</del>}
+                {c.is && <ins>{c.is}</ins>}
+                {c.detail && <span>{c.detail}</span>}
+                <span className="why">{c.why}</span>
+              </div>
+              <button className="btn ghost sm" type="button" aria-busy={busy === c.id || undefined} onClick={() => void toggle(c.id, !c.undone, c.label)}>
+                {c.undone ? "Redo" : "Undo"}<span className="sr-only"> {c.label.toLowerCase()}</span>
+              </button>
+            </li>
+          ))}
+        </ol>
       )}
     </div>
+  );
+}
+
+function LineRow({ line }: { line: CvLineView }) {
+  return <li><span>{line.text}</span> <span className="meta">· <PieceLinks pieces={line.pieces} /></span></li>;
+}
+
+/** Every line on the CV with the pieces it relies on: nothing on it that the profile doesn't back. */
+function Lines({ cv }: { cv: CvVersionView }) {
+  return (
+    <div className="panel">
+      <details className="cv-lines">
+        <summary><h2>Every line and its pieces</h2> <span className="meta">each line on the CV, linked to the pieces it relies on</span></summary>
+        <div className="stack">
+          {cv.summary && <section><h3>Summary</h3><ul><LineRow line={cv.summary} /></ul></section>}
+          {cv.roles.map((r) => (
+            <section key={r.roleId}><h3>{r.heading}</h3>{r.bullets.length ? <ul>{r.bullets.map((b, i) => <LineRow key={i} line={b} />)}</ul> : <p className="meta">Title and dates only.</p>}</section>
+          ))}
+          {cv.skills.length > 0 && <section><h3>Skills</h3><ul>{cv.skills.map((l, i) => <LineRow key={i} line={l} />)}</ul></section>}
+          {cv.education.length > 0 && <section><h3>Education</h3><ul>{cv.education.map((l, i) => <LineRow key={i} line={l} />)}</ul></section>}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+/** A CV that runs onto page 2: the ways to tighten it, none pre-selected; type and margins never shrink. */
+function FitChoices({ pkg, cv, onChange, say }: { pkg: PackageView; cv: CvVersionView; onChange: (p: PackageView) => void; say: (m: string) => void }) {
+  const [error, setError] = useState<string | null>(null);
+  async function choose(id: string, label: string) {
+    const r = await fitCv(pkg.id, id).catch((err: unknown) => ({ changed: false as const, reason: message(err), package: pkg }));
+    onChange(r.package);
+    setError(r.changed ? null : r.reason);
+    if (!r.changed) return;
+    const fits = r.package.cv?.pages === 1;
+    say(id === "keep-two-pages" ? "Kept 2 pages." : `${label}. ${fits ? "The CV fits on one page now." : "It still runs onto page 2: choose again."} Undo it under Changes.`);
+    window.setTimeout(() => (document.getElementById(fits || id === "keep-two-pages" ? "cv-title" : "tighten-legend"))?.focus(), 0);
+  }
+  const n = cv.fit.linesOnPage2;
+  return (
+    <>
+      <div className="banner warning" role="note">
+        <span className="text"><b>This CV runs onto a second page: {n} {n === 1 ? "line spills" : "lines spill"} over.</b> One page is the rule for your template. Pick what to tighten; each choice shows as a change you can undo. Type and margins never shrink.</span>
+      </div>
+      <fieldset className="choices">
+        <legend id="tighten-legend" tabIndex={-1}>How to fit it on one page</legend>
+        {cv.fit.choices.map((c) => (
+          <label className="choice" key={c.id}>
+            <input type="radio" name="tighten" checked={false} onChange={() => void choose(c.id, c.label)} />
+            <b>{c.label}</b>
+            <span className="meta">{c.meta}</span>
+          </label>
+        ))}
+      </fieldset>
+      {error && <p className="why-off" role="alert">{error}</p>}
+    </>
+  );
+}
+
+function KeptTwo({ pkg, onChange, say }: { pkg: PackageView; onChange: (p: PackageView) => void; say: (m: string) => void }) {
+  async function again() {
+    const r = await fitCv(pkg.id, "choose-again").catch((err: unknown) => ({ changed: false as const, reason: message(err), package: pkg }));
+    onChange(r.package);
+    say(r.changed ? "Choose how to fit one page, or keep 2." : r.reason);
+    if (r.changed) window.setTimeout(() => document.getElementById("tighten-legend")?.focus(), 0);
+  }
+  return (
+    <div className="banner info" role="note">
+      <span className="text">You kept 2 pages. Some recruiters skip page 2; the ATS check will say so.</span>
+      <button className="btn sm" type="button" onClick={() => void again()}>Choose again</button>
+    </div>
+  );
+}
+
+const checkChip: Record<HonestyCheckView["state"], [string, "met" | "line" | "gap", string]> = {
+  ok: ["met", "met", "OK"], fixed: ["met", "met", "Fixed"], line: ["partly", "line", "Held"], gap: ["gap", "gap", "Gap"],
+};
+
+function CvHonesty({ cv, onPreview }: { cv: CvVersionView; onPreview: () => void }) {
+  return (
+    <>
+      <div className="panel">
+        <h2>Honesty check</h2>
+        <ul className="checks">
+          {cv.honesty.map((c) => {
+            const [cls, icon, label] = checkChip[c.state];
+            return (
+              <li key={c.id}>
+                <span className={`chip ${cls}`}><Icon name={icon} />{label}</span>
+                <span>{c.label}{c.detail && <span className="meta block">{c.detail}</span>}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <div className="panel">
+        <h2>Tailoring notes</h2>
+        <ul className="notes">{cv.notes.map((n, i) => <li key={i}>{n}</li>)}</ul>
+        <div className="row"><button className="btn ghost sm" type="button" onClick={onPreview}>See the exact PDF</button></div>
+      </div>
+    </>
   );
 }
 

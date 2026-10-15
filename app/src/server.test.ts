@@ -298,6 +298,8 @@ describe("the Package's API", () => {
     expect(form.status).toBe(415);
     expect(feed.jobs.map((j) => j.package)).toEqual([null]);
     expect((await s.request("/api/packages/nope")).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/changes/c1/undo", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/fit", s.json({ choice: "keep-two-pages" }))).status).toBe(404);
   });
 });
 

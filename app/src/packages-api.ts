@@ -1,6 +1,6 @@
 // The Package's API (ticket #62): the Prepare button's state for a Job, starting the Job's package,
 // reading it, approving steps in order, the target posting, language and photo, stopping and
-// retrying parts, and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
+// retrying parts, the CV version's changes (undo, redo) and fitting it on one page (#63), and the CV's draft PDF. Mutations need a JSON body type, like the rest of the
 // service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
 import { packageSteps, type DiscoveryEngine, type PackageStep, type PreparationEngine } from "@apply-kit/core";
@@ -68,6 +68,13 @@ export function mountPackageApi(app: Hono, engine: DiscoveryEngine, preparation:
     const s = step(c, c.req.param("part")!);
     return s instanceof Response ? s : preparation.retryPart(id, s);
   }));
+
+  // A change from the master profile in the CV version: undo it (the line it replaced comes back) or redo it.
+  app.post("/api/packages/:id/cv/changes/:change/undo", (c) => withPackage(c, (id) => preparation.undoCvChange(id, c.req.param("change")!)));
+  app.post("/api/packages/:id/cv/changes/:change/redo", (c) => withPackage(c, (id) => preparation.redoCvChange(id, c.req.param("change")!)));
+  // { choice }: one of the ways offered to fit the CV on one page, or "keep-two-pages".
+  app.post("/api/packages/:id/cv/fit", (c) => withPackage(c, (id, body) =>
+    typeof body.choice === "string" ? preparation.fitCv(id, body.choice) : c.json({ error: "choice must be one of the offered ways" }, 400)));
 
   // The CV's draft PDF, exactly as printed. ?download=1 saves it, named as a draft.
   app.get("/api/packages/:id/cv.pdf", async (c) => {
