@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { EmailClassification } from "@apply-kit/core";
+import { bannedPhrases, type DraftInput, type EmailClassification } from "@apply-kit/core";
 import { CHINA_HOSTED_PROVIDERS } from "./openrouter.ts";
 import { createOpenRouterTrackAssistant } from "./track-assistant.ts";
 
@@ -48,5 +48,32 @@ describe("OpenRouter Track assistant", () => {
     expect(assistant.estimateClassifyUsd(input)).toBeGreaterThan(0.00012);
     expect(api.requests).toHaveLength(0);
     await expect(assistant.classify(input)).rejects.toThrow();
+  });
+});
+
+// A synthetic follow-up (made-up company, person and profile).
+const draftInput: DraftInput = {
+  followUpId: "fu-secret-id", kind: "nudge", company: "Kestrel Payments", title: "Security Engineer", since: "Mon 5 Oct", stage: "applied",
+  daysQuiet: 7, requirements: ["Threat modelling for payment features"], notes: [], language: "en", words: { min: 70, max: 110 }, banned: bannedPhrases,
+  evidence: [{ text: "Ran threat-modelling sessions; 40 tracked fixes", origin: "Velora · Security Engineer" }],
+  voice: ["I keep things short and plain."],
+};
+
+describe("OpenRouter Track assistant: drafts", () => {
+  it("drafts on pinned non-China hosts with the requirements, evidence, voice excerpts and banned phrases, but not the follow-up's id", async () => {
+    const api = fakeOpenRouter(JSON.stringify({ body: "A short nudge." }));
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: api.fetch });
+
+    const result = await assistant.draft(draftInput);
+
+    expect(result).toEqual({ draft: { body: "A short nudge." }, costUsd: 0.00012, model: "deepseek/deepseek-v4.1-flash" });
+    expect(assistant.estimateDraftUsd(draftInput)).toBeGreaterThan(0);
+    const body = api.requests[0]!;
+    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: false, ignore: CHINA_HOSTED_PROVIDERS });
+    const sent = JSON.stringify(body.messages);
+    for (const part of ["Threat modelling for payment features", "40 tracked fixes", "I keep things short and plain.", "as per my previous email", "70-110 words"]) {
+      expect(sent).toContain(part);
+    }
+    expect(sent).not.toContain("fu-secret-id");
   });
 });

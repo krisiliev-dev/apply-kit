@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { htmlToText } from "./extraction/text.ts";
 import { normaliseCompany, normaliseTitle } from "./matching.ts";
+import type { DraftInput, DraftOutput } from "./follow-ups.ts";
 import type { MailMessage } from "./ports.ts";
 import { jobCards } from "./sources/email/cards.ts";
 import { readEmailHtml } from "./sources/email/html.ts";
@@ -31,6 +32,9 @@ export const emailClassificationSchema = z.object({
 });
 export type EmailClassification = z.infer<typeof emailClassificationSchema>;
 
+/** A drafted message as the assistant returns it: the body only. Validated before it is used. */
+export const draftOutputSchema = z.object({ body: z.string() });
+
 /** The minimum of an email the assistant is shown: who sent it, the subject and the text (trimmed). */
 export interface ClassifyInput {
   /** The Message-ID. Never sent to the model; it lets fakes answer per email. */
@@ -42,8 +46,8 @@ export interface ClassifyInput {
 }
 
 /**
- * Track's AI seam (spec #24 "AI seam"). Only email classification so far; drafts and prep sheets
- * join it with their tickets. The service passes the OpenRouter implementation; tests pass a fake
+ * Track's AI seam (spec #24 "AI seam"): classifying an email and drafting a message; prep sheets join
+ * it with their ticket. Each task's estimate is checked against the shared monthly cap before calling. The service passes the OpenRouter implementation; tests pass a fake
  * answering with recorded outputs.
  */
 export interface TrackAssistant {
@@ -51,6 +55,10 @@ export interface TrackAssistant {
   estimateClassifyUsd(input: ClassifyInput): number;
   /** Throws on any failure; the email is then matched on rules alone. */
   classify(input: ClassifyInput): Promise<{ classification: EmailClassification; costUsd: number; model: string }>;
+  /** A cautious (high) estimate of drafting this message, in USD. No I/O. */
+  estimateDraftUsd(input: DraftInput): number;
+  /** Drafts the body of one message. Throws on any failure (the user gets the outline). May carry `costUsd` if billed. */
+  draft(input: DraftInput): Promise<{ draft: DraftOutput; costUsd: number; model: string }>;
 }
 
 /** How confident the assistant must be for an email to change a Status on its own. */

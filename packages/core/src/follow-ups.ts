@@ -23,6 +23,8 @@ export interface FollowUp {
   state: "pending" | "sent" | "skipped";
   /** When it was marked sent or skipped, or null. */
   doneAt: string | null;
+  /** Who marked it: you, or apply-kit on seeing your sent copy in the job mailbox ("email"); null while pending. */
+  doneBy: "you" | "email" | null;
   /** The text as the user typed it ("" until they type). */
   text: string;
 }
@@ -107,4 +109,131 @@ export function outlineOf(i: OutlineInput): string[] {
   points.push("One true example of your own that fits it; numbers only from your Master profile.");
   points.push("Offer a call; no pressure.");
   return points;
+}
+
+// ---------- Drafts (Track #32; spec #24 "Draft rules") ----------
+
+/**
+ * The messages the Track assistant drafts. Only the nudge so far: thank-you notes, check-ins,
+ * withdrawals and declines join with their tickets. A note to self is never drafted (its outline is it).
+ */
+export type DraftKind = "nudge";
+
+/** The length that works well, in words, per kind (spec "Draft rules"). */
+export const draftWords: Record<DraftKind, { min: number; max: number }> = { nudge: { min: 70, max: 110 } };
+
+/**
+ * Phrases a draft must never use (docs/knowledge/application-tactics.md: the follow-up draft rules
+ * and the shared banned-phrase list). Matched case-insensitively, as whole words.
+ */
+export const bannedPhrases: readonly string[] = [
+  "I wanted to reach out to express my deep interest", "as per my previous email", "I'm thrilled", "I am thrilled",
+  "I'm excited to apply", "excited to apply", "I have always been passionate about", "passionate", "results-driven",
+  "dynamic", "synergy", "I believe", "I think", "I feel", "thanks for considering", "thank you for considering",
+  "looking forward to", "you've got this",
+];
+
+/** One piece of the user's Master profile a draft may draw on, and where it comes from. */
+export interface ProfileEvidence {
+  /** The piece in the user's own words, numbers as they confirmed them. */
+  text: string;
+  /** Where it is in the Master profile, in plain words ("Velora · Security Engineer (2022–2024)"). */
+  origin: string;
+}
+
+/**
+ * The Master profile as Track needs it: the pieces that bear on a posting's requirements. An assumed
+ * contract with Prepare (its master profile isn't built yet); without one, drafts carry no numbers.
+ */
+export interface MasterProfile {
+  evidence(input: { requirements: string[]; language: string }): Promise<ProfileEvidence[]>;
+}
+
+/**
+ * The user's past writing kept on the laptop (Prepare's voice samples: past cover letters). An
+ * assumed contract with Prepare; Track adds the user's own follow-up edits to what it gets here.
+ * Only short excerpts are ever sent with a draft (PRODUCT.md "Voice").
+ */
+export interface VoiceSamples {
+  excerpts(input: { language: string; limit: number }): Promise<string[]>;
+}
+
+/** What the Track assistant is given to draft one message. */
+export interface DraftInput {
+  /** The follow-up's id. Never sent to the model; it lets fakes answer per follow-up. */
+  followUpId: string;
+  kind: DraftKind;
+  company: string;
+  title: string;
+  /** The day the stage began, in words ("Mon 5 Oct"), and the stage. */
+  since: string;
+  stage: "applied" | "screening";
+  /** Whole days with no reply. */
+  daysQuiet: number;
+  /** The posting's requirements as read (English labels), most important first; empty when it wasn't read. */
+  requirements: string[];
+  /** The user's notes on the Application, oldest first. */
+  notes: string[];
+  /** Master profile pieces the draft may draw on; the only source of numbers about the user. */
+  evidence: ProfileEvidence[];
+  /** Short excerpts of the user's own writing, to sound like them. */
+  voice: string[];
+  /** ISO 639-1: the posting's language ("bg" for a Bulgarian posting). */
+  language: string;
+  words: { min: number; max: number };
+  banned: readonly string[];
+}
+
+/** The draft as the assistant returns it: the body only (no greeting, sign-off or subject). */
+export interface DraftOutput {
+  body: string;
+}
+
+/** A draft as the user sees it, with where any number in it came from. */
+export interface FollowUpDraftText {
+  text: string;
+  language: string;
+  /** Each number about the user in the draft, quoted with the words after it, and its Master profile origin. */
+  numbers: { quote: string; origin: string }[];
+}
+
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const numberRe = /\d+(?:[.,]\d+)*%?/g;
+
+/**
+ * Checks a draft against the rules that can be checked without a model: not empty, no banned phrase,
+ * and every number either from the Master profile evidence (its origin returned) or from the
+ * Application and posting themselves (the date applied, a requirement, a note). Returns why not, or the draft.
+ */
+export function checkDraft(
+  body: string,
+  input: Pick<DraftInput, "evidence" | "banned" | "language" | "since" | "requirements" | "notes" | "title" | "company">,
+): { ok: true; draft: FollowUpDraftText } | { ok: false; why: string } {
+  const text = body.trim();
+  if (!text) return { ok: false, why: "it was empty" };
+  const plain = text.replace(/[’‘]/g, "'");
+  const banned = input.banned.find((p) => new RegExp(`(^|[^\\p{L}])${escapeRe(p)}($|[^\\p{L}])`, "iu").test(plain));
+  if (banned) return { ok: false, why: `it used "${banned}"` };
+  const context = [input.since, input.title, input.company, ...input.requirements, ...input.notes].join("\n");
+  const numbers: { quote: string; origin: string }[] = [];
+  for (const m of text.matchAll(numberRe)) {
+    const n = m[0];
+    const has = (s: string) => new RegExp(`(^|[^\\d])${escapeRe(n)}($|[^\\d])`).test(s);
+    const piece = input.evidence.find((e) => has(e.text));
+    if (piece) {
+      const after = text.slice(m.index + n.length).match(/^(?:\s+[\p{L}-]+){0,2}/u)?.[0] ?? "";
+      const quote = `${n}${after}`.trim();
+      if (!numbers.some((x) => x.quote === quote)) numbers.push({ quote, origin: piece.origin });
+    } else if (!has(context) && !isDateNumber(n, text, m.index)) {
+      return { ok: false, why: `it used a number (${n}) that isn't in your Master profile` };
+    }
+  }
+  return { ok: true, draft: { text, language: input.language, numbers } };
+}
+
+const months = /^\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|януари|февруари|март|април|май|юни|юли|август|септември|октомври|ноември|декември)/i;
+/** A day of the month written next to a month name ("on 5 October", "October 5"): a date, not a claim. */
+function isDateNumber(n: string, text: string, at: number): boolean {
+  if (!/^\d{1,2}$/.test(n)) return false;
+  return months.test(text.slice(at + n.length)) || /(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*$/i.test(text.slice(Math.max(0, at - 12), at));
 }

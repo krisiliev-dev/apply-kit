@@ -165,6 +165,8 @@ function withMail() {
       if (!classification) throw new Error(`no recorded classification for ${input.messageId}`);
       return { classification, costUsd: 0.0005, model: "fake/track-assistant" };
     },
+    estimateDraftUsd: () => 0.002,
+    draft: async () => { throw new Error("no drafts in these tests"); },
   };
   let tracker: AnyTracker | null = null;
   const t = createTestEngine({ clock, mailReader: mailbox, aiMonthlyCapUsd: 10, onMailStored: (emails) => tracker!.processMail(emails) });

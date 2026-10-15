@@ -377,6 +377,20 @@ const migrations: string[] = [
      seen_at TEXT NOT NULL,
      since TEXT
    );`,
+  // Track #32: a follow-up's draft from the Track assistant (kept once made, with the Master profile
+  // origin of each number in it), and the user's own writing kept as voice samples (local only): the
+  // latest text of each follow-up they edited or wrote themselves.
+  `ALTER TABLE follow_up ADD COLUMN draft_text TEXT;
+   ALTER TABLE follow_up ADD COLUMN draft_language TEXT;
+   ALTER TABLE follow_up ADD COLUMN draft_numbers TEXT;
+   ALTER TABLE follow_up ADD COLUMN draft_model TEXT;
+   ALTER TABLE follow_up ADD COLUMN drafted_at TEXT;
+   CREATE TABLE voice_sample (
+     follow_up_id TEXT PRIMARY KEY REFERENCES follow_up(id),
+     text TEXT NOT NULL,
+     language TEXT,
+     saved_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

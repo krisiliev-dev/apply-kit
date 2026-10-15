@@ -26,6 +26,8 @@ function fakeAssistant({ costUsd = 0.0005 } = {}) {
       if (!classification) throw new Error(`no recorded classification for ${input.messageId}`);
       return { classification, costUsd, model: "fake/track-assistant" };
     },
+    estimateDraftUsd: () => costUsd,
+    draft: async () => { throw new Error("no drafts in these tests"); },
   };
   return { assistant, calls };
 }
