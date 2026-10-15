@@ -48,6 +48,18 @@ describe("packages folder", () => {
     expect(new TextDecoder().decode((await folder.read(frozen.path))!)).toBe("%PDF approved");
   });
 
+  it("freezes the same bytes again as the file already there (a retried approval), and refuses other bytes", async () => {
+    const dataDir = freshDir();
+    const folder = createPackageFolder(dataDir);
+    const first = await folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF approved"));
+
+    const again = await folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF approved"));
+
+    expect(again).toEqual(first);
+    await expect(folder.freeze("p1", 1, "Mira_Petrova_CV_Kestrel.pdf", bytes("%PDF changed"))).rejects.toThrow();
+    expect(new TextDecoder().decode((await folder.read(first.path))!)).toBe("%PDF approved");
+  });
+
   it("still freezes when the Packages folder can't be written, with no copy", async () => {
     const dataDir = freshDir();
     const folder = createPackageFolder(dataDir, "/dev/null/apply-kit Packages");

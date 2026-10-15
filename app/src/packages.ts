@@ -12,6 +12,7 @@ const SAFE_NAME = /^[A-Za-z0-9_.-]+\.pdf$/;
 const VERSION = /^v[1-9]\d*$/;
 
 const safeName = (fileName: string) => SAFE_NAME.test(fileName) && !fileName.startsWith(".");
+const sameBytes = (a: Uint8Array, b: Uint8Array) => Buffer.compare(a, b) === 0;
 
 export function createPackageFolder(dataDir: string, packagesDir?: string): PackageFolder {
   return {
@@ -33,8 +34,11 @@ export function createPackageFolder(dataDir: string, packagesDir?: string): Pack
       if (!Number.isInteger(version) || version < 1) throw new Error(`Not a version: ${version}`);
       const dir = join(dataDir, "packages", packageId, `v${version}`);
       await mkdir(dir, { recursive: true });
-      // "wx": a frozen file is written once; writing it again fails rather than change it.
-      await writeFile(join(dir, fileName), bytes, { flag: "wx" });
+      // "wx": a frozen file is written once. The same bytes again (a retried approval) find it there;
+      // other bytes fail rather than change it.
+      await writeFile(join(dir, fileName), bytes, { flag: "wx" }).catch(async (err: NodeJS.ErrnoException) => {
+        if (err.code !== "EEXIST" || !sameBytes(await readFile(join(dir, fileName)), bytes)) throw err;
+      });
       let copy: string | null = null;
       if (packagesDir) {
         try {
