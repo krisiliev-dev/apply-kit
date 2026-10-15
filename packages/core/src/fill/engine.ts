@@ -143,11 +143,17 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
       const answer: FieldAnswer = { fieldId, kind: "needs-you", reason: `The closest answer is ${answerKindWords(entry.kind)} answer, and this field asks for ${fieldKindWords(f.kind)}`, basis };
       return { answerId: m.answerId, answer: value ? { ...answer, suggestion: value } : answer };
     }
+    if (m.fill.action === "no-version") {
+      const names = m.fill.languages.map((l) => (l === "bg" ? "Bulgarian" : "English")).join(" and ");
+      return { answerId: m.answerId, answer: { fieldId, kind: "needs-you", reason: `Your answer bank has this only in ${names}`, basis: `"${m.question}" in your answer bank` } };
+    }
     if (value === null) return null;
-    const mapped = mapToField(value, f);
+    const mapped = mapToField(value, f, clock.now());
     return {
       answerId: m.answerId,
-      answer: mapped.ok ? { fieldId, kind: "fill", value: mapped.value, source: "answer-bank", basis } : { fieldId, kind: "needs-you", reason: mapped.reason, basis, suggestion: value },
+      answer: mapped.ok
+        ? { fieldId, kind: "fill", value: mapped.value, source: "answer-bank", basis: mapped.basis ?? basis }
+        : { fieldId, kind: "needs-you", reason: mapped.reason, basis, suggestion: value },
     };
   }
 

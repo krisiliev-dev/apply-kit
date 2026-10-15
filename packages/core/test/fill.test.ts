@@ -295,3 +295,50 @@ describe("answering questions from the answer bank", () => {
     expect(used()).toMatchObject({ useCount: 1, lastUsedAt: "2026-10-12T07:30:00.000Z" });
   });
 });
+
+describe("turning an answer into the field's format", () => {
+  it("maps yes/no between English and Bulgarian, and to options worded as sentences", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("q1", "Do you require visa sponsorship?", { kind: "select", options: ["Да", "Не"] }),
+      field("q2", "Will you now or in the future require sponsorship?", { kind: "radio", options: ["Yes, I will", "No, I won't"] }),
+    ]));
+
+    expect(answers.map((a) => a.kind === "fill" && a.value)).toEqual(["Не", "No, I won't"]);
+
+    bank(t, { question: "Нуждаете ли се от спонсорство за виза?", versions: { bg: "Не" }, category: "standard", kind: "yes-no" });
+    const [bg] = t.fill.answer(t.sessionId, reading([field("q2", "Нуждаете ли се от спонсорство за виза?", { kind: "radio", options: ["Yes, I will", "No, I won't"] })]));
+    expect(bg).toMatchObject({ kind: "needs-you", reason: "Your answer bank has this only in Bulgarian" });
+  });
+
+  it("puts '1 month' in the notice-period option that holds it", async () => {
+    const t = await filling();
+    const [a, b] = t.fill.answer(t.sessionId, reading([
+      field("q1", "Notice period", { kind: "select", options: ["Immediately", "Less than 2 weeks", "2–4 weeks", "1–2 months", "More than 2 months"] }),
+      field("q2", "Notice period", { kind: "select", options: ["Up to 1 month", "1 month or more"] }),
+    ]));
+
+    expect(a).toEqual({ fieldId: "q1", kind: "fill", value: "1–2 months", source: "answer-bank", basis: null });
+    // Two options hold it: all or nothing, so Kris picks.
+    expect(b).toEqual({ fieldId: "q2", kind: "needs-you", reason: 'None of the options matches "1 month"', basis: null, suggestion: "1 month" });
+  });
+
+  it("puts a number in the range that holds it", async () => {
+    const t = await filling();
+    bank(t, { question: "Years of experience with SIEM tools", versions: { en: "4" }, category: "screening", kind: "number" });
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Years of experience with SIEM tools", { kind: "select", options: ["0-2", "3-5", "6+"] })]));
+    expect(a).toMatchObject({ kind: "fill", value: "3-5" });
+  });
+
+  it("works out a relative start date from today", async () => {
+    const t = await filling();
+    bank(t, { question: "Earliest start date", wordings: ["When can you start?"], versions: { en: "Two weeks from offer" }, category: "standard", kind: "date" });
+
+    const [date, text] = t.fill.answer(t.sessionId, reading([field("d", "Earliest start date", { kind: "date" }), field("t", "When can you start?")]));
+
+    expect(date).toEqual({ fieldId: "d", kind: "fill", value: "2026-10-26", source: "answer-bank", basis: '"Two weeks from offer", counted from today' });
+    expect(text).toEqual({ fieldId: "t", kind: "fill", value: "Two weeks from offer", source: "answer-bank", basis: null });
+  });
+});

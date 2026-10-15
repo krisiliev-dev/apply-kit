@@ -76,12 +76,20 @@ export function yesNoOf(text: string): "yes" | "no" | null {
   return yesWords.has(first) ? "yes" : noWords.has(first) ? "no" : null;
 }
 
-export type Mapped = { ok: true; value: string } | { ok: false; reason: string };
+/** `basis` says how a value was worked out ("counted from today"), when it isn't the answer as written. */
+export type Mapped = { ok: true; value: string; basis?: string } | { ok: false; reason: string };
 
 /** The answer in the field's format, all or nothing: exactly one option, a number, a date, or text within the limit. */
-export function mapToField(answer: string, field: ReadField): Mapped {
+export function mapToField(answer: string, field: ReadField, today: Date): Mapped {
   const value = answer.trim();
   if (field.options.length > 0) return pickOption(value, field.options);
+  if (field.kind === "date") {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return { ok: true, value };
+    const days = daysIn(value);
+    if (days === null) return { ok: false, reason: `"${value}" isn't a date apply-kit can work out` };
+    return { ok: true, value: new Date(today.getTime() + days * 86_400_000).toISOString().slice(0, 10), basis: `"${value}", counted from today` };
+  }
+  if (field.kind === "number" && !/^-?\d+([.,]\d+)?$/.test(value)) return { ok: false, reason: `"${value}" isn't a number` };
   if (field.kind === "checkbox") {
     const yn = yesNoOf(value);
     return yn === "yes" ? { ok: true, value: "checked" } : yn === "no" ? { ok: true, value: "" } : { ok: false, reason: `"${value}" isn't a yes or no for this tick box` };
@@ -99,9 +107,54 @@ function pickOption(value: string, options: string[]): Mapped {
   const exact = one(options.filter((o) => normaliseQuestion(o) === norm));
   if (exact) return exact;
   const yn = yesNoOf(value);
-  if (yn && (yesWords.has(norm) || noWords.has(norm))) {
-    const hit = one(options.filter((o) => yesNoOf(o) === yn));
-    if (hit) return hit;
+  if (yn && (yesWords.has(norm) || noWords.has(norm))) return one(options.filter((o) => yesNoOf(o) === yn)) ?? none;
+  if (preferNot.test(norm)) return one(options.filter((o) => preferNot.test(normaliseQuestion(o)))) ?? none;
+  // A length of time ("1 month") goes in the bucket that holds it; a number in the range that holds it.
+  const days = daysIn(value);
+  if (days !== null) return one(options.filter((o) => holds(bucketOf(o, true), days))) ?? none;
+  if (/^\d+([.,]\d+)?$/.test(value)) {
+    const n = Number(value.replace(",", "."));
+    return one(options.filter((o) => holds(bucketOf(o, false), n))) ?? none;
   }
   return none;
 }
+
+/** "Prefer not to say" and the ways portals word it. */
+const preferNot = /^(i )?(prefer not to (say|answer|disclose)|decline to (self identify|answer|state)|i (do not|don t) wish to (answer|disclose)|предпочитам да не)/u;
+
+const units: [RegExp, number][] = [[/^(day|days|ден|дни|дена)$/u, 1], [/^(week|weeks|седмица|седмици)$/u, 7], [/^(month|months|месец|месеца|месеци)$/u, 30]];
+const numberWords: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, six: 6, един: 1, една: 1, два: 2, две: 2, три: 3, четири: 4, шест: 6 };
+const unitOf = (w: string | undefined) => (w ? units.find(([re]) => re.test(w))?.[1] ?? null : null);
+const amountOf = (w: string | undefined) => (w === undefined ? null : /^\d+$/.test(w) ? Number(w) : numberWords[w] ?? null);
+
+/** A length of time in days ("1 month" → 30, "two weeks from offer" → 14, "immediately" → 0), or null. */
+export function daysIn(text: string): number | null {
+  const w = normaliseQuestion(text).split(" ");
+  if (/^(immediately|now|asap|веднага|незабавно)$/u.test(w[0] ?? "")) return 0;
+  const unit = unitOf(w[1]);
+  const amount = amountOf(w[0]);
+  return unit !== null && amount !== null ? amount * unit : null;
+}
+
+/** The span an option covers, in days (time) or plain numbers: "2–4 weeks", "Less than 2 weeks", "6+", "1 month". */
+function bucketOf(option: string, time: boolean): [number, number] | null {
+  const w = normaliseQuestion(option.replace(/(\d)\s*\+/u, "$1 plus")).split(" ");
+  if (time && /^(immediately|now|веднага|незабавно)$/u.test(w[0] ?? "")) return [0, 0];
+  const nums = w.map((x) => amountOf(x));
+  const unit = time ? w.map(unitOf).find((u) => u !== null) ?? null : 1;
+  if (unit === null) return null;
+  const at = nums.findIndex((n) => n !== null);
+  if (at < 0) return null;
+  const first = nums[at]! * unit;
+  const second = nums.slice(at + 1).find((n) => n !== null);
+  const before = w.slice(0, at).join(" ");
+  const after = w.slice(at + 1).join(" ");
+  if (/(less than|under|fewer than|до|по малко от)$/u.test(before)) return [0, first - 1];
+  if (/(up to)$/u.test(before)) return [0, first];
+  if (/(more than|over|над|повече от)$/u.test(before)) return [first + 1, Infinity];
+  if (/\b(plus|or more)\b/u.test(after) || /^(at least)$/u.test(before)) return [first, Infinity];
+  if (second != null) return [first, second * unit];
+  return [first, first];
+}
+
+const holds = (span: [number, number] | null, n: number) => span !== null && n >= span[0] && n <= span[1];
