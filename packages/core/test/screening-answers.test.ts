@@ -98,3 +98,119 @@ describe("the target posting's questions", () => {
     expect(pkg.parts[3]).toMatchObject({ part: "answers", state: "done", what: "7 questions · 3 from your answer bank" });
   });
 });
+
+/** One question's answer as the step shows it. */
+const question = (pkg: { answers: { questions: { question: string }[] } | null }, text: string) => {
+  const q = pkg.answers?.questions.find((x) => x.question.startsWith(text));
+  if (!q) throw new Error(`No question "${text}"`);
+  return q as NonNullable<Awaited<ReturnType<typeof started>>["answers"]>["questions"][number];
+};
+
+describe("salary", () => {
+  it("always needs Kris, with the posting's range, the floor, the last answer and the rule's suggestion", async () => {
+    const t = mira();
+    const corvid = await started(t, kestrelJob({ id: "job-corvid", company: "Corvid Logistics" }));
+    t.preparation.setScreeningAnswer(corvid.id, "question_31003", "€3,300");
+
+    const pkg = await started(t);
+
+    expect(question(pkg, "What are your salary")).toMatchObject({
+      origin: "needs-you", label: "Needs you", text: "", needsYou: true,
+      salary: {
+        range: "€2,800–3,600 gross", floor: 2000, last: { amount: 3300, company: "Corvid Logistics" }, suggested: 3400,
+        text: "Posting range €2,800–3,600 gross · your minimum €2,000 · last asked at Corvid Logistics: €3,300. Suggested €3,400 by your answer-bank rule (upper half of the posting's stated range, never under €2,000 a month).",
+      },
+    });
+  });
+
+  it("is never filled from the bank, even when the bank has a number for it", async () => {
+    const t = mira();
+    const salary = t.preparation.listAnswers({ search: "Salary expectations" }).answers[0]!;
+    t.preparation.saveAnswer({ ...salary, wordings: [...salary.wordings.map((w) => w.text), "What are your salary expectations? (gross monthly, EUR)"], mode: "fill", kind: "text", versions: { en: "3000" } });
+
+    const pkg = await started(t);
+
+    expect(question(pkg, "What are your salary")).toMatchObject({ origin: "needs-you", text: "", salary: { suggested: 3400 } });
+  });
+
+  it("takes one number, never saved to the bank", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3,000–3,500")).toMatchObject({ changed: false, reason: "Give one number: the form takes a number, not a range." });
+    const set = t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3400");
+    expect(question(set.package, "What are your salary")).toMatchObject({ text: "3400", needsYou: false, yours: true, save: { offered: false } });
+    expect(t.preparation.saveScreeningAnswerToBank(pkg.id, "question_31003")).toMatchObject({ changed: false, reason: "Salary depends on the job, so the number is never saved to the answer bank." });
+  });
+});
+
+describe("an answer adapted from the bank", () => {
+  it("is trimmed to the form's limit by whole sentences and lists exactly what was removed", async () => {
+    const t = mira();
+    t.bank({
+      question: "Describe a security incident you handled", category: "screening",
+      versions: { en: "In 2024 a phishing campaign reached the claims team at Northwind Bank. I ran the response and had the affected sessions revoked within the hour. Afterwards I ran a short awareness session for the claims team and wrote a guide on reporting suspicious mail." },
+    });
+
+    const pkg = await started(t);
+
+    expect(question(pkg, "Describe a security incident")).toMatchObject({
+      origin: "adapted", label: "Answer bank · adapted",
+      text: "In 2024 a phishing campaign reached the claims team at Northwind Bank. I ran the response and had the affected sessions revoked within the hour.",
+      note: "Your answer, trimmed by 1 sentence to fit. No facts added.",
+      changed: { removed: ["Afterwards I ran a short awareness session for the claims team and wrote a guide on reporting suspicious mail."], note: "Your answer bank keeps the full version." },
+      limit: { words: 40, chars: null }, words: 25,
+    });
+  });
+});
+
+describe("saving to the answer bank", () => {
+  it("is never offered or done for a company-specific answer", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(question(pkg, "Why Kestrel")).toMatchObject({ save: { offered: false, note: "Written for this company: not saved to the answer bank." } });
+    expect(t.preparation.saveScreeningAnswerToBank(pkg.id, "question_31004")).toMatchObject({
+      changed: false, reason: "Written for Kestrel Payments: answers like this are written fresh for each job, so they aren't saved to the answer bank.",
+    });
+    expect(t.preparation.listAnswers({ search: "Kestrel" }).total).toBe(0);
+  });
+
+  it("is offered for a reusable new answer, which becomes a screening answer in the bank", async () => {
+    const t = mira();
+    const pkg = await started(t);
+    expect(question(pkg, "Describe a security incident")).toMatchObject({ origin: "new", save: { offered: true } });
+
+    const saved = t.preparation.saveScreeningAnswerToBank(pkg.id, "question_31005");
+
+    expect(question(saved.package, "Describe a security incident")).toMatchObject({ save: { offered: false, savedTo: expect.any(String) } });
+    expect(t.preparation.findAnswer("Describe a security incident you handled", "en")).toMatchObject({ fill: { action: "fill", value: recordedDraftAnswer.text } });
+    expect(t.preparation.listAnswers({ category: "screening" }).answers[0]).toMatchObject({ category: "screening", source: { from: "Kestrel Payments package", jobId: "job-kestrel" } });
+  });
+});
+
+describe("Approve", () => {
+  it("waits for every answer that needs Kris, naming the first one to go to", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(pkg.answers!.waiting).toEqual({ questionId: "question_31003", reason: "1 answer needs you: salary" });
+    expect(pkg.steps[3]).toMatchObject({ sub: "1 needs you" });
+
+    const done = t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3400");
+
+    expect(done.package.answers!.waiting).toBeNull();
+    expect(done.package.steps[3]).not.toMatchObject({ sub: "1 needs you" });
+  });
+
+  it("an answer Kris writes is checked against the form's limit, with its words counted", async () => {
+    const t = mira();
+    const pkg = await started(t);
+    const long = Array.from({ length: 41 }, (_, i) => `word${i}`).join(" ");
+
+    expect(t.preparation.setScreeningAnswer(pkg.id, "question_31005", long)).toMatchObject({ changed: false, reason: "The form takes at most 40 words; this is 41." });
+    expect(t.preparation.setScreeningAnswer(pkg.id, "question_31001", "Maybe")).toMatchObject({ changed: false, reason: "Choose one of the form's options." });
+    const set = t.preparation.setScreeningAnswer(pkg.id, "question_31005", "I ran the response to a phishing campaign.");
+    expect(question(set.package, "Describe a security incident")).toMatchObject({ text: "I ran the response to a phishing campaign.", words: 8, yours: true });
+  });
+});
