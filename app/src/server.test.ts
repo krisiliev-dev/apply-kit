@@ -310,6 +310,11 @@ describe("the Package's API", () => {
     expect((await s.request("/api/packages/nope/answers/question_1", { ...s.json({ text: "1 month" }), method: "PUT" })).status).toBe(404);
     expect((await s.request("/api/packages/nope/answers/question_1/save", s.json({}))).status).toBe(404);
     expect((await s.request("/api/packages/nope/draft-answer", s.json({ question: "Why us?" }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/approve", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/approve", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/packages/nope/ats/fix", s.json({ values: { phone: "+359 88 000 0175" }, updateProfile: true }))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/cv/redraft-changed", s.json({}))).status).toBe(404);
+    expect((await s.request("/api/packages/nope/files/cv.pdf")).status).toBe(404);
     expect(await (await s.request("/api/profile/learned")).json()).toEqual([]);
     expect((await s.request("/api/profile/learned/confirm", { method: "POST", body: "" })).status).toBe(415);
   });
