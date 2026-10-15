@@ -9,6 +9,7 @@ import type {
 import { mountImportApi } from "./import-api.ts";
 import { mountAnswerApi } from "./answers-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
+import { mountVoiceApi } from "./voice-api.ts";
 
 const documentKinds: DocumentKind[] = ["cv", "cover-letter"];
 const documentLanguages: DocumentLanguage[] = ["en", "bg"];
@@ -346,6 +347,8 @@ export function createServer({ engine, preparation, scheduler, pairing, uiDir, p
   if (preparation) mountImportApi(app, preparation);
   // Profile's answer bank: the table, Add and Edit answer, Delete, and portal edits to keep or not.
   if (preparation) mountAnswerApi(app, preparation);
+  // Profile's voice: samples, the rules learned, and the "Learn from my edits" switch.
+  if (preparation) mountVoiceApi(app, preparation);
 
   app.all("/api/*", (c) => c.json({ error: "Not found" }, 404));
 

@@ -416,3 +416,31 @@ describe("Import's API", () => {
     expect(await res.json()).toMatchObject({ saved: false, problems: [{ field: "numberSource" }] });
   });
 });
+
+describe("Voice's API", () => {
+  const sample = (fileName: string, text: string) => ({ fileName, base64: Buffer.from(text).toString("base64") });
+
+  it("adds samples from base64 files, shows an unreadable one with its reason, and removes one", async () => {
+    const s = service();
+
+    const added = await s.request("/api/profile/voice/samples", s.json({ files: [sample("about-page.txt", "I build small tools that make noisy systems quieter."), sample("letter.pages", "PK")] }));
+    expect(added.status).toBe(201);
+    const voice = (await (await s.request("/api/profile/voice")).json()) as { samples: { id: string; fileName: string; problem: { reason: string } | null }[] };
+    expect(voice.samples.map((x) => [x.fileName, x.problem?.reason ?? null])).toEqual([["about-page.txt", null], ["letter.pages", "pages"]]);
+
+    const removed = await s.request(`/api/profile/voice/samples/${encodeURIComponent(voice.samples[0]!.id)}/remove`, s.json({}));
+    expect(removed.status).toBe(200);
+    expect(((await removed.json()) as { samples: unknown[] }).samples).toHaveLength(1);
+  });
+
+  it("pauses and resumes learning from edits, and asks for JSON on every change", async () => {
+    const s = service();
+
+    const paused = await s.request("/api/profile/voice/learning", { ...s.json({ fromEdits: false }), method: "PUT" });
+    expect(await paused.json()).toMatchObject({ learnFromEdits: false });
+    expect(s.preparation.recordVoiceEdit({ purpose: "cover-letter", language: "en", before: "I am passionate.", after: "I fix noisy alerts." })).toBe(false);
+
+    expect((await s.request("/api/profile/voice/rules/voice-rule:x/remove", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/profile/voice/rules/voice-rule:x/remove", s.json({}))).status).toBe(404);
+  });
+});

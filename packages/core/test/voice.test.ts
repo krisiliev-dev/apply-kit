@@ -106,7 +106,7 @@ const learnsRules = (...rules: string[]) => (input: VoiceLearningInput): Learned
 });
 
 describe("learning within the budget", () => {
-  it("sends nothing once the monthly cap is reached, and learns the rest when there's budget again", async () => {
+  it("sends nothing once the monthly cap is reached", async () => {
     const writer = fakeWriter();
     const t = await withSamples({ writer, capUsd: 0 });
 
