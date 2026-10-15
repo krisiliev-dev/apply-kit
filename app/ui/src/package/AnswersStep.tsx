@@ -80,10 +80,12 @@ function Question({ pkg, q, onChange, say }: Props & { answers: ScreeningAnswers
     : <span className="chip neutral">{q.label}</span>;
 
   return (
-    <li className={`q${q.needsYou ? " needs" : ""}`} id={questionElementId(q.id)} tabIndex={-1} aria-labelledby={headId}>
+    <li className={`q${q.needsYou ? " q-needs" : ""}`} id={questionElementId(q.id)} tabIndex={-1} aria-labelledby={headId}>
       <div className="qh"><b id={headId}>{q.question}{q.required && <span className="meta"> (required)</span>}</b>{chip}</div>
       {q.salary ? <Salary q={q} busy={busy} errId={errId} error={error} onAnswer={answer} />
         : q.type === "select" ? <Choice q={q} headId={headId} busy={busy} onAnswer={answer} />
+        // A bank answer as it is: changed in the answer bank, so every form gets the same one.
+        : q.origin === "bank" && !q.yours ? <p className="ans">{q.text || <span className="meta">Left blank</span>}</p>
         : <Words q={q} headId={headId} busy={busy} errId={errId} error={error} onAnswer={answer} />}
       {error && !q.salary && q.type === "select" && <p className="why-off" id={errId} role="alert">{error}</p>}
       <Foot pkg={pkg} q={q} busy={busy} onSend={send} />
@@ -111,7 +113,7 @@ function Salary({ q, busy, errId, error, onAnswer }: { q: ScreeningAnswerView; b
           <span className="meta">gross / month</span>
         </div>
         <span className="help" id={helpId}>
-          {s.suggested !== null ? `Suggested ${euros(s.suggested)} by your answer-bank rule. ` : ""}The number itself is never saved: salary depends on the job.
+          The number itself is never saved: salary depends on the job.
         </span>
         {error && <span className="why-off" id={errId} role="alert">{error}</span>}
       </div>
@@ -158,7 +160,7 @@ function Words({ q, headId, busy, errId, error, onAnswer }: { q: ScreeningAnswer
   const described = [q.type === "long-text" ? countId : "", error ? errId : ""].filter(Boolean).join(" ") || undefined;
   const save = () => { if (text.trim() !== q.text && !over) void onAnswer(text); };
   const field = q.type === "long-text"
-    ? <textarea className="textarea" aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />
+    ? <textarea className="textarea" rows={Math.max(3, Math.ceil(text.length / 70))} aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />
     : <input className="input" aria-labelledby={headId} aria-describedby={described} aria-invalid={over || error ? "true" : undefined} value={text} readOnly={busy} onChange={(e) => setText(e.target.value)} onBlur={save} />;
   return (
     <>

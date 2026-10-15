@@ -1418,7 +1418,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         salary: a.needs === "salary" ? salaryView(r) : null,
         bank: banked ? { answerId: banked.id, useCount: banked.useCount, lastUsedAt: banked.lastUsedAt } : null,
         save: { offered: reusable && !a.savedTo, note: a.companySpecific ? "Written for this company: not saved to the answer bank." : null, savedTo: a.savedTo },
-        redraft: a.type === "long-text" && a.needs !== "salary" && !a.heard,
+        redraft: a.type === "long-text" && (a.origin === "new" || a.origin === "needs-you") && a.needs !== "salary" && !a.heard,
       };
     });
     const fromBank = s.answers.filter((a) => a.origin === "bank" || a.origin === "adapted").length;
