@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DraftAnswerInput, DraftedAnswer, PackageJob, PieceInput } from "../src/index.ts";
 import { fixtureFetch } from "./harness.ts";
-import { createTestPreparation, fakeWriter, recordedDraftAnswer, recordedWhyAnswer } from "./preparation-harness.ts";
+import { createTestPreparation, fakeWriter, recordedDraftAnswer, recordedLetter, recordedWhyAnswer } from "./preparation-harness.ts";
 
 // Step 4 of a package, screening answers (ticket #66), through the preparation engine: the target
 // posting's questions in the form's order, each answered from the answer bank, adapted, newly
@@ -24,7 +24,9 @@ type Options = Parameters<typeof createTestPreparation>[0] & { draft?: (input: D
 function mira(options: Options = {}) {
   const ids: Record<string, string> = {};
   const { draft, ...rest } = options;
-  const writer = fakeWriter({ draftAnswer: (input) => (draft ? draft(input, ids) : recordedFor(ids)(input)) });
+  // The cover letter (#65) is the recorded one, citing this profile's pieces.
+  const letter = () => JSON.parse(JSON.stringify(recordedLetter).replace(/"piece-([a-z]+)"/g, (m, key: string) => (ids[key] ? JSON.stringify(ids[key]) : m))) as typeof recordedLetter;
+  const writer = fakeWriter({ draftAnswer: (input) => (draft ? draft(input, ids) : recordedFor(ids)(input)), writeLetter: letter });
   const t = createTestPreparation({ writer, fetch: fixtureFetch({ [kestrelQuestions]: "greenhouse-kestrel-4410-questions.json" }), ...rest });
   const save = (key: string, input: PieceInput) => {
     const r = t.preparation.savePiece(input);
@@ -190,6 +192,24 @@ describe("saving to the answer bank", () => {
 });
 
 describe("Approve", () => {
+  it("approves the CV, the cover letter and the screening answers in order; the answers wait while one still needs Kris", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(t.preparation.approveStep(pkg.id, "answers")).toMatchObject({ approved: false, blockedBy: "target" });
+    for (const step of ["target", "cv", "letter"] as const) expect(t.preparation.approveStep(pkg.id, step)).toMatchObject({ approved: true });
+
+    const waiting = t.preparation.approveStep(pkg.id, "answers");
+    expect(waiting).toMatchObject({ approved: false, blockedBy: "answers", reason: "1 answer needs you: salary" });
+    expect(waiting.package.steps.map((s) => s.state)).toEqual(["done", "done", "done", "current", "upcoming"]);
+
+    t.preparation.setScreeningAnswer(pkg.id, "question_31003", "3400");
+    const approved = t.preparation.approveStep(pkg.id, "answers");
+
+    expect(approved).toMatchObject({ approved: true });
+    expect(approved.package.steps.map((s) => s.approvedAt !== null)).toEqual([true, true, true, true, false]);
+  });
+
   it("waits for every answer that needs Kris, naming the first one to go to", async () => {
     const t = mira();
     const pkg = await started(t);
