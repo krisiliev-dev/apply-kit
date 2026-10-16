@@ -87,3 +87,8 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-small); min-height: 24px }
 .opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 2px 0 0; flex: none }
 .pick .opt { padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control) }
+
+/* The package's file on the page (hi-fi "CV attached", "CV didn't attach"): icon, name · size, version line. */
+.filechip { display: flex; gap: var(--s-3); align-items: center; padding: var(--s-3) var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); font-size: var(--fs-small); min-width: 0 }
+.filechip .ico { width: var(--s-5); height: var(--s-5); color: var(--ink-3) }
+.filechip > span:last-child { min-width: 0; overflow-wrap: anywhere }
