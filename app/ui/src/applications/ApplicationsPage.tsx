@@ -258,14 +258,15 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     const toNeeds = () => requestAnimationFrame(() => document.getElementById("ny-h")?.focus());
     try {
       const r = await answerPackageConfirmation(item.email.id, answer);
-      const list = await refresh();
-      if (answer === "not-this" || !r.application) {
-        toNeeds();
+      const id = r.application?.id ?? null;
+      // Focus moves once the new list has rendered: to the new row, or back to Needs you.
+      let list: ApplicationList | null = null;
+      focusNext.current = () => (id && list ? focusApplication(id, groupOf(list, id)) : toNeeds());
+      list = await refresh();
+      if (answer === "not-this" || !id) {
         toaster.announce("Not this package: nothing was added. The email waits under Needs you for you to match.");
         return;
       }
-      const id = r.application.id;
-      focusApplication(id, groupOf(list, id));
       toaster.show({
         message: `${job}: marked Applied, dated ${weekDay(item.appliedOn)}. Logged by you.`,
         returnFocus: () => focusApplication(id, groupOf(list, id)),
