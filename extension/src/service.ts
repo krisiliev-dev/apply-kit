@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, RecordedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FieldReport, FieldReportInput, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, RecordedPage } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -38,6 +38,8 @@ export interface FillClient {
   undoMarkSubmitted(applicationId: string): Promise<Answer<{ packageId: string }>>;
   /** The package's CV or letter as base64, held in the panel's memory only while it's attached. */
   file(sessionId: string, which: PackageFileKind): Promise<Answer<PackageFileBytes>>;
+  /** "Report this field": apply-kit keeps the field's structure on this laptop (host and path, never the query; never a value). */
+  report(report: FieldReportInput): Promise<Answer<FieldReport>>;
   /** "Show in Finder": apply-kit reveals the session's file in the Packages folder. */
   reveal(sessionId: string, which: PackageFileKind): Promise<Answer<{ revealed: string }>>;
 }
@@ -127,6 +129,7 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       record: (sessionId, reading, outcomes) => post("/api/ext/fill/record", { sessionId, reading, outcomes }),
       file: (sessionId, which) => post("/api/ext/fill/file", { sessionId, which }),
       reveal: (sessionId, which) => post("/api/ext/fill/reveal", { sessionId, which }),
+      report: (report) => post("/api/ext/fill/report", report),
       markSubmitted: (sessionId, portalUrl) => post("/api/ext/fill/submitted", { sessionId, portalUrl }, [422]),
       undoMarkSubmitted: (applicationId) => post("/api/ext/fill/submitted/undo", { applicationId }),
     },
