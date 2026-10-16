@@ -39,9 +39,17 @@ const missingName: Record<ContactKey, string> = {
   location: "city", city: "city", country: "country", linkedin: "LinkedIn link", github: "GitHub link", portfolio: "website",
 };
 
+/** What each contact field asks for, in English (the copy list's meaning beside a form's own label). */
+const meaningOf: Record<ContactKey, string> = {
+  givenName: "first name", familyName: "family name", fullName: "full name", email: "email", phone: "phone", countryCode: "phone country code",
+  location: "location", city: "city", country: "country", linkedin: "LinkedIn", github: "GitHub", portfolio: "website",
+};
+
 export interface ContactValue {
   /** Null when the profile has nothing for it. */
   value: string | null;
+  /** What the field asks for, in English ("full name"). */
+  meaning: string;
   basis: string | null;
   /** "Your profile has no GitHub link". */
   missing: string;
@@ -63,7 +71,7 @@ export function contactValue(field: ReadField, profile: ProfileForApply, page: R
   const c = profile.contact;
   const codeField = key === "phone" && c.phone ? page.find((f) => f !== field && contactKey(f) === "countryCode") : undefined;
   if (codeField && c.phone) {
-    return { value: c.phone.national, basis: `Without ${c.phone.countryCode}, which is in ${codeField.label}`, missing: `Your profile has no ${missingName.phone}` };
+    return { value: c.phone.national, meaning: "phone number without the country code", basis: `Without ${c.phone.countryCode}, which is in ${codeField.label}`, missing: `Your profile has no ${missingName.phone}` };
   }
   const value: string | null = {
     givenName: c.givenName, familyName: c.familyName, fullName: c.fullName, email: c.email,
@@ -71,5 +79,5 @@ export function contactValue(field: ReadField, profile: ProfileForApply, page: R
     location: [c.city, c.country].filter(Boolean).join(", "), city: c.city, country: c.country,
     linkedin: c.linkedin, github: c.github, portfolio: c.portfolio,
   }[key] || null;
-  return { value, basis: key === "email" ? "Your job address" : null, missing: `Your profile has no ${missingName[key]}` };
+  return { value, meaning: meaningOf[key], basis: key === "email" ? "Your job address" : null, missing: `Your profile has no ${missingName[key]}` };
 }

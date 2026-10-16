@@ -161,3 +161,17 @@ export interface FieldReport {
   field: FieldStructure;
   createdAt: string;
 }
+
+/**
+ * One value in the copy list on a form apply-kit doesn't know (#47): under the form's own label (in
+ * its language), what it asks for in English, and the value to paste, or the package's file to attach.
+ */
+export type CopyRow =
+  | { fieldId: string; label: string; meaning: string; kind: "value"; value: string }
+  | { fieldId: string; label: string; meaning: string; kind: "file"; which: PackageFileKind; fileName: string };
+
+/** The copy list: rows in the form's order, and how many fields apply-kit can't map (left out). Consent boxes and passwords are Kris's and aren't counted. */
+export interface CopyList {
+  rows: CopyRow[];
+  unmapped: number;
+}

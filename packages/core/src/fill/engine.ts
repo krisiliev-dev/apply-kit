@@ -4,16 +4,17 @@
 // (docs/contracts.md). The extension reads and fills the page; this decides.
 import { randomUUID } from "node:crypto";
 import type { PrepareForApply } from "../preparation/engine.ts";
-import { sameJobReference, type ApprovedPackage, type PageJobReference, type SubmittedVia } from "../preparation/contracts.ts";
+import { sameJobReference, type ApprovedPackage, type PageJobReference, type ProfileForApply, type SubmittedVia } from "../preparation/contracts.ts";
 import { TrackerError, type ApplicationSummary, type Submission, type Tracker } from "../tracker.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import type { PackageFolder } from "../preparation/ports.ts";
 import { migrate } from "../schema.ts";
 import { minMatchConfidence, type Answer, type AnswerKind } from "../preparation/answers.ts";
 import { isSalaryQuestion } from "../preparation/screening.ts";
-import { contactValue } from "./contact.ts";
+import { contactValue, normaliseLabel } from "./contact.ts";
 import { answerKindOf, answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, oneOffQuestion, similarity, wordLimit } from "./questions.ts";
 import {
+  type CopyList, type CopyRow,
   countOutcomes, type FieldAnswer, type FieldOutcome, type FieldReport, type FieldReportInput, type PackageFileKind, type PageReading, type PendingAnswer, type ReadField, type RecordedFill, type RecordedPage, type SaveOffer, type SavedAnswers, type SavePick,
 } from "./reading.ts";
 import { fieldStructure, whereReported } from "./field-report.ts";
@@ -117,6 +118,12 @@ export interface FillEngine {
   matchPage(page: FillPage, options?: FillOptions): Promise<FillStart>;
   /** Every Fill starts here: re-reads the job, keeps the tab's session for the same job, ends it for a different one, and opens one on a match. */
   startFill(page: FillPage, options?: FillOptions): Promise<FillStart>;
+  /**
+   * The copy list on a form apply-kit doesn't know (#47): the value for each field it can map, under the
+   * form's own label with its meaning in English, in the form's order; files as the package's own. Fills
+   * nothing and drafts nothing. Throws once the session has ended.
+   */
+  copyList(sessionId: string, reading: PageReading): CopyList;
   /**
    * The answer for each field of the page, in its order. A new required free-text question still
    * empty gets a draft from Prepare's drafter (once per session), within the AI cap. Rejects once the
@@ -359,8 +366,11 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
       if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
       if (f.kind === "file") return fileAnswer(f, pkg);
       if (letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) {
-        if (letterAsFile) return { fieldId, kind: "skip", reason: "Your letter is attached as a file" };
+        if (letterAsFile) return { fieldId, kind: "skip", reason: letterAttached };
         if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
+      }
+      if (pkg && positionLabel.test(normaliseLabel(f.label)) && f.options.length === 0 && (f.kind === "text" || f.kind === "textarea")) {
+        return { fieldId, kind: "fill", value: pkg.job.title, source: "package", basis: "The job your package is for" };
       }
       const contact = contactValue(f, profile, fields);
       if (contact?.value) {
@@ -379,6 +389,15 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
         ? { fieldId, kind: "needs-you", reason: noAnswer, basis: nearMiss(f), save: saveOffer(f.label, pkg) }
         : { fieldId, kind: "skip", reason: optionalNoAnswer };
     });
+  }
+
+  /** What a filled field asks for, in English, for the copy list. */
+  function meaningFor(f: ReadField, a: Extract<FieldAnswer, { kind: "fill" }>, pkg: ApprovedPackage | null, profile: ProfileForApply, fields: ReadField[], language: string): string {
+    if (pkg?.letter && a.value === pkg.letter.text) return `cover letter, ${language}, ${a.value.length.toLocaleString("en-GB")} characters`;
+    if (pkg && a.source === "package" && a.value === pkg.job.title && positionLabel.test(normaliseLabel(f.label))) return "the job you're applying for";
+    if (a.source === "profile") return contactValue(f, profile, fields)?.meaning ?? f.label;
+    if (a.source === "answer-bank") return prepare.findAnswer(f.label, pkg?.language ?? "en")?.question ?? f.label;
+    return f.label;
   }
 
   /** Ticked for a question that will come up again; unticked, with why, for a one-off for this company. */
@@ -486,6 +505,28 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
   return {
     matchPage: (page, options = {}) => begin(page, options, false),
     startFill: (page, options = {}) => begin(page, options, true),
+
+    copyList(sessionId, reading) {
+      const s = openSession(sessionId);
+      const pkg = approvedById(s.packageId);
+      const profile = prepare.profileForApply();
+      const language = pkg?.language === "bg" ? "Bulgarian" : "English";
+      const decided = decide(reading.fields, pkg);
+      const rows: CopyRow[] = [];
+      let unmapped = 0;
+      decided.forEach((a, i) => {
+        const f = reading.fields[i]!;
+        const base = { fieldId: f.id, label: f.label };
+        if (a.kind === "file") {
+          rows.push({ ...base, kind: "file", which: a.which, fileName: a.fileName, meaning: `${a.which === "cv" ? "CV" : "cover letter"}, ${language} version` });
+        } else if (a.kind === "fill") {
+          rows.push({ ...base, kind: "value", value: a.value, meaning: meaningFor(f, a, pkg, profile, reading.fields, language) });
+        } else if (!(a.kind === "skip" && (f.consent || f.password || a.byRule || a.reason === letterAttached))) {
+          unmapped++;
+        }
+      });
+      return { rows, unmapped };
+    },
 
     async answer(sessionId, reading) {
       const s = openSession(sessionId);
@@ -621,6 +662,10 @@ function hostOf(url: string): string {
     return "";
   }
 }
+
+/** "Desired position", "Position applied for", "Желана позиция": the job the package is for. */
+const positionLabel = /^(desired |applied |the )?(position|role|job title|job)( applied for| you are applying for)?$|^(желана )?позиция$|^длъжност$/u;
+const letterAttached = "Your letter is attached as a file";
 
 const letterLabel = /\bcover(ing)? ?letter\b|\bmotivation(al)? letter\b|мотивационно писмо/iu;
 const cvLabel = /\b(resume|résumé|cv|curriculum)\b|автобиография/iu;

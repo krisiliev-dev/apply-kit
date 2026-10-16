@@ -106,3 +106,62 @@ function field(id: string, label: string, more: Partial<ReadField> = {}): ReadFi
   return { id, label, kind: "text", required: false, value: "", options: [], maxLength: null, consent: false, password: false, hint: null, ...more };
 }
 const reading = (fields: ReadField[]): PageReading => ({ pageKind: "form", jobRef: null, stepLabel: null, stepCount: null, fields });
+
+/** Ostrava Bank's own form as the generic filler reads it: Bulgarian labels, in the form's order. */
+const ostravaForm = reading([
+  field("full_name", "Име и фамилия", { required: true }),
+  field("phone", "Телефон", { kind: "tel", required: true }),
+  field("email", "E-mail", { kind: "email", required: true }),
+  field("position", "Желана позиция"),
+  field("cv", "Прикачи CV (PDF, до 5 MB)", { kind: "file", required: true }),
+  field("letter", "Мотивационно писмо", { kind: "textarea" }),
+  field("city", "Град"),
+  field("source", "Откъде научихте за позицията?", { kind: "select", options: ["Сайт за работа", "Препоръка", "Друго"] }),
+  field("salary", "Очаквано брутно месечно възнаграждение", { required: true }),
+  field("gdpr", "Съгласен съм с обработката на личните ми данни", { kind: "checkbox", required: true, consent: true }),
+]);
+
+async function onOstravaForm() {
+  const t = setup();
+  const pkg = await approvedFor(t, ostravaJob());
+  const r = await t.fill.startFill(unknownPage());
+  if (r.kind !== "matched") throw new Error(r.kind);
+  return { ...t, pkg, sessionId: r.session!.id };
+}
+
+describe("the copy list on a form apply-kit doesn't know", () => {
+  it("lists each value under the form's own label with its meaning in English, in the form's order", async () => {
+    const t = await onOstravaForm();
+    const letter = t.pkg.approved!.letter!;
+
+    const list = t.fill.copyList(t.sessionId, ostravaForm);
+
+    expect(list.rows.map((r) => [r.fieldId, r.label, r.meaning, r.kind === "value" ? r.value : r.fileName])).toEqual([
+      ["full_name", "Име и фамилия", "full name", "Mira Petrova"],
+      ["phone", "Телефон", "phone", "+359 88 000 0175"],
+      ["email", "E-mail", "email", "mira.petrova@example.com"],
+      ["position", "Желана позиция", "the job you're applying for", "IT Security Specialist"],
+      ["cv", "Прикачи CV (PDF, до 5 MB)", "CV, Bulgarian version", t.pkg.approved!.cv.file.fileName],
+      ["letter", "Мотивационно писмо", `cover letter, Bulgarian, ${letter.text.length.toLocaleString("en-GB")} characters`, letter.text],
+      ["city", "Град", "city", "Sofia"],
+    ]);
+    expect(list.rows.find((r) => r.fieldId === "cv")).toMatchObject({ kind: "file", which: "cv" });
+  });
+
+  it("leaves out the fields it can't map and counts them; consent boxes are Kris's and aren't counted", async () => {
+    const t = await onOstravaForm();
+
+    expect(t.fill.copyList(t.sessionId, ostravaForm).unmapped).toBe(2);
+  });
+
+  it("maps the same fields labelled in English", async () => {
+    const t = await onOstravaForm();
+
+    const list = t.fill.copyList(t.sessionId, reading([field("n", "Full name"), field("p", "Phone number"), field("e", "Email address"), field("j", "Position applied for"), field("q", "Notice period")]));
+
+    expect(list.rows.map((r) => [r.meaning, r.kind === "value" ? r.value : r.fileName])).toEqual([
+      ["full name", "Mira Petrova"], ["phone", "+359 88 000 0175"], ["email", "mira.petrova@example.com"], ["the job you're applying for", "IT Security Specialist"], ["Notice period", "1 месец"],
+    ]);
+    expect(list.unmapped).toBe(0);
+  });
+});
