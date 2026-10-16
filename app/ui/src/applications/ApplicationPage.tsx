@@ -6,17 +6,19 @@
 // When a follow-up is due, the Next step box holds it with its draft (hi-fi "Follow-up due"), or, with
 // no draft, the outline and a banner at the top saying why (hi-fi "Follow-up · AI budget out"). When an
 // email moved the Status (state Moved by email): a banner with Looks right and Undo, and the email that
-// moved it with the signals it matched on (and an English line for one in Bulgarian). Interviews,
-// offers and the Package as sent come with later Track tickets. Interviews (#33): the coming one in the
+// moved it with the signals it matched on (and an English line for one in Bulgarian). Interviews (#33): the coming one in the
 // Next step box, the Interviews panel with Add interview and Edit (a dialog), the prep sheet, and a
 // thank-you note in the Next step box once an interview ends (Interviews.tsx). Offers and closing (#34,
 // Offer.tsx and Withdrawals.tsx): at Offer the Next step box holds the decisions and the offer details
 // sit below it; accepting (here or with Accepted in the Status select) opens the withdrawal dialog;
 // declining offers a reply first; a rejection shows its lesson, likely reason and what it changes in Stats.
-import type { ApplicationDetail, ApplicationSummary, FollowUp, FollowUpDraft, HealthSummary, Interview, MovedByEmail, NoDraft, Status, TimelineEntry } from "@apply-kit/core";
+// The Package as sent (#35): Prepare's read-only snapshot (the CV PDF as approved, the cover letter, the
+// screening answers and where it was submitted), a Bulgarian package marked and read as Bulgarian; one
+// added by hand without a Package can pick a CV version sent before, besides attaching the CV.
+import type { ApprovedPackage, ApplicationDetail, ApplicationSummary, FollowUp, FollowUpDraft, HealthSummary, Interview, MovedByEmail, NoDraft, Status, TimelineEntry } from "@apply-kit/core";
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
-  addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchSources,
+  addApplicationContact, addApplicationNote, applicationCvUrl, attachApplicationCv, confirmEmailMove, fetchApplication, fetchCvVersions, fetchSources, packageFileUrl, pickCvVersion,
   acceptOffer, declineOffer, followUpAction, needsYouChanged, setApplicationStatus, undoApplicationEvent,
 } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
@@ -209,7 +211,7 @@ export function ApplicationPage({ id, onHealth }: { id: string; onHealth: (h: He
           <Timeline app={app} refresh={refresh} toaster={toaster} />
         </div>
         <div className="col">
-          {byHand && <WhatYouSent app={app} refresh={refresh} toaster={toaster} />}
+          {app.package ? <PackageAsSent app={app} pkg={app.package} /> : byHand && <WhatYouSent app={app} refresh={refresh} toaster={toaster} />}
           <Posting app={app} />
           <Contacts app={app} refresh={refresh} toaster={toaster} addRef={contactRef} />
         </div>
@@ -258,6 +260,7 @@ function Head({ app, onStatus }: { app: ApplicationDetail; onStatus: (a: Applica
           {app.createdHow === "by-hand" && <span>added by hand</span>}
           {app.createdHow === "i-applied" && <span>applied without apply-kit</span>}
           {app.angle && <span className="chip neutral">{angleLabel[app.angle]} angle</span>}
+          {app.package?.language === "bg" && <span className="chip neutral">Bulgarian package</span>}
           {app.posting?.jobId && <a className="mini" href={`/jobs/${encodeURIComponent(app.posting.jobId)}`}>Job page</a>}
         </div>
         <div className="stepper" role="group" aria-label={`Status: ${statusLabel[app.status]}`}>
@@ -522,6 +525,69 @@ const thumb = (
   </span>
 );
 
+const wordCount = (text: string) => text.split(/\s+/).filter(Boolean).length;
+const hostOf = (url: string) => { try { return new URL(url).host; } catch { return url; } };
+const sentHow = { extension: "marked in the extension", app: "marked on the Job page", email: "marked Applied from its confirmation email" } as const;
+
+/** The Package as sent: Prepare's snapshot, read-only. The letter and the answers open in place. */
+function PackageAsSent({ app, pkg }: { app: ApplicationDetail; pkg: ApprovedPackage }) {
+  const [open, setOpen] = useState<"letter" | "answers" | null>(null);
+  const letterId = useId();
+  const answersId = useId();
+  const lang = pkg.language === "bg" ? "bg" : undefined;
+  const sub = app.submission;
+  const ats = pkg.cv.ats;
+  const toggle = (which: "letter" | "answers") => setOpen((o) => (o === which ? null : which));
+  return (
+    <section className="panel" aria-labelledby="pkg-h">
+      <div className="sec-head"><h2 id="pkg-h">Package as sent</h2><span className="meta">Read-only</span></div>
+      <div className="pkg">
+        <div className="item">
+          <span className="row cv-row">{thumb}<span><b>CV · {pkg.cv.label}</b><br /><span className="meta">
+            {pkg.language === "bg" ? "Bulgarian" : "English"} · {ats.passed === ats.total ? "ATS check passed" : `ATS check ${ats.passed} of ${ats.total}${ats.accepted.length ? ", accepted knowingly" : ""}`} · approved {dayOf(pkg.approvedAt)}
+          </span></span></span>
+          <a className="btn sm" href={packageFileUrl(app.id, "cv")} target="_blank" rel="noreferrer">View as sent<span className="sr-only">: the CV PDF (opens in a new tab)</span></a>
+        </div>
+        <div className="item">
+          <span><b>Cover letter</b><br /><span className="meta">{pkg.letter ? `${wordCount(pkg.letter.text)} words` : "None sent with this package"}</span></span>
+          {pkg.letter && (
+            <span className="row">
+              <button className="btn ghost sm" type="button" aria-expanded={open === "letter"} aria-controls={letterId} onClick={() => toggle("letter")}>
+                {open === "letter" ? "Hide" : "Read"}<span className="sr-only"> the cover letter</span>
+              </button>
+              <a className="btn ghost sm" href={packageFileUrl(app.id, "letter")} target="_blank" rel="noreferrer">PDF<span className="sr-only">: the cover letter (opens in a new tab)</span></a>
+            </span>
+          )}
+          {pkg.letter && <div className="as-sent" id={letterId} lang={lang} hidden={open !== "letter"}>{pkg.letter.text}</div>}
+        </div>
+        <div className="item">
+          <span><b>Screening answers</b><br /><span className="meta">{pkg.answers.length ? `${pkg.answers.length} answer${pkg.answers.length === 1 ? "" : "s"}` : "None asked"}</span></span>
+          {pkg.answers.length > 0 && (
+            <button className="btn ghost sm" type="button" aria-expanded={open === "answers"} aria-controls={answersId} onClick={() => toggle("answers")}>
+              {open === "answers" ? "Hide" : "Read"}<span className="sr-only"> the screening answers</span>
+            </button>
+          )}
+          {pkg.answers.length > 0 && (
+            <dl className="as-sent qa" id={answersId} hidden={open !== "answers"}>
+              {pkg.answers.map((a, i) => (
+                <div key={i}><dt lang={langOf(a.question)}>{a.question}</dt><dd lang={langOf(a.answer)}>{a.answer}</dd></div>
+              ))}
+            </dl>
+          )}
+        </div>
+        {sub && (
+          <div className="item">
+            <span><b>Submitted to</b><br /><span className="meta">{sub.portalUrl ? hostOf(sub.portalUrl) : pkg.targetPosting.site} · {dayOf(sub.submittedAt)} · {sentHow[sub.via]}</span></span>
+            <a className="btn ghost sm" href={sub.portalUrl ?? pkg.targetPosting.url} target="_blank" rel="noreferrer">
+              {sub.portalUrl ? "Open portal" : "Open posting"}<span className="sr-only"> (opens in a new tab)</span>
+            </a>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function WhatYouSent({ app, refresh, toaster }: { app: ApplicationDetail; refresh: () => Promise<ApplicationDetail>; toaster: Toaster }) {
   const [file, setFile] = useState<File | null>(null);
   const [label, setLabel] = useState("");
@@ -532,6 +598,40 @@ function WhatYouSent({ app, refresh, toaster }: { app: ApplicationDetail; refres
   const labelRef = useRef<HTMLInputElement>(null);
   const labelId = useId();
   const errId = useId();
+  /** The CV versions sent so far, for "Pick a CV version"; the one being picked while its field is open. */
+  const [versions, setVersions] = useState<string[]>([]);
+  const [picking, setPicking] = useState<string | null>(null);
+  const pickVersionRef = useRef<HTMLButtonElement>(null);
+  const versionRef = useRef<HTMLSelectElement>(null);
+  const versionId = useId();
+  useEffect(() => {
+    const ctrl = new AbortController();
+    fetchCvVersions(ctrl.signal).then(setVersions).catch(() => {});
+    return () => ctrl.abort();
+  }, []);
+  const wasPicking = useRef(false);
+  useEffect(() => {
+    if (picking !== null) versionRef.current?.focus();
+    else if (wasPicking.current) pickVersionRef.current?.focus();
+    wasPicking.current = picking !== null;
+  }, [picking]);
+
+  async function pick(e: FormEvent) {
+    e.preventDefault();
+    if (!picking) return;
+    setBusy(true);
+    try {
+      await pickCvVersion(app.id, picking);
+      await refresh();
+      const label = picking;
+      setPicking(null);
+      toaster.show({ message: `It counts as "${label}" under CV version.` });
+    } catch (err) {
+      toaster.show({ message: `Couldn't pick it: ${message(err)}` });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   const choose = (f: File | null) => {
     setError(null);
@@ -581,6 +681,7 @@ function WhatYouSent({ app, refresh, toaster }: { app: ApplicationDetail; refres
       ) : (
         <p className="muted mini">
           Applied outside apply-kit, so there's no Package. Attach the CV you sent if you'd like it shown here and counted under "CV version" in What's working.
+          {app.cvVersion && <><br />It counts under <b>{app.cvVersion}</b> (picked, no file attached).</>}
         </p>
       )}
       <input
@@ -604,11 +705,30 @@ function WhatYouSent({ app, refresh, toaster }: { app: ApplicationDetail; refres
             <button className="btn ghost sm" type="button" onClick={cancel}>Cancel</button>
           </div>
         </form>
+      ) : picking !== null ? (
+        <form className="stack" onSubmit={pick} noValidate>
+          <div className="field">
+            <label htmlFor={versionId}>CV version</label>
+            <span className="help">One you've sent with a Package or attached before.</span>
+            <select className="input" id={versionId} ref={versionRef} value={picking} onChange={(e) => setPicking(e.target.value)}>
+              {versions.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+          <div className="row">
+            <button className="btn primary sm" type="submit" disabled={busy}>Pick this version</button>
+            <button className="btn ghost sm" type="button" onClick={() => setPicking(null)}>Cancel</button>
+          </div>
+        </form>
       ) : (
         <div className="row">
           <button className="btn sm" type="button" ref={pickRef} onClick={() => inputRef.current?.click()}>
             {app.cv ? "Replace CV (PDF)…" : "Attach CV (PDF)…"}
           </button>
+          {!app.cv && versions.length > 0 && (
+            <button className="btn ghost sm" type="button" ref={pickVersionRef} onClick={() => setPicking(app.cvVersion && versions.includes(app.cvVersion) ? app.cvVersion : versions[0]!)}>
+              Pick a CV version
+            </button>
+          )}
         </div>
       )}
     </section>

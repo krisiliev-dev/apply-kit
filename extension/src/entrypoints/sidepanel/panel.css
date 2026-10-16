@@ -90,6 +90,14 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 2px 0 0; flex: none }
 .pick .opt { padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control) }
 
+/* Needs-you items Kris answers in the panel, and answers typed on the portal (hi-fi "Questions need you", "Review", "Submitted?") */
+.sp h3 { font-size: var(--fs-small); font-weight: 600; margin: 0 }
+.need textarea.input { min-height: var(--h-textarea); resize: vertical; font-size: var(--fs-small); line-height: var(--lh-body) }
+.need .input { font-size: var(--fs-small) }
+.need fieldset { gap: var(--s-2) }
+.need legend.q { margin-bottom: var(--s-2) }
+.cnt { font-size: var(--fs-caption); color: var(--ink-3); justify-self: end; font-variant-numeric: tabular-nums }
+.stack > .btn { justify-self: start }
 /* The package's file on the page (hi-fi "CV attached", "CV didn't attach"): icon, name · size, version line. */
 .filechip { display: flex; gap: var(--s-3); align-items: center; padding: var(--s-3) var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); font-size: var(--fs-small); min-width: 0 }
 .filechip .ico { width: var(--s-5); height: var(--s-5); color: var(--ink-3) }
