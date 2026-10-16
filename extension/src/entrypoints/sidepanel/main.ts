@@ -440,7 +440,7 @@ function embedOffer(embed: EmbeddedForm, card: ReturnType<typeof contextCard>, a
   show({
     connected: true,
     body: [
-      ctxCard(`${label} form inside ${card.where.replace(/^Not a portal apply-kit knows · /, "")}`, card.job, `Job ${embed.ref.jobId}, from the form's address. Nothing on the page has been read or filled.`, true),
+      ctxCard(`${label} form inside ${card.where.replace(/^Not a portal apply-kit knows · /, "")}`, card.job, `Job ${embed.ref.jobId}, from the form's address. Nothing in the form has been read or filled.`, true),
       h("p", {}, access === "granted"
         ? `Chrome didn't let apply-kit into the ${label} form on this page. Open the form on its own and fill it there: it's the same application.`
         : `This ${label} form sits inside the company's page, where apply-kit can fill it only with the portals permission. Open the form on its own and fill it there: it's the same application.`),
