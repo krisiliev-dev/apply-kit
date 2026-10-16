@@ -179,3 +179,70 @@ describe("what filling never does", () => {
     expect(refusal(create)).toBe("a button");
   });
 });
+
+describe("custom and demographic questions", () => {
+  const questions = () => openFixture("greenhouse-questions.html", "https://boards.greenhouse.io/vireohealth/jobs/4471077");
+  const ids = {
+    sponsorship: "job_application_answers_attributes_0_answer_selected_options_attributes_0_question_option_id",
+    notice: "job_application_answers_attributes_1_text_value",
+    relocate: "job_application[answers_attributes][2][boolean_value]",
+    office: "job_application_answers_attributes_3_boolean_value",
+    detection: "job_application_answers_attributes_4_text_value",
+    salary: "job_application_answers_attributes_5_text_value",
+  };
+
+  it("reads a radio group as one question with its options, and the limits and voluntary section", () => {
+    const r = createGreenhouseFiller().read(questions().document);
+
+    expect(r.fields.map((f) => [f.id, f.label, f.kind, f.required])).toEqual([
+      ["first_name", "First Name", "text", true],
+      [ids.sponsorship, "Do you require visa sponsorship?", "select", true],
+      [ids.notice, "What is your notice period?", "text", true],
+      [ids.relocate, "Are you willing to relocate to Sofia?", "radio", true],
+      [ids.office, "I can work from the Sofia office two days a week", "checkbox", false],
+      [ids.detection, "Describe a detection rule you wrote that reduced false positives.", "textarea", true],
+      [ids.salary, "Expected gross monthly salary (EUR)", "text", true],
+      ["job_application_gender", "Gender", "select", false],
+      ["job_application_hispanic_ethnicity", "Are you Hispanic/Latino?", "select", false],
+      ["job_application_veteran_status", "Veteran Status", "select", false],
+      ["job_application_data_compliance_gdpr_consent_given", "I agree to Vireo Health processing my data as described in the privacy notice.", "checkbox", true],
+    ]);
+    expect(r.fields.find((f) => f.id === ids.relocate)!.options).toEqual(["Yes", "No"]);
+    expect(r.fields.find((f) => f.id === ids.detection)!.maxLength).toBe(1000);
+    expect(r.fields.find((f) => f.id === ids.office)!.consent).toBe(false);
+  });
+
+  it("fills the questions it has answers for, skips the voluntary ones, marks what needs Kris, and leaves consent alone", () => {
+    const page = questions();
+    const filler = createGreenhouseFiller();
+    const bankFill = (fieldId: string, value: string): FieldAnswer => ({ fieldId, kind: "fill", value, source: "answer-bank", basis: null });
+
+    const outcomes = filler.fill(page.document, [
+      bankFill(ids.sponsorship, "No"),
+      { fieldId: ids.notice, kind: "fill", value: "1 month", source: "package", basis: "Approved screening answer in this package" },
+      bankFill(ids.relocate, "No"),
+      bankFill(ids.office, "checked"),
+      { fieldId: ids.detection, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null },
+      { fieldId: ids.salary, kind: "needs-you", reason: "Your answer bank says: ask each time", basis: null, suggestion: "2000" },
+      { fieldId: "job_application_gender", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "job_application_hispanic_ethnicity", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "job_application_veteran_status", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "job_application_data_compliance_gdpr_consent_given", kind: "skip", reason: "Consent boxes are yours to tick" },
+    ]);
+
+    expect(outcomes.map((o) => o.outcome)).toEqual(["filled", "filled", "filled", "filled", "needs-you", "needs-you", "skipped", "skipped", "skipped", "skipped"]);
+    const doc = page.document;
+    expect((doc.getElementById(ids.sponsorship) as HTMLSelectElement).value).toBe("202");
+    expect(page.field(ids.notice).value).toBe("1 month");
+    expect([page.field("relocate_yes").checked, page.field("relocate_no").checked]).toEqual([false, true]);
+    expect(page.field(ids.office).checked).toBe(true);
+    expect((doc.getElementById("job_application_gender") as HTMLSelectElement).value).toBe("");
+    expect(page.field("job_application_data_compliance_gdpr_consent_given").checked).toBe(false);
+    expect(marks(doc)).toEqual([`${ids.sponsorship}:filled`, `${ids.notice}:filled`, `${ids.relocate}:filled`, `${ids.office}:filled`, `${ids.detection}:needs-you`, `${ids.salary}:needs-you`]);
+    expect(page.presses).toEqual([]);
+
+    // Undo unticks and clears what it changed.
+    filler.undo(doc);
+    expect([page.field("relocate_no").checked, page.field(ids.office).checked, page.field(ids.notice).value]).toEqual([false, false, ""]);
+  });
+});

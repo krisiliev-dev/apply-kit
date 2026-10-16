@@ -1,0 +1,33 @@
+<!-- Synthetic Greenhouse classic board application with custom questions and the voluntary
+     demographic (EEOC) section, modelled on docs/research/implementation/portals.md. Made-up company
+     and job; no real person's data. -->
+<div id="app_body">
+  <div id="header"><h1 class="app-title">Detection Engineer</h1><span class="company-name">at Vireo Health</span></div>
+  <div id="application">
+    <form id="application_form" action="/vireohealth/jobs/4471077" method="post">
+      <div id="main_fields">
+        <div class="field"><label for="first_name">First Name <span class="asterisk">*</span></label><input type="text" id="first_name" name="job_application[first_name]" maxlength="255" aria-required="true"></div>
+      </div>
+      <div id="custom_fields">
+        <div class="field"><label for="job_application_answers_attributes_0_answer_selected_options_attributes_0_question_option_id">Do you require visa sponsorship? <span class="asterisk">*</span></label>
+          <select id="job_application_answers_attributes_0_answer_selected_options_attributes_0_question_option_id" name="job_application[answers_attributes][0][answer_selected_options_attributes][0][question_option_id]" aria-required="true"><option value="">--</option><option value="201">Yes</option><option value="202">No</option></select></div>
+        <div class="field"><label for="job_application_answers_attributes_1_text_value">What is your notice period? <span class="asterisk">*</span></label><input type="text" id="job_application_answers_attributes_1_text_value" name="job_application[answers_attributes][1][text_value]" maxlength="255" aria-required="true"></div>
+        <fieldset class="field" id="relocate_question"><legend>Are you willing to relocate to Sofia? <span class="asterisk">*</span></legend>
+          <label><input type="radio" id="relocate_yes" name="job_application[answers_attributes][2][boolean_value]" value="1"> Yes</label>
+          <label><input type="radio" id="relocate_no" name="job_application[answers_attributes][2][boolean_value]" value="0"> No</label>
+        </fieldset>
+        <div class="field"><label><input type="checkbox" id="job_application_answers_attributes_3_boolean_value" name="job_application[answers_attributes][3][boolean_value]" value="1"> I can work from the Sofia office two days a week</label></div>
+        <div class="field"><label for="job_application_answers_attributes_4_text_value">Describe a detection rule you wrote that reduced false positives. <span class="asterisk">*</span></label><textarea id="job_application_answers_attributes_4_text_value" name="job_application[answers_attributes][4][text_value]" maxlength="1000" aria-required="true"></textarea></div>
+        <div class="field"><label for="job_application_answers_attributes_5_text_value">Expected gross monthly salary (EUR) <span class="asterisk">*</span></label><input type="text" id="job_application_answers_attributes_5_text_value" name="job_application[answers_attributes][5][text_value]" aria-required="true"></div>
+      </div>
+      <div id="eeoc_fields">
+        <p>Voluntary Self-Identification</p>
+        <div class="field"><label for="job_application_gender">Gender</label><select id="job_application_gender" name="job_application[gender]"><option value="">Please select</option><option value="1">Male</option><option value="2">Female</option><option value="3">Decline To Self Identify</option></select></div>
+        <div class="field"><label for="job_application_hispanic_ethnicity">Are you Hispanic/Latino?</label><select id="job_application_hispanic_ethnicity" name="job_application[hispanic_ethnicity]"><option value="">Please select</option><option value="Yes">Yes</option><option value="No">No</option><option value="Decline To Self Identify">Decline To Self Identify</option></select></div>
+        <div class="field"><label for="job_application_veteran_status">Veteran Status</label><select id="job_application_veteran_status" name="job_application[veteran_status]"><option value="">Please select</option><option value="1">I am not a protected veteran</option><option value="3">I don't wish to answer</option></select></div>
+      </div>
+      <div class="field" id="data_compliance"><label><input type="checkbox" id="job_application_data_compliance_gdpr_consent_given" name="job_application[data_compliance][gdpr_consent_given]" value="1"> I agree to Vireo Health processing my data as described in the privacy notice. <span class="asterisk">*</span></label></div>
+      <div id="submit_buttons"><input type="button" id="submit_app" value="Submit Application"></div>
+    </form>
+  </div>
+</div>
