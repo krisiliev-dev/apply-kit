@@ -50,6 +50,16 @@ describe("OpenRouter Track assistant", () => {
     await expect(assistant.classify(input)).rejects.toThrow();
   });
 
+  it("preserves billed usage for invalid classifications, drafts and prep sheets", async () => {
+    const assistant = createOpenRouterTrackAssistant({ apiKey: "test-key", fetch: fakeOpenRouter("truncated {").fetch });
+    const calls = [
+      () => assistant.classify(input),
+      () => assistant.draft(draftInput),
+      () => assistant.buildPrepSheet({ company: "Kestrel", title: "Engineer", language: "en", postingText: "TypeScript", requirements: [], notes: [], stories: [] }),
+    ];
+    for (const call of calls) await expect(call()).rejects.toMatchObject({ costUsd: expect.any(Number) });
+  });
+
   it("builds a prep sheet from the posting, notes and stories it is given, sending story ids and texts but nothing else of the profile", async () => {
     const sheet = {
       facts: [{ text: "Booking software for private clinics.", source: "posting" }],

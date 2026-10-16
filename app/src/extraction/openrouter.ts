@@ -2,8 +2,8 @@
 // schema-validated structured output. With the writer (writing/openrouter.ts), the only modules that
 // call the model; both use the pinned setup in ../openrouter.ts.
 import { generateText, Output } from "ai";
-import { postingFactsSchema, type ExtractionInput, type Extractor } from "@apply-kit/core";
-import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
+import { postingLanguageCode, postingFactsSchema, type ExtractionInput, type Extractor } from "@apply-kit/core";
+import { billedUsd, rethrowBilledFailure, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 export { CHINA_HOSTED_PROVIDERS, DEFAULT_MODEL, DEFAULT_PROVIDERS, providerRouting } from "../openrouter.ts";
 
@@ -18,7 +18,8 @@ const instructions = `You read one job posting and return its facts as JSON matc
 - Only report what the posting says. Never guess. If something isn't stated, use "not-stated", null or an empty list.
 - Every "quote" is copied word for word from the posting, in its original language, short (one line or sentence).
   If the posting isn't in English, give an English "translation" of each quote; otherwise translation is null.
-- Labels, summaries, language names and "about" are short plain English, even for Bulgarian postings.
+- Top-level "language": the ISO 639-1 code of the posting’s written language ("bg" for Bulgarian, "en" for English), never its name.
+- Labels, summaries, names in "languages" and "about" are short plain English, even for Bulgarian postings.
 - titleTranslation: the job title in plain English if the posting isn't in English; otherwise null.
 - "required" is anything the posting asks for as a must. Items under headings like "Nice to have", "Bonus",
   "Preferred", "Plus", or worded "ideally", "a plus", "is an advantage" are "preferred".
@@ -42,17 +43,22 @@ export function createOpenRouterExtractor(options: OpenRouterExtractorOptions): 
     },
 
     async extract(input) {
-      const result = await generateText({
-        model,
-        instructions,
-        prompt: promptFor(input),
-        output: Output.object({ schema: postingFactsSchema, name: "posting_facts" }),
-        temperature: 0,
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        maxRetries: 1,
-        timeout: TIMEOUT_MS,
-      });
-      return { facts: result.output, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS), model: result.response.modelId || modelId };
+      try {
+        const result = await generateText({
+          model,
+          instructions,
+          prompt: promptFor(input),
+          output: Output.object({ schema: postingFactsSchema, name: "posting_facts" }),
+          temperature: 0,
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          maxRetries: 1,
+          timeout: TIMEOUT_MS,
+        });
+        const facts = { ...result.output, language: postingLanguageCode(result.output.language) };
+        return { facts, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS), model: result.response.modelId || modelId };
+      } catch (err) {
+        rethrowBilledFailure(err, MAX_OUTPUT_TOKENS);
+      }
     },
   };
 }

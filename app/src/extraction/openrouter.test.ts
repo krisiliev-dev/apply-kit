@@ -76,6 +76,24 @@ describe("OpenRouter extractor", () => {
     expect(result).toEqual({ facts, costUsd: 0.00042, model: "deepseek/deepseek-v4.1-flash" });
   });
 
+  it("normalises model language names to the codes used for package language", async () => {
+    for (const [language, code] of [["Bulgarian", "bg"], ["English", "en"], ["BG", "bg"]]) {
+      const extractor = createOpenRouterExtractor({ apiKey: "test-key", fetch: fakeOpenRouter(JSON.stringify({ ...facts, language })).fetch });
+      expect((await extractor.extract(input)).facts.language).toBe(code);
+    }
+  });
+
+  it("makes the posting language code explicit in the model contract", async () => {
+    const api = fakeOpenRouter();
+    await createOpenRouterExtractor({ apiKey: "test-key", fetch: api.fetch }).extract(input);
+    expect(JSON.stringify(api.requests[0]!.body)).toContain("ISO 639-1");
+  });
+
+  it("keeps billed usage when structured output is rejected", async () => {
+    const extractor = createOpenRouterExtractor({ apiKey: "test-key", fetch: fakeOpenRouter("truncated {").fetch });
+    await expect(extractor.extract(input)).rejects.toMatchObject({ costUsd: expect.any(Number) });
+  });
+
   it("estimates a cost above what a typical read costs, without calling anything", () => {
     const api = fakeOpenRouter();
     const extractor = createOpenRouterExtractor({ apiKey: "test-key", fetch: api.fetch });

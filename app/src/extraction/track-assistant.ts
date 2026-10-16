@@ -6,6 +6,7 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
 import { draftOutputSchema, emailClassificationSchema, prepSheetDraftSchema, type ClassifyInput, type DraftInput, type PrepSheetInput, type TrackAssistant } from "@apply-kit/core";
+import { rethrowBilledFailure } from "../openrouter.ts";
 import { DEFAULT_MODEL, DEFAULT_PROVIDERS, providerRouting } from "./openrouter.ts";
 
 /** Prices the estimate assumes (the routing's max price per million tokens), and output limits. */
@@ -117,7 +118,7 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
         maxOutputTokens: PREP_OUTPUT_TOKENS,
         maxRetries: 1,
         timeout: TIMEOUT_MS * 2,
-      });
+      }).catch((err: unknown) => rethrowBilledFailure(err, PREP_OUTPUT_TOKENS));
       const reported = (result.providerMetadata?.openrouter as { usage?: { cost?: unknown } } | undefined)?.usage?.cost;
       const costUsd = typeof reported === "number" && Number.isFinite(reported)
         ? reported
@@ -137,7 +138,7 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
         maxOutputTokens: DRAFT_OUTPUT_TOKENS,
         maxRetries: 1,
         timeout: TIMEOUT_MS,
-      });
+      }).catch((err: unknown) => rethrowBilledFailure(err, DRAFT_OUTPUT_TOKENS));
       const reported = (result.providerMetadata?.openrouter as { usage?: { cost?: unknown } } | undefined)?.usage?.cost;
       const costUsd = typeof reported === "number" && Number.isFinite(reported)
         ? reported
@@ -157,7 +158,7 @@ export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): 
         maxOutputTokens: MAX_OUTPUT_TOKENS,
         maxRetries: 1,
         timeout: TIMEOUT_MS,
-      });
+      }).catch((err: unknown) => rethrowBilledFailure(err, MAX_OUTPUT_TOKENS));
       const reported = (result.providerMetadata?.openrouter as { usage?: { cost?: unknown } } | undefined)?.usage?.cost;
       const costUsd = typeof reported === "number" && Number.isFinite(reported)
         ? reported

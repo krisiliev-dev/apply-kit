@@ -20,7 +20,7 @@ export type {
 export type { CompanyDetection, SystemProbe, ProbeStatus, Fallback } from "./companies.ts";
 export { sofiaWatchlist } from "./watchlist.ts";
 export type { WatchlistEntry, WatchlistFeedEntry, WatchlistAlertEntry, WatchlistGroup, WatchlistField, AlertRoute } from "./watchlist.ts";
-export { postingFactsSchema } from "./extraction/facts.ts";
+export { postingFactsSchema, postingLanguageCode } from "./extraction/facts.ts";
 export type {
   PostingFacts, SourceQuote, ExtractedRequirement, ExtractedYears, ExtractedLanguage, ExtractedCertificate,
   ExtractedWorkAuthorisation, ExtractedRemote, ExtractedSalary, ExtractionInput, ExtractionResult,

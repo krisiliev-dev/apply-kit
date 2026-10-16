@@ -2,7 +2,7 @@
 // the Vercel AI SDK, with providers pinned to hosts outside China that don't store or train on
 // prompts (PRODUCT.md, privacy constraint), a price ceiling, and how a call's cost is worked out.
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import type { LanguageModel } from "ai";
+import { NoObjectGeneratedError, type LanguageModel } from "ai";
 
 export const DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash";
 
@@ -77,4 +77,10 @@ export function billedUsd(result: { providerMetadata?: unknown; usage?: { inputT
   return typeof reported === "number" && Number.isFinite(reported)
     ? reported
     : usdFor(result.usage?.inputTokens ?? 0, result.usage?.outputTokens ?? maxOutputTokens, price);
+}
+
+/** A rejected structured response can still be billed; keep its usage for the shared budget. */
+export function rethrowBilledFailure(err: unknown, maxOutputTokens: number, price: Price = MAX_PRICE): never {
+  if (NoObjectGeneratedError.isInstance(err) && err.usage) Object.assign(err, { costUsd: billedUsd({ usage: err.usage }, maxOutputTokens, price) });
+  throw err;
 }

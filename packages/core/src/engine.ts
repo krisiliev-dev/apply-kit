@@ -3,7 +3,7 @@ import { migrate } from "./schema.ts";
 import { createAiBudget, type BudgetInfo } from "./budget.ts";
 import type { AlertEmail, EngineDeps, MailMessage, SqlDatabase } from "./ports.ts";
 import { createMailStore } from "./mail-store.ts";
-import { postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
+import { postingLanguageCode, postingFactsSchema, type ExtractionInput, type PostingFacts } from "./extraction/facts.ts";
 import {
   jobReading, type FactAnswer, type FeedRequirement, type JobRequirement, type KeyFact, type NeedsYouItem, type Screening,
 } from "./extraction/reading.ts";
@@ -1205,7 +1205,10 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
     if (inFlight.has(postingId)) return { state: "reading", facts: null, error: null, text };
     const e = db.prepare("SELECT status, text_hash, facts, error FROM extraction WHERE posting_id = ?").get(postingId);
     const current = e && e.text_hash === hashText(text);
-    if (current && e.status === "read") return { state: "read", facts: JSON.parse(String(e.facts)) as PostingFacts, error: null, text };
+    if (current && e.status === "read") {
+      const facts = JSON.parse(String(e.facts)) as PostingFacts;
+      return { state: "read", facts: { ...facts, language: postingLanguageCode(facts.language) }, error: null, text };
+    }
     if (current && e.status === "failed") return { state: "failed", facts: null, error: String(e.error), text };
     return { state: budgetReached ? "unscreened" : "unread", facts: null, error: null, text };
   }

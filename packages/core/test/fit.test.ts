@@ -273,6 +273,13 @@ describe("Bulgarian postings", () => {
     expect(detail!.postingText).toContain("Търсим анализатор.");
   });
 
+  it("uses Bulgarian for cached readings that stored the model's language name", async () => {
+    const { engine } = await feedOf([{ title: "Анализатор SOC" }], { "Анализатор SOC": cannedFacts({ language: "Bulgarian" }) });
+    const [job] = (await engine.queryFeed({ view: "new" })).jobs;
+    expect(job).toMatchObject({ language: "bg" });
+    expect(await engine.getJob(job!.id)).toMatchObject({ language: "bg", packageLanguage: "bg" });
+  });
+
   it("matches angles on the English title of a Bulgarian posting", async () => {
     const tester = cannedFacts({ language: "bg", titleTranslation: "Penetration Tester" });
     const { engine } = await feedOf([{ title: "Тестер, ниво 2" }], { "Тестер, ниво 2": tester });

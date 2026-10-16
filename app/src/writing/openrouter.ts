@@ -1,10 +1,10 @@
 // The real writer: Prepare's only connection to the model. DeepSeek V4.1 Flash through OpenRouter,
 // pinned to non-China hosts like the extractor (../openrouter.ts), with schema-validated structured
 // output per task. Each task sends only the text it needs (extracted text, never files).
-import { generateText, NoObjectGeneratedError, Output } from "ai";
+import { generateText, Output } from "ai";
 import type { z } from "zod";
 import { coachTurnSchema, draftedAnswerSchema, writtenLetterSchema, draftedPiecesSchema, learnedVoiceSchema, tailoredCvSchema, type SentExcerpt, type Writer, type WriterRequest, type Written } from "@apply-kit/core";
-import { billedUsd, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
+import { billedUsd, rethrowBilledFailure, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
 /** Output tokens a task typically needs at most, for the estimate. */
@@ -123,8 +123,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
       return { output: result.output, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS, options.maxPrice), model: result.response.modelId || modelId, excerpts };
     } catch (err) {
       // The model answered but not in the schema's shape: the call was billed all the same.
-      if (NoObjectGeneratedError.isInstance(err) && err.usage) Object.assign(err, { costUsd: billedUsd({ usage: err.usage }, MAX_OUTPUT_TOKENS, options.maxPrice) });
-      throw err;
+      rethrowBilledFailure(err, MAX_OUTPUT_TOKENS, options.maxPrice);
     }
   }
 

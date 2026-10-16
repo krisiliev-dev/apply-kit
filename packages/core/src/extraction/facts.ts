@@ -89,7 +89,7 @@ export const salarySchema = z.object({
 
 export const postingFactsSchema = z.object({
   /** ISO 639-1 code of the posting's language, e.g. "en", "bg". */
-  language: z.string(),
+  language: z.string().describe("ISO 639-1 code of the posting’s written language: en for English, bg for Bulgarian. Use a code, never a language name."),
   /** The job title in English when the posting isn't in English, e.g. "SOC Analyst L2"; null for English postings. */
   titleTranslation: z.string().nullable(),
   requirements: z.array(requirementSchema),
@@ -127,4 +127,10 @@ export interface ExtractionResult {
   costUsd: number;
   /** The model that answered, for the record. */
   model: string;
+}
+
+/** Tolerates names returned by older providers and cached readings for our two package languages. */
+export function postingLanguageCode(value: string): string {
+  const language = value.trim().toLowerCase();
+  return language === "bulgarian" ? "bg" : language === "english" ? "en" : language;
 }
