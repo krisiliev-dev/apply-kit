@@ -6,7 +6,8 @@
 // Its public interface below is the testing seam (test/tracker.test.ts).
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
-import type { VoiceForDrafts } from "./preparation/engine.ts";
+import type { PrepareForTrack, VoiceForDrafts } from "./preparation/engine.ts";
+import type { ApprovedPackage } from "./preparation/contracts.ts";
 import { angleLabel, type Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
@@ -50,9 +51,10 @@ export interface ApplicationEvent {
    * cv: the user attached the CV they sent. email: an email was matched here (and, when `to` is
    * set, moved the Status). undo: an earlier Event was undone. follow-up-sent, follow-up-skipped,
    * follow-up-snoozed: what the user did with a follow-up (`followUpId`). interview: an interview
-   * was set or changed (read from an invite email, or by you).
+   * was set or changed (read from an invite email, or by you). submission: a package marked submitted
+   * was attached to an Application made another way (added by hand, "I applied").
    */
-  kind: "created" | "status" | "note" | "cv" | "email" | "undo" | "interview" | FollowUpEventKind;
+  kind: "created" | "status" | "note" | "cv" | "email" | "undo" | "interview" | "submission" | FollowUpEventKind;
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -333,8 +335,10 @@ export interface RejectionView {
 export interface ApplicationDetail extends ApplicationSummary {
   /** When it got its current Status (the Event still standing that set it). */
   statusSince: string;
-  /** The CV version it counts under in What's working: the attached CV's label (or, later, the Package's). */
+  /** The CV version it counts under in What's working: its Package's CV label, else the attached CV's. */
   cvVersion: string | null;
+  /** The Package as sent (Prepare's read-only snapshot, never changed once submitted), or null without one. */
+  package: ApprovedPackage | null;
   /** The CV attached by hand, or null. */
   cv: AttachedCv | null;
   /** Null when added by hand without a link. */
@@ -400,8 +404,8 @@ export interface Submission {
   portalUrl: string | null;
   /** When Kris marked it submitted (ISO). */
   submittedAt: string;
-  /** Marked in the extension's panel, or on the Job page in the app. */
-  via: "extension" | "app";
+  /** Marked in the extension's panel, on the Job page in the app, or from its confirmation email (Needs you's "Mark Applied"). */
+  via: "extension" | "app" | "email";
 }
 
 /** What "Mark as submitted" hands Track: the package's Job and how it was sent. */
@@ -415,7 +419,7 @@ export interface SubmissionInput extends Submission {
 export type SubmissionResult =
   /** `alreadyRecorded`: the package already had its Application; this is it, unchanged. */
   | { outcome: "recorded"; alreadyRecorded: boolean; application: ApplicationSummary & { submission: Submission } }
-  /** The Job already has an open Application made another way: nothing was added (Track #35 attaches the package to it). */
+  /** The Job's open Application already has another package: nothing was added. */
   | { outcome: "already-open"; application: ApplicationSummary; message: string };
 
 export type GroupKey = "accepted" | "offer" | "interviewing" | "screening" | "applied" | "closed";
@@ -537,6 +541,19 @@ export interface OfferToAnswer {
   other: string | null;
 }
 
+/**
+ * "Mark Applied, dated …?" in Needs you: a confirmation email about an approved package that was never
+ * marked submitted (applied by phone, say). Never an Application until the user says so.
+ */
+export interface PackageConfirmation {
+  email: EmailSummary;
+  package: { id: string; job: { title: string; company: string }; language: "en" | "bg" };
+  /** The day the email arrived: the date applied that marking it gives. */
+  appliedOn: string;
+  /** Why it seems to be about this package, in plain words. */
+  signals: string[];
+}
+
 /** Something only coming up: one quiet "Coming up" line. */
 export interface ComingUp {
   applicationId: string;
@@ -575,6 +592,8 @@ export interface NeedsYou {
   offers: OfferToAnswer[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
+  /** Confirmation emails for an approved package with no Application: "Mark Applied, dated …?", newest first. */
+  packageConfirmations: PackageConfirmation[];
   /** Kinds with 3 or more due (or done today): shown grouped, their items stepped through one by one. */
   groups: NeedsYouGroup[];
   /** Due in the next 3 days, soonest first. */
@@ -688,15 +707,17 @@ export interface Tracker {
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /**
-   * Record submission (Apply's "Mark as submitted"; Track #35 extends it): creates the Application in
-   * Applied for the package's Job, with the package, portal, portal address, when and how. Once per
-   * package: asked again, it returns the Application it made. A Job with an open Application made
-   * another way gets nothing new ("already-open").
+   * Record submission (Apply's "Mark as submitted"): creates the Application in Applied for the
+   * package's Job ("Submitted → Applied"), with the package, portal, portal address, when and how.
+   * Once per package: asked again, it returns the Application it has. A Job with an open Application
+   * made another way (by hand, "I applied") gets the package attached to that one instead, its Status
+   * and date applied kept. A Job whose open Application has another package gets nothing ("already-open").
    */
   recordSubmission(input: SubmissionInput): Promise<SubmissionResult>;
   /**
-   * Undoes record submission (Apply's Undo): the Application is taken off the list. Refused (a
-   * TrackerError) once anything has happened to it since. Returns the package it was made from.
+   * Undoes record submission (Apply's Undo): the Application is taken off the list (or, when the package
+   * was attached to one made another way, the package is taken off it). Refused (a TrackerError) once
+   * anything has happened to it since. Returns the package.
    */
   undoSubmission(applicationId: string): Promise<{ packageId: string; event: ApplicationEvent }>;
   /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
@@ -708,8 +729,17 @@ export interface Tracker {
    * version. A new one replaces the old. Throws a TrackerError when refused.
    */
   attachCv(applicationId: string, cv: AttachCvInput): Promise<{ cv: AttachedCv; event: ApplicationEvent }>;
+  /** The CV versions sent so far (the Packages' CV labels, and CVs attached by hand), to pick from. */
+  cvVersions(): Promise<string[]>;
+  /**
+   * "Pick a CV version" for an Application added by hand: it counts under that version in What's
+   * working, without a file. An Event by you. Throws a TrackerError when refused.
+   */
+  pickCvVersion(applicationId: string, label: string): Promise<{ event: ApplicationEvent }>;
   /** The attached CV file, or null. */
   cvFile(applicationId: string): Promise<{ fileName: string; bytes: Uint8Array } | null>;
+  /** A file of the Package as sent (the CV PDF, or the letter), exactly as approved; null without one. */
+  packageFile(applicationId: string, which: "cv" | "letter"): Promise<{ fileName: string; sha256: string; bytes: Uint8Array } | null>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
   /** What Track knows about each of these Jobs, keyed by the id asked with (unknown ids are left out). */
@@ -763,6 +793,17 @@ export interface Tracker {
    * about an application. The answer is remembered for the sender. Throws a TrackerError when refused.
    */
   answerEmail(emailId: string, answer: EmailAnswer): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }>;
+  /**
+   * Answers "Mark Applied, dated …?": "mark-applied" records the package's submission dated the email
+   * (and marks the package submitted in Prepare), filing the email on the Application; "not-this"
+   * leaves the email to match by hand. Throws a TrackerError when refused.
+   */
+  answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this"): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }>;
+  /**
+   * Undoes "Mark Applied" (the toast's Undo): the Application is taken off, the package is approved
+   * again and the question comes back. Refused (a TrackerError) once anything else happened to it.
+   */
+  undoPackageConfirmation(emailId: string): Promise<void>;
   /** "Looks right" on the moved-by-email banner: the banner goes; the email stays on the timeline. */
   confirmEmailMove(eventId: string): Promise<void>;
   /** The job mailbox's state, for Applications' banners. */
@@ -812,7 +853,12 @@ export interface TrackerDeps {
    * draft before marking it sent, recorded as evidence to learn the voice from.
    */
   voice?: VoiceForDrafts;
+  /** Prepare's packages: the Package as sent, and approved packages not yet submitted (a confirmation email for one asks you). */
+  packages?: PackagesForTrack;
 }
+
+/** What the tracker reads from Prepare's packages (docs/contracts.md › PrepareForTrack). */
+export type PackagesForTrack = Pick<PrepareForTrack, "packageSnapshot" | "approvedWithoutApplication" | "packageFile" | "markPackageSubmitted" | "undoPackageSubmitted">;
 
 const statusLabel: Record<Status, string> = {
   applied: "Applied", screening: "Screening", interviewing: "Interviewing", offer: "Offer",
@@ -843,7 +889,7 @@ const movesStatus = "(kind IN ('created', 'status') OR (kind = 'email' AND to_st
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice }: TrackerDeps): Tracker {
+export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice, packages }: TrackerDeps): Tracker {
   migrate(db);
   const now = () => clock.now().toISOString();
   const today = () => sofiaDay(clock.now());
@@ -996,8 +1042,24 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const packageId = str(r.package_id);
     const submittedAt = str(r.submitted_at);
     return packageId && submittedAt
-      ? { packageId, portal: str(r.portal), portalUrl: str(r.portal_url), submittedAt, via: r.submitted_via === "app" ? "app" : "extension" }
+      ? { packageId, portal: str(r.portal), portalUrl: str(r.portal_url), submittedAt, via: r.submitted_via === "app" || r.submitted_via === "email" ? r.submitted_via : "extension" }
       : null;
+  }
+
+  /** The CV label of a package as approved (what What's working counts it under), or null when Prepare isn't wired. */
+  const cvLabelOf = (packageId: string) => packages?.packageSnapshot(packageId)?.cv.label ?? null;
+
+  /** The Package as sent of an Application, or null. */
+  function packageOf(r: Row): ApprovedPackage | null {
+    const packageId = str(r.package_id);
+    return packageId && r.submitted_at && packages ? packages.packageSnapshot(packageId) : null;
+  }
+
+  async function packageFile(applicationId: string, which: "cv" | "letter") {
+    const r = row(applicationId);
+    const sent = r ? packageOf(r) : null;
+    const file = sent ? await packages!.packageFile(sent.id, which, sent.version) : null;
+    return file ? { fileName: file.fileName, sha256: file.sha256, bytes: file.bytes } : null;
   }
 
   async function recordSubmission(input: SubmissionInput): Promise<SubmissionResult> {
@@ -1006,7 +1068,21 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const existing = db.prepare("SELECT * FROM application WHERE package_id = ? AND submitted_at IS NOT NULL AND removed_at IS NULL ORDER BY rowid LIMIT 1").get(input.packageId);
     if (existing) return recorded(existing, true);
     const open = openOnJob(input.jobId);
-    if (open) return alreadyOpen(open);
+    if (open && row(open.id)!.package_id) return alreadyOpen(open);
+    if (open) {
+      db.exec("BEGIN");
+      try {
+        // The package is what was sent, so its CV label is the CV version (over a CV attached by hand).
+        db.prepare("UPDATE application SET package_id = ?, portal = ?, portal_url = ?, submitted_at = ?, submitted_via = ?, cv_version = COALESCE(?, cv_version) WHERE id = ?")
+          .run(input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via, cvLabelOf(input.packageId), open.id);
+        addEvent({ applicationId: open.id, kind: "submission", cause: "you", from: null, to: null, text: "Package attached: marked as submitted", undoes: null });
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+      return recorded(row(open.id)!, false);
+    }
 
     const job = await discovery.getJob(input.jobId);
     const target = job?.postings.find((p) => p.isTarget) ?? job?.postings[0];
@@ -1016,14 +1092,14 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     db.exec("BEGIN");
     try {
       db.prepare(
-        `INSERT INTO application (id, job_id, company, title, status, applied_on, created_how, created_at, posting_url, angle, source, package_id, portal, portal_url, submitted_at, submitted_via)
-         VALUES (?, ?, ?, ?, 'applied', ?, 'submission', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO application (id, job_id, company, title, status, applied_on, created_how, created_at, posting_url, angle, source, package_id, portal, portal_url, submitted_at, submitted_via, cv_version)
+         VALUES (?, ?, ?, ?, 'applied', ?, 'submission', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id, job?.id ?? input.jobId, job?.company ?? input.job.company, job?.title ?? input.job.title, sofiaDay(new Date(input.submittedAt)), now(),
         job?.url ?? null, input.angle ?? job?.fit.angle ?? null, source, input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via,
+        cvLabelOf(input.packageId),
       );
-      const text = input.via === "app" ? "Marked as submitted on the Job page" : `Marked as submitted${portal ? ` on ${portal}` : ""}`;
-      addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text, undoes: null });
+      addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text: "Submitted → Applied", undoes: null });
       db.exec("COMMIT");
     } catch (err) {
       db.exec("ROLLBACK");
@@ -1037,8 +1113,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const submission = r ? submissionOf(r) : null;
     if (!r || !submission) throw new TrackerError("not-found", "There's no Application made by marking a package submitted with that id.");
     const all = allEvents(applicationId);
-    const created = all.find((e) => e.kind === "created")!;
-    const later = all.filter((e) => e.id !== created.id);
+    const attached = r.created_how !== "submission";
+    const created = attached ? all.filter((e) => e.kind === "submission" && !e.undoneAt).at(-1)! : all.find((e) => e.kind === "created")!;
+    const later = all.slice(all.findIndex((e) => e.id === created.id) + 1);
     if (later.length > 0) {
       throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
     }
@@ -1150,6 +1227,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         // The follow-up's state comes from its Events still standing, so it is as it was before.
         const text = ev.kind === "follow-up-snoozed" ? "Snooze undone" : ev.kind === "follow-up-sent" ? "Undone: not sent after all" : "Undone: not skipped after all";
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text, undoes: eventId, followUpId: ev.followUpId ?? undefined });
+      } else if (ev.kind === "submission") {
+        db.prepare(
+          `UPDATE application SET package_id = NULL, portal = NULL, portal_url = NULL, submitted_at = NULL, submitted_via = NULL,
+             cv_version = (SELECT label FROM application_cv WHERE application_id = application.id) WHERE id = ?`,
+        ).run(ev.applicationId);
+        event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Package taken off: not submitted after all", undoes: eventId });
       } else if (ev.kind === "created") {
         db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), ev.applicationId);
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Adding undone: removed", undoes: eventId });
@@ -1229,6 +1312,20 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     }
   }
 
+  async function cvVersions() {
+    return db.prepare("SELECT DISTINCT cv_version FROM application WHERE removed_at IS NULL AND cv_version IS NOT NULL ORDER BY cv_version").all()
+      .map((r) => String(r.cv_version));
+  }
+
+  async function pickCvVersion(applicationId: string, label: string) {
+    const r = row(applicationId);
+    if (!r) throw new TrackerError("not-found", "There's no such Application.");
+    if (r.package_id) throw new TrackerError("invalid", "This Application has its Package as sent; its CV version is that one.", applicationId);
+    if (!(await cvVersions()).includes(label)) throw new TrackerError("invalid", "Pick one of the CV versions you've sent.", applicationId);
+    db.prepare("UPDATE application SET cv_version = ? WHERE id = ?").run(label, applicationId);
+    return { event: addEvent({ applicationId, kind: "cv", cause: "you", from: null, to: null, text: `CV version picked: ${label}`, undoes: null }) };
+  }
+
   async function cvFile(applicationId: string) {
     const r = db.prepare("SELECT file_name, bytes FROM application_cv WHERE application_id = ?").get(applicationId);
     return r ? { fileName: String(r.file_name), bytes: r.bytes as Uint8Array } : null;
@@ -1303,8 +1400,14 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const all = allEvents(applicationId);
     const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
     const posting = await postingOf(app);
+    const submission = submissionOf(row(applicationId)!);
+    const submittedHow = !submission ? null
+      : submission.via === "app" ? "Marked on the Job page"
+        : submission.via === "email" ? "Marked Applied from its confirmation email"
+          : `${submission.portal ? portalLabel(submission.portal) : "The portal"}, marked in the extension`;
     const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
-      id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
+      id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, undoneAt: e.undoneAt,
+      detail: (e.kind === "submission" && !e.undoneAt) || (e.kind === "created" && app.createdHow === "submission") ? submittedHow : null,
       undoable: !e.undoneAt && (e.kind === "note" || ((e.kind === "status" || (e.kind === "email" && !!e.to) || isFollowUpEvent(e)) && !movedSince(e, app.status))),
       email: e.kind === "email" && e.emailId ? matchedEmail(e.emailId) : null,
     }));
@@ -1335,7 +1438,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const setter = standing.filter((e) => e.kind === "created" || e.kind === "status" || (e.kind === "email" && !!e.to)).at(-1);
     const followUp = currentFollowUp(row(applicationId)!);
     return {
-      ...app, submission: submissionOf(row(applicationId)!), statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
+      ...app, submission, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), package: packageOf(row(applicationId)!), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
       nextStep: nextStepOf(app, standing, followUp, thankYous, interviews), followUp, interviews, thankYous, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
       closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
@@ -1814,6 +1917,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
     comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
     const emails = Number(db.prepare("SELECT COUNT(*) AS n FROM email_match WHERE state = 'to-match'").get()?.n ?? 0);
+    const packageConfirmations = packageConfirmationList();
     const groups: NeedsYouGroup[] = [];
     for (const kind of [...new Set(items.map((i) => i.followUp.kind))]) {
       const same = items.filter((i) => i.followUp.kind === kind);
@@ -1838,7 +1942,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       };
     }).sort((a, b) => a.since.localeCompare(b.since));
     return {
-      count: items.filter((i) => !i.done).length + emails + interviews.length + offers.length, items, groups, interviews, offers, emailsToMatch: emails, comingUp,
+      count: items.filter((i) => !i.done).length + emails + packageConfirmations.length + interviews.length + offers.length,
+      items, groups, interviews, offers, emailsToMatch: emails, packageConfirmations, comingUp,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -2395,7 +2500,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return happyPath.indexOf(to) > happyPath.indexOf(from);
   }
 
-  function decide(emailId: string, d: { state: "matched" | "to-match" | "not-application" | "left"; applicationId?: string | null; signals?: string[]; candidates?: { applicationId: string; signals: string[] }[]; reason?: string | null; how?: "auto" | "you" | null }) {
+  function decide(emailId: string, d: { state: "matched" | "to-match" | "not-application" | "left" | "package"; applicationId?: string | null; signals?: string[]; candidates?: { applicationId: string; signals: string[] }[]; reason?: string | null; how?: "auto" | "you" | null }) {
     db.prepare(
       `INSERT INTO email_match (email_id, state, application_id, signals, candidates, reason, how, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email_id) DO UPDATE SET state = excluded.state, application_id = excluded.application_id, signals = excluded.signals,
@@ -2496,6 +2601,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
     const candidates = signalsFor(m, c);
     const match = uniqueMatch(candidates);
+    // A confirmation about no Application, for an approved package never marked submitted: asked, never added.
+    const forgotten = c?.kind === "confirmation" && !match ? packageFor(m, c) : null;
+    if (forgotten) {
+      decide(m.id, { state: "package", signals: forgotten.signals, reason: forgotten.packageId });
+      return "toMatch";
+    }
     const target = targetOf(c?.kind, c?.stage);
     const strongMatch = !!match?.signals.some((s) => strongGroups.includes(s.group));
     const texts = (x: { signals: Signal[] }) => x.signals.map((s) => s.text);
@@ -2530,6 +2641,115 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (!target) return match ? file(false) : wait();
     if (!match || c.confidence < highConfidence) return wait();
     return file(true);
+  }
+
+  const sameCompany = (a: string | null | undefined, b: string) => !!a && normaliseCompany(a) === normaliseCompany(b);
+
+  /**
+   * The one approved package not marked submitted that a confirmation is about: tied to its company
+   * (the sender's domain is the company's or the target posting's, a job system writing for it, or
+   * the company named), the job title deciding between several. Null when none, or not just one.
+   */
+  function packageFor(m: MailMessage, c: EmailClassification): { packageId: string; signals: string[] } | null {
+    if (!packages) return null;
+    const domain = domainOf(senderOf(m).address);
+    const base = baseDomain(domain);
+    const text = `${m.subject}\n${quoteOf(m, 4000)}`;
+    const found = packages.approvedWithoutApplication().flatMap((p) => {
+      const company = p.job.company;
+      const host = hostOf(p.targetPosting.url);
+      const tie = host && !isBoardDomain(host) && !isBoardDomain(domain) && baseDomain(host) === base ? `The sender's domain is the target posting's (${base}).`
+        : isAtsDomain(domain) && (namesCompany(company, text) || sameCompany(c.company, company)) ? `A job system (${base}) writing for ${company}.`
+          : !isAtsDomain(domain) && !isSharedProvider(domain) && companyDomainMatches(company, domain) ? `The sender's domain (${base}) is ${company}'s.`
+            : sameCompany(c.company, company) ? `It names the company: ${company}.` : null;
+      if (!tie) return [];
+      const titled = namesTitle(p.job.title, text) || (!!c.jobTitle && namesTitle(p.job.title, c.jobTitle) && namesTitle(c.jobTitle, p.job.title));
+      return [{ packageId: p.id, signals: titled ? [tie, `It names the job: "${p.job.title}".`] : [tie] }];
+    });
+    const pick = found.length > 1 ? found.filter((x) => x.signals.length > 1) : found;
+    return pick.length === 1 ? pick[0]! : null;
+  }
+
+  /** Needs you's "Mark Applied, dated …?" questions still open (their package still approved and not submitted). */
+  function packageConfirmationList(): PackageConfirmation[] {
+    if (!packages) return [];
+    const rows = db.prepare(
+      "SELECT d.email_id, d.reason, d.signals FROM email_match d JOIN mail_message m ON m.id = d.email_id WHERE d.state = 'package' ORDER BY m.received_at DESC, m.id",
+    ).all();
+    return rows.flatMap((r) => {
+      const p = packages.packageSnapshot(String(r.reason));
+      const email = emailSummary(String(r.email_id));
+      if (!p || p.state !== "approved" || !email) return [];
+      return [{
+        email, package: { id: p.id, job: { title: p.job.title, company: p.job.company }, language: p.language },
+        appliedOn: sofiaDay(new Date(email.receivedAt)), signals: JSON.parse(String(r.signals)) as string[],
+      }];
+    });
+  }
+
+  async function answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this") {
+    if (answer !== "mark-applied" && answer !== "not-this") throw new TrackerError("invalid", "Choose Mark Applied, or Not this package.");
+    const d = db.prepare("SELECT state, reason, signals FROM email_match WHERE email_id = ?").get(emailId);
+    const r = db.prepare("SELECT * FROM mail_message WHERE id = ?").get(emailId);
+    if (!d || !r || d.state !== "package" || !packages) throw new TrackerError("not-found", "There's no such question about a package.");
+    const m = storedMessage(r);
+    const p = packages.packageSnapshot(String(d.reason));
+    if (answer === "not-this") {
+      const cls = db.prepare("SELECT * FROM email_classification WHERE email_id = ?").get(emailId);
+      const c = cls?.kind ? { kind: cls.kind, company: str(cls.company), jobTitle: str(cls.job_title) } as EmailClassification : null;
+      const candidates = signalsFor(m, c);
+      decide(emailId, {
+        state: "to-match", reason: `You said it isn't about your ${p?.job.company ?? "approved"} package, so nothing has changed.`,
+        candidates: candidates.slice(0, 4).map((x) => ({ applicationId: x.applicationId, signals: x.signals.map((s) => s.text) })),
+      });
+      return { application: null, event: null };
+    }
+    if (!p || p.state !== "approved") throw new TrackerError("unchanged", "That package was marked submitted already.");
+    const submittedAt = m.receivedAt.toISOString();
+    const recorded = await recordSubmission({
+      jobId: p.jobId, job: p.job, angle: p.angle, packageId: p.id, portal: p.targetPosting.jobRef?.portal ?? null, portalUrl: null, submittedAt, via: "email",
+    });
+    if (recorded.outcome === "already-open") throw new TrackerError("already-open", recorded.message, recorded.application.id);
+    const applicationId = recorded.application.id;
+    packages.markPackageSubmitted(p.id, { via: "app", portalUrl: null, at: submittedAt });
+    db.exec("BEGIN");
+    try {
+      const { event } = fileEmail(applicationId, m, "confirmation", null, false, "you");
+      decide(emailId, { state: "matched", applicationId, signals: JSON.parse(String(d.signals)) as string[], reason: p.id, how: "you" });
+      db.exec("COMMIT");
+      return { application: summary(applicationId), event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  async function undoPackageConfirmation(emailId: string) {
+    const d = db.prepare("SELECT state, application_id, reason, signals FROM email_match WHERE email_id = ?").get(emailId);
+    const r = d?.state === "matched" && d.application_id ? row(String(d.application_id)) : undefined;
+    const submission = r ? submissionOf(r) : null;
+    if (!r || !submission || submission.via !== "email" || r.created_how !== "submission" || !packages) {
+      throw new TrackerError("not-found", "There's no Mark Applied to undo for that email.");
+    }
+    const applicationId = String(r.id);
+    const all = allEvents(applicationId);
+    const later = all.filter((e) => e.kind !== "created" && !(e.kind === "email" && e.emailId === emailId));
+    if (later.length) {
+      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
+    }
+    db.exec("BEGIN");
+    try {
+      const created = all.find((e) => e.kind === "created")!;
+      db.prepare("UPDATE application_event SET undone_at = ? WHERE application_id = ? AND undone_at IS NULL").run(now(), applicationId);
+      db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), applicationId);
+      addEvent({ applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Mark Applied undone: removed", undoes: created.id });
+      decide(emailId, { state: "package", signals: JSON.parse(String(d!.signals)) as string[], reason: String(d!.reason) });
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+    packages.undoPackageSubmitted(submission.packageId);
   }
 
   let running: Promise<unknown> = Promise.resolve();
@@ -2767,6 +2987,11 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     jobMarkers,
     addByHand,
     recordSubmission,
+    answerPackageConfirmation,
+    undoPackageConfirmation,
+    packageFile,
+    cvVersions,
+    pickCvVersion,
     undoSubmission,
     list,
     get: detail,

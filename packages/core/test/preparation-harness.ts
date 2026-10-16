@@ -203,6 +203,8 @@ export interface TestPreparationOptions extends Partial<Omit<PreparationDeps, "b
   /** The discovery engine's own ports. */
   fetch?: typeof fetch;
   extractor?: FakeExtractor;
+  mailReader?: EngineDeps["mailReader"];
+  onMailStored?: EngineDeps["onMailStored"];
 }
 
 export interface TestPreparation {
@@ -216,7 +218,7 @@ export interface TestPreparation {
 
 /** Both engines on one in-memory database, fake clock and AI budget, as the service wires them. */
 export function createTestPreparation(options: TestPreparationOptions = {}): TestPreparation {
-  const { capUsd = 10, fetch = fixtureFetch(), extractor = fakeExtractor(), ...overrides } = options;
+  const { capUsd = 10, fetch = fixtureFetch(), extractor = fakeExtractor(), mailReader = { fetchSince: async () => [] }, onMailStored, ...overrides } = options;
   const clock = fakeClock();
   const db = overrides.db ?? memoryDb();
   const budget = createAiBudget({ db, clock, capUsd });
@@ -233,7 +235,7 @@ export function createTestPreparation(options: TestPreparationOptions = {}): Tes
     ...overrides,
   };
   const discoveryDeps: EngineDeps = {
-    db, clock, fetch, extractor, mailReader: { fetchSince: async () => [] }, budget, settings: deps.settings,
+    db, clock, fetch, extractor, mailReader, onMailStored, budget, settings: deps.settings,
   };
   const discovery = createEngine(discoveryDeps);
   return { preparation: createPreparationEngine(deps), discovery, budget, clock, writer: deps.writer, files: deps.files };
