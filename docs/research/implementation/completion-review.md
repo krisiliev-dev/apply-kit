@@ -16,7 +16,7 @@ History and callers: `git blame` on the shared action guard identified its origi
 
 ## Verification
 
-The integrated suite passed 1,394 tests across 104 files; TypeScript and ESLint passed. UI and extension production builds were also checked. Fixtures use fictional people and recorded forms. Tests cover password-value exclusion, denied navigation/consent actions, undo, cross-job and tenant matching, recent same-portal verification links, file fallbacks, unknown-form copy mode, and verified Bulgarian role/skill equivalents.
+The integrated suite passed 1,394 tests across 104 files; TypeScript and ESLint passed. UI and extension production builds were also checked. Chrome checks with the production filler covered basic field fill and undo on all six recorded portals, plus native file attachment/undo on Greenhouse and password-value exclusion on a synthetic account form. The app’s real PDF preview, application status/undo, light/dark appearance and 375/768/1280px layouts were checked with fictional data. These are smoke checks, not full live portal trials. Fixtures use fictional people and recorded forms. Tests cover password-value exclusion, denied navigation/consent actions, undo, cross-job and tenant matching, recent same-portal verification links, file fallbacks, unknown-form copy mode, and verified Bulgarian role/skill equivalents.
 
 ## Limits and first use
 
