@@ -311,6 +311,7 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
       const toVerify: string[] = [];
       for (const a of answers) {
         if (a.kind === "file") continue;
+        if (a.kind === "entries") { report(a.fieldId, "needs-you"); continue; }
         const found = find(doc, a.fieldId);
         if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
         // A closed component can't be read or filled: Kris types (or pastes) apply-kit's value.

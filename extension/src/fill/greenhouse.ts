@@ -2,7 +2,7 @@
 // new job board, and the embedded form) into its fields in the portal's order, fills the answers it's
 // given through page actions, and undoes what it changed. It keeps only the previous values and which
 // fields it filled, in the page's isolated world; nothing else. It never presses a button.
-import type { FieldAnswer, FieldKind, FieldOutcome, FieldStructure, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
+import type { EntrySection, FieldAnswer, FieldKind, FieldOutcome, FieldStructure, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
 import { describingAttribute } from "@apply-kit/core/field-report";
 import { recognisePortal } from "../portal.ts";
 import { attachFile, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark, type FileBytes } from "./page-actions.ts";
@@ -32,6 +32,10 @@ export interface Filler {
   show(doc: Document, fieldId: string): boolean;
   /** "Report this field": the field's structure, never its value (nor anything that contains it). Null if the field is gone. */
   describe(doc: Document, fieldId: string): FieldStructure | null;
+  /** Kris's choice for a needs-you choice (a typeahead with two plausible matches): picks that option. */
+  pick?(doc: Document, fieldId: string, option: string): Promise<FieldOutcome["outcome"]>;
+  /** "Remove the N duplicates": deletes those entries of a repeating section with the portal's own Delete. Returns how many went. */
+  removeEntries?(doc: Document, section: EntrySection, indexes: number[]): Promise<number>;
 }
 
 /** A package file for a file answer, as the panel fetched it from apply-kit. */
@@ -286,7 +290,8 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
       for (const a of answers) {
         if (a.kind === "file") continue;
         const found = find(doc, a.fieldId);
-        if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
+        // Greenhouse has no repeating sections to add entries to.
+        if (!found || a.kind === "skip" || a.kind === "entries") { report(a.fieldId, "skipped"); continue; }
         if (a.kind === "needs-you") {
           const current = found.field.value;
           // Answered: from the panel (Kris's), or typed on the page (kept, so apply-kit can offer it to the bank).

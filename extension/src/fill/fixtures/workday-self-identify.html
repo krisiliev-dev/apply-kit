@@ -1,0 +1,29 @@
+<!-- Synthetic Workday application page (myworkdayjobs.com): step 5, Self Identify (disability). Modelled on
+     docs/research/implementation/portals.md (data-automation-id names as Workday uses them). Made-up
+     company (Kestrel Payments) and job; no real person's data. The test setup (fixtures/workday.ts)
+     simulates Workday's widgets: list buttons, typeaheads with delayed suggestions, Add and Delete,
+     and its CV reading. Every navigation button notes a press, which fails the test. -->
+<div data-automation-id="applyFlowPage">
+  <header><span data-automation-id="headerCompanyName">Kestrel Payments</span><h1 data-automation-id="jobPostingHeader">Security Engineer</h1></header>
+  <main>
+    <div data-automation-id="progressBar"><ol aria-label="Application progress">
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 1 of 6</label><div>My Information</div></li>
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 2 of 6</label><div>My Experience</div></li>
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 3 of 6</label><div>Application Questions</div></li>
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 4 of 6</label><div>Voluntary Disclosures</div></li>
+      <li data-automation-id="progressBarActiveStep"><label class="sr-only">current step 5 of 6</label><div>Self Identify</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 6 of 6</label><div>Review</div></li>
+    </ol></div>
+    <h2 data-automation-id="pageHeaderTitle">Self Identify</h2>
+    <div data-automation-id="selfIdentificationPage">
+    <h3>Voluntary Self-Identification of Disability</h3>
+      <div data-automation-id="formField-selfIdentifiedDisabilityData--name"><label for="selfIdentifiedDisabilityData--name" id="selfIdentifiedDisabilityData--name-label">Name</label><input type="text" id="selfIdentifiedDisabilityData--name"></div>
+      <div data-automation-id="formField-selfIdentifiedDisabilityData--dateSignedOn"><label id="selfIdentifiedDisabilityData--dateSignedOn-label">Date</label><div data-automation-id="dateInputWrapper" role="group" aria-labelledby="selfIdentifiedDisabilityData--dateSignedOn-label"><input type="text" data-automation-id="dateSectionMonth-input" id="selfIdentifiedDisabilityData--dateSignedOn-month" aria-label="Month" role="spinbutton" placeholder="MM"><input type="text" data-automation-id="dateSectionYear-input" id="selfIdentifiedDisabilityData--dateSignedOn-year" aria-label="Year" role="spinbutton" placeholder="YYYY"></div></div>
+      <div data-automation-id="formField-disabilityStatus"><fieldset><legend><label>Please check one of the boxes below</label></legend><div><input type="checkbox" id="disability-yes"><label for="disability-yes">Yes, I have a disability, or have had one in the past</label></div><div><input type="checkbox" id="disability-no"><label for="disability-no">No, I do not have a disability and have not had one in the past</label></div><div><input type="checkbox" id="disability-skip"><label for="disability-skip">I do not want to answer</label></div></fieldset></div>
+    </div>
+  </main>
+  <div data-automation-id="pageFooter">
+    <button type="button" data-automation-id="pageFooterBackButton">Back</button>
+    <button type="button" data-automation-id="pageFooterNextButton">Save and Continue</button>
+  </div>
+</div>

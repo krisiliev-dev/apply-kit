@@ -4,7 +4,7 @@
 import type { ProfileForApply } from "../preparation/contracts.ts";
 import type { ReadField } from "./reading.ts";
 
-type ContactKey = "givenName" | "familyName" | "fullName" | "email" | "phone" | "countryCode" | "location" | "city" | "country" | "linkedin" | "github" | "portfolio";
+export type ContactKey = "givenName" | "familyName" | "fullName" | "email" | "phone" | "countryCode" | "location" | "city" | "country" | "linkedin" | "github" | "portfolio";
 
 /** Lower case, accents and punctuation gone, "(optional)" and "*" dropped, spaces collapsed. Unicode-safe for Cyrillic. */
 export function normaliseLabel(label: string): string {
@@ -40,6 +40,8 @@ const missingName: Record<ContactKey, string> = {
 };
 
 export interface ContactValue {
+  /** Which contact detail the field asks for. */
+  key: ContactKey;
   /** Null when the profile has nothing for it. */
   value: string | null;
   basis: string | null;
@@ -63,7 +65,7 @@ export function contactValue(field: ReadField, profile: ProfileForApply, page: R
   const c = profile.contact;
   const codeField = key === "phone" && c.phone ? page.find((f) => f !== field && contactKey(f) === "countryCode") : undefined;
   if (codeField && c.phone) {
-    return { value: c.phone.national, basis: `Without ${c.phone.countryCode}, which is in ${codeField.label}`, missing: `Your profile has no ${missingName.phone}` };
+    return { key, value: c.phone.national, basis: `Without ${c.phone.countryCode}, which is in ${codeField.label}`, missing: `Your profile has no ${missingName.phone}` };
   }
   const value: string | null = {
     givenName: c.givenName, familyName: c.familyName, fullName: c.fullName, email: c.email,
@@ -71,5 +73,5 @@ export function contactValue(field: ReadField, profile: ProfileForApply, page: R
     location: [c.city, c.country].filter(Boolean).join(", "), city: c.city, country: c.country,
     linkedin: c.linkedin, github: c.github, portfolio: c.portfolio,
   }[key] || null;
-  return { value, basis: key === "email" ? "Your job address" : null, missing: `Your profile has no ${missingName[key]}` };
+  return { key, value, basis: key === "email" ? "Your job address" : null, missing: `Your profile has no ${missingName[key]}` };
 }

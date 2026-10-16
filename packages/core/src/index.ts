@@ -161,5 +161,5 @@ export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch,
 export { countOutcomes } from "./fill/reading.ts";
 export { fieldReportFixture, fieldStructure } from "./fill/field-report.ts";
 export type {
-  PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, PackageFileKind, RecordedPage, RecordedFill, PendingAnswer, SaveOffer, SavePick, SavedAnswers, FieldStructure, FieldReportInput, FieldReport,
+  PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, PackageFileKind, RecordedPage, RecordedFill, PendingAnswer, SaveOffer, SavePick, SavedAnswers, FieldStructure, FieldReportInput, FieldReport, EntrySection, DuplicateEntry,
 } from "./fill/reading.ts";

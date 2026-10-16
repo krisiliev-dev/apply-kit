@@ -3,7 +3,7 @@
 // the end-of-fill announcement, and where focus goes after a fill.
 import { countOutcomes } from "@apply-kit/core/fill";
 import type {
-  FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageFileKind, PackageInBrief, PageJobReference, PageKind, PageReading, PendingAnswer, ReadField, SaveOffer, SubmittedApplication,
+  EntrySection, FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageFileKind, PackageInBrief, PageJobReference, PageKind, PageReading, PendingAnswer, ReadField, SaveOffer, SubmittedApplication,
 } from "@apply-kit/core";
 
 const sources: Record<FillSource, string> = { profile: "Profile", "answer-bank": "Answer bank", package: "Package", "cv-version": "CV version", you: "You" };
@@ -36,7 +36,12 @@ export interface FieldRow {
   limit: string | null;
   /** apply-kit's value for a kept field ("Replace"), or a value that didn't stick (to paste). */
   offer: string | null;
+  /** A list or typeahead with more than one plausible match: the options for Kris to choose between. */
+  choices: string[] | null;
 }
+
+const sectionNouns: Record<EntrySection, [string, string]> = { work: ["job entry", "job entries"], education: ["education entry", "education entries"] };
+const sectionHeads: Record<EntrySection, string> = { work: "Work Experience", education: "Education" };
 
 /** The page's fields in the portal's order: label → value → source. */
 export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes: FieldOutcome[]): FieldRow[] {
@@ -46,7 +51,19 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
     const a = answer.get(f.id);
     const o = outcome.get(f.id);
     if (!a || !o) return [];
-    const row = { fieldId: f.id, label: f.label, outcome: o.outcome, offer: null, limit: null };
+    const row = { fieldId: f.id, label: f.label, outcome: o.outcome, offer: null, limit: null, choices: null };
+    if (a.kind === "entries") {
+      const n = Number(f.value) || 0;
+      if (o.outcome === "filled") return [{ ...row, value: `${n} ${n === 1 ? "entry" : "entries"}`, chip: { tone: "met", word: sourceWords("cv-version") }, why: a.basis }];
+      if (o.outcome === "needs-you") return [{ ...row, value: `Add ${a.add} more ${a.add === 1 ? "entry" : "entries"}`, chip: { tone: "ask", word: "Needs you" }, why: `Add ${a.add === 1 ? "it" : "them"} with Workday's Add button; apply-kit can't press it. ${a.basis}` }];
+      if (o.outcome === "didnt-stick") return [{ ...row, value: "Not all added", chip: { tone: "gap", word: "Didn't stick" }, why: `Workday didn't add every entry. ${a.basis}` }];
+      return [{ ...row, value: `${n} ${n === 1 ? "entry" : "entries"}`, chip: { tone: "closed", word: "Skipped" }, why: "Workday changed this section while reading your CV. Click Fill this page again." }];
+    }
+    if (o.outcome === "needs-you" && a.kind === "fill" && reading.jobRef?.portal === "workday") {
+      // apply-kit had the value but couldn't put it in: a list it can't open, or more than one match.
+      if (o.choices?.length) return [{ ...row, value: `Suggested: ${o.choices[0]}`, chip: { tone: "ask", word: "Needs you" }, why: `Workday offers more than one match for "${a.value}"`, choices: o.choices }];
+      return [{ ...row, value: `Choose: ${a.value.split("\n").join(", ")}`, chip: { tone: "ask", word: "Needs you" }, why: "apply-kit can't open Workday's lists yet. Choose it on the page" }];
+    }
     if (a.kind === "file") {
       if (o.outcome === "filled") return [{ ...row, value: a.fileName, chip: { tone: "met", word: sourceWords("package") }, why: a.basis }];
       if (o.outcome === "didnt-stick") return [{ ...row, value: "Not attached", chip: { tone: "gap", word: "Didn't attach" }, why: "Attach it yourself from your Packages folder." }];
@@ -54,11 +71,12 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
     }
     switch (o.outcome) {
       case "filled":
-        return [{ ...row, value: a.kind === "fill" ? a.value : f.value, chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
+        // A typeahead's picks (skills) are one per line: shown as a list.
+        return [{ ...row, value: (a.kind === "fill" ? a.value : f.value).split("\n").join(", "), chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
       case "kept":
         // A needs-you field with a value: Kris answered it on the page.
         if (a.kind === "needs-you") return [{ ...row, value: f.value, chip: { tone: "met", word: sourceWords("you") }, why: "You answered this on the page." }];
-        return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" ? a.value : null }];
+        return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" && a.value.trim() !== f.value.trim() ? a.value : null }];
       case "needs-you":
         if (o.choices?.length && a.kind === "fill") {
           return [{
@@ -322,4 +340,115 @@ export function markedLines(a: SubmittedApplication, p: PackageInBrief): { term:
   ];
   if (s.portalUrl) lines.push({ term: "Portal", detail: new URL(s.portalUrl).hostname });
   return lines;
+}
+
+// ---------- Workday: duplicates, where Kris is, earlier pages and the review ----------
+
+export interface DuplicatesReport {
+  section: EntrySection;
+  fieldId: string;
+  indexes: number[];
+  question: string;
+  basis: string;
+  remove: string;
+  keep: string;
+  /** The first duplicate's heading, for Show on page. */
+  show: string;
+}
+
+/** Entries Workday added when it read the CV that repeat the CV's own (hi-fi "CV attached"); null when there are none. */
+export function duplicatesReport(answers: FieldAnswer[]): DuplicatesReport | null {
+  const a = answers.find((x): x is Extract<FieldAnswer, { kind: "entries" }> => x.kind === "entries" && x.duplicates.length > 0);
+  if (!a) return null;
+  const n = a.duplicates.length;
+  const [one, many] = sectionNouns[a.section];
+  const quoted = a.duplicates.map((d) => `"${d.words}"`);
+  const list = quoted.length === 1 ? quoted[0] : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
+  return {
+    section: a.section, fieldId: a.fieldId, indexes: a.duplicates.map((d) => d.index),
+    question: `Workday added ${n} ${n === 1 ? one : many} after reading your CV`,
+    basis: `${list} ${n === 1 ? "repeats" : "repeat"} ${a.section === "work" ? "roles" : "entries"} on your CV. Nothing was removed.`,
+    remove: n === 1 ? "Remove the duplicate" : `Remove the ${n} duplicates`, keep: n === 1 ? "Keep it" : "Keep them",
+    show: `${sectionHeads[a.section]} ${a.duplicates[0]!.index}`,
+  };
+}
+
+/** Under the step's heading: the count only when the portal prints it, and when it was filled. */
+export function stepLine(reading: PageReading, portal: string, time: string): string {
+  return reading.stepCount ? `Page ${reading.stepCount.current} of ${reading.stepCount.total}, as ${portal} shows it. Filled ${time}.` : `Filled ${time}.`;
+}
+
+/** A page as Kris left it, for "Earlier pages" and the review's checks. In the panel's memory only. */
+export interface PageSummary {
+  step: string;
+  filled: number;
+  /** Fields Kris chose an option for (a needs-you choice). */
+  chosen: string[];
+  /** The CV attached on this page, by name. */
+  cv: string | null;
+  duplicatesRemoved: number;
+  /** Values that didn't stick: Kris pastes them. */
+  didntStick: string[];
+  /** Questions left blank by Kris's rule. */
+  byRule: number;
+}
+
+export function pageSummary(reading: PageReading, answers: FieldAnswer[], outcomes: FieldOutcome[], extra: { chosen: string[]; duplicatesRemoved: number }): PageSummary {
+  const answer = new Map(answers.map((a) => [a.fieldId, a]));
+  const label = new Map(reading.fields.map((f) => [f.id, f.label]));
+  const cv = answers.find((a): a is Extract<FieldAnswer, { kind: "file" }> => a.kind === "file" && a.which === "cv" && outcomes.some((o) => o.fieldId === a.fieldId && o.outcome === "filled"));
+  return {
+    step: reading.stepLabel ?? "This page",
+    filled: outcomes.filter((o) => o.outcome === "filled").length,
+    chosen: extra.chosen,
+    cv: cv?.fileName ?? null,
+    duplicatesRemoved: extra.duplicatesRemoved,
+    didntStick: outcomes.filter((o) => o.outcome === "didnt-stick" && answer.get(o.fieldId)?.kind !== "file").map((o) => label.get(o.fieldId) ?? o.fieldId),
+    byRule: outcomes.filter((o) => { const a = answer.get(o.fieldId); return o.outcome === "skipped" && a?.kind === "skip" && a.byRule; }).length,
+  };
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** "Earlier pages · 16 filled" and a line per page; null before the first page is left. */
+export function earlierPages(pages: PageSummary[]): { heading: string; lines: string[] } | null {
+  if (!pages.length) return null;
+  const total = pages.reduce((n, p) => n + p.filled + p.chosen.length, 0);
+  return {
+    heading: `Earlier pages · ${total} filled`,
+    lines: pages.map((p) => {
+      const parts: string[] = [];
+      const filled = p.filled + p.chosen.length;
+      if (filled) parts.push(`${filled} filled${p.chosen.length ? ` (${p.chosen.length} you chose: ${p.chosen.join(", ")})` : ""}`);
+      if (p.cv) parts.push("CV attached");
+      if (p.duplicatesRemoved) parts.push(`${plural(p.duplicatesRemoved, "Workday duplicate", "Workday duplicates")} removed`);
+      if (p.didntStick.length) parts.push(`${p.didntStick.length} to paste yourself`);
+      if (p.byRule) parts.push(`${p.byRule} left blank by your rule`);
+      return `${p.step} · ${parts.join(", ") || "nothing filled"}`;
+    }),
+  };
+}
+
+/** The review page's "Worth a look before you submit" (hi-fi "Review · you submit"). */
+export function reviewChecks(pages: PageSummary[]): { tone: "ok" | "nb" | "dim"; text: string }[] {
+  if (!pages.length) return [{ tone: "dim", text: "No pages filled in this panel yet" }];
+  const checks: { tone: "ok" | "nb" | "dim"; text: string }[] = [];
+  const cv = pages.find((p) => p.cv)?.cv;
+  if (cv) checks.push({ tone: "ok", text: `CV attached: ${cv}` });
+  const filled = pages.reduce((n, p) => n + p.filled + p.chosen.length, 0);
+  checks.push({ tone: "ok", text: `${plural(filled, "field", "fields")} filled across ${plural(pages.length, "page", "pages")}` });
+  const paste = pages.flatMap((p) => p.didntStick);
+  if (paste.length) checks.push({ tone: "nb", text: `${plural(paste.length, "value", "values")} to paste yourself: ${paste.join(", ")}` });
+  for (const p of pages) if (p.duplicatesRemoved) checks.push({ tone: "nb", text: `${plural(p.duplicatesRemoved, "Workday duplicate", "Workday duplicates")} removed on ${p.step}` });
+  const blank = pages.reduce((n, p) => n + p.byRule, 0);
+  if (blank) checks.push({ tone: "dim", text: `${plural(blank, "voluntary question", "voluntary questions")} left blank, by your rule` });
+  return checks;
+}
+
+/** The portal's "how do you want to apply?" screen: what to choose, in words; apply-kit never clicks it. */
+export function startScreen(portal: string): { heading: string; text: string } {
+  return {
+    heading: `Choose Apply Manually on ${portal}`,
+    text: `apply-kit fills the form you get after it, page by page. Autofill with Resume makes ${portal} read your CV and add entries of its own to check. apply-kit never presses these choices.`,
+  };
 }

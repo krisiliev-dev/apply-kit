@@ -941,3 +941,84 @@ describe("field reports", () => {
     expect(t.fill.fieldReports().map((r) => r.id)).toEqual([second.id]);
   });
 });
+
+describe("Workday's repeating sections, from the CV in the package", () => {
+  const work = (count: number) => field("work", "Work Experience", { kind: "repeating", required: false, value: String(count), entry: { section: "work", index: 0 } });
+  const inWork = (index: number, id: string, label: string, value = "", more: Partial<ReadField> = {}) =>
+    field(`work-${index}/${id}`, label, { value, entry: { section: "work", index }, ...more });
+  const workEntry = (index: number, values: { title?: string; company?: string; from?: string } = {}) => [
+    inWork(index, "jobTitle", "Job Title", values.title),
+    inWork(index, "companyName", "Company", values.company),
+    inWork(index, "location", "Location", "", { required: false }),
+    inWork(index, "currentlyWorkHere", "I currently work here", "", { kind: "checkbox", required: false }),
+    inWork(index, "startDate", "From", values.from, { kind: "date", hint: "month-year" }),
+    inWork(index, "endDate", "To", "", { kind: "date", hint: "month-year" }),
+    inWork(index, "roleDescription", "Role Description", "", { kind: "textarea", required: false }),
+  ];
+
+  it("adds as many entries as the CV has roles, and fills each from its role, dates as Workday's month and year", async () => {
+    const t = await filling();
+
+    const [section] = await t.fill.answer(t.sessionId, reading([work(0)]));
+    expect(section).toEqual({ fieldId: "work", kind: "entries", section: "work", add: 1, duplicates: [], source: "cv-version", basis: "1 role on the CV in your package" });
+
+    const answers = await t.fill.answer(t.sessionId, reading([work(1), ...workEntry(1)]));
+    expect(answers).toEqual([
+      { fieldId: "work", kind: "entries", section: "work", add: 0, duplicates: [], source: "cv-version", basis: "1 role on the CV in your package" },
+      { fieldId: "work-1/jobTitle", kind: "fill", value: "Security Analyst", source: "cv-version", basis: null },
+      { fieldId: "work-1/companyName", kind: "fill", value: "Northwind Bank", source: "cv-version", basis: null },
+      { fieldId: "work-1/location", kind: "fill", value: "Sofia", source: "cv-version", basis: null },
+      { fieldId: "work-1/currentlyWorkHere", kind: "fill", value: "checked", source: "cv-version", basis: "Your current role" },
+      { fieldId: "work-1/startDate", kind: "fill", value: "2022-03", source: "cv-version", basis: null },
+      { fieldId: "work-1/endDate", kind: "skip", reason: "Your current role has no end date" },
+      { fieldId: "work-1/roleDescription", kind: "skip", reason: "Optional: your CV, attached above, describes the role" },
+    ]);
+  });
+
+  it("never asks for more entries than the CV has, and leaves extra empty entries alone", async () => {
+    const t = await filling();
+    const answers = await t.fill.answer(t.sessionId, reading([work(2), ...workEntry(1), ...workEntry(2)]));
+    expect(answers[0]).toMatchObject({ kind: "entries", add: 0, duplicates: [] });
+    expect(answers.filter((a) => a.fieldId.startsWith("work-2/")).map((a) => a.kind === "skip" && a.reason)).toEqual(Array(7).fill("Your CV has no more roles for this entry"));
+  });
+
+  it("reports the entries Workday added from the CV that repeat a role, and fills a role into the entry Workday read for it", async () => {
+    const t = await filling();
+    // Workday read the CV into two entries for the same role, with its own dates.
+    const answers = await t.fill.answer(t.sessionId, reading([
+      work(2),
+      ...workEntry(1, { title: "Security Analyst", company: "Northwind Bank", from: "2021-03" }),
+      ...workEntry(2, { title: "Security Analyst (SOC)", company: "NORTHWIND BANK", from: "2023-01" }),
+    ]));
+
+    expect(answers[0]).toEqual({
+      fieldId: "work", kind: "entries", section: "work", add: 0, source: "cv-version", basis: "1 role on the CV in your package",
+      duplicates: [{ index: 2, words: "Security Analyst (SOC), NORTHWIND BANK, from 2023" }],
+    });
+    // Entry 1 is the role: its answers are the role's (the filler keeps what Workday wrote, with Replace).
+    expect(answers.find((a) => a.fieldId === "work-1/startDate")).toMatchObject({ kind: "fill", value: "2022-03" });
+    expect(answers.filter((a) => a.fieldId.startsWith("work-2/")).map((a) => a.kind === "skip" && a.reason)).toEqual(Array(7).fill("Likely a duplicate Workday added when it read your CV"));
+  });
+
+  it("fills education with years, and skills from the CV as one typeahead pick each", async () => {
+    const t = await filling();
+    const inEdu = (id: string, label: string, more: Partial<ReadField> = {}) => field(`education-1/${id}`, label, { entry: { section: "education", index: 1 }, ...more });
+
+    const answers = await t.fill.answer(t.sessionId, reading([
+      field("education", "Education", { kind: "repeating", required: false, value: "1", entry: { section: "education", index: 0 } }),
+      inEdu("school", "School or University"), inEdu("degree", "Degree", { kind: "select" }), inEdu("fieldOfStudy", "Field of Study", { kind: "typeahead", required: false }),
+      inEdu("firstYearAttended", "From", { kind: "date", hint: "year", required: false }), inEdu("lastYearAttended", "To (Actual or Expected)", { kind: "date", hint: "year", required: false }),
+      field("skills", "Type to Add Skills", { kind: "typeahead", required: false }),
+    ]));
+
+    expect(answers).toEqual([
+      { fieldId: "education", kind: "entries", section: "education", add: 0, duplicates: [], source: "cv-version", basis: "1 degree on the CV in your package" },
+      { fieldId: "education-1/school", kind: "fill", value: "Danube Institute of Technology", source: "cv-version", basis: null },
+      { fieldId: "education-1/degree", kind: "fill", value: "BSc Computer Science", source: "cv-version", basis: null },
+      { fieldId: "education-1/fieldOfStudy", kind: "skip", reason: "Your CV names no field of study for this degree" },
+      { fieldId: "education-1/firstYearAttended", kind: "fill", value: "2018", source: "cv-version", basis: null },
+      { fieldId: "education-1/lastYearAttended", kind: "fill", value: "2022", source: "cv-version", basis: null },
+      { fieldId: "skills", kind: "fill", value: expect.stringContaining("Wazuh"), source: "cv-version", basis: "The skills on the CV in your package, one at a time" },
+    ]);
+  });
+});

@@ -110,3 +110,16 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .copyrow .k { font-size: var(--fs-caption); color: var(--ink-3); overflow-wrap: anywhere }
 .copyrow .v { font-size: var(--fs-small); overflow-wrap: anywhere; min-width: 0 }
 .need .row { flex-wrap: wrap }
+/* Workday (hi-fi "Filled · 1 to review", "CV attached", "Review · you submit"): the review reminder, its checks, Earlier pages. */
+.remind { display: grid; gap: var(--s-3); padding: var(--s-5); border: 2px solid var(--ink); border-radius: var(--r-control) }
+.remind b { font-family: var(--font-display); font-size: var(--fs-title); line-height: var(--lh-tight); font-weight: 600 }
+.remind span { font-size: var(--fs-small) }
+.sp h3 { font-size: var(--fs-small); font-weight: 600; margin: 0 }
+.sp .stack { display: grid; gap: var(--s-3) }
+.ticks .ok .ico { color: var(--met) }
+.ticks .nb .ico { color: var(--partly) }
+.ticks .dim .ico { color: var(--ink-3) }
+.earlier summary { font-size: var(--fs-small); font-weight: 600; color: var(--ink-2); padding: var(--s-2) 0 }
+.earlier ul { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); font-size: var(--fs-small); color: var(--ink-2) }
+.earlier li { overflow-wrap: anywhere }
+.pick { display: grid; gap: var(--s-2) }

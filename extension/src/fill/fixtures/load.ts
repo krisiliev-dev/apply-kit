@@ -26,6 +26,8 @@ export interface FixtureOptions {
   uploads?: "change" | "drop-only" | "reject";
   /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields (into a controlled input's state too). */
   cvParser?: { delayMs: number; values: Record<string, string> };
+  /** Controls a filler may press (a portal's own list buttons, Add and Delete): not noted as presses. Navigation always is. */
+  widgets?: string;
   /**
    * A field that clears itself `afterMs` after a value is typed into it (a portal reformatting the
    * number as it's typed), the first `times` times (default: every time).
@@ -38,7 +40,25 @@ export interface FixtureOptions {
   places?: { delayMs: number; names: string[] };
 }
 
-export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, clears, places }: FixtureOptions = {}): FixturePage {
+/** React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value. */
+export function controlInput(el: HTMLInputElement | HTMLTextAreaElement): void {
+  const native = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!;
+  let state = native.get!.call(el) as string;
+  Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
+  el.addEventListener("input", () => { state = native.get!.call(el) as string; });
+  portalWrites.set(el, (v) => { native.set!.call(el, v); state = v; });
+}
+
+const portalWrites = new WeakMap<Element, (v: string) => void>();
+
+/** The portal itself writing a value (its CV reading, clearing a typeahead after a pick): its own state, no events. */
+export function portalWrite(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const write = portalWrites.get(el);
+  if (write) write(value);
+  else el.value = value;
+}
+
+export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, widgets, clears, places }: FixtureOptions = {}): FixturePage {
   const window = new Window({ url, settings: { disableJavaScriptEvaluation: true, navigation: { disableMainFrameNavigation: true } } });
   const document = window.document as unknown as Document;
   document.body.innerHTML = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
@@ -55,23 +75,15 @@ export function openFixture(name: string, url: string, { controlled = false, upl
   }
   for (const b of Array.from(document.querySelectorAll("button, input[type=submit], input[type=button], a"))) {
     if (b.matches("._yesno > button")) continue;
+    if (widgets && b.matches(widgets)) continue;
     b.addEventListener("click", () => presses.push(`pressed ${b.textContent?.trim() || b.getAttribute("value")}`));
   }
   for (const f of Array.from(document.querySelectorAll("form"))) f.addEventListener("submit", (e) => { e.preventDefault(); presses.push("submitted the form"); });
 
-  /** The page's own writes to a controlled input's state (React setting it, not typing). */
-  const setState = new WeakMap<Element, (v: string) => void>();
   if (controlled) {
-    // React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value.
-    for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea"))) {
-      const native = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!;
-      let state = native.get!.call(el) as string;
-      Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
-      el.addEventListener("input", () => { state = native.get!.call(el) as string; });
-      setState.set(el, (v) => { native.set!.call(el, v); state = v; });
-    }
+    for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea"))) controlInput(el);
   }
-  const pageSet = (el: HTMLInputElement, v: string) => (setState.get(el) ?? ((x: string) => { el.value = x; }))(v);
+  const pageSet = portalWrite;
   if (places) {
     for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[role=combobox][aria-controls]"))) {
       const list = document.getElementById(input.getAttribute("aria-controls")!)!;
@@ -102,7 +114,7 @@ export function openFixture(name: string, url: string, { controlled = false, upl
     el.addEventListener("input", () => {
       if (left <= 0 || native.get!.call(el) === "") return;
       left--;
-      setTimeout(() => (setState.get(el) ?? ((v: string) => native.set!.call(el, v)))(""), clears.afterMs);
+      setTimeout(() => portalWrite(el, ""), clears.afterMs);
     });
   }
   for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[type=file]"))) {

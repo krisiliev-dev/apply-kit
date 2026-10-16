@@ -397,6 +397,7 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
       const toVerify: string[] = [];
       for (const a of answers) {
         if (a.kind === "file") continue;
+        if (a.kind === "entries") { report(a.fieldId, "needs-you"); continue; }
         const found = find(doc, a.fieldId);
         if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
         const { item, field } = found;

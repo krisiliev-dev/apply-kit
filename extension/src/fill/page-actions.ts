@@ -63,6 +63,44 @@ export function setValue(el: Element, value: string, label = ""): boolean {
   return true;
 }
 
+// ---------- widgets: the portal's own list buttons, options, Add and Delete ----------
+
+/**
+ * A click on one of the portal's widgets (a list button, an option, a picked item's delete, an
+ * entry's Add or Delete). The extension has no click of its own: the guard test (user-driven.test.ts)
+ * forbids clicks everywhere, page actions included. A filler is given one, or leaves these widgets to Kris.
+ */
+export type Press = (el: Element) => void;
+
+/** Why apply-kit won't press this widget, or null when it may: never a link, a submit, navigation or consent. */
+export function widgetRefusal(el: Element, words = ""): string | null {
+  const tag = el.tagName.toLowerCase();
+  const type = (el.getAttribute("type") ?? "").toLowerCase();
+  const role = (el.getAttribute("role") ?? "").toLowerCase();
+  if (tag === "a" || role === "link") return "a link";
+  if (tag === "form") return "a form";
+  if (["submit", "image", "reset"].includes(type)) return "a submit button";
+  if (tag !== "button" && role !== "button" && role !== "option") return "not a widget";
+  const all = [words, el.textContent, el.getAttribute("aria-label"), el.getAttribute("data-automation-id")].filter(Boolean).join(" ");
+  if (consentWords.test(all)) return "a consent box";
+  // An option is the portal's wording of an answer ("Next week"), not a control that moves the page.
+  if (role === "option") return null;
+  const automation = (el.getAttribute("data-automation-id") ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ");
+  const said = `${el.textContent ?? ""} ${el.getAttribute("aria-label") ?? ""} ${automation}`;
+  if (navigation.test(said) || moving.test(said)) return "a navigation control";
+  return null;
+}
+
+/** Widgets that move, close or leave the page, or open the file picker (English and Bulgarian): never pressed. */
+const moving = /\b(back|previous|close|cancel|exit|withdraw|select files|upload)\b|назад|затвори|откажи/iu;
+
+/** Presses a widget with the click the filler was given. False if there's none, or the control is refused. */
+export function pressWidget(el: Element, press: Press | null, words = ""): boolean {
+  if (!press || widgetRefusal(el, words)) return false;
+  press(el);
+  return true;
+}
+
 // ---------- files: the package's CV or letter, attached as choosing it would ----------
 
 /** A package file as the panel passes it into the page: its name, type and bytes (base64). */
@@ -145,6 +183,8 @@ const markStyle = {
   "needs-you": { colour: "#a33d62", soft: "#f7e3ea", badge: "?", label: "needs you" },
   kept: { colour: "#75561a", soft: "#f6ecd1", badge: "◐", label: "kept the portal's value" },
   "didnt-stick": { colour: "#a33e46", soft: "#f6e2e3", badge: "✕", label: "didn't stick" },
+  /** The portal's Submit on its review page: ringed so Kris finds it, never pressed. */
+  submit: { colour: "#a33d62", soft: "#f7e3ea", badge: "!", label: "you press Submit" },
 } as const;
 export type MarkKind = keyof typeof markStyle;
 
@@ -164,7 +204,7 @@ export function mark(el: Element, kind: MarkKind, fieldId: string): void {
   box.style.cssText = [
     "position:absolute", "pointer-events:none", "z-index:2147483646", "box-sizing:border-box", "border-radius:4px",
     `top:${r.top + win.scrollY - 3}px`, `left:${r.left + win.scrollX - 3}px`, `width:${r.width + 6}px`, `height:${r.height + 6}px`,
-    `outline:2px solid ${s.colour}`, `box-shadow:inset 3px 0 0 ${s.colour}`,
+    kind === "submit" ? `outline:2px dashed ${s.colour}` : `outline:2px solid ${s.colour}`, kind === "submit" ? "outline-offset:2px" : `box-shadow:inset 3px 0 0 ${s.colour}`,
   ].join(";");
   const badge = doc.createElement("span");
   badge.textContent = s.badge;
@@ -211,6 +251,7 @@ export function choiceRefusal(el: Element): string | null {
   const role = (el.getAttribute("role") ?? "").toLowerCase();
   if (tag === "a" || role === "link" || el.closest("a") || el.querySelector("a")) return "a link";
   if (role === "option") return el.closest("[role=listbox]") && !el.querySelector("button, input") ? null : "not a suggestion in a field's list";
+  if (widgetRefusal(el) === null && el.matches('button[type="button"][aria-haspopup="listbox"], button[type="button"][data-automation-id="add-button"], button[type="button"][data-automation-id="panel-set-delete-button"], [role="button"][data-automation-id="DELETE_charm"]')) return null;
   if (tag === "button" || role === "button" || tag === "input") {
     if (!isYesNoButton(el)) return "not a yes/no answer";
     const pair = Array.from(el.parentElement?.children ?? []).filter((c) => c.tagName.toLowerCase() === "button" || c.getAttribute("role") === "button");

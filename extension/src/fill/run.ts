@@ -19,6 +19,8 @@ export type FillRun =
   | { state: "filled"; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; filledAt: string; paths: Map<PackageFileKind, string | null>; typed: PendingAnswer[] }
   /** The portal's confirmation page: the panel asks "Did you submit?". Nothing filled. */
   | { state: "confirmation"; reading: PageReading }
+  /** The portal's "how do you want to apply?" screen (Workday's Apply Manually): the panel says what to choose. Nothing filled. */
+  | { state: "start"; reading: PageReading }
   /** Stopped (Kris's Stop, or Chrome refused the page) before anything was filled. */
   | { state: "stopped"; message: string }
   /** apply-kit stopped answering before anything was filled: the page wasn't touched. */
@@ -33,6 +35,7 @@ export async function runFill({ client, page, sessionId, stopRequested, now = ()
   if (!reading) return { state: "stopped", message: "Chrome didn't let apply-kit read this page. Click the apply-kit icon in the toolbar on it, then Fill this page." };
   if (stopRequested()) return { state: "stopped", message: "Stopped. Nothing was filled." };
   if (submitPrompt({ known: true, pageKind: reading.pageKind }) === "ask") return { state: "confirmation", reading };
+  if (reading.pageKind === "start") return { state: "start", reading };
   const answers = await client.answer(sessionId, reading);
   if (!answers.ok) return { state: "no-answer", problem: answers };
   if (stopRequested()) return { state: "stopped", message: "Stopped. Nothing was filled." };
@@ -48,11 +51,27 @@ export async function runFill({ client, page, sessionId, stopRequested, now = ()
     paths.set(a.which, file.value.path);
   }
   if (stopRequested()) return { state: "stopped", message: "Stopped. Nothing was filled." };
-  const outcomes = await page.fill(answers.value, files);
+  let outcomes = await page.fill(answers.value, files);
+  if (!outcomes) { files.length = 0; return { state: "stopped", message: "Chrome didn't let apply-kit fill this page. Nothing was filled." }; }
+  // Workday changes the page as it's filled (its CV reading adds entries; Add adds empty ones): read
+  // it again and fill what's new, in the same click, until it stops changing (three passes at most).
+  let latest = reading;
+  let given = answers.value;
+  for (let pass = 1; pass < 3 && !stopRequested(); pass++) {
+    const again = await page.read();
+    if (!again || shape(again) === shape(latest)) break;
+    const more = await client.answer(sessionId, again);
+    if (!more.ok) break;
+    const next = await page.fill(more.value, files);
+    if (!next) break;
+    [latest, given, outcomes] = [again, more.value, next];
+  }
   files.length = 0;
-  if (!outcomes) return { state: "stopped", message: "Chrome didn't let apply-kit fill this page. Nothing was filled." };
-  const recorded = await client.record(sessionId, reading, outcomes);
-  const done = { reading, answers: answers.value, outcomes, paths };
+  const recorded = await client.record(sessionId, latest, outcomes);
+  const done = { reading: latest, answers: given, outcomes, paths };
   if (!recorded.ok && recorded.state !== "error") return { state: "stopped-mid-fill", problem: recorded, ...done };
   return { state: "filled", ...done, filledAt: recorded.ok ? recorded.value.filledAt : now().toISOString(), typed: recorded.ok ? recorded.value.typedAnswers ?? [] : [] };
 }
+
+/** The page's fields and how many entries each repeating section has: what changes when the portal adds entries. */
+const shape = (r: PageReading) => r.fields.map((f) => `${f.id}:${f.kind === "repeating" ? f.value : ""}`).join("|");
