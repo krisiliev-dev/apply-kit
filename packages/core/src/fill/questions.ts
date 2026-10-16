@@ -158,3 +158,18 @@ function bucketOf(option: string, time: boolean): [number, number] | null {
 }
 
 const holds = (span: [number, number] | null, n: number) => span !== null && n >= span[0] && n <= span[1];
+
+/** Diversity topics portals ask about in their own words, and the wording the answer bank's rule knows them by. */
+const diversityTopics: [RegExp, string][] = [
+  [/hispanic|latin|race|racial|ethnic|етническ/u, "Ethnicity"],
+  [/gender|пол$/u, "Gender"],
+  [/veteran/u, "Protected veteran status"],
+  [/disabilit|увреждан/u, "Disability"],
+  [/sexual orientation|lgbt/u, "Sexual orientation"],
+];
+
+/** The bank's wording for a voluntary diversity question's topic, or null when it isn't one. */
+export function diversityTopic(label: string): string | null {
+  const q = normaliseQuestion(label);
+  return diversityTopics.find(([re]) => re.test(q))?.[1] ?? null;
+}

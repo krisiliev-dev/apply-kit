@@ -169,7 +169,7 @@ describe("answering a page's contact fields from the master profile", () => {
     const answers = t.fill.answer(t.sessionId, reading([
       field("pw", "Password", { kind: "text", password: true }),
       field("gdpr", "I agree to the privacy policy", { kind: "checkbox", consent: true }),
-      field("why", "Why do you want to work at Kestrel Payments?", { kind: "textarea" }),
+      field("why", "What would you change in your last team?", { kind: "textarea" }),
       field("pronouns", "Pronouns", { required: false }),
       field("resume", "Resume/CV", { kind: "file" }),
     ]));
@@ -320,9 +320,9 @@ describe("turning an answer into the field's format", () => {
       field("q2", "Notice period", { kind: "select", options: ["Up to 1 month", "1 month or more"] }),
     ]));
 
-    expect(a).toEqual({ fieldId: "q1", kind: "fill", value: "1–2 months", source: "answer-bank", basis: null });
+    expect(a).toEqual({ fieldId: "q1", kind: "fill", value: "1–2 months", source: "package", basis: "Approved screening answer in this package" });
     // Two options hold it: all or nothing, so Kris picks.
-    expect(b).toEqual({ fieldId: "q2", kind: "needs-you", reason: 'None of the options matches "1 month"', basis: null, suggestion: "1 month" });
+    expect(b).toEqual({ fieldId: "q2", kind: "needs-you", reason: 'None of the options matches "1 month"', basis: "Approved screening answer in this package", suggestion: "1 month" });
   });
 
   it("puts a number in the range that holds it", async () => {
@@ -340,5 +340,67 @@ describe("turning an answer into the field's format", () => {
 
     expect(date).toEqual({ fieldId: "d", kind: "fill", value: "2026-10-26", source: "answer-bank", basis: '"Two weeks from offer", counted from today' });
     expect(text).toEqual({ fieldId: "t", kind: "fill", value: "Two weeks from offer", source: "answer-bank", basis: null });
+  });
+});
+
+describe("Kris's rules and the package's answers", () => {
+  it("suggests salary from the rule, with the floor, and never fills it", async () => {
+    const t = await filling();
+    const [a] = t.fill.answer(t.sessionId, reading([field("s", "Expected gross monthly salary", { kind: "number" })]));
+    expect(a).toEqual({
+      fieldId: "s", kind: "needs-you", reason: "Your answer bank says: ask each time",
+      basis: 'Your rule: "Upper half of the posting\'s stated range, never under €2,000 a month". The posting\'s range isn\'t known here, so this is your floor.',
+      suggestion: "2000",
+    });
+  });
+
+  it("suggests the salary Kris approved in the package for this job, still without filling it", async () => {
+    const t = await filling();
+    const [a] = t.fill.answer(t.sessionId, reading([field("s", "What are your salary expectations? (gross monthly, EUR)")]));
+    expect(a).toEqual({
+      fieldId: "s", kind: "needs-you", reason: "Your answer bank says: ask each time",
+      basis: "You chose 3400 for this job when you approved the package.", suggestion: "3400",
+    });
+  });
+
+  it("leaves voluntary diversity questions blank by rule, and says 'prefer not to say' only where the portal requires an answer", async () => {
+    const t = await filling();
+    const decline = ["Male", "Female", "Decline To Self Identify"];
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("g", "Gender", { kind: "select", options: decline, required: false }),
+      field("h", "Are you Hispanic/Latino?", { kind: "select", options: ["Yes", "No", "Decline To Self Identify"], required: false }),
+      field("v", "Veteran Status", { kind: "select", options: ["I am not a protected veteran", "I don't wish to answer"], required: true }),
+      field("d", "Disability Status", { kind: "select", options: ["Yes", "No"], required: true }),
+    ]));
+
+    expect(answers).toEqual([
+      { fieldId: "g", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "h", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "v", kind: "fill", value: "I don't wish to answer", source: "answer-bank", basis: "This portal requires an answer, so your rule's \"Prefer not to say\"" },
+      { fieldId: "d", kind: "needs-you", reason: "This portal requires an answer, and none of its options is \"Prefer not to say\"", basis: "Your rule leaves voluntary questions blank" },
+    ]);
+  });
+
+  it("uses the package's approved screening answers for their own questions, ahead of the answer bank", async () => {
+    const t = await filling();
+    const notice = t.preparation.listAnswers({ search: "Notice period" }).answers[0]!;
+    t.preparation.saveAnswer({ id: notice.id, question: notice.question, wordings: notice.wordings.map((w) => w.text), versions: { en: "2 months" }, category: "standard" });
+
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("n", "What is your notice period?"),
+      field("n2", "Notice period"),
+      field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 1000 }),
+    ]));
+
+    expect(answers[0]).toEqual({ fieldId: "n", kind: "fill", value: "1 month", source: "package", basis: "Approved screening answer in this package" });
+    // The same question in other words is still the package's.
+    expect(answers[1]).toMatchObject({ fieldId: "n2", kind: "fill", value: "1 month", source: "package" });
+    expect(answers[2]).toMatchObject({ fieldId: "i", kind: "fill", source: "package", value: expect.stringMatching(/^At Northwind Bank I ran the response/) });
+  });
+
+  it("respects a field's character limit", async () => {
+    const t = await filling();
+    const [a] = t.fill.answer(t.sessionId, reading([field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 100 })]));
+    expect(a).toMatchObject({ fieldId: "i", kind: "needs-you", reason: "Your answer is 178 characters; this field takes 100", basis: "Approved screening answer in this package" });
   });
 });

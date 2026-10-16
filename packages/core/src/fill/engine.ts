@@ -7,9 +7,10 @@ import type { PrepareForApply } from "../preparation/engine.ts";
 import { sameJobReference, type ApprovedPackage, type PageJobReference } from "../preparation/contracts.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
 import { migrate } from "../schema.ts";
-import type { Answer } from "../preparation/answers.ts";
+import { minMatchConfidence, type Answer } from "../preparation/answers.ts";
+import { isSalaryQuestion } from "../preparation/screening.ts";
 import { contactValue } from "./contact.ts";
-import { answerKindWords, fieldKindWords, kindFits, mapToField, nearMissFloor, similarity } from "./questions.ts";
+import { answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, similarity } from "./questions.ts";
 import { countOutcomes, type FieldAnswer, type FieldOutcome, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
 
 export interface FillDeps {
@@ -133,9 +134,34 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
 
   /** The answer bank's answer for a field, or null when nothing in the bank matches well enough. */
   function fromBank(f: ReadField, language: "en" | "bg"): { answer: FieldAnswer; answerId: string } | null {
-    const m = prepare.findAnswer(f.label, language);
+    let m = prepare.findAnswer(f.label, language);
+    // A diversity question the bank doesn't word ("Are you Hispanic/Latino?") follows the rule for its topic, if that rule leaves it blank.
+    if (!m) {
+      const topic = diversityTopic(f.label);
+      const byTopic = topic ? prepare.findAnswer(topic, language) : null;
+      if (byTopic?.fill.action === "leave-blank") m = { ...byTopic, confidence: 1 };
+    }
     if (!m) return null;
     const fieldId = f.id;
+    if (m.fill.action === "ask") {
+      const rule = m.fill.rule;
+      const floor = rule?.params?.kind === "salary" ? rule.params.floor : null;
+      const basis = rule ? `Your rule: "${rule.text}".${floor != null ? " The posting's range isn't known here, so this is your floor." : ""}` : null;
+      const answer: FieldAnswer = { fieldId, kind: "needs-you", reason: "Your answer bank says: ask each time", basis };
+      return { answerId: m.answerId, answer: floor != null ? { ...answer, suggestion: String(floor) } : answer };
+    }
+    if (m.fill.action === "leave-blank") {
+      const ruleWords = "Your rule leaves voluntary questions blank";
+      if (!f.required) return { answerId: m.answerId, answer: { fieldId, kind: "skip", reason: ruleWords, byRule: true } };
+      const instead = m.fill.whenRequired;
+      const mapped = instead ? mapToField(instead, f, clock.now()) : null;
+      return {
+        answerId: m.answerId,
+        answer: mapped?.ok
+          ? { fieldId, kind: "fill", value: mapped.value, source: "answer-bank", basis: `This portal requires an answer, so your rule's "${instead}"` }
+          : { fieldId, kind: "needs-you", reason: `This portal requires an answer, and none of its options is "${instead ?? "Prefer not to say"}"`, basis: ruleWords },
+      };
+    }
     const entry = bankEntries().find((a) => a.id === m.answerId);
     const basis = m.confidence < 1 ? `Close wording of "${m.question}" in your answer bank` : null;
     const value = m.fill.action === "fill" ? m.fill.value : null;
@@ -155,6 +181,25 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
         ? { fieldId, kind: "fill", value: mapped.value, source: "answer-bank", basis: mapped.basis ?? basis }
         : { fieldId, kind: "needs-you", reason: mapped.reason, basis, suggestion: value },
     };
+  }
+
+  /** The package's approved screening answer for a field's question, ahead of the answer bank; null when the package has none for it. */
+  function fromPackage(f: ReadField, pkg: ApprovedPackage | null): FieldAnswer | null {
+    let best: { question: string; answer: string; score: number } | null = null;
+    for (const a of pkg?.answers ?? []) {
+      const score = similarity(f.label, a.question);
+      if (score >= minMatchConfidence && (!best || score > best.score) && (score === 1 || kindFits(kindOfText(a.answer), f.kind))) best = { ...a, score };
+    }
+    if (!best) return null;
+    const fieldId = f.id;
+    if (isSalaryQuestion(f.label) || isSalaryQuestion(best.question)) {
+      return { fieldId, kind: "needs-you", reason: "Your answer bank says: ask each time", basis: `You chose ${best.answer} for this job when you approved the package.`, suggestion: best.answer };
+    }
+    const basis = "Approved screening answer in this package";
+    const mapped = mapToField(best.answer, f, clock.now());
+    return mapped.ok
+      ? { fieldId, kind: "fill", value: mapped.value, source: "package", basis }
+      : { fieldId, kind: "needs-you", reason: mapped.reason, basis, suggestion: best.answer };
   }
 
   /** "The closest answer bank entry (…) is a different question", for a question nothing matched. */
@@ -242,8 +287,11 @@ export function createFillEngine({ db, clock, prepare }: FillDeps): FillEngine {
           return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
         }
         if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
+        const packaged = fromPackage(f, pkg);
+        if (packaged) return packaged;
         const banked = fromBank(f, pkg?.language ?? "en");
         if (banked) return banked.answer;
+        if (isSalaryQuestion(f.label)) return { fieldId, kind: "needs-you", reason: "Salary is yours to decide for each job", basis: null };
         return f.required
           ? { fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: nearMiss(f) }
           : { fieldId, kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" };
