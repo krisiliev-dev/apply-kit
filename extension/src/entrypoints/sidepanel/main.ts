@@ -554,7 +554,7 @@ function filled(f: {
   const stuck = stuckFields(f.reading, f.answers, f.outcomes, f.retried, f.portal).map((x) => h("div", { class: "need", id: `stuck-${x.fieldId}`, tabindex: "-1" }, h("div", {},
     h("div", { class: "stack-tight", role: "alert" }, h("p", { class: "q" }, x.heading), h("p", { class: "basis" }, x.text)),
     h("div", { class: "copyrow" },
-      h("div", { class: "kv" }, h("div", { class: "k" }, x.copyLabel), h("div", { class: "v" }, x.value)),
+      h("div", { class: "copy-what" }, h("div", { class: "k" }, x.copyLabel), h("div", { class: "v" }, x.value)),
       button("Copy", () => void copy(x.value, x.label), "btn sm", { "aria-label": `Copy ${x.label}` })),
     h("div", { class: "row" },
       x.tryOnceMore && button("Try once more", () => void tryOnceMore(x), "btn ghost sm", { "aria-label": `Try ${x.label} once more` }),
