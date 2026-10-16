@@ -9,18 +9,21 @@ import { TrackerError, type ApplicationSummary, type Submission, type Tracker } 
 import type { Clock, SqlDatabase } from "../ports.ts";
 import type { PackageFolder } from "../preparation/ports.ts";
 import { migrate } from "../schema.ts";
-import { minMatchConfidence, type Answer } from "../preparation/answers.ts";
+import { minMatchConfidence, type Answer, type AnswerKind } from "../preparation/answers.ts";
 import { isSalaryQuestion } from "../preparation/screening.ts";
 import { contactValue } from "./contact.ts";
-import { answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, similarity } from "./questions.ts";
-import { countOutcomes, type FieldAnswer, type FieldOutcome, type FieldReport, type FieldReportInput, type PackageFileKind, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
+import { answerKindOf, answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, oneOffQuestion, similarity, wordLimit } from "./questions.ts";
+import {
+  countOutcomes, type FieldAnswer, type FieldOutcome, type FieldReport, type FieldReportInput, type PackageFileKind, type PageReading, type PendingAnswer, type ReadField, type RecordedFill, type RecordedPage, type SaveOffer, type SavedAnswers, type SavePick,
+} from "./reading.ts";
 import { fieldStructure, whereReported } from "./field-report.ts";
 
 export interface FillDeps {
   db: SqlDatabase;
   clock: Clock;
   prepare: Pick<PrepareForApply,
-    "approvedPackages" | "packageForApply" | "profileForApply" | "packageFile" | "findAnswer" | "listAnswers" | "recordAnswerUse" | "markPackageSubmitted" | "undoPackageSubmitted">;
+    | "approvedPackages" | "packageForApply" | "profileForApply" | "packageFile" | "findAnswer" | "listAnswers" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit"
+    | "draftAnswer" | "markPackageSubmitted" | "undoPackageSubmitted">;
   /** Track: "Mark as submitted" creates the Application through its record submission. */
   track: Pick<Tracker, "recordSubmission" | "undoSubmission">;
   /**
@@ -108,12 +111,29 @@ export interface FillEngine {
   matchPage(page: FillPage, options?: FillOptions): Promise<FillStart>;
   /** Every Fill starts here: re-reads the job, keeps the tab's session for the same job, ends it for a different one, and opens one on a match. */
   startFill(page: FillPage, options?: FillOptions): Promise<FillStart>;
-  /** The answer for each field of the page, in its order. Throws once the session has ended. */
-  answer(sessionId: string, reading: PageReading): FieldAnswer[];
+  /**
+   * The answer for each field of the page, in its order. A new required free-text question still
+   * empty gets a draft from Prepare's drafter (once per session), within the AI cap. Rejects once the
+   * session has ended.
+   */
+  answer(sessionId: string, reading: PageReading): Promise<FieldAnswer[]>;
+  /**
+   * Records what the fill did on a page: counts and per-field outcome and source, no values. The
+   * reading is taken before filling, so a value in a field left to Kris (needs you, or empty) on an
+   * earlier fill is one Kris typed on the portal: it's kept pending in the session and returned with
+   * the others still waiting.
+   */
+  recordPage(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): RecordedFill;
   /** The session's package's CV or letter, exactly as approved; null when the package has no such file. Throws once the session has ended. */
   packageFile(sessionId: string, which: PackageFileKind): Promise<PackageFileForFill | null>;
-  /** Records what the fill did on a page: counts and per-field outcome and source, no values. */
-  recordPage(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): RecordedPage;
+  /** The answers Kris typed on the portal in this session, waiting to be saved or declined ("Did you submit?"). */
+  pendingAnswers(sessionId: string): PendingAnswer[];
+  /**
+   * "Save to answer bank": writes the picked answers through Prepare with the job and portal as their
+   * source. A question the bank has with another answer becomes a portal edit for Kris to settle in
+   * Profile. Saved answers stop being pending.
+   */
+  saveAnswers(sessionId: string, picks: SavePick[]): SavedAnswers;
   /** The pages recorded in a session, oldest first. */
   pages(sessionId: string): RecordedPage[];
   session(sessionId: string): FillSession | null;
@@ -122,8 +142,9 @@ export interface FillEngine {
    * Mark as submitted, for the tab's session (the panel) or a package (the Job page): Track creates
    * the Application in Applied with the package, portal, address, time and how; the package becomes
    * "submitted"; the session ends. Once per package: marking again returns the first, `alreadyMarked`.
+   * The answers typed on the portal whose ids are in `saveAnswers` (ticked) are saved; the rest are discarded.
    */
-  markSubmitted(target: { sessionId: string } | { packageId: string }, how: { portalUrl: string | null; via: SubmittedVia }): Promise<MarkResult>;
+  markSubmitted(target: { sessionId: string } | { packageId: string }, how: { portalUrl: string | null; via: SubmittedVia; saveAnswers?: string[] }): Promise<MarkResult>;
   /** Undo after marking: the Application goes and the package is approved again. Refused (FillError) once the Application has a later Event. */
   undoMarkSubmitted(applicationId: string): Promise<{ packageId: string }>;
   /** "Report this field": keeps the field's structure, the portal, host and path (never the query) and step label. Never a value. */
@@ -133,6 +154,9 @@ export interface FillEngine {
   /** Deletes one; false if there's no such report. */
   deleteFieldReport(id: string): boolean;
 }
+
+const noAnswer = "apply-kit has no answer for this yet";
+const optionalNoAnswer = "Optional, and apply-kit has no answer for it yet";
 
 export class FillError extends Error {
   constructor(readonly problem: "no-session" | "session-ended" | "not-found" | "not-undoable" | "bad-report", message: string) {
@@ -307,42 +331,153 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
     return match(page, packageId, commit);
   }
 
+  /** What goes in each field, before any drafting: from the profile, the package, the answer bank, or Kris. */
+  function decide(fields: ReadField[], pkg: ApprovedPackage | null): FieldAnswer[] {
+    const profile = prepare.profileForApply();
+    // One letter per page: as a file where the page takes one, its text only where there's no file field for it.
+    const letterAsFile = !!pkg?.letter && fields.some((f) => f.kind === "file" && letterLabel.test(f.label));
+    return fields.map((f): FieldAnswer => {
+      const fieldId = f.id;
+      if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
+      if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
+      if (f.kind === "file") return fileAnswer(f, pkg);
+      if (letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) {
+        if (letterAsFile) return { fieldId, kind: "skip", reason: "Your letter is attached as a file" };
+        if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
+      }
+      const contact = contactValue(f, profile, fields);
+      if (contact?.value) {
+        if (f.options.length === 0) return { fieldId, kind: "fill", value: contact.value, source: "profile", basis: contact.basis };
+        const option = f.options.find((o) => o.trim().toLowerCase() === contact.value!.toLowerCase());
+        if (option) return { fieldId, kind: "fill", value: option, source: "profile", basis: contact.basis };
+        return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
+      }
+      if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
+      const packaged = fromPackage(f, pkg);
+      if (packaged) return packaged;
+      const banked = fromBank(f, pkg?.language ?? "en");
+      if (banked) return banked.answer;
+      if (isSalaryQuestion(f.label)) return { fieldId, kind: "needs-you", reason: "Salary is yours to decide for each job", basis: null };
+      return f.required
+        ? { fieldId, kind: "needs-you", reason: noAnswer, basis: nearMiss(f), save: saveOffer(f.label, pkg) }
+        : { fieldId, kind: "skip", reason: optionalNoAnswer };
+    });
+  }
+
+  /** Ticked for a question that will come up again; unticked, with why, for a one-off for this company. */
+  function saveOffer(question: string, pkg: ApprovedPackage | null, written = false): SaveOffer {
+    const company = pkg?.job.company ?? "";
+    return written || oneOffQuestion(question, company)
+      ? { ticked: false, note: `This reads as a one-off for ${company || "this company"}` }
+      : { ticked: true, note: null };
+  }
+
+  /** Session + question + limits → a draft already made, so filling the page again doesn't draft (or bill) again. */
+  const drafted = new Map<string, FieldAnswer>();
+
+  /** A new required free-text question, still empty, gets Prepare's draft; the cap or a failure leaves it to Kris with the reason. */
+  async function withDraft(s: FillSession, pkg: ApprovedPackage | null, f: ReadField, a: FieldAnswer): Promise<FieldAnswer> {
+    if (a.kind !== "needs-you" || a.reason !== noAnswer || !pkg || !f.required || f.value.trim() !== "" || (f.kind !== "textarea" && f.kind !== "text")) return a;
+    const key = JSON.stringify([s.id, f.label, f.maxLength]);
+    const kept = drafted.get(key);
+    if (kept) return { ...kept, fieldId: f.id };
+    const r = await prepare.draftAnswer(pkg.id, { question: f.label, language: pkg.language, maxChars: f.maxLength, maxWords: wordLimit(f.label) });
+    if (!r.drafted) return { ...a, reason: r.reason };
+    const pieces = r.pieces.map((p) => `"${p.label}"`).join(", ");
+    const answer: FieldAnswer = {
+      ...a,
+      reason: "A new question: check the draft before you fill it",
+      basis: `Drafted from your master profile${pieces ? `: ${pieces}` : ""}${/[.!?]"?$/.test(pieces) ? "" : "."} Nothing added that isn't there.`,
+      draft: r.text,
+      save: saveOffer(f.label, pkg, r.companySpecific),
+    };
+    drafted.set(key, answer);
+    return answer;
+  }
+
+  // ---- answers Kris typed on the portal, and saving to the answer bank (#42) ----
+
+  const pendingRow = (s: FillSession, pkg: ApprovedPackage | null) => (r: Record<string, unknown>): PendingAnswer => ({
+    id: String(r.id), question: String(r.question), answer: String(r.answer), kind: r.kind as AnswerKind, save: saveOffer(String(r.question), pkg),
+  });
+  const pending = (s: FillSession): PendingAnswer[] =>
+    db.prepare("SELECT * FROM fill_pending_answer WHERE session_id = ? ORDER BY id").all(s.id).map(pendingRow(s, approvedById(s.packageId)));
+
+  /**
+   * A field left to Kris on the last fill of its page (needs you, or empty and skipped), that has a
+   * value now apply-kit didn't put there, for a question the bank doesn't have: Kris typed it.
+   */
+  function noteTyped(s: FillSession, reading: PageReading, outcomes: Map<string, FieldOutcome>) {
+    const last = new Map<string, RecordedPage["fields"][number]>();
+    for (const p of pages(s.id)) for (const f of p.fields) last.set(f.label, f);
+    const pkg = approvedById(s.packageId);
+    const waiting = new Set(pending(s).map((p) => p.question));
+    const typed = reading.fields.filter((f) => {
+      const before = last.get(f.label);
+      const leftToKris = waiting.has(f.label) || (before && (before.outcome === "needs-you" || before.outcome === "skipped") && before.empty);
+      return leftToKris && f.value.trim() !== "" && outcomes.get(f.id)?.outcome !== "filled" && !f.password && !f.consent && f.kind !== "file";
+    });
+    if (typed.length === 0) return;
+    const decided = decide(typed, pkg);
+    typed.forEach((f, i) => {
+      const a = decided[i]!;
+      const unknown = (a.kind === "needs-you" && a.save) || (a.kind === "skip" && a.reason === optionalNoAnswer);
+      if (!unknown) return;
+      db.prepare("DELETE FROM fill_pending_answer WHERE session_id = ? AND question = ?").run(s.id, f.label);
+      db.prepare("INSERT INTO fill_pending_answer (session_id, question, answer, kind, created_at) VALUES (?, ?, ?, ?, ?)")
+        .run(s.id, f.label, f.value.trim(), answerKindOf(f), clock.now().toISOString());
+    });
+  }
+
+  const portalNames: Record<string, string> = { workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", smartrecruiters: "SmartRecruiters", workable: "Workable", ashby: "Ashby" };
+
+  function save(s: FillSession, picks: SavePick[]): SavedAnswers {
+    const pkg = approvedById(s.packageId);
+    const language = pkg?.language ?? "en";
+    const where = `${pkg?.job.company ?? "A"} ${portalNames[s.portal] ?? s.portal} form`.trim();
+    const result: SavedAnswers = { saved: [], refused: [] };
+    for (const pick of picks) {
+      const p = "pendingId" in pick
+        ? pending(s).find((x) => x.id === pick.pendingId)
+        : { question: pick.question.trim(), answer: pick.answer.trim(), kind: pick.kind };
+      if (!p) continue;
+      if (!p.question || !p.answer) {
+        result.refused.push({ question: p.question, reason: "Answer it first." });
+        continue;
+      }
+      const m = prepare.findAnswer(p.question, language);
+      if (m && m.confidence === 1 && (m.fill.action === "fill" || m.fill.action === "no-version")) {
+        const same = m.fill.action === "fill" && m.fill.value === p.answer;
+        if (!same) prepare.recordPortalEdit(m.answerId, { language, text: p.answer, portal: where, jobId: pkg?.jobId ?? null });
+        result.saved.push({ question: p.question, answerId: m.answerId, how: same ? "same" : "portal-edit" });
+      } else if (m && m.confidence === 1) {
+        result.refused.push({ question: p.question, reason: "Your answer bank asks you this each time or leaves it blank, so it isn't saved." });
+        continue;
+      } else {
+        const r = prepare.saveAnswer({ question: p.question, versions: { [language]: p.answer }, category: "screening", kind: p.kind }, { from: where, jobId: pkg?.jobId ?? null, portal: s.portal });
+        if (!r.saved) {
+          result.refused.push({ question: p.question, reason: r.problems[0]!.message });
+          continue;
+        }
+        result.saved.push({ question: p.question, answerId: r.answer.id, how: "added" });
+      }
+      db.prepare("DELETE FROM fill_pending_answer WHERE session_id = ? AND question = ?").run(s.id, p.question);
+    }
+    return result;
+  }
+
   return {
     matchPage: (page, options = {}) => begin(page, options, false),
     startFill: (page, options = {}) => begin(page, options, true),
 
-    answer(sessionId, reading) {
+    async answer(sessionId, reading) {
       const s = openSession(sessionId);
-      const profile = prepare.profileForApply();
       const pkg = approvedById(s.packageId);
-      // One letter per page: as a file where the page takes one, its text only where there's no file field for it.
-      const letterAsFile = !!pkg?.letter && reading.fields.some((f) => f.kind === "file" && letterLabel.test(f.label));
-      return reading.fields.map((f): FieldAnswer => {
-        const fieldId = f.id;
-        if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
-        if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
-        if (f.kind === "file") return fileAnswer(f, pkg);
-        if (letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) {
-          if (letterAsFile) return { fieldId, kind: "skip", reason: "Your letter is attached as a file" };
-          if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
-        }
-        const contact = contactValue(f, profile, reading.fields);
-        if (contact?.value) {
-          if (f.options.length === 0) return { fieldId, kind: "fill", value: contact.value, source: "profile", basis: contact.basis };
-          const option = f.options.find((o) => o.trim().toLowerCase() === contact.value!.toLowerCase());
-          if (option) return { fieldId, kind: "fill", value: option, source: "profile", basis: contact.basis };
-          return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
-        }
-        if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
-        const packaged = fromPackage(f, pkg);
-        if (packaged) return packaged;
-        const banked = fromBank(f, pkg?.language ?? "en");
-        if (banked) return banked.answer;
-        if (isSalaryQuestion(f.label)) return { fieldId, kind: "needs-you", reason: "Salary is yours to decide for each job", basis: null };
-        return f.required
-          ? { fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: nearMiss(f) }
-          : { fieldId, kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" };
-      });
+      const decided = decide(reading.fields, pkg);
+      const answers: FieldAnswer[] = [];
+      // One at a time: each draft is a billed call, checked against the cap before it's made.
+      for (const [i, a] of decided.entries()) answers.push(await withDraft(s, pkg, reading.fields[i]!, a));
+      return answers;
     },
 
     async packageFile(sessionId, which) {
@@ -367,14 +502,27 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
         const id = fromBank(f, language)?.answerId;
         if (id) prepare.recordAnswerUse(id);
       }
+      noteTyped(s, reading, byId);
       const fields = reading.fields.flatMap((f) => {
         const o = byId.get(f.id);
-        return o ? [{ label: f.label, kind: f.kind, outcome: o.outcome, source: o.source }] : [];
+        return o ? [{ label: f.label, kind: f.kind, outcome: o.outcome, source: o.source, empty: f.value.trim() === "" }] : [];
       });
       const page: RecordedPage = { stepLabel: reading.stepLabel, pageKind: reading.pageKind, filledAt: clock.now().toISOString(), counts: countOutcomes(fields), fields };
       db.prepare("INSERT INTO fill_page (session_id, step_label, page_kind, filled_at, counts, fields) VALUES (?, ?, ?, ?, ?, ?)")
         .run(sessionId, page.stepLabel, page.pageKind, page.filledAt, JSON.stringify(page.counts), JSON.stringify(page.fields));
-      return page;
+      return { ...page, typedAnswers: pending(s) };
+    },
+
+    pendingAnswers: (sessionId) => {
+      const s = session(sessionId);
+      if (!s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
+      return pending(s);
+    },
+
+    saveAnswers(sessionId, picks) {
+      const s = session(sessionId);
+      if (!s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
+      return save(s, picks);
     },
 
     pages,
@@ -382,7 +530,7 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
     session,
     endSession,
 
-    async markSubmitted(target, { portalUrl, via }) {
+    async markSubmitted(target, { portalUrl, via, saveAnswers: ticked = [] }) {
       const s = "sessionId" in target ? session(target.sessionId) : null;
       if ("sessionId" in target && !s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
       const packageId = s ? s.packageId : (target as { packageId: string }).packageId;
@@ -397,6 +545,12 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
         portal: s?.portal ?? pkg.targetPosting.jobRef?.portal ?? null, portalUrl, submittedAt, via,
       });
       if (recorded.outcome === "already-open") return { marked: false, reason: recorded.message, application: recorded.application };
+      if (s) {
+        // The answers typed on the portal: the ticked ones go to the bank, the rest are declined.
+        const waiting = pending(s);
+        save(s, waiting.filter((p) => ticked.includes(p.id)).map((p) => ({ pendingId: p.id })));
+        db.prepare("DELETE FROM fill_pending_answer WHERE session_id = ?").run(s.id);
+      }
       const marked = recorded.alreadyRecorded ? null : prepare.markPackageSubmitted(pkg.id, { via, portalUrl, at: submittedAt });
       if (s && !s.endedAt) endSession(s.id, "submitted");
       const now = marked?.marked ? marked.package : pkg;

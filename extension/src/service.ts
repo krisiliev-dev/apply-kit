@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FieldReport, FieldReportInput, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, RecordedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FieldReport, FieldReportInput, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, PendingAnswer, RecordedFill, SavedAnswers, SavePick } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -31,9 +31,14 @@ export interface FillClient {
   /** A Fill click: re-reads the job, keeps or ends the tab's session, opens one on a match. */
   start(page: FillPage, options: { sessionId?: string | null; packageId?: string }): Promise<Answer<FillStart>>;
   answer(sessionId: string, reading: PageReading): Promise<Answer<FieldAnswer[]>>;
-  record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedPage>>;
-  /** Kris's "Mark as submitted": the Application is created (or was already); a mark that created nothing says why. */
-  markSubmitted(sessionId: string, portalUrl: string | null): Promise<Answer<MarkResult>>;
+  /** Records the fill; returns the answers Kris typed on the portal that are waiting. */
+  record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedFill>>;
+  /** The answers Kris typed on the portal in this session, waiting ("Did you submit?"). */
+  pending(sessionId: string): Promise<Answer<PendingAnswer[]>>;
+  /** Save to answer bank: typed answers by id, or one Kris filled from the panel. */
+  saveAnswers(sessionId: string, picks: SavePick[]): Promise<Answer<SavedAnswers>>;
+  /** Kris's "Mark as submitted", with the typed answers he left ticked: the Application is created (or was already); a mark that created nothing says why. */
+  markSubmitted(sessionId: string, portalUrl: string | null, saveAnswers: string[]): Promise<Answer<MarkResult>>;
   /** Undo after marking (kept in the panel until it closes). */
   undoMarkSubmitted(applicationId: string): Promise<Answer<{ packageId: string }>>;
   /** The package's CV or letter as base64, held in the panel's memory only while it's attached. */
@@ -130,7 +135,9 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       file: (sessionId, which) => post("/api/ext/fill/file", { sessionId, which }),
       reveal: (sessionId, which) => post("/api/ext/fill/reveal", { sessionId, which }),
       report: (report) => post("/api/ext/fill/report", report),
-      markSubmitted: (sessionId, portalUrl) => post("/api/ext/fill/submitted", { sessionId, portalUrl }, [422]),
+      pending: (sessionId) => post("/api/ext/fill/pending", { sessionId }),
+      saveAnswers: (sessionId, picks) => post("/api/ext/fill/save-answers", { sessionId, picks }),
+      markSubmitted: (sessionId, portalUrl, saveAnswers) => post("/api/ext/fill/submitted", { sessionId, portalUrl, saveAnswers }, [422]),
       undoMarkSubmitted: (applicationId) => post("/api/ext/fill/submitted/undo", { applicationId }),
     },
 
