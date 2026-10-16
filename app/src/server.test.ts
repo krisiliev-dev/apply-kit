@@ -811,6 +811,23 @@ describe("the Applications routes", () => {
     expect((await s.request("/api/applications/no-such-id/cv")).status).toBe(404);
   });
 
+  it("lists the CV versions sent and picks one for an Application added by hand; no Package as sent without one", async () => {
+    const s = service();
+    const add = async (company: string) => ((await (await s.request("/api/applications", s.json({ job: { company, title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }))).json()) as { application: { id: string } }).application.id;
+    const first = await add("Fennel Studio");
+    const second = await add("Pixelmoor");
+    const pdf = new TextEncoder().encode("%PDF-1.7\n%%EOF\n");
+    await s.request(`/api/applications/${encodeURIComponent(first)}/cv?name=cv.pdf&label=Design%20v2`, { method: "PUT", headers: { "content-type": "application/pdf" }, body: pdf });
+
+    expect(await (await s.request("/api/applications/cv-versions")).json()).toEqual(["Design v2"]);
+    const picked = await s.request(`/api/applications/${encodeURIComponent(second)}/cv-version`, s.json({ label: "Design v2" }));
+    expect(picked.status).toBe(200);
+    expect(await (await s.request(`/api/applications/${encodeURIComponent(second)}`)).json()).toMatchObject({ cvVersion: "Design v2", package: null });
+    expect((await s.request(`/api/applications/${encodeURIComponent(second)}/cv-version`, s.json({ label: "Nope" }))).status).toBe(422);
+    expect((await s.request(`/api/applications/${encodeURIComponent(second)}/package/cv`)).status).toBe(404);
+    expect((await s.request("/api/applications/emails/%3Cnone%40example.com%3E/package", s.json({ answer: "mark-applied" }))).status).toBe(404);
+  });
+
   it("carries Track's markers on the Feed and the Job: All open keeps an applied Job with its Application", async () => {
     const s = service();
     const pasted = { title: "Security Engineer", company: "Kestrel Payments", location: "Sofia", text: "Protect payments.\n3+ years in security." };

@@ -426,6 +426,8 @@ export function createServer({ engine, preparation, fill, revealer, tracker, sch
   app.get("/api/applications/needs-you", async (c) => c.json(await tracker.needsYou()));
   // The withdrawals of the offer accepted (still to send, and sent), for the withdrawal dialog.
   app.get("/api/applications/withdrawals", async (c) => c.json(await tracker.withdrawals()));
+  // The CV versions sent so far, for "Pick a CV version" on an Application added by hand.
+  app.get("/api/applications/cv-versions", async (c) => c.json(await tracker.cvVersions()));
   app.get("/api/applications/:id", async (c) => {
     const a = await tracker.get(c.req.param("id"));
     return a ? c.json(a) : c.json({ error: "No such application" }, 404);
@@ -479,6 +481,23 @@ export function createServer({ engine, preparation, fill, revealer, tracker, sch
     });
   });
 
+  // "Pick a CV version" ({ label }): one sent before, without a file.
+  app.post("/api/applications/:id/cv-version", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.pickCvVersion(c.req.param("id"), typeof body.label === "string" ? body.label : ""));
+  });
+  // The Package as sent: its CV PDF or letter (cv | letter), exactly as approved.
+  app.get("/api/applications/:id/package/:which", async (c) => {
+    const which = c.req.param("which");
+    const file = which === "cv" || which === "letter" ? await tracker.packageFile(c.req.param("id"), which) : null;
+    if (!file) return c.json({ error: "No such file in the Package as sent" }, 404);
+    return c.body(new Uint8Array(file.bytes), 200, {
+      "content-type": "application/pdf",
+      "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    });
+  });
+
   // "Add application" and "I applied": { job: { jobId } | { company, title, link? }, appliedOn, status, contact?, how? }.
   // Added: 201. Already open for that Job: 200 with the existing one. Invalid: 422 naming the field.
   app.post("/api/applications", async (c) => {
@@ -524,6 +543,17 @@ export function createServer({ engine, preparation, fill, revealer, tracker, sch
       : body.choice === "none" ? { choice: "none" }
       : {}) as EmailAnswer;
     return trackerCall(c, () => tracker.answerEmail(c.req.param("id"), answer));
+  });
+
+  // "Mark Applied, dated …?" for a confirmation about an approved package: { answer: "mark-applied" | "not-this" }.
+  app.post("/api/applications/emails/:id/package", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.answerPackageConfirmation(c.req.param("id"), body.answer as "mark-applied" | "not-this"));
+  });
+  app.post("/api/applications/emails/:id/package/undo", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, async () => { await tracker.undoPackageConfirmation(c.req.param("id")); return { ok: true }; });
   });
 
   // One follow-up: its outline and text (GET), the text as typed (PUT { text }), and what the user did:
