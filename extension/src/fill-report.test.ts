@@ -75,3 +75,32 @@ describe("what the Fill view says", () => {
       .toBe("The tab moved from Security Engineer (4410) to Cloud Security Analyst (4420). Nothing was filled from the Security Engineer package.");
   });
 });
+
+describe("question rows", () => {
+  it("names Answer bank, Package, Skipped · your rule and Needs you, with the suggestion and the field's limit", () => {
+    const r: PageReading = { ...reading, fields: [
+      field("rw", "Do you require visa sponsorship?"), field("np", "What is your notice period?"),
+      { ...field("sal", "Expected gross monthly salary"), maxLength: null }, { ...field("det", "Describe a detection rule"), kind: "textarea", maxLength: 1000 },
+      field("g", "Gender"),
+    ] };
+    const a: FieldAnswer[] = [
+      { fieldId: "rw", kind: "fill", value: "No", source: "answer-bank", basis: null },
+      { fieldId: "np", kind: "fill", value: "1 month", source: "package", basis: "Approved screening answer in this package" },
+      { fieldId: "sal", kind: "needs-you", reason: "Your answer bank says: ask each time", basis: "Your rule: \"Upper half\".", suggestion: "2000" },
+      { fieldId: "det", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null },
+      { fieldId: "g", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+    ];
+    const o: FieldOutcome[] = [
+      { fieldId: "rw", outcome: "filled", source: "answer-bank" }, { fieldId: "np", outcome: "filled", source: "package" },
+      { fieldId: "sal", outcome: "needs-you", source: null }, { fieldId: "det", outcome: "needs-you", source: null }, { fieldId: "g", outcome: "skipped", source: null },
+    ];
+
+    expect(fieldRows(r, a, o).map((x) => [x.label, x.value, x.chip.word, x.why, x.limit])).toEqual([
+      ["Do you require visa sponsorship?", "No", "Answer bank", null, null],
+      ["What is your notice period?", "1 month", "Package", "Approved screening answer in this package", null],
+      ["Expected gross monthly salary", "Suggested: 2000", "Needs you", "Your answer bank says: ask each time. Your rule: \"Upper half\".", null],
+      ["Describe a detection rule", "Not filled", "Needs you", "apply-kit has no answer for this yet", "max 1,000 characters"],
+      ["Gender", "Not filled", "Skipped · your rule", "Your rule leaves voluntary questions blank", null],
+    ]);
+  });
+});

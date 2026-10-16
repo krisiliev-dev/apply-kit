@@ -29,6 +29,8 @@ export interface FieldRow {
   /** The reason or basis, when there's one worth saying. */
   why: string | null;
   outcome: FieldOutcome["outcome"];
+  /** "max 1,000 characters" on a needs-you field with a limit, so a long answer is never cut off. */
+  limit: string | null;
   /** apply-kit's value for a kept field ("Replace"), or a value that didn't stick (to paste). */
   offer: string | null;
 }
@@ -41,18 +43,22 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
     const a = answer.get(f.id);
     const o = outcome.get(f.id);
     if (!a || !o) return [];
-    const row = { fieldId: f.id, label: f.label, outcome: o.outcome, offer: null };
+    const row = { fieldId: f.id, label: f.label, outcome: o.outcome, offer: null, limit: null };
     switch (o.outcome) {
       case "filled":
         return [{ ...row, value: a.kind === "fill" ? a.value : f.value, chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
       case "kept":
         return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" ? a.value : null }];
       case "needs-you":
-        return [{ ...row, value: a.kind === "needs-you" && a.suggestion ? `Suggested: ${a.suggestion}` : "Not filled", chip: { tone: "ask", word: "Needs you" }, why: a.kind === "needs-you" ? [a.reason, a.basis].filter(Boolean).join(". ") : null }];
+        return [{
+          ...row, value: a.kind === "needs-you" && a.suggestion ? `Suggested: ${a.suggestion}` : "Not filled", chip: { tone: "ask", word: "Needs you" },
+          why: a.kind === "needs-you" ? [a.reason, a.basis].filter(Boolean).join(". ") : null,
+          limit: f.maxLength !== null && (f.kind === "textarea" || f.kind === "text") ? `max ${f.maxLength.toLocaleString("en-GB")} characters` : null,
+        }];
       case "didnt-stick":
         return [{ ...row, value: "Empty: the value didn't stay", chip: { tone: "gap", word: "Didn't stick" }, why: "Paste it into the field yourself.", offer: a.kind === "fill" ? a.value : null }];
       case "skipped":
-        return [{ ...row, value: "Not filled", chip: { tone: "closed", word: "Skipped" }, why: a.kind === "skip" ? a.reason : null }];
+        return [{ ...row, value: "Not filled", chip: { tone: "closed", word: a.kind === "skip" && a.byRule ? "Skipped · your rule" : "Skipped" }, why: a.kind === "skip" ? a.reason : null }];
     }
   });
 }
