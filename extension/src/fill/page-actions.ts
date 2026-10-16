@@ -2,8 +2,8 @@
 // a fill Kris clicked. It sets a field's value the way typing would (the element's native setter,
 // then `input` and `change`, so React-style forms register it), draws and removes apply-kit's marks,
 // and scrolls a field into view and focuses it for "Show on page". It refuses any control that is a
-// link, a button, or reads as navigation, submission, sign-in, account creation or consent: those are
-// Kris's. The guard test (user-driven.test.ts) allows events and scrolling only in this file.
+// link or reads as navigation, submission, sign-in, account creation or consent: those are
+// Kris's. Only explicitly guarded form-widget buttons are allowed. The guard test (user-driven.test.ts) allows events and scrolling only in this file.
 
 /** Words on controls apply-kit never acts on: navigation, submission, sign-in and accounts (English and Bulgarian). */
 const navigation = /\b(submit|send|next|continue|save and continue|apply|review|sign ?in|log ?in|sign ?up|register|create (an )?account|finish)\b|изпрати|кандидатствай|напред|продължи|вход|регистр|създай профил/iu;

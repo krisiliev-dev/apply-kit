@@ -2,13 +2,13 @@
 
 A personal tool that finds jobs, prepares tailored applications, fills application portals and tracks outcomes for one job seeker. It runs entirely on your Mac: a small local service with the UI in a browser tab, and all data in one SQLite file.
 
-The first feature being built is **Discover**: one trustworthy Feed of every relevant job (spec: GitHub issue #1). The old prototypes (`cv-maker/`, `autofill-extension/`) live on in git history and the `archive-2026-10` tag.
+**Discover**, **Prepare**, **Apply** and **Track** are implemented: find a job, review a tailored package, fill the application on your click, and track replies and follow-ups. The old prototypes (`cv-maker/`, `autofill-extension/`) live on in git history and the `archive-2026-10` tag.
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `app/` | Local service: Hono API (and later the scheduler, mail reader and PDF), in `app/src/` |
+| `app/` | Local service: Hono API, scheduler, mail reader and PDF rendering, in `app/src/` |
 | `app/ui/` | React + Vite UI. `app/ui/src/styles/tokens.css` and `components.css` are the design system's single copy |
 | `packages/core/` | Discovery engine and domain rules. Its dependencies (fetch, clock, database, AI extractor, mail reader) are injected |
 | `extension/` | Chrome-first WXT extension: a side panel that captures the job page, or the search results, you're viewing, and (from the Apply spec) fills application portals when you click |
@@ -61,7 +61,7 @@ While the service runs it checks Sources every 30 minutes between 07:00 and 23:0
 
 On the Feed (first run, or **Add job** in the toolbar), paste a job's link to add that one job. apply-kit reads the page once (its JSON-LD JobPosting, otherwise the page's heading and main text), only where the site's robots.txt allows it, and the Job is merged, ranked and read like any other. A link already in the Feed opens its Job. LinkedIn, jobs.bg, Google, Apple and Meta careers, Indeed and Glassdoor are never fetched, and a page behind bot protection is never retried: apply-kit keeps the link and asks you to paste the job's text instead. Pasted jobs aren't a Source to check, so they never close because a check missed them; one that no job system lists shows **Unverified after 30 days** and stays in the Feed.
 
-### Chrome extension (capture, and fill from the Apply spec)
+### Chrome extension (capture and application filling)
 
 Capture the job page you're viewing in Chrome, or every listing a search results page shows (LinkedIn and jobs.bg included), with one click.
 
@@ -69,9 +69,24 @@ Capture the job page you're viewing in Chrome, or every listing a search results
 2. With the service running, open apply-kit › **Settings** › **Pair the extension**, click the apply-kit icon in Chrome (it opens apply-kit's side panel) and type the 6-digit code. The code works once, for 10 minutes. Paired extensions are listed there and can be unpaired.
 3. On a job page or a page of search results, click the apply-kit icon, choose **Capture** in the panel's switch if it isn't already, then **Capture this page** (or **Capture search results**). The panel shows each listing as New, Already in Feed, Hidden (with the dealbreaker) or Couldn't read; **Add to Feed** stores them under the Source "Captured · <site>".
 
-On one of the six portals apply-kit knows (Workday, Greenhouse, Lever, SmartRecruiters, Workable, Ashby) the panel opens on **Fill this application** and names the portal and the job from the page's address. The first time, it asks once to **Allow the 6 portals** (Chrome's prompt for those sites only; **Not now** works, and then you click the apply-kit icon on each new site before filling). **Fill this page** (also `Alt+Shift+F`, remappable at `chrome://extensions/shortcuts`) doesn't fill anything yet: filling comes with the next Apply tickets.
+On one of the six portals apply-kit knows (Workday, Greenhouse, Lever, SmartRecruiters, Workable, Ashby) the panel opens on **Fill this application** and names the portal and the job from the page's address. The first time, it asks once to **Allow the 6 portals** (Chrome's prompt for those sites only; **Not now** works, and then you click the apply-kit icon on each new site before filling). **Fill this page** (also `Alt+Shift+F`, remappable at `chrome://extensions/shortcuts`) matches an approved package, fills recognised fields, attaches its documents, and reports what needs your attention. Use Undo to restore fields changed by that fill. Review the portal yourself before submitting.
 
-The extension reads a page only when you click, as Chrome has rendered it: it never scrolls, clicks, pages or opens listings, and has no access to any site until you open it on that tab (`activeTab`). Scroll or open the next page yourself, then capture again; listings already captured are recognised. It talks only to the service on this laptop (default `http://127.0.0.1:4310`; change it under **Service address** when pairing) and keeps nothing but that address and its pairing token. When the service isn't running it says so and retries. A captured job is re-checked on the company's own job system when apply-kit watches one (it closes when that stops listing it); otherwise it shows **Unverified after 30 days** and stays in the Feed.
+Capture reads a page only when you click, as Chrome has rendered it: capture never scrolls, clicks, pages or opens listings, and has no access to any site until you open it on that tab (`activeTab`). Scroll or open the next page yourself, then capture again; listings already captured are recognised. It talks only to the service on this laptop (default `http://127.0.0.1:4310`; change it under **Service address** when pairing) and keeps nothing but that address and its pairing token. When the service isn't running it says so and retries. A captured job is re-checked on the company's own job system when apply-kit watches one (it closes when that stops listing it); otherwise it shows **Unverified after 30 days** and stays in the Feed.
+
+During filling, guarded clicks can choose form options and add or remove work-history entries. The extension never clicks Next, Submit, consent, account creation or sign-in. Account help fills your email and points you to Chrome’s password manager; passwords are never read or stored. A recent verification email from the matching portal can appear as a link that you open yourself.
+
+On other company forms, the panel starts with a copy list of your approved answers and documents. **Fill clear fields** is a separate opt-in for clearly labelled fields; ambiguous questions stay for you. If a portal changes, use **Report field** in the panel and review reports in Settings.
+
+For Bulgarian packages, enter verified Bulgarian equivalents on role and skill pieces in Profile. Saving confirms that wording is equivalent; employers and dates retain their original values. Without a verified equivalent, the original title or skill is used.
+
+### First application
+
+1. Open **Profile**, add your contact details and confirmed work history, skills and reusable answers. Check the preparation checklist.
+2. Open a job in the Feed and prepare its package. Review the target, CV, letter, answers and ATS check, then approve it.
+3. Open the company application and click **Fill this page** in the paired extension. Review every page and press Next and Submit yourself.
+4. Confirm **I submitted** in the panel. **Applications** keeps the approved files, events and follow-ups; sending email remains your action.
+
+The first five real applications are a calibration trial, not an automated test. Use [the trial sheet](docs/research/implementation/portal-trial.md) to record portal differences and timing; no live applications have been submitted by the implementation checks.
 
 ### Job mailbox (email alerts)
 
