@@ -32,13 +32,15 @@ describe("the evaluation's spending ledger", () => {
     db.close();
   });
 
-  it("starts from nothing, without creating a database, when the service has never run", () => {
+  it("refuses to spend before the service has created its persistent ledger", () => {
     const path = join(mkdtempSync(join(tmpdir(), "apply-kit-ledger-")), "apply-kit.db");
-    const ledger = openSpendLedger(path, october);
-
-    ledger.record(0.5);
-    expect(ledger.spentThisMonthUsd()).toBeCloseTo(0.5);
-    ledger.close();
+    expect(() => openSpendLedger(path, october)).toThrow("Start apply-kit once");
     expect(existsSync(path)).toBe(false);
+  });
+
+  it("refuses a database without a spending table", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "apply-kit-ledger-")), "apply-kit.db");
+    new DatabaseSync(path).close();
+    expect(() => openSpendLedger(path, october)).toThrow("Start apply-kit once");
   });
 });

@@ -12,9 +12,11 @@ Scope: changes from `5f789e9` through the completed Apply / reviewed Track integ
 
 History and callers: `git blame` on the shared action guard identified its original click-only boundary (`cdb97fa9`) and the widening needed for portal widgets. The shared guard has 27 references across portal action paths and tests, so mutations were checked across the six portal adapters rather than only Workday. The reviewed Track merge preserves Prepare’s submission guard.
 
+- Evaluation spending before the first service start was only held in memory. Evaluations now refuse to run without the persistent service ledger; regression tests cover a missing database and missing spending table.
+
 ## Verification
 
-The integrated suite passed 1,393 tests across 104 files; TypeScript and ESLint passed. UI and extension production builds were also checked. Fixtures use fictional people and recorded forms. Tests cover password-value exclusion, denied navigation/consent actions, undo, cross-job and tenant matching, recent same-portal verification links, file fallbacks, unknown-form copy mode, and verified Bulgarian role/skill equivalents.
+The integrated suite passed 1,394 tests across 104 files; TypeScript and ESLint passed. UI and extension production builds were also checked. Fixtures use fictional people and recorded forms. Tests cover password-value exclusion, denied navigation/consent actions, undo, cross-job and tenant matching, recent same-portal verification links, file fallbacks, unknown-form copy mode, and verified Bulgarian role/skill equivalents.
 
 ## Limits and first use
 

@@ -9,25 +9,24 @@ import type { SpendLedger } from "./cli.ts";
 const monthOf = (d: Date) => d.toISOString().slice(0, 7);
 
 export function openSpendLedger(dbPath: string, now: () => Date = () => new Date()): SpendLedger {
-  // No service database (or one from before reading postings existed): count this run on its own.
-  const db = existsSync(dbPath) ? new DatabaseSync(dbPath) : null;
-  const shared = db?.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_spend'").get() != null;
-  if (db && !shared) db.close();
-  // The service may be writing at the same time: wait for its lock rather than fail.
-  if (shared) db!.exec("PRAGMA busy_timeout = 5000");
-  let ownUsd = 0;
+  const unavailable = () => new Error("Start apply-kit once before running an evaluation, so spending is recorded in its persistent monthly ledger.");
+  if (!existsSync(dbPath)) throw unavailable();
+  const db = new DatabaseSync(dbPath);
+  if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'ai_spend'").get()) {
+    db.close();
+    throw unavailable();
+  }
+  db.exec("PRAGMA busy_timeout = 5000");
   return {
     spentThisMonthUsd() {
-      if (!shared) return ownUsd;
-      return Number(db!.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(monthOf(now()))?.s ?? 0);
+      return Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(monthOf(now()))?.s ?? 0);
     },
     record(costUsd) {
-      if (!shared) { ownUsd += costUsd; return; }
-      db!.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'evaluation', NULL, ?)")
+      db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'evaluation', NULL, ?)")
         .run(now().toISOString(), monthOf(now()), costUsd);
     },
     close() {
-      if (shared) db!.close();
+      db.close();
     },
   };
 }
