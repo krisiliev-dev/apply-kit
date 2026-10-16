@@ -1,0 +1,26 @@
+<!-- Synthetic Greenhouse new job board application (job-boards.greenhouse.io): a React form whose
+     inputs ignore direct value writes (the test setup makes them controlled). Modelled on
+     docs/research/implementation/portals.md. Made-up company and job; no real person's data. -->
+<main class="main">
+  <div class="job__header"><h1 class="section-header">Security Engineer</h1><div class="job__location">Sofia</div></div>
+  <div class="application--container">
+    <h2 class="section-header">Apply for this job</h2>
+    <p class="required-fields">* indicates a required field</p>
+    <form id="application-form" class="application--form">
+      <div class="application--questions">
+        <div class="text-input-wrapper"><label id="first_name-label" for="first_name" class="label">First Name<span aria-hidden="true">*</span></label><input id="first_name" class="input" type="text" maxlength="255" aria-required="true" autocomplete="given-name"></div>
+        <div class="text-input-wrapper"><label id="last_name-label" for="last_name" class="label">Last Name<span aria-hidden="true">*</span></label><input id="last_name" class="input" type="text" maxlength="255" aria-required="true" autocomplete="family-name"></div>
+        <div class="text-input-wrapper"><label id="preferred_name-label" for="preferred_name" class="label">Preferred First Name</label><input id="preferred_name" class="input" type="text" maxlength="255"></div>
+        <div class="text-input-wrapper"><label id="email-label" for="email" class="label">Email<span aria-hidden="true">*</span></label><input id="email" class="input" type="email" maxlength="255" aria-required="true" autocomplete="email"></div>
+        <div class="select__container"><label id="country-label" for="country" class="label">Country</label><input id="country" class="select__input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-labelledby="country-label" autocomplete="off"></div>
+        <div class="text-input-wrapper"><label id="phone-label" for="phone" class="label">Phone<span aria-hidden="true">*</span></label><input id="phone" class="input" type="tel" aria-required="true" autocomplete="tel"></div>
+        <div class="file-upload"><div id="upload-label-resume" class="label upload-label">Resume/CV<span aria-hidden="true">*</span></div><div class="file-upload__wrapper"><button type="button" class="btn btn--pill">Attach</button><button type="button" class="btn btn--pill">Enter manually</button></div><input id="resume" type="file" class="visually-hidden" aria-labelledby="upload-label-resume" aria-required="true" accept=".pdf,.doc,.docx,.txt,.rtf"></div>
+        <div class="text-input-wrapper"><label id="question_31001-label" for="question_31001" class="label">LinkedIn Profile</label><input id="question_31001" class="input" type="text" maxlength="255"></div>
+        <div class="text-input-wrapper"><label id="question_31002-label" for="question_31002" class="label">GitHub<span aria-hidden="true">*</span></label><input id="question_31002" class="input" type="text" maxlength="255" aria-required="true"></div>
+        <div class="text-input-wrapper"><label id="question_31003-label" for="question_31003" class="label">What are your salary expectations? (gross monthly, EUR)<span aria-hidden="true">*</span></label><input id="question_31003" class="input" type="text" aria-required="true"></div>
+        <div class="checkbox__wrapper"><input id="gdpr_consent" type="checkbox" class="checkbox__input" aria-required="true"><label for="gdpr_consent" class="checkbox__label">I consent to Kestrel Payments storing my application for 12 months<span aria-hidden="true">*</span></label></div>
+      </div>
+      <div class="application--submit"><button type="submit" class="btn btn--rounded">Submit application</button></div>
+    </form>
+  </div>
+</main>

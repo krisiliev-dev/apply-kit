@@ -6,10 +6,11 @@ import { TrackerError, angles, maxCvBytes } from "@apply-kit/core";
 import type {
   RejectionReason,
   AddApplicationInput, CapturedPage, EmailAnswer, CoverageInput, DiscoveryEngine, DocumentKind, DocumentLanguage, FactAnswer, FeedSort, FeedView, GroupKey,
-  Pairing, PassReason, PastedPosting, PreparationEngine, Scheduler, Status, StatusFilter, Tracker, Angle,
+  FillEngine, Pairing, PassReason, PastedPosting, PreparationEngine, Scheduler, Status, StatusFilter, Tracker, Angle,
 } from "@apply-kit/core";
 import { mountImportApi } from "./import-api.ts";
 import { mountAnswerApi } from "./answers-api.ts";
+import { mountFillApi } from "./fill-api.ts";
 import { mountPackageApi } from "./packages-api.ts";
 import { mountProfileApi } from "./profile-api.ts";
 import { mountSetupApi } from "./setup-api.ts";
@@ -24,10 +25,12 @@ const groupKeys: GroupKey[] = ["accepted", "offer", "interviewing", "screening",
 /** Applications groups over this many rows are paged ("Applied 1–25 of 47"). */
 const applicationPageSize = 25;
 
-export function createServer({ engine, preparation, tracker, scheduler, pairing, uiDir, port }: {
+export function createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port }: {
   engine: DiscoveryEngine; tracker: Tracker; scheduler: Scheduler; pairing: Pairing; uiDir: string;
   /** Prepare's engine; its routes answer 404 without it. */
   preparation?: PreparationEngine;
+  /** Apply's fill engine; the extension's fill routes answer 404 without it. */
+  fill?: FillEngine;
   /** The port the service listens on: only requests addressed to this machine on it are answered. */
   port: number;
 }) {
@@ -75,6 +78,8 @@ export function createServer({ engine, preparation, tracker, scheduler, pairing,
     engine.readPending().catch((err: unknown) => console.error("Reading postings failed:", err));
     return report;
   }, 201));
+
+  if (fill) mountFillApi(app, fill);
 
   // The app's side of pairing: show a code, list paired extensions, forget one.
   app.post("/api/pairing", (c) => {

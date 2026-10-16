@@ -55,3 +55,37 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .listing { display: grid; gap: var(--s-1); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule) }
 .listing .title { font-weight: 600; overflow-wrap: anywhere }
 .listing .chip { justify-self: start; white-space: normal }
+
+/* Fill: the package, the page's result, needs-you items and the field rows (hi-fi "Portal detected", "Filled", "Different job") */
+.sp h2 { font-family: var(--font-display); font-size: var(--fs-title); line-height: var(--lh-tight); font-weight: 600; margin: 0 }
+.sp .meta.block { display: block }
+.pkg { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: var(--s-2) var(--s-4); font-size: var(--fs-small); margin: 0 }
+.pkg dt { color: var(--ink-3) }
+.pkg dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
+.pkg dd .meta { display: block }
+.pagehead { display: grid; gap: var(--s-2) }
+.pagehead .row { gap: var(--s-3) }
+.counts { display: flex; flex-wrap: wrap; gap: var(--s-2) }
+.counts .chip .ico, .frow .chip .ico { width: 11px; height: 11px }
+.flist { list-style: none; margin: 0; padding: 0; display: grid }
+.flist li { display: grid; border-top: 1px solid var(--rule) }
+.flist .replace { justify-self: start; margin: 0 var(--s-2) var(--s-3) }
+.frow { font: inherit; width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-3); align-items: center; padding: var(--s-3) var(--s-2); border: 0; background: none; color: var(--ink); text-align: left; cursor: pointer; border-radius: 0; min-height: 44px }
+.frow:hover { background: color-mix(in srgb, var(--surface-sunken) 55%, var(--surface)) }
+.frow .l { grid-column: 1; grid-row: 1; font-size: var(--fs-small); font-weight: 500; min-width: 0; overflow-wrap: anywhere }
+.frow .v { grid-column: 1; font-size: var(--fs-caption); color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0 }
+.frow .chip { grid-column: 2; grid-row: 1 / span 2 }
+.frow .why2 { grid-column: 1 / -1; font-size: var(--fs-caption); color: var(--ink-3) }
+.need { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 0 var(--s-4); padding: var(--s-4) var(--s-4) var(--s-4) var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control); background: var(--surface) }
+.need::before { content: ""; border-radius: 2px; background: var(--bloom) }
+.need > div { display: grid; gap: var(--s-3); min-width: 0 }
+.need .q { font-weight: 600; font-size: var(--fs-small); overflow-wrap: anywhere }
+.basis { font-size: var(--fs-caption); color: var(--ink-2); overflow-wrap: anywhere; border-left: 2px solid var(--rule); padding-left: var(--s-3) }
+.need .suggest { font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere }
+.need .q .meta { font-weight: 400 }
+.sp .undo { justify-self: start }
+.sp fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-2); min-width: 0 }
+.sp legend { padding: 0; font-weight: 600; font-size: var(--fs-small); margin-bottom: var(--s-2) }
+.opt { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-small); min-height: 24px }
+.opt input { accent-color: var(--action); width: 16px; height: 16px; margin: 2px 0 0; flex: none }
+.pick .opt { padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-control) }

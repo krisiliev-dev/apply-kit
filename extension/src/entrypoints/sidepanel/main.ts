@@ -3,21 +3,29 @@
 // it read the tab Kris is on (activeTab, for that site until the tab moves to another one), unless Kris
 // allowed the six portals. Capture reads the page
 // once on a click, asks apply-kit what it would add, and only "Add" stores anything (in apply-kit,
-// never here). Fill, for now, recognises the portal and the job from the tab's address and fills
-// nothing. The panel follows the tab Kris looks at only to update what it says; it never reads or
-// touches a page by itself.
+// never here). Fill recognises the portal and the job from the tab's address, asks apply-kit which
+// approved package fits, and only on "Fill this page" injects the filler into the tab, reads the page,
+// gets the answers from apply-kit and fills them (Greenhouse so far). The browser keeps only which
+// fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
+// it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
-import type { CaptureReport, CapturedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PageReading } from "@apply-kit/core";
+import { countOutcomes } from "@apply-kit/core/fill";
 import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
 import "./panel.css";
 import { contextCard, fillStateFor, openingView, type PanelView, type PortalsAccess } from "../../context.ts";
+import { differentJobLine, fieldRows, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, submitPrompt, type FieldRow } from "../../fill-report.ts";
+import { runFiller } from "../../fill/in-page.ts";
 import { grabPage } from "../../grab.ts";
 import { portalOrigins, portals, recognisePortal } from "../../portal.ts";
 import { actionLabel, captureButtonLabel, itemStatus, previewHeading, resultSummary } from "../../report.ts";
-import { createClient, defaultServiceUrl, type Connection } from "../../service.ts";
+import { createClient, defaultServiceUrl, type Answer, type Connection } from "../../service.ts";
+import { createTabSessions } from "../../sessions.ts";
 
 const client = createClient({ fetch: (input, init) => fetch(input, init), store: browser.storage.local });
+/** Tab → fill session id: the only fill state kept in the browser (session storage, gone when Chrome closes). */
+const sessions = createTabSessions(browser.storage.session);
 const retryMs = 10_000;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -43,6 +51,10 @@ const icons = {
   check: '<svg viewBox="0 0 12 12"><path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
   info: '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M6 3.6v3M6 8.2v.2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>',
   dot: '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="2.4" fill="currentColor"/></svg>',
+  ask: '<svg viewBox="0 0 12 12"><path d="M4.3 4.4a1.8 1.8 0 1 1 2.5 1.7c-.5.2-.8.6-.8 1.1v.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="9.8" r=".9" fill="currentColor"/></svg>',
+  x: '<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
+  partly: '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>',
+  dash: '<svg viewBox="0 0 12 12"><path d="M3 6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
 };
 
 // ---------- the panel frame: header, Fill / Capture switch, body, sticky footer ----------
@@ -66,7 +78,10 @@ function show({ connected, body: b, foot: f }: { connected: boolean | null; body
   conn.className = connected ? "conn" : "conn off";
   conn.replaceChildren(h("i", {}), connected ? "Connected" : "Not connected");
   modes.hidden = connected !== true;
-  body.replaceChildren(...b.filter((c): c is Node | string => !!c));
+  // Undo after marking stays in the panel until it closes: a reminder on every other Fill view.
+  const reminder = connected && lastMarked && !onMarkedScreen && fillTab.getAttribute("aria-pressed") === "true" ? markedReminder(lastMarked) : null;
+  onMarkedScreen = false;
+  body.replaceChildren(...[reminder, ...b].filter((c): c is Node | string => !!c));
   foot.replaceChildren(...f.filter((c): c is Node | string => !!c));
 }
 function announce(message: string) {
@@ -206,37 +221,112 @@ async function fill(tab: Awaited<ReturnType<typeof currentTab>>) {
   }
 
   const card = contextCard(page, { address: address!, title: tab?.title });
-  const ctx = h("div", { class: "ctx" },
-    h("span", { class: "where" }, card.where),
-    h("h1", { class: "job" }, card.job),
-    h("span", { class: "why" }, state === "portal" && page.ref ? svg(icons.check) : svg(icons.info, "info"), h("span", {}, card.why)),
-  );
-
   if (state === "not-portal") {
+    // A form apply-kit doesn't know has no confirmation page to detect: "I've submitted this" sits in
+    // the footer, for the package this tab is filling.
+    const tabSession = tab?.id != null ? await sessions.get(tab.id) : null;
+    const offer = tabSession && submitPrompt({ known: false, pageKind: null }) === "footer";
     return show({
       connected: true,
-      body: [ctx, h("p", {}, "Filling works on Workday, Greenhouse, Lever, SmartRecruiters, Workable and Ashby. On other forms it fills nothing unless you ask.")],
-      foot: [button("Capture this job", () => choose("capture"), "btn primary"), fillBoundary()],
+      body: [ctxCard(card.where, card.job, card.why, false), h("p", {}, "Filling works on Workday, Greenhouse, Lever, SmartRecruiters, Workable and Ashby. On other forms it fills nothing unless you ask.")],
+      foot: [button("Capture this job", () => choose("capture"), "btn primary"), offer && button("I've submitted this", () => void markSubmitted(tab!.id!, tabSession, address ?? null), "btn"), fillBoundary()],
     });
   }
 
+  // Which package fits, without opening anything: the page isn't touched until Fill this page.
+  const sessionId = tab?.id != null ? await sessions.get(tab.id) : null;
+  const matched = page.ref || sessionId ? await client.fill.match(fillPageOf(address!, page)!, sessionId) : null;
+  if (matched && !matched.ok && matched.state !== "error") return problem(matched);
+  const m = matched?.ok ? matched.value : null;
+  // A different job shows as what Fill would match now; the click ends the old session and says so.
+  showMatch({ tab: tab!, page, card, match: m?.kind === "different-job" ? m.then : m, keys, access });
+}
+
+const fillPrimary = () => button("Fill this page", () => void fillThisPage(), "btn primary", { id: "fill-btn" });
+
+function ctxCard(where: string, job: string, why: string, sure: boolean) {
+  return h("div", { class: "ctx" },
+    h("span", { class: "where" }, where),
+    h("h1", { class: "job" }, job),
+    h("span", { class: "why" }, sure ? svg(icons.check) : svg(icons.info, "info"), h("span", {}, why)),
+  );
+}
+
+/** The page as the fill engine sees it: portal, host and job reference from the address. */
+function fillPageOf(address: string, page: ReturnType<typeof recognisePortal>): FillPage | null {
+  if (page.portal === "unknown") return null;
+  return { portal: page.portal, host: new URL(address).hostname, jobRef: page.ref };
+}
+
+function packageList(p: Extract<FillStart, { kind: "matched" }>["package"]) {
+  return h("dl", { class: "pkg" }, ...packageLines(p).flatMap((l) => [h("dt", {}, l.term), h("dd", {}, l.detail, l.note && h("span", { class: "meta" }, l.note))]));
+}
+
+/** The Fill view for a portal page and what apply-kit matched it to. */
+function showMatch({ tab, page, card, match, keys, access, banner }: {
+  tab: Awaited<ReturnType<typeof currentTab>> & object; page: ReturnType<typeof recognisePortal>; card: ReturnType<typeof contextCard>;
+  match: FillStart | null; keys: string; access: PortalsAccess; banner?: Node;
+}) {
   const label = portals.find((p) => p.name === page.portal)!.label;
+  const loop = h("div", { class: "callout" },
+    h("b", {}, `Each page: click Fill, check, then continue on ${label}`),
+    h("span", {}, `apply-kit fills the page you're looking at and marks every field it touched. It never presses ${label}'s buttons. When the next page shows, click Fill this page again.`),
+    keys && h("span", { class: "meta" }, `Shortcut: ${keys}. Change it at chrome://extensions/shortcuts.`),
+  );
+  const notNowNote = access === "not-now" && h("div", { class: "callout" },
+    h("b", {}, "Without the portals permission"),
+    h("span", {}, `Click the apply-kit icon in the toolbar on each new page before filling${keys ? `, or press ${keys}` : ""}. Forms embedded in company sites can't be filled.`),
+    button("Allow the 6 portals", () => requestPortals(), "btn sm"),
+  );
+
+  if (match?.kind === "matched") {
+    return show({
+      connected: true,
+      body: [banner, ctxCard(`${label} · ${match.package.job.company}`, match.package.job.title, matchWhy(match, page.ref), true), packageList(match.package), loop, notNowNote],
+      foot: [fillPrimary(), fillBoundary()],
+    });
+  }
+  if (match?.kind === "choose") {
+    const name = "pick-package";
+    const options = match.candidates.map((c, i) => h("label", { class: "opt" },
+      h("input", { type: "radio", name, value: c.id, ...(i === 0 ? { checked: "" } : {}) }),
+      h("span", {}, `${c.job.title} · ${c.job.company}`, h("span", { class: "meta block" }, `${c.cv.fileName} · approved ${new Date(c.approvedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`)),
+    ));
+    const picked = () => (body.querySelector<HTMLInputElement>(`input[name="${name}"]:checked`)?.value ?? match.candidates[0]!.id);
+    return show({
+      connected: true,
+      body: [banner, ctxCard(card.where, card.job, `No approved package targets job ${page.ref?.jobId ?? "on this page"}, but ${match.candidates.length === 1 ? "one" : match.candidates.length} on this board could be it.`, false),
+        h("fieldset", { class: "pick" }, h("legend", {}, "Which application is this?"), ...options),
+        h("p", { class: "meta" }, "apply-kit never guesses between packages. Pick the one this form is for, or none.")],
+      foot: [button("Fill with this package", () => void fillThisPage(picked()), "btn primary"), button("None of these", () => showMatch({ tab, page, card, match: { kind: "no-package", job: null }, keys, access }), "btn ghost"), fillBoundary()],
+    });
+  }
+  if (match?.kind === "no-package") {
+    const c = connection!;
+    const draft = match.job;
+    return show({
+      connected: true,
+      body: [
+        banner,
+        ctxCard(card.where, card.job, draft ? draft.reason : "There's no approved package for this job, so there's nothing to fill from.", false),
+        h("p", {}, draft
+          ? "Your package for this job is still a draft. Approve it in apply-kit, then come back to this tab and click Fill this page."
+          : "A package gives this form a tailored CV, a cover letter and your approved answers. Capture the job, prepare the package in apply-kit (about 5 minutes), then come back to this tab."),
+      ],
+      foot: draft
+        ? [h("a", { class: "btn primary", href: `${c.serviceUrl}/jobs/${encodeURIComponent(draft.id)}/package`, target: "_blank", rel: "noopener" }, "Open the package"), fillBoundary()]
+        : [
+            button("Capture and prepare", () => void captureAndPrepare(), "btn primary"),
+            button("Capture only", () => choose("capture"), "btn"),
+            h("p", { class: "bound" }, "\"Capture and prepare\" adds the job to your Feed and gives you its package in apply-kit. This tab stays as it is."),
+          ],
+    });
+  }
+  // No answer about packages (the app answered with an error, or no job on this page yet): the address card only.
   show({
     connected: true,
-    body: [
-      ctx,
-      h("div", { class: "callout" },
-        h("b", {}, `Each page: click Fill, check, then continue on ${label}`),
-        h("span", {}, `apply-kit fills the page you're looking at and marks every field it touched. It never presses ${label}'s buttons. When the next page shows, click Fill this page again.`),
-        keys && h("span", { class: "meta" }, `Shortcut: ${keys}. Change it at chrome://extensions/shortcuts.`),
-      ),
-      access === "not-now" && h("div", { class: "callout" },
-        h("b", {}, "Without the portals permission"),
-        h("span", {}, `Click the apply-kit icon in the toolbar on each new page before filling${keys ? `, or press ${keys}` : ""}. Forms embedded in company sites can't be filled.`),
-        button("Allow the 6 portals", () => requestPortals(), "btn sm"),
-      ),
-    ],
-    foot: [button("Fill this page", () => fillThisPage(), "btn primary"), fillBoundary()],
+    body: [banner, ctxCard(card.where, card.job, card.why, !!page.ref), loop, notNowNote],
+    foot: [fillPrimary(), fillBoundary()],
   });
 }
 
@@ -282,10 +372,291 @@ async function notNow() {
   void ready();
 }
 
-/** The primary action of the Fill view. Filling itself isn't built yet: nothing on the page is touched. */
-function fillThisPage() {
-  const note = body.querySelector(".fill-note") ?? body.appendChild(h("p", { class: "fill-note meta", role: "status" }));
-  note.textContent = "Nothing was filled: filling pages comes in the next apply-kit update. This page hasn't been touched.";
+// ---------- Filling a page ----------
+
+/** Set by Stop filling; checked between the steps of a fill. */
+let stopRequested = false;
+/** "Press F6 to move to the page" is said once, the first time Show on page is used. */
+let toldF6 = false;
+
+/** Injects the filler into the tab (on this click only) and runs one of its commands on the page. */
+async function inPage<T>(tabId: number, command: Parameters<typeof runFiller>[0], args: unknown[] = []): Promise<T | null> {
+  try {
+    await browser.scripting.executeScript({ target: { tabId }, files: ["/filler.js"] });
+    const [res] = await browser.scripting.executeScript({ target: { tabId }, func: runFiller, args: [command, args] });
+    return (res?.result as T | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function fillProblem(answer: Exclude<Answer<unknown>, { ok: true }>, during?: string) {
+  if (answer.state === "error") {
+    return show({ connected: true, body: [h("div", { class: "banner error", role: "alert" }, h("div", { class: "text" }, answer.error))], foot: [button("Back", () => void start(), "btn primary"), fillBoundary()] });
+  }
+  return answer.state === "not-running" ? notRunning(connection!, during) : unpaired(connection!, "apply-kit no longer knows this extension. Pair it again.");
+}
+
+/** Fill this page: re-read the job, match it, then read, answer and fill the page. Nothing is pressed. */
+async function fillThisPage(packageId?: string) {
+  const tab = await currentTab();
+  const page = recognisePortal(tab?.url);
+  const fp = tab?.url ? fillPageOf(tab.url, page) : null;
+  if (tab?.id == null || !fp) return;
+  const tabId = tab.id;
+  busy = true;
+  stopRequested = false;
+  const keys = await shortcut();
+  const access = await portalsAccess();
+  const card = contextCard(page, { address: tab.url!, title: tab.title });
+
+  const started = await client.fill.start(fp, { sessionId: await sessions.get(tabId), packageId });
+  if (!started.ok) return fillProblem(started, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
+  let s = started.value;
+  let banner: Node | undefined;
+  if (s.kind === "different-job") {
+    banner = h("div", { class: "banner warning", role: "alert" }, h("div", { class: "text" }, h("b", {}, "This is a different job. "),
+      differentJobLine(s.previous, { title: s.then.kind === "matched" ? s.then.package.job.title : card.job, jobId: page.ref?.jobId ?? null })));
+    s = s.then;
+    if (s.kind === "matched" && s.session) await sessions.set(tabId, s.session.id);
+    else await sessions.clear(tabId);
+    busy = false;
+    return showMatch({ tab, page, card, match: s, keys, access, banner });
+  }
+  if (s.kind !== "matched" || !s.session) {
+    busy = false;
+    return showMatch({ tab, page, card, match: s, keys, access });
+  }
+  const session = s.session;
+  await sessions.set(tabId, session.id);
+  const ctx = ctxCard(`${portals.find((p) => p.name === page.portal)!.label} · ${s.package.job.company}`, s.package.job.title, matchWhy(s, page.ref), true);
+
+  if (page.portal !== "greenhouse") {
+    busy = false;
+    showMatch({ tab, page, card, match: s, keys, access });
+    body.append(h("p", { class: "meta", role: "status" }, "apply-kit fills Greenhouse pages so far; this portal comes in a later update. This page hasn't been touched."));
+    return;
+  }
+
+  show({
+    connected: true,
+    body: [ctx, h("div", { class: "pagehead" }, h("h2", {}, h("span", { class: "row" }, h("span", { class: "spin", "aria-hidden": "true" }), "Filling this page")), h("p", { class: "meta" }, "Reading the page's fields…"))],
+    foot: [button("Stop filling", () => { stopRequested = true; }, "btn"), h("p", { class: "bound" }, "Stop keeps what's filled so far; Undo this page appears when it stops.")],
+  });
+  announce("Filling this page…");
+
+  const stopped = (what: string) => {
+    busy = false;
+    showMatch({ tab, page, card, match: s, keys, access });
+    announce(what);
+  };
+  const reading = await inPage<PageReading>(tabId, "read");
+  if (!reading) return stopped("Chrome didn't let apply-kit read this page. Click the apply-kit icon in the toolbar on it, then Fill this page.");
+  if (stopRequested) return stopped("Stopped. Nothing was filled.");
+  if (submitPrompt({ known: true, pageKind: reading.pageKind }) === "ask") {
+    busy = false;
+    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal: portals.find((p) => p.name === page.portal)!.label });
+  }
+  const answers = await client.fill.answer(session.id, reading);
+  if (!answers.ok) return fillProblem(answers, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
+  if (stopRequested) return stopped("Stopped. Nothing was filled.");
+  const outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value]);
+  if (!outcomes) return stopped("Chrome didn't let apply-kit fill this page. Nothing was filled.");
+  const recorded = await client.fill.record(session.id, reading, outcomes);
+  filled({ tabId, ctx, reading, answers: answers.value, outcomes, at: recorded.ok ? recorded.value.filledAt : new Date().toISOString(), portal: portals.find((p) => p.name === page.portal)!.label });
+}
+
+const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: icons.x, closed: icons.dash } as const;
+
+/** The Filled state: counts, what needs Kris first, then every field in the portal's order, Undo this page. */
+function filled(f: { tabId: number; ctx: HTMLElement; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; at: string; portal: string }, announceIt = true) {
+  const rows = fieldRows(f.reading, f.answers, f.outcomes);
+  const counts = countOutcomes(f.outcomes);
+  const showOnPage = async (row: FieldRow) => {
+    const ok = await inPage<boolean>(f.tabId, "show", [row.fieldId]);
+    announce(ok ? `Showing ${row.label} on the page.${toldF6 ? "" : " Press F6 to move to the page."}` : `${row.label} isn't on this page any more.`);
+    toldF6 = true;
+  };
+  const chip = (tone: string, icon: string, text: string) => h("span", { class: `chip ${tone}` }, svg(icon), text);
+  const needs = rows.filter((r) => r.outcome === "needs-you").map((r) => h("div", { class: "need", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
+    h("p", { class: "q" }, r.label, r.limit && h("span", { class: "meta" }, ` (${r.limit})`)),
+    r.why && h("p", { class: "basis" }, r.why),
+    r.value.startsWith("Suggested: ") && h("p", { class: "suggest" }, r.value),
+    h("div", { class: "row" }, button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
+  )));
+  const list = h("ul", { class: "flist" }, ...rows.map((r) => h("li", {},
+    button("", () => void showOnPage(r), "frow"),
+    r.offer && r.outcome === "kept" && button(`Replace with ${r.offer}`, () => void replace(r), "btn ghost sm replace"),
+  )));
+  // Each row reads label → value → source (AX-01); the chip sits on the right by the grid.
+  list.querySelectorAll<HTMLButtonElement>(".frow").forEach((b, i) => {
+    const r = rows[i]!;
+    b.replaceChildren(h("span", { class: "l" }, r.label), h("span", { class: "v" }, r.value), chip(r.chip.tone, chipIcon[r.chip.tone], r.chip.word), ...[r.why && r.outcome !== "needs-you" ? h("span", { class: "why2" }, r.why) : ""], h("span", { class: "sr-only" }, ". Show on page"));
+  });
+  const replace = async (r: FieldRow) => {
+    const outcome = await inPage<FieldOutcome["outcome"]>(f.tabId, "replace", [r.fieldId, r.offer]);
+    const source = f.answers.find((a) => a.fieldId === r.fieldId);
+    const outcomes = f.outcomes.map((o) => (o.fieldId === r.fieldId && outcome ? { ...o, outcome, source: outcome === "filled" && source?.kind === "fill" ? source.source : null } : o));
+    announce(outcome === "filled" ? `Replaced ${r.label}.` : `${r.label} didn't take the new value.`);
+    filled({ ...f, outcomes }, false);
+  };
+  const time = new Date(f.at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  show({
+    connected: true,
+    body: [
+      f.ctx,
+      h("div", { class: "pagehead" },
+        h("h2", {}, f.reading.stepLabel ?? "This page"),
+        h("div", { class: "counts" },
+          chip("met", icons.check, `${counts.filled} filled`),
+          counts.needsYou > 0 && chip("ask", icons.ask, `${counts.needsYou} ${counts.needsYou === 1 ? "needs" : "need"} you`),
+          counts.kept > 0 && chip("partly", icons.partly, `${counts.kept} kept`),
+          counts.didntStick > 0 && chip("gap", icons.x, `${counts.didntStick} didn't stick`),
+        ),
+        h("p", { class: "meta" }, f.reading.stepCount ? `Page ${f.reading.stepCount.current} of ${f.reading.stepCount.total}, as ${f.portal} shows it. Filled ${time}.` : `Filled ${time}.`),
+      ),
+      ...needs,
+      list,
+      h("p", { class: "meta" }, "On the page: a tick marks each field apply-kit filled, a \"?\" each field that needs you, a half circle each value it kept. Select a row to see its field."),
+      button("Undo this page", () => void undoPage(f.tabId), "btn ghost sm undo"),
+      h("div", { class: "callout" },
+        h("b", {}, `Next: check the page, then press ${f.portal}'s own button yourself.`),
+        h("span", {}, "apply-kit never presses Next or Submit. The package stays with this tab until you mark it submitted or close the tab."),
+      ),
+    ],
+    foot: [fillPrimary(), fillBoundary()],
+  });
+  // The list stays until the tab's address or title changes; then the panel shows the page as it is now.
+  busy = false;
+  if (!announceIt) return;
+  announce(fillAnnouncement(counts));
+  const first = focusAfterFill(f.outcomes);
+  (first ? document.getElementById(`need-${first}`) : document.getElementById("fill-btn"))?.focus();
+}
+
+async function undoPage(tabId: number) {
+  const restored = await inPage<number>(tabId, "undo");
+  announce(restored === null ? "Chrome didn't let apply-kit undo on this page." : `Undone: ${restored === 1 ? "1 field is" : `${restored} fields are`} back to how ${restored === 1 ? "it was" : "they were"}, and the marks are gone.`);
+  busy = false;
+  void ready();
+}
+
+// ---------- Did you submit? and Mark as submitted ----------
+
+/** The last mark in this panel, so Undo stays until the panel closes. */
+let lastMarked: Extract<MarkResult, { marked: true }> | null = null;
+/** Set while the Marked state itself shows (it has its own Undo). */
+let onMarkedScreen = false;
+
+const applicationLink = (id: string, label = "Open the Application", cls = "btn primary") =>
+  h("a", { class: cls, href: `${connection!.serviceUrl}/applications/${encodeURIComponent(id)}`, target: "_blank", rel: "noopener" }, label);
+
+/** The portal's confirmation page: a hint, not proof. Nothing is created until Kris clicks Mark as submitted. */
+function didYouSubmit(d: { tabId: number; ctx: HTMLElement; sessionId: string; portalUrl: string | null; portal: string }) {
+  show({
+    connected: true,
+    body: [
+      d.ctx,
+      h("div", { class: "lead-h" }, h("h2", {}, "Did you submit?"), h("p", { class: "muted" }, `${d.portal} is showing its confirmation page, which usually means yes.`)),
+      h("p", { class: "meta" }, "Marking creates the Application with this package linked, so apply-kit can match the company's emails to it."),
+    ],
+    foot: [
+      button("Mark as submitted", () => void markSubmitted(d.tabId, d.sessionId, d.portalUrl), "btn primary", { id: "mark-btn" }),
+      button("Not yet", () => { announce("Not marked. Click Fill this page on the confirmation page when you're ready."); void ready(); }, "btn ghost"),
+    ],
+  });
+  announce("Did you submit? The portal is showing its confirmation page.");
+  document.getElementById("mark-btn")?.focus();
+}
+
+async function markSubmitted(tabId: number, sessionId: string, portalUrl: string | null) {
+  busy = true;
+  const r = await client.fill.markSubmitted(sessionId, portalUrl);
+  if (!r.ok) return fillProblem(r, "Nothing was marked: apply-kit stopped answering.");
+  const m = r.value;
+  if (!m.marked) {
+    busy = false;
+    return show({
+      connected: true,
+      body: [h("div", { class: "banner warning", role: "alert" }, h("div", { class: "text" }, h("b", {}, "Nothing was created. "), m.reason))],
+      foot: [m.application ? applicationLink(m.application.id) : button("Back", () => void ready(), "btn primary"), m.application && button("Back", () => void ready(), "btn ghost")],
+    });
+  }
+  // The fill session for this tab ends here; the next portal in this tab starts fresh.
+  await sessions.clear(tabId);
+  if (!m.alreadyMarked) lastMarked = m;
+  showMarked(m);
+}
+
+/** "Marked as submitted": the Application created (or the one already there), with Undo until the panel closes. */
+function showMarked(m: Extract<MarkResult, { marked: true }>) {
+  const banner = markedBanner(m);
+  onMarkedScreen = true;
+  show({
+    connected: true,
+    body: [
+      h("div", { class: "banner success", role: "status" }, h("div", { class: "text" }, h("b", {}, banner.lead), ` ${banner.rest}`)),
+      h("dl", { class: "pkg" }, ...markedLines(m.application, m.package).flatMap((l) => [
+        h("dt", {}, l.term),
+        h("dd", {}, l.term === "Status" ? h("span", { class: `status ${m.application.status}` }, h("i", {}), l.detail) : l.detail),
+      ])),
+      h("p", { class: "meta" }, "Track takes it from here: replies to the job address move its status, and a follow-up comes due if nothing arrives."),
+    ],
+    foot: [applicationLink(m.application.id), !m.alreadyMarked && button("Undo", () => void undoMarked(m), "btn ghost", { "aria-label": "Undo mark as submitted" })],
+  });
+  busy = false;
+  announce(`${banner.lead} ${banner.rest}`);
+  // The button pressed is gone: focus moves to the state's primary action.
+  foot.querySelector<HTMLElement>(".btn.primary")?.focus();
+}
+
+/** The reminder on the Fill view after marking: Undo stays until the panel closes. */
+function markedReminder(m: Extract<MarkResult, { marked: true }>) {
+  return h("div", { class: "banner success" }, h("div", { class: "text" }, h("b", {}, "Marked as submitted. "), `${m.application.title} at ${m.application.company}.`),
+    button("Undo", () => void undoMarked(m), "btn ghost sm", { "aria-label": "Undo mark as submitted" }));
+}
+
+async function undoMarked(m: Extract<MarkResult, { marked: true }>) {
+  const r = await client.fill.undoMarkSubmitted(m.application.id);
+  if (!r.ok && r.state !== "error") return fillProblem(r, "Nothing was undone: apply-kit stopped answering.");
+  lastMarked = null;
+  if (!r.ok) {
+    return show({
+      connected: true,
+      body: [h("div", { class: "banner error", role: "alert" }, h("div", { class: "text" }, r.error))],
+      foot: [applicationLink(m.application.id), button("Back", () => void ready(), "btn ghost")],
+    });
+  }
+  announce("Undone: the Application is removed and the package is waiting to be submitted again.");
+  busy = false;
+  void ready();
+}
+
+/** "Capture and prepare": captures the job into the Feed and offers its package in apply-kit. This tab stays as it is. */
+async function captureAndPrepare() {
+  busy = true;
+  show({ connected: true, body: [h("p", { class: "meta", role: "status" }, "Adding this job to your Feed…")], foot: [fillBoundary()] });
+  const page = await readTab();
+  if (!page) return capture();
+  const answer = await client.capture(page);
+  if (!answer.ok) return problem(answer);
+  const jobId = answer.report.listings.find((l) => l.jobId)?.jobId;
+  const c = connection!;
+  show({
+    connected: true,
+    body: [
+      h("div", { class: "banner success", role: "status" }, h("div", { class: "text" }, resultSummary(answer.report, "done") || "The job is in your Feed")),
+      h("p", {}, "Prepare and approve its package in apply-kit, then come back to this tab and click Fill this page."),
+    ],
+    foot: [
+      h("div", { class: "actions" },
+        jobId ? h("a", { class: "btn primary", href: `${c.serviceUrl}/jobs/${encodeURIComponent(jobId)}/package`, target: "_blank", rel: "noopener" }, "Prepare the package")
+          : h("a", { class: "btn primary", href: c.serviceUrl, target: "_blank", rel: "noopener" }, "Open the Feed"),
+        button("Back", () => void start(), "btn ghost"),
+      ),
+      fillBoundary(),
+    ],
+  });
 }
 
 // ---------- Capture ----------
@@ -407,7 +778,7 @@ browser.action.onClicked.addListener((tab) => { if (tab.windowId === windowId) t
 browser.commands.onCommand.addListener((command) => {
   if (command !== "fill-this-page" || connection?.state !== "ready") return;
   chosen = "fill";
-  void ready().then(() => { if (fillShown === "portal") fillThisPage(); });
+  void ready().then(() => { if (fillShown === "portal") void fillThisPage(); });
 });
 
 void start();

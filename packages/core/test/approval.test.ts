@@ -221,6 +221,16 @@ describe("what Apply reads (#38, #39, #41)", () => {
     expect(t.preparation.approvedPackages()).toEqual([]);
   });
 
+  it("finds a Job's package from the portal job reference of any of the Job's postings", async () => {
+    const t = mira();
+    const pkg = await started(t);
+
+    expect(t.preparation.packageForApply({ jobRef: { portal: "greenhouse", board: "Kestrel", jobId: "4410" } })).toMatchObject({ kind: "not-approved", packageId: pkg.id, jobId: "job-kestrel" });
+    expect(t.preparation.packageForApply({ jobRef: { portal: "greenhouse", board: null, jobId: "4410" } })).toMatchObject({ kind: "not-approved", packageId: pkg.id });
+    expect(t.preparation.packageForApply({ jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4499" } })).toEqual({ kind: "none" });
+    expect(t.preparation.packageForApply({ jobRef: { portal: "lever", board: "kestrel", jobId: "4410" } })).toEqual({ kind: "none" });
+  });
+
   it("the master profile as a portal's form asks for it", () => {
     const t = mira();
 

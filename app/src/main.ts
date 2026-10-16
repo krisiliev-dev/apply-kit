@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { serve } from "@hono/node-server";
-import { createAiBudget, createEngine, createPairing, createPreparationEngine, createScheduler, createTracker, trackPortsFrom } from "@apply-kit/core";
+import { createAiBudget, createEngine, createFillEngine, createPairing, createPreparationEngine, createScheduler, createTracker, trackPortsFrom } from "@apply-kit/core";
 import { loadEnv, readConfig } from "./config.ts";
 import { openDatabase } from "./db.ts";
 import { createImapMailReader, readMailSettings } from "./mail.ts";
@@ -124,7 +124,11 @@ tracker = createTracker({
   ...trackPortsFrom(preparation),
 });
 
-const app = createServer({ engine, preparation, tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
+// Apply: the fill engine matches portal pages to approved packages and answers fields, reading
+// Prepare through PrepareForApply; "Mark as submitted" creates the Application through the tracker.
+const fill = createFillEngine({ db, clock, prepare: preparation, track: tracker });
+
+const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 
 // localhost only: the extension and UI talk to this, nothing else should.
 const server = serve({ fetch: app.fetch, port: config.port, hostname: "127.0.0.1" }, (info) => {

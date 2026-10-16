@@ -74,9 +74,10 @@ export type { HeldSummary, HonestyProfile, HonestyRule, HonestyProblem, Rejected
 export { createPreparationEngine } from "./preparation/engine.ts";
 export type { PreparationEngine, DraftRequest, DocumentDraft, VoiceForDrafts, PrepareForApply, PrepareForTrack } from "./preparation/engine.ts";
 export type {
-  ApprovedPackage, FrozenFile, PortalJobReference, CvEntryAsSent, PackageState, SubmittedVia, PackageForApply, ProfileForApply, MarkSubmittedResult,
+  ApprovedPackage, ApplyQuery, PageJobReference, FrozenFile, PortalJobReference, CvEntryAsSent, PackageState, SubmittedVia, PackageForApply, ProfileForApply, MarkSubmittedResult,
 } from "./preparation/contracts.ts";
 export { portalJobReference } from "./preparation/portal.ts";
+export { sameJobReference } from "./preparation/contracts.ts";
 export { atsCheckLabel } from "./preparation/ats-step.ts";
 export type { AtsStepView, AtsCheckView, AtsLine, AtsFixView, AtsFixField } from "./preparation/ats-step.ts";
 export type { ProfileExport } from "./preparation/engine.ts";
@@ -138,7 +139,7 @@ export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact as ApplicationContact, TargetPosting, AttachedCv, AttachCvInput,
   NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft, UpcomingInterview,
-  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView,
+  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView, Submission, SubmissionInput, SubmissionResult,
 } from "./tracker.ts";
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
 export { trackPortsFrom } from "./track-prepare.ts";
@@ -155,3 +156,7 @@ export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } fr
 export type {
   EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";
+export { createFillEngine, FillError } from "./fill/engine.ts";
+export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageInBrief, SessionEnd, MarkResult, SubmittedApplication } from "./fill/engine.ts";
+export { countOutcomes } from "./fill/reading.ts";
+export type { PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, RecordedPage } from "./fill/reading.ts";

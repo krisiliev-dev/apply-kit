@@ -13,6 +13,7 @@
     "@apply-kit/core": "workspace:*"
   },
   "devDependencies": {
+    "happy-dom": "^21.0.1",
     "wxt": "0.21.4"
   }
 }
