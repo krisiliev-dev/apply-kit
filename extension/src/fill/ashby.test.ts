@@ -148,3 +148,31 @@ describe("what filling an Ashby page never does", () => {
     }
   });
 });
+
+describe("recovery on an Ashby page (#48)", () => {
+  it("reads a value back once after a settle: a field the page cleared didn't stick, and Try once more puts it in once", async () => {
+    vi.useFakeTimers();
+    const page = application({ clears: { id: "_systemfield_phone", afterMs: 200, times: 1 } });
+    const filler = createAshbyFiller({ settleMs: 500 });
+
+    const filling = filler.fill(page.document, [fill("_systemfield_phone", "+359 88 000 0175"), fill("_systemfield_name", "Mira Petrova")]);
+    await vi.advanceTimersByTimeAsync(600);
+    expect((await filling).map((o) => o.outcome)).toEqual(["didnt-stick", "filled"]);
+
+    const again = filler.retry(page.document, "_systemfield_phone", "+359 88 000 0175");
+    await vi.advanceTimersByTimeAsync(600);
+    expect(await again).toBe("filled");
+    expect(page.field("_systemfield_phone").value).toBe("+359 88 000 0175");
+  });
+
+  it("describes a yes/no question for a field report by its structure, never its value", async () => {
+    const page = application();
+    const filler = createAshbyFiller({ settleMs: 0 });
+    await filler.fill(page.document, [fill(linkedin, "https://www.linkedin.com/in/mira-petrova-example")]);
+
+    const yesNo = filler.describe(page.document, "q-eu")!;
+    expect(yesNo).toMatchObject({ tag: "div", role: "group", kind: "yes-no", options: ["Yes", "No"] });
+    expect(yesNo.labelChain[0]).toEqual({ from: "group aria-labelledby", text: "Are you authorized to work in the EU?" });
+    expect(JSON.stringify(filler.describe(page.document, linkedin))).not.toContain("mira-petrova");
+  });
+});

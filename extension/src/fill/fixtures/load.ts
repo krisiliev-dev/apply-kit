@@ -27,13 +27,18 @@ export interface FixtureOptions {
   /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields. */
   cvParser?: { delayMs: number; values: Record<string, string> };
   /**
+   * A field that clears itself `afterMs` after a value is typed into it (a portal reformatting the
+   * number as it's typed), the first `times` times (default: every time).
+   */
+  clears?: { id: string; afterMs: number; times?: number };
+  /**
    * Typeaheads (`role=combobox` with `aria-controls`): after `delayMs`, the places whose name contains
    * the first word typed show as suggestions; choosing one puts its name in the field.
    */
   places?: { delayMs: number; names: string[] };
 }
 
-export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, places }: FixtureOptions = {}): FixturePage {
+export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, clears, places }: FixtureOptions = {}): FixturePage {
   const window = new Window({ url, settings: { disableJavaScriptEvaluation: true, navigation: { disableMainFrameNavigation: true } } });
   const document = window.document as unknown as Document;
   document.body.innerHTML = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
@@ -54,8 +59,8 @@ export function openFixture(name: string, url: string, { controlled = false, upl
   }
   for (const f of Array.from(document.querySelectorAll("form"))) f.addEventListener("submit", (e) => { e.preventDefault(); presses.push("submitted the form"); });
 
-  /** How the page itself changes a field (a suggestion chosen, the CV parser): past React's state too. */
-  const pageSets = new WeakMap<Element, (v: string) => void>();
+  /** The page's own writes to a controlled input's state (React setting it, not typing). */
+  const setState = new WeakMap<Element, (v: string) => void>();
   if (controlled) {
     // React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value.
     for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea"))) {
@@ -63,10 +68,10 @@ export function openFixture(name: string, url: string, { controlled = false, upl
       let state = native.get!.call(el) as string;
       Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
       el.addEventListener("input", () => { state = native.get!.call(el) as string; });
-      pageSets.set(el, (v) => { native.set!.call(el, v); state = v; });
+      setState.set(el, (v) => { native.set!.call(el, v); state = v; });
     }
   }
-  const pageSet = (el: HTMLInputElement, v: string) => (pageSets.get(el) ?? ((x: string) => { el.value = x; }))(v);
+  const pageSet = (el: HTMLInputElement, v: string) => (setState.get(el) ?? ((x: string) => { el.value = x; }))(v);
   if (places) {
     for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[role=combobox][aria-controls]"))) {
       const list = document.getElementById(input.getAttribute("aria-controls")!)!;
@@ -89,6 +94,16 @@ export function openFixture(name: string, url: string, { controlled = false, upl
         }, places.delayMs);
       });
     }
+  }
+  if (clears) {
+    const el = document.getElementById(clears.id) as HTMLInputElement;
+    const native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!;
+    let left = clears.times ?? Infinity;
+    el.addEventListener("input", () => {
+      if (left <= 0 || native.get!.call(el) === "") return;
+      left--;
+      setTimeout(() => (setState.get(el) ?? ((v: string) => native.set!.call(el, v)))(""), clears.afterMs);
+    });
   }
   for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[type=file]"))) {
     const box = input.closest(".field, .file-upload, [class*=upload]")!;

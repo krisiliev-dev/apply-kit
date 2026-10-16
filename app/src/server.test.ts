@@ -420,6 +420,42 @@ describe("the extension's fill endpoints", () => {
   });
 });
 
+describe("field reports", () => {
+  const phone = {
+    tag: "input", type: "tel", role: null, kind: "tel",
+    attributes: { id: "phone", type: "tel", autocomplete: "tel-national" },
+    labelChain: [{ from: "label[for]", text: "Phone Number" }], options: [],
+  };
+  const address = "https://job-boards.greenhouse.io/kestrel/jobs/4410?gh_src=mira.petrova%40example.com";
+
+  it("the panel saves one with the pairing token; Settings lists it with Copy as fixture, and deletes it", async () => {
+    const s = service();
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, stepLabel: null, field: phone }))).status).toBe(401);
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const saved = await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, stepLabel: "My Information", field: { ...phone, value: "+359 88 000 0175" } }, auth));
+    expect(saved.status).toBe(200);
+    const { id } = (await saved.json()) as { id: string };
+
+    const list = await s.request("/api/field-reports");
+    const body = (await list.json()) as { reports: { id: string; host: string; path: string; stepLabel: string; fixture: string }[] };
+    expect(body.reports).toEqual([expect.objectContaining({ id, portal: "greenhouse", host: "job-boards.greenhouse.io", path: "/kestrel/jobs/4410", stepLabel: "My Information", field: phone })]);
+    expect(body.reports[0]!.fixture).toContain("<input id=\"phone\" type=\"tel\" autocomplete=\"tel-national\">");
+    expect(JSON.stringify(body)).not.toMatch(/gh_src|mira|88 000 0175/);
+
+    expect((await s.request(`/api/field-reports/${id}/delete`, s.json({}))).status).toBe(200);
+    expect((await s.request(`/api/field-reports/${id}/delete`, s.json({}))).status).toBe(404);
+    expect(await (await s.request("/api/field-reports")).json()).toEqual({ reports: [] });
+  });
+
+  it("refuses a report without the page's address or the field's structure", async () => {
+    const s = service();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address: "not a page", field: phone }, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, field: null }, auth))).status).toBe(400);
+  });
+});
+
 describe("Mark as submitted on the Job page", () => {
   it("refuses a package that isn't approved, saying why, and an Application it didn't make", async () => {
     const s = service();

@@ -14,7 +14,7 @@ export function normaliseLabel(label: string): string {
 }
 
 const byLabel: [ContactKey, RegExp][] = [
-  ["countryCode", /^(phone |mobile )?country code$|^dial(ling)? code$/u],
+  ["countryCode", /^(phone |mobile )?country code$|^country (phone |dial(ling)? )code$|^dial(ling)? code$/u],
   ["givenName", /^(legal |your )?(first|given) name$|^first$|^име$/u],
   ["familyName", /^(legal |your )?(last|family) name$|^surname$|^last$|^фамилия$/u],
   ["fullName", /^(full |your |legal )?name$|^име и фамилия$|^имена$/u],
@@ -47,12 +47,24 @@ export interface ContactValue {
   missing: string;
 }
 
-/** The contact detail this field asks for and the profile's value, or null when it isn't a contact field. */
-export function contactValue(field: ReadField, profile: ProfileForApply): ContactValue | null {
+function contactKey(field: ReadField): ContactKey | undefined {
   const label = normaliseLabel(field.label);
-  const key = byLabel.find(([, re]) => re.test(label))?.[0] ?? (field.hint ? byHint[field.hint.toLowerCase()] : undefined);
+  return byLabel.find(([, re]) => re.test(label))?.[0] ?? (field.hint ? byHint[field.hint.toLowerCase()] : undefined);
+}
+
+/**
+ * The contact detail this field asks for and the profile's value, or null when it isn't a contact
+ * field. `page`: the page's other fields; a phone field on a page with a country code field of its own
+ * gets the national number (the field's format), and says where the code went.
+ */
+export function contactValue(field: ReadField, profile: ProfileForApply, page: ReadField[] = []): ContactValue | null {
+  const key = contactKey(field);
   if (!key) return null;
   const c = profile.contact;
+  const codeField = key === "phone" && c.phone ? page.find((f) => f !== field && contactKey(f) === "countryCode") : undefined;
+  if (codeField && c.phone) {
+    return { value: c.phone.national, basis: `Without ${c.phone.countryCode}, which is in ${codeField.label}`, missing: `Your profile has no ${missingName.phone}` };
+  }
   const value: string | null = {
     givenName: c.givenName, familyName: c.familyName, fullName: c.fullName, email: c.email,
     phone: c.phone?.full ?? null, countryCode: c.phone?.countryCode ?? null,

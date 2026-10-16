@@ -4,8 +4,10 @@
 // reads the form in the portal's order, attaches the package's files first, fills the answers it's
 // given through page actions (typing, ticking, choosing a yes/no button or a suggestion), verifies
 // each value once, and undoes what it changed. It keeps only how to put back what it changed and which
-// fields it filled, in the page's isolated world. It never presses a button.
-import type { FieldKind, FieldOutcome, PageKind, ReadField } from "@apply-kit/core";
+// fields it filled, in the page's isolated world. It never presses a button. "Try once more" and
+// "Report this field" (#48) work as on Greenhouse.
+import type { FieldKind, FieldOutcome, FieldStructure, PageKind, ReadField } from "@apply-kit/core";
+import { describingAttribute } from "@apply-kit/core/field-report";
 import { recognisePortal } from "../portal.ts";
 import type { FileToAttach, Filler } from "./greenhouse.ts";
 import { attachFile, choiceRefusal, choose, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark } from "./page-actions.ts";
@@ -186,6 +188,27 @@ function readField(item: Item, index: number, shape: FormShape): ReadField {
   };
 }
 
+/** Every label source for "Report this field", in the order apply-kit reads them. */
+function labelChain(item: Item, shape: FormShape): { from: string; text: string }[] {
+  const { el } = item;
+  const doc = el.ownerDocument;
+  const chain: { from: string; text: string }[] = [];
+  const add = (from: string, text: string | null | undefined) => { const t = clean(text); if (t) chain.push({ from, text: t }); };
+  if (isGroup(item)) {
+    const box = item.kind === "yes-no" ? el : el.closest("fieldset, [role=radiogroup], [role=group]");
+    add("legend", box?.querySelector("legend")?.textContent);
+    add("group aria-labelledby", byIds(doc, box?.getAttribute("aria-labelledby") ?? null));
+    add("group aria-label", box?.getAttribute("aria-label"));
+  }
+  if (el.id) add("label[for]", Array.from(doc.querySelectorAll("label")).find((l) => l.getAttribute("for") === el.id)?.textContent);
+  add("aria-labelledby", byIds(doc, el.getAttribute("aria-labelledby")));
+  add("wrapping label", el.closest("label") ? textOf(el.closest("label")!) : "");
+  add("question label", questionLabel(el, shape));
+  add("aria-label", el.getAttribute("aria-label"));
+  add("placeholder", el.getAttribute("placeholder"));
+  return chain;
+}
+
 /** The upload box around a file input: where the portal shows the chosen file's name and takes a dropped file. */
 const fileBox = (el: Element): Element => el.closest(".field, .file-upload, [class*=upload], [class*=drop]") ?? el.parentElement ?? el;
 const shows = (box: Element, fileName: string) => (box.textContent ?? "").includes(fileName);
@@ -310,6 +333,16 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
     return finish(id, item, holds(item, value));
   }
 
+  /** The single read-back after the settle wait: the value apply-kit put in is still there, or it didn't stick. */
+  function verify(doc: Document, id: string): FieldOutcome["outcome"] {
+    const found = find(doc, id);
+    const put = filled.get(id);
+    if (found && put !== undefined && valueOf(found.item, shape).trim() === put.trim()) return "filled";
+    filled.delete(id);
+    if (found) mark(markTarget(found.item, shape), "didnt-stick", id);
+    return "didnt-stick";
+  }
+
   return {
     read(doc) {
       const fields = items(doc, shape).map((item, i) => readField(item, i, shape));
@@ -359,6 +392,7 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
         }
       }
 
+      const toVerify: string[] = [];
       for (const a of answers) {
         if (a.kind === "file") continue;
         const found = find(doc, a.fieldId);
@@ -382,8 +416,23 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
         }
         const put = item.kind === "typeahead" ? await putTypeahead(doc, a.fieldId, a.value) : putNow(doc, a.fieldId, a.value);
         report(a.fieldId, put.outcome, put.outcome === "filled" ? a.source : null, put.choices);
+        if (put.outcome === "filled") toVerify.push(a.fieldId);
+      }
+      // Verify once: some portals reformat or clear a value just after it's typed.
+      if (toVerify.length) {
+        await settle();
+        for (const id of toVerify) if (verify(doc, id) === "didnt-stick") report(id, "didnt-stick");
       }
       return answers.map((a) => outcomes.get(a.fieldId)!);
+    },
+
+    async retry(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      const found = find(doc, fieldId);
+      const put = found?.item.kind === "typeahead" ? await putTypeahead(doc, fieldId, value) : putNow(doc, fieldId, value);
+      if (put.outcome !== "filled") return "didnt-stick";
+      await settle();
+      return verify(doc, fieldId);
     },
 
     replace(doc, fieldId, value) {
@@ -403,6 +452,28 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
       filled.clear();
       removeMarks(doc);
       return restored;
+    },
+
+    describe(doc, fieldId) {
+      const found = find(doc, fieldId);
+      if (!found) return null;
+      const { item, field } = found;
+      const el = item.el;
+      // A free-text value can turn up in a portal's own text (a label echoing it): anything containing it is left out.
+      const value = ["select", "radio", "checkbox", "yes-no"].includes(field.kind) ? "" : field.value.trim();
+      const holds = (text: string) => value.length > 1 && text.toLowerCase().includes(value.toLowerCase());
+      const attributes: Record<string, string> = {};
+      for (const a of Array.from(el.attributes)) if (describingAttribute.test(a.name) && !holds(a.value)) attributes[a.name] = a.value;
+      const structure: FieldStructure = {
+        tag: el.tagName.toLowerCase(),
+        type: el.getAttribute("type"),
+        role: el.getAttribute("role"),
+        kind: field.kind,
+        attributes,
+        labelChain: labelChain(item, shape).filter((l) => !holds(l.text)),
+        options: field.options.filter((o) => !holds(o)),
+      };
+      return structure;
     },
 
     show(doc, fieldId) {

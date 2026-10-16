@@ -1,6 +1,7 @@
 // What the Fill view says, as pure functions (like report.ts for Capture): why the page matched a
 // package, the package in words, the field rows in the portal's order with their source in words,
 // the end-of-fill announcement, and where focus goes after a fill.
+import { countOutcomes } from "@apply-kit/core/fill";
 import type { FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageFileKind, PackageInBrief, PageJobReference, PageKind, PageReading, SubmittedApplication } from "@apply-kit/core";
 
 const sources: Record<FillSource, string> = { profile: "Profile", "answer-bank": "Answer bank", package: "Package", "cv-version": "CV version", you: "You" };
@@ -67,11 +68,54 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
           limit: f.maxLength !== null && (f.kind === "textarea" || f.kind === "text") ? `max ${f.maxLength.toLocaleString("en-GB")} characters` : null,
         }];
       case "didnt-stick":
-        return [{ ...row, value: "Empty: the value didn't stay", chip: { tone: "gap", word: "Didn't stick" }, why: "Paste it into the field yourself.", offer: a.kind === "fill" ? a.value : null }];
+        return [{ ...row, value: a.kind === "fill" ? a.value : "Empty: the value didn't stay", chip: { tone: "gap", word: "Didn't stick" }, why: "Paste it into the field yourself.", offer: a.kind === "fill" ? a.value : null }];
       case "skipped":
         return [{ ...row, value: "Not filled", chip: { tone: "closed", word: a.kind === "skip" && a.byRule ? "Skipped · your rule" : "Skipped" }, why: a.kind === "skip" ? a.reason : null }];
     }
   });
+}
+
+export interface StuckField {
+  fieldId: string;
+  label: string;
+  /** "Phone Number didn't stick": the error names the field. */
+  heading: string;
+  text: string;
+  /** What the value to copy is, with the field's format ("Phone Number · without +359, which is in Country Phone Code"). */
+  copyLabel: string;
+  /** The value ready to paste, in the format the field wants (the engine's answer for it). */
+  value: string;
+  /** "Try once more" is offered once per field, never in a loop. */
+  tryOnceMore: boolean;
+}
+
+/**
+ * The fields whose value didn't stick (hi-fi "Error · field didn't stick"), in the portal's order, each
+ * with its value ready to copy. Files have their own "didn't attach" block. `retried`: the fields
+ * Try once more was used on.
+ */
+export function stuckFields(reading: PageReading, answers: FieldAnswer[], outcomes: FieldOutcome[], retried: ReadonlySet<string>, portal: string): StuckField[] {
+  const answer = new Map(answers.map((a) => [a.fieldId, a]));
+  const outcome = new Map(outcomes.map((o) => [o.fieldId, o.outcome]));
+  return reading.fields.flatMap((f): StuckField[] => {
+    const a = answer.get(f.id);
+    if (outcome.get(f.id) !== "didnt-stick" || a?.kind !== "fill") return [];
+    const again = retried.has(f.id);
+    return [{
+      fieldId: f.id, label: f.label, heading: `${f.label} didn't stick`,
+      text: `${portal} ${again ? "cleared it again after Try once more" : "cleared or changed it right after filling"}. Paste it in yourself, in the format the field wants:`,
+      copyLabel: a.basis ? `${f.label} · ${a.basis.charAt(0).toLowerCase()}${a.basis.slice(1)}` : f.label,
+      value: a.value, tryOnceMore: !again,
+    }];
+  });
+}
+
+/** The "app not running" state after the app stopped answering mid-fill: how many fields stay filled, and that Undo still works. */
+export function stoppedMidFill(outcomes: FieldOutcome[]): string {
+  const n = countOutcomes(outcomes).filled;
+  return n === 1
+    ? "apply-kit stopped answering after filling 1 field on this page. It stays filled, and Undo this page still puts it back."
+    : `apply-kit stopped answering after filling ${n} fields on this page. They stay filled, and Undo this page still puts them back.`;
 }
 
 /** After a fill, focus goes to the first needs-you item; null means it stays on Fill this page. */

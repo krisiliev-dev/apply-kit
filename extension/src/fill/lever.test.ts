@@ -103,7 +103,8 @@ describe("filling a Lever page", () => {
     const filling = createLeverFiller({ settleMs: 1500 }).fill(page.document, [
       attachCv, fill("name", "Mira Petrova"), fill("email", "mira.petrova@example.com"), fill("phone", "+359 88 000 0175"),
     ], [cv]);
-    await vi.advanceTimersByTimeAsync(1500);
+    // The files' settle, then the one read-back's.
+    await vi.advanceTimersByTimeAsync(3000);
     const outcomes = await filling;
 
     expect(outcomes).toEqual([

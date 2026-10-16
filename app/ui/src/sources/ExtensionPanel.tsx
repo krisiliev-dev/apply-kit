@@ -3,6 +3,7 @@
 import type { PairedDevice } from "@apply-kit/core";
 import { useEffect, useState } from "react";
 import { fetchPairedDevices, startPairing, unpairDevice } from "../api.ts";
+import { FieldReports } from "./FieldReports.tsx";
 
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 const date = (iso: string) => new Date(iso).toLocaleDateString([], { day: "numeric", month: "short" });
@@ -58,6 +59,7 @@ export function ExtensionPanel() {
         </ul>
       )}
       {devices && devices.length === 0 && !code && <p className="meta">No extension is paired yet.</p>}
+      <FieldReports />
     </section>
   );
 }
