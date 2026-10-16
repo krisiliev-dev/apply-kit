@@ -121,3 +121,17 @@ describe("job mailbox: one read per check", () => {
     expect(received).toEqual([]);
   });
 });
+
+it("refreshes only job mail while waiting for verification, throttles reads and stores arrivals", async () => {
+  const clock = fakeClock("2026-10-16T10:00:00Z");
+  const mailbox = fakeMailbox(clock);
+  const { engine } = createTestEngine({ clock, mailReader: mailbox });
+  mailbox.deliver(confirmation("<verify@northwind-labs.example>", "2026-10-16T09:59:00Z"));
+  await engine.refreshMail();
+  await engine.refreshMail();
+  expect(mailbox.reads).toHaveLength(1);
+  expect((await engine.storedMail()).map((m) => m.id)).toEqual(["<verify@northwind-labs.example>"]);
+  clock.set("2026-10-16T10:00:10Z");
+  await engine.refreshMail();
+  expect(mailbox.reads).toHaveLength(2);
+});

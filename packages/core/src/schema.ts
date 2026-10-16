@@ -828,6 +828,7 @@ const migrations: string[] = [
      kind TEXT NOT NULL,
      created_at TEXT NOT NULL
    );`,
+  `ALTER TABLE profile_piece ADD COLUMN bulgarian TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

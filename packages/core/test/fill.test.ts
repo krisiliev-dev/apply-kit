@@ -1022,3 +1022,20 @@ describe("Workday's repeating sections, from the CV in the package", () => {
     ]);
   });
 });
+
+it("never continues an account session for another tenant on the same shared portal host", async () => {
+  const t = setup();
+  await approved(t);
+  const first = await t.fill.startFill(page("4410"));
+  if (first.kind !== "matched") throw new Error(first.kind);
+  const otherTenant = { ...page(null), ...{ tenant: "other-company" } };
+  expect((await t.fill.startFill(otherTenant, { sessionId: first.session!.id })).kind).not.toBe("matched");
+});
+
+it("refuses to answer a page whose job reference differs from the session", async () => {
+  const t = setup();
+  await approved(t);
+  const first = await t.fill.startFill(page("4410"));
+  if (first.kind !== "matched") throw new Error(first.kind);
+  await expect(t.fill.answer(first.session!.id, { pageKind: "form", jobRef: { portal: "greenhouse", board: "other", jobId: "9999" }, stepLabel: null, stepCount: null, fields: [] })).rejects.toThrow(/different job/i);
+});

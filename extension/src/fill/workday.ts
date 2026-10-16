@@ -130,6 +130,7 @@ function dateParts(f: WField): { month: HTMLInputElement | null; year: HTMLInput
 }
 
 function valueOf(f: WField, doc: Document): string {
+  if (f.control?.getAttribute("type") === "password") return "";
   switch (f.kind) {
     case "repeating": return String(entriesOf(doc, f.entry!.section).length);
     case "select": {
@@ -158,7 +159,7 @@ function toRead(f: WField, doc: Document): ReadField {
     id: f.id, label: f.label, kind: f.kind, required: f.required, value: valueOf(f, doc),
     options: f.kind === "radio" ? choiceBoxes(f).map(choiceLabel) : [],
     maxLength: Number.isFinite(max) && max > 0 ? max : null,
-    consent: (f.kind === "checkbox" || f.kind === "radio") && consentWords.test(f.label + " " + choiceBoxes(f).map(choiceLabel).join(" ")),
+    consent: consentWords.test(f.label + " " + choiceBoxes(f).map(choiceLabel).join(" ")),
     password: f.control?.getAttribute("type") === "password",
     hint,
     entry: f.entry,

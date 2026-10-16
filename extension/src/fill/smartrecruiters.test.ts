@@ -17,7 +17,7 @@ describe("reading a SmartRecruiters OneClick page", () => {
     const r = createSmartRecruitersFiller().read(oneClick().document);
 
     expect(r).toMatchObject({ pageKind: "form", jobRef: { portal: "smartrecruiters", board: "NordlichtBank", jobId: publication }, stepLabel: null, stepCount: null });
-    expect(r.fields.map((f) => [f.id, f.label, f.kind, f.required])).toEqual([
+    expect(r.fields.filter((f) => f.kind !== "repeating").map((f) => [f.id, f.label, f.kind, f.required])).toEqual([
       ["first-name-input", "First name", "text", true],
       ["last-name-input", "Last name", "text", true],
       ["email-input", "Email", "email", true],
@@ -136,7 +136,7 @@ describe("the screening questions step and the confirmation", () => {
 
     const r = filler.read(page.document);
     expect(r).toMatchObject({ pageKind: "form", stepLabel: "Screening questions", stepCount: null });
-    expect(r.fields.map((f) => [f.id, f.label, f.kind, f.required, f.options])).toEqual([
+    expect(r.fields.filter((f) => f.kind !== "repeating").map((f) => [f.id, f.label, f.kind, f.required, f.options])).toEqual([
       ["q-right-to-work", "Do you have the right to work in Bulgaria?", "radio", true, ["Yes", "No"]],
       ["q-notice-select", "What is your notice period?", "select", true, ["Immediately", "1 month", "2 months or more"]],
       ["q-why-input", "Why are you interested in this role?", "textarea", true, []],

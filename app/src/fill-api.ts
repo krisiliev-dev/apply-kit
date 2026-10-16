@@ -17,6 +17,10 @@ export interface Revealer {
 const fileWords = { cv: "CV", letter: "letter" } as const;
 
 export function mountFillApi(app: Hono, fill: FillEngine, revealer?: Revealer): void {
+  app.post("/api/ext/fill/verification", (c) => withBody(c, (b) => {
+    const sessionId = str(b.sessionId);
+    return sessionId ? fill.verification(sessionId) : bad("Send the sessionId");
+  }));
   // { page: { portal, host, jobRef }, sessionId? }: which package fits, opening nothing.
   app.post("/api/ext/fill/match", (c) => withBody(c, (b) => {
     const page = pageOf(b.page);
@@ -26,6 +30,12 @@ export function mountFillApi(app: Hono, fill: FillEngine, revealer?: Revealer): 
   app.post("/api/ext/fill/start", (c) => withBody(c, (b) => {
     const page = pageOf(b.page);
     return page ? fill.startFill(page, { sessionId: str(b.sessionId), packageId: str(b.packageId) ?? undefined }) : bad("Send the page: { portal, host, jobRef }");
+  }));
+  // { sessionId, reading }: the copy list on a form apply-kit doesn't know. Fills nothing, drafts nothing.
+  app.post("/api/ext/fill/copy-list", (c) => withBody(c, (b) => {
+    const sessionId = str(b.sessionId);
+    const reading = readingOf(b.reading);
+    return sessionId && reading ? fill.copyList(sessionId, reading) : bad("Send the sessionId and the page's reading");
   }));
   // { sessionId, reading }: the answer for each field of the page.
   app.post("/api/ext/fill/answer", (c) => withBody(c, (b) => {
@@ -136,10 +146,11 @@ async function withBody(c: Context, act: (body: Body) => unknown) {
 
 function pageOf(v: unknown): FillPage | null {
   const p = v as Partial<FillPage> | null;
-  if (!p || typeof p !== "object" || !portals.includes(String(p.portal)) || typeof p.host !== "string") return null;
+  // "unknown": a form apply-kit doesn't know (a company's own careers site), matched by its host.
+  if (!p || typeof p !== "object" || !(portals.includes(String(p.portal)) || p.portal === "unknown") || typeof p.host !== "string") return null;
   const ref = p.jobRef as FillPage["jobRef"] | undefined;
   if (ref != null && (typeof ref !== "object" || !portals.includes(String(ref.portal)) || typeof ref.jobId !== "string")) return null;
-  return { portal: p.portal!, host: p.host, jobRef: ref ? { portal: ref.portal, board: typeof ref.board === "string" ? ref.board : null, jobId: ref.jobId } : null };
+  return { portal: p.portal!, tenant: typeof p.tenant === "string" ? p.tenant : null, host: p.host, jobRef: ref ? { portal: ref.portal, board: typeof ref.board === "string" ? ref.board : null, jobId: ref.jobId } : null };
 }
 
 function picksOf(v: unknown): SavePick[] | null {

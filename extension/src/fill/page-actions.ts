@@ -12,6 +12,7 @@ export const consentWords = /\b(i agree|agree to|consent|i certify|certify that|
 
 /** Why apply-kit won't act on this control, or null when it may set its value. */
 export function refusal(el: Element, label = ""): string | null {
+  if (movedDocument(el)) return "the page changed during filling";
   const tag = el.tagName.toLowerCase();
   const type = (el.getAttribute("type") ?? "").toLowerCase();
   const role = (el.getAttribute("role") ?? "").toLowerCase();
@@ -20,7 +21,7 @@ export function refusal(el: Element, label = ""): string | null {
   if (tag === "form") return "a form";
   if (!["input", "select", "textarea"].includes(tag)) return "not a form field";
   const words = [label, el.getAttribute("aria-label"), el.getAttribute("name"), el.id, el.getAttribute("data-automation-id")].filter(Boolean).join(" ");
-  if ((type === "checkbox" || type === "radio") && consentWords.test(words)) return "a consent box";
+  if (consentWords.test(words)) return "a consent box";
   if (type === "password") return "a password";
   // Workday names its controls in automation ids ("signInSubmitButton", "bottom-navigation-next-button").
   const automation = (el.getAttribute("data-automation-id") ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ");
@@ -74,6 +75,7 @@ export type Press = (el: Element) => void;
 
 /** Why apply-kit won't press this widget, or null when it may: never a link, a submit, navigation or consent. */
 export function widgetRefusal(el: Element, words = ""): string | null {
+  if (movedDocument(el)) return "the page changed during filling";
   const tag = el.tagName.toLowerCase();
   const type = (el.getAttribute("type") ?? "").toLowerCase();
   const role = (el.getAttribute("role") ?? "").toLowerCase();
@@ -192,6 +194,7 @@ const markAttr = "data-apply-kit-mark";
 
 /** Draws (or redraws) the mark on a field: an outline and a positioned badge, `pointer-events: none`, `aria-hidden`. */
 export function mark(el: Element, kind: MarkKind, fieldId: string): void {
+  if (movedDocument(el)) return;
   const doc = el.ownerDocument;
   unmark(doc, fieldId);
   const s = markStyle[kind];
@@ -247,10 +250,16 @@ const isYesNoButton = (el: Element) => {
  * submit buttons (a `<button>` is one unless it says `type="button"`), and any other button.
  */
 export function choiceRefusal(el: Element): string | null {
+  if (movedDocument(el)) return "the page changed during filling";
   const tag = el.tagName.toLowerCase();
   const role = (el.getAttribute("role") ?? "").toLowerCase();
   if (tag === "a" || role === "link" || el.closest("a") || el.querySelector("a")) return "a link";
+  const type = (el.getAttribute("type") ?? "").toLowerCase();
+  if ((tag === "button" && type !== "button") || ["submit", "image", "reset"].includes(type)) return "a submit button";
+  const question = el.closest("fieldset, [role=group], [role=radiogroup], .application-question, [data-automation-id^=formField]");
+  if (consentWords.test([el.getAttribute("aria-label"), question?.querySelector("legend")?.textContent, question?.getAttribute("aria-label"), question?.textContent].filter(Boolean).join(" "))) return "a consent question";
   if (role === "option") return el.closest("[role=listbox]") && !el.querySelector("button, input") ? null : "not a suggestion in a field's list";
+  if (tag === "button" && type === "button" && widgetRefusal(el) === null && el.closest(".entries, [data-ui=experience], [data-ui=education]") && el.matches('.add-entry, .remove-entry, [data-ui^="add-"], [data-ui^="remove-"], [aria-label^="Remove"]') && /^(?:\+\s*)?(add|remove|delete)(?:\s|$)/i.test(el.getAttribute("aria-label") || el.textContent || "")) return null;
   if (widgetRefusal(el) === null && el.matches('button[type="button"][aria-haspopup="listbox"], button[type="button"][data-automation-id="add-button"], button[type="button"][data-automation-id="panel-set-delete-button"], [role="button"][data-automation-id="DELETE_charm"]')) return null;
   if (tag === "button" || role === "button" || tag === "input") {
     if (!isYesNoButton(el)) return "not a yes/no answer";
@@ -267,3 +276,13 @@ export function choose(el: Element): boolean {
   (el as HTMLElement).click();
   return true;
 }
+
+/** Lets Chrome offer a password; reads and writes no password value. */
+export function passwordHint(el: Element): void {
+  if (movedDocument(el)) return;
+  if (el.tagName.toLowerCase() === "input" && el.getAttribute("type") === "password") el.setAttribute("autocomplete", "new-password");
+}
+
+const documentAddresses = new WeakMap<Document, string>();
+export function bindDocument(doc: Document): void { documentAddresses.set(doc, doc.URL); }
+const movedDocument = (el: Element) => documentAddresses.has(el.ownerDocument) && documentAddresses.get(el.ownerDocument) !== el.ownerDocument.URL;

@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FieldReport, FieldReportInput, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, PendingAnswer, RecordedFill, SavedAnswers, SavePick } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, CopyList, FieldAnswer, FieldOutcome, FieldReport, FieldReportInput, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, PendingAnswer, RecordedFill, SavedAnswers, SavePick } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -26,11 +26,14 @@ export type CaptureAnswer = { ok: true; report: CaptureReport } | { ok: false; s
 export type Answer<T> = { ok: true; value: T } | { ok: false; state: "not-running" | "unpaired" } | { ok: false; state: "error"; error: string; problem?: string };
 
 export interface FillClient {
+  verification(sessionId: string): Promise<Answer<{ connected: boolean; url: string | null }>>;
   /** Which package fits the page; opens nothing. */
   match(page: FillPage, sessionId: string | null): Promise<Answer<FillStart>>;
   /** A Fill click: re-reads the job, keeps or ends the tab's session, opens one on a match. */
   start(page: FillPage, options: { sessionId?: string | null; packageId?: string }): Promise<Answer<FillStart>>;
   answer(sessionId: string, reading: PageReading): Promise<Answer<FieldAnswer[]>>;
+  /** The copy list on a form apply-kit doesn't know: values under the form's labels, in its order. Held in the panel only while shown. */
+  copyList(sessionId: string, reading: PageReading): Promise<Answer<CopyList>>;
   /** Records the fill; returns the answers Kris typed on the portal that are waiting. */
   record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedFill>>;
   /** The answers Kris typed on the portal in this session, waiting ("Did you submit?"). */
@@ -131,6 +134,8 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       match: (page, sessionId) => post("/api/ext/fill/match", { page, sessionId }),
       start: (page, options) => post("/api/ext/fill/start", { page, ...options }),
       answer: (sessionId, reading) => post("/api/ext/fill/answer", { sessionId, reading }),
+      verification: (sessionId) => post("/api/ext/fill/verification", { sessionId }),
+      copyList: (sessionId, reading) => post("/api/ext/fill/copy-list", { sessionId, reading }),
       record: (sessionId, reading, outcomes) => post("/api/ext/fill/record", { sessionId, reading, outcomes }),
       file: (sessionId, which) => post("/api/ext/fill/file", { sessionId, which }),
       reveal: (sessionId, which) => post("/api/ext/fill/reveal", { sessionId, which }),

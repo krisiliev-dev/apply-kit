@@ -13,6 +13,7 @@ import type { FileToAttach, Filler } from "./greenhouse.ts";
 import { attachFile, choiceRefusal, choose, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark } from "./page-actions.ts";
 
 export interface FormShape {
+  labelFallback?: boolean;
   /** The application form (Ashby's is not a `<form>`), or null when the page shows none. */
   form(doc: Document): Element | null;
   /** Parts of the form apply-kit never reads or fills (Ashby's "Autofill from resume" box). */
@@ -131,7 +132,7 @@ function ownLabel(el: Element, shape: FormShape): string {
   if (by.trim()) return by;
   const wrapping = el.closest("label");
   if (wrapping && textOf(wrapping).trim()) return textOf(wrapping);
-  return questionLabel(el, shape) || el.getAttribute("aria-label") || el.getAttribute("placeholder") || "";
+  return questionLabel(el, shape) || el.getAttribute("aria-label") || el.getAttribute("placeholder") || (shape.labelFallback ? (el.closest("fieldset")?.querySelector("legend")?.textContent || (el.getAttribute("name") ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ")) : "");
 }
 
 function groupLabel(item: Item, shape: FormShape): string {
@@ -149,6 +150,7 @@ const isOn = (b: Element) => b.getAttribute("aria-pressed") === "true" || Array.
 
 function valueOf(item: Item, shape: FormShape): string {
   const { el, kind, members } = item;
+  if (typeOf(el) === "password") return "";
   if (kind === "yes-no") return clean(members.find(isOn)?.textContent);
   if (kind === "radio" || (kind === "checkbox" && members.length > 1)) {
     return members.filter((m) => (m as HTMLInputElement).checked).map((m) => optionLabel(m, shape)).join(", ");
@@ -182,7 +184,7 @@ function readField(item: Item, index: number, shape: FormShape): ReadField {
     options: kind === "select" ? Array.from((el as HTMLSelectElement).options).filter((o) => o.value !== "").map((o) => o.text.trim())
       : isGroup(item) ? members.map((m) => optionLabel(m, shape)) : [],
     maxLength: Number.isFinite(max) && max > 0 ? max : null,
-    consent: (kind === "checkbox" || kind === "radio") && consentWords.test(label),
+    consent: consentWords.test(label),
     password: typeOf(el) === "password",
     hint: kind !== "yes-no" && hint && hint !== "on" && hint !== "off" ? hint : null,
   };

@@ -4,10 +4,12 @@
 // apply-kit's isolated world, where it keeps the previous values for Undo across clicks. The panel
 // then calls it with `runFiller` (src/fill/in-page.ts).
 import { defineUnlistedScript } from "wxt/utils/define-unlisted-script";
+import { accountHelp } from "../fill/account.ts";
+import { createGenericFiller } from "../fill/generic.ts";
 import { fillerFor } from "../fill/fillers.ts";
 import type { Filler } from "../fill/greenhouse.ts";
 
 export default defineUnlistedScript(() => {
   const world = globalThis as { applyKitFiller?: Filler | null };
-  world.applyKitFiller ??= fillerFor(location.href);
+  world.applyKitFiller ??= accountHelp(fillerFor(location.href) ?? createGenericFiller());
 });

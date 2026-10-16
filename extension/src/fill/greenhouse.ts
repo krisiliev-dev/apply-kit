@@ -117,6 +117,7 @@ function kindOf(el: Control): FieldKind {
 }
 
 function valueOf(el: Control): string {
+  if (el.getAttribute("type") === "password") return "";
   const type = (el.getAttribute("type") ?? "").toLowerCase();
   if (type === "radio") {
     const on = radios(el).find((r) => r.checked);
@@ -145,7 +146,7 @@ function readField(el: Control, index: number): ReadField {
     options: kind === "select" ? Array.from((el as HTMLSelectElement).options).filter((o) => o.value !== "").map((o) => o.text.trim())
       : kind === "radio" ? radios(el).map((r) => clean(ownLabel(r))) : [],
     maxLength: Number.isFinite(max) && max > 0 ? max : null,
-    consent: (kind === "checkbox" || kind === "radio") && consentWords.test(label),
+    consent: consentWords.test(label),
     password: (el.getAttribute("type") ?? "").toLowerCase() === "password",
     hint: hint && hint !== "on" && hint !== "off" ? hint : null,
   };

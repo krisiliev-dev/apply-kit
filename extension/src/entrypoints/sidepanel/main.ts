@@ -1,3 +1,4 @@
+import { portalTenant } from "../../portal.ts";
 // apply-kit's side panel (ADR 0005): one panel, two views, Fill this application and Capture, switched
 // in place. It's opened from the toolbar icon or the "Fill this page" command, which is also what lets
 // it read the tab Kris is on (activeTab, for that site until the tab moves to another one), unless Kris
@@ -82,7 +83,9 @@ document.getElementById("app")!.replaceChildren(
 // The sticky footer must never cover the focused control (WCAG 2.4.11): scroll padding = its height.
 new ResizeObserver(() => document.documentElement.style.setProperty("--foot-h", `${foot.offsetHeight}px`)).observe(foot);
 
+let stopAccountPolling: (() => void) | null = null;
 function show({ connected, body: b, foot: f }: { connected: boolean | null; body: Child[]; foot: Child[] }) {
+  stopAccountPolling?.(); stopAccountPolling = null;
   conn.hidden = connected === null;
   conn.className = connected ? "conn" : "conn off";
   conn.replaceChildren(h("i", {}), connected ? "Connected" : "Not connected");
@@ -246,9 +249,9 @@ async function fill(tab: Awaited<ReturnType<typeof currentTab>>) {
       body: [ctxCard(card.where, card.job, card.why, false), h("p", {}, "Filling works on Workday, Greenhouse, Lever, SmartRecruiters, Workable and Ashby. On other forms it fills nothing unless you ask.")],
       foot: [
         button("Capture this job", () => choose("capture"), "btn primary"),
-        button("Fill a form embedded here", () => void fillThisPage(), "btn", { "aria-describedby": "embed-note" }),
+        button("Show this form’s copy list", () => void fillThisPage(), "btn", { "aria-describedby": "embed-note" }),
         offer && button("I've submitted this", () => void markSubmitted(tab!.id!, tabSession, address ?? null), "btn"),
-        h("p", { id: "embed-note", class: "bound" }, "Looks for a Greenhouse, Lever or Ashby form inside this page, only when you click. Never presses Next or Submit."),
+        h("p", { id: "embed-note", class: "bound" }, "Reads the form only when you click. Starts with copy assistance; filling clear fields is a separate choice. Never presses Next or Submit."),
       ],
     });
   }
@@ -274,8 +277,7 @@ function ctxCard(where: string, job: string, why: string, sure: boolean) {
 
 /** The page as the fill engine sees it: portal, host and job reference from the address. */
 function fillPageOf(address: string, page: ReturnType<typeof recognisePortal>): FillPage | null {
-  if (page.portal === "unknown") return null;
-  return { portal: page.portal, host: new URL(address).hostname, jobRef: page.ref };
+    return { portal: page.portal, tenant: portalTenant(address), host: new URL(address).hostname, jobRef: page.ref };
 }
 
 function packageList(p: Extract<FillStart, { kind: "matched" }>["package"]) {
@@ -287,7 +289,7 @@ function showMatch({ tab, page, card, match, keys, access, banner }: {
   tab: Awaited<ReturnType<typeof currentTab>> & object; page: ReturnType<typeof recognisePortal>; card: ReturnType<typeof contextCard>;
   match: FillStart | null; keys: string; access: PortalsAccess; banner?: Node;
 }) {
-  const label = portals.find((p) => p.name === page.portal)!.label;
+  const label = (portals.find((p) => p.name === page.portal)?.label ?? "Company form");
   const loop = h("div", { class: "callout" },
     h("b", {}, `Each page: click Fill, check, then continue on ${label}`),
     h("span", {}, `apply-kit fills the page you're looking at and marks every field it touched. It never presses ${label}'s buttons. When the next page shows, click Fill this page again.`),
@@ -416,18 +418,28 @@ let toldF6 = false;
 
 /** Tab → the frame of the portal form embedded in its page, while the panel fills it (kept in memory only). */
 const embedFrames = new Map<number, number>();
+const fillDocuments = new Map<number, { id: string; address: string }>();
+const expectedFillAddresses = new Map<number, string>();
 
 /** Injects the filler into the tab, or its embedded form's frame (on this click only), and runs one of its commands there. */
 async function inPage<T>(tabId: number, command: Parameters<typeof runFiller>[0], args: unknown[] = []): Promise<T | null> {
   const frame = embedFrames.get(tabId);
-  const target = frame === undefined ? { tabId } : { tabId, frameIds: [frame] };
+  let binding = fillDocuments.get(tabId);
   try {
-    await browser.scripting.executeScript({ target, files: ["/filler.js"] });
-    const [res] = await browser.scripting.executeScript({ target, func: runFiller, args: [command, args] });
+    const target = binding ? { tabId, documentIds: [binding.id] } : frame === undefined ? { tabId } : { tabId, frameIds: [frame] };
+    const injected = await browser.scripting.executeScript({ target, files: ["/filler.js"] });
+    if (!binding) {
+      const id = injected[0]?.documentId;
+      if (!id) return null;
+      const [where] = await browser.scripting.executeScript({ target: { tabId, documentIds: [id] }, func: frameAddress });
+      if (typeof where?.result !== "string" || where.result !== expectedFillAddresses.get(tabId)) return null;
+      binding = { id, address: where.result };
+      fillDocuments.set(tabId, binding);
+    }
+    const [res] = await browser.scripting.executeScript({ target: { tabId, documentIds: [binding.id] }, func: runFiller, args: [command, args, binding.address] });
     return (res?.result as T | undefined) ?? null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
+
 }
 
 function fillProblem(answer: Exclude<Answer<unknown>, { ok: true }>, during?: string) {
@@ -480,7 +492,7 @@ function embedOffer(embed: EmbeddedForm, card: ReturnType<typeof contextCard>, a
 }
 
 /** Fill this page: re-read the job, match it, then read, answer and fill the page. Nothing is pressed. */
-async function fillThisPage(packageId?: string) {
+async function fillThisPage(packageId?: string, clearFields = false) {
   const tab = await currentTab();
   if (tab?.id == null || !tab.url) return;
   const tabId = tab.id;
@@ -488,6 +500,7 @@ async function fillThisPage(packageId?: string) {
   let address = tab.url;
   const access = await portalsAccess();
   embedFrames.delete(tabId);
+  fillDocuments.delete(tabId);
   // A company page: the form may be a portal's, in a frame (Greenhouse's ?gh_jid=, Ashby's ?ashby_jid=, or none).
   if (page.portal === "unknown" || page.ref?.board === null) {
     const embed = await findEmbed(tabId);
@@ -498,10 +511,9 @@ async function fillThisPage(packageId?: string) {
       embedFrames.set(tabId, frame);
       page = recognisePortal(embed.src);
       address = embed.src;
-    } else if (page.portal === "unknown") {
-      return announce("No Greenhouse, Lever or Ashby form on this page. Nothing was read or filled.");
     }
   }
+  expectedFillAddresses.set(tabId, address);
   const fp = fillPageOf(address, page);
   if (!fp) return;
   busy = true;
@@ -528,9 +540,13 @@ async function fillThisPage(packageId?: string) {
   }
   const session = s.session;
   await sessions.set(tabId, session.id);
-  const ctx = ctxCard(`${portals.find((p) => p.name === page.portal)!.label} · ${s.package.job.company}`, s.package.job.title, matchWhy(s, page.ref), true);
+  const ctx = ctxCard(`${(portals.find((p) => p.name === page.portal)?.label ?? "Company form")} · ${s.package.job.company}`, s.package.job.title, matchWhy(s, page.ref), true);
 
-  if (page.portal === "unknown" || !filledPortals.includes(page.portal)) {
+  if (page.portal === "unknown" && !clearFields) {
+    busy = false;
+    return unknownForm(tabId, session.id, s.package.id, ctx, address);
+  }
+  if (page.portal !== "unknown" && !filledPortals.includes(page.portal)) {
     busy = false;
     showMatch({ tab, page, card, match: s, keys, access });
     body.append(h("p", { class: "meta", role: "status" }, "apply-kit fills Greenhouse, Lever and Ashby pages so far; this portal comes in a later update. This page hasn't been touched."));
@@ -538,7 +554,7 @@ async function fillThisPage(packageId?: string) {
   }
   stopWatching?.();
   newPage.delete(tabId);
-  const portal = portals.find((p) => p.name === page.portal)!.label;
+  const portal = (portals.find((p) => p.name === page.portal)?.label ?? "Company form");
 
   show({
     connected: true,
@@ -578,6 +594,7 @@ async function fillThisPage(packageId?: string) {
     midFill = { tabId, line: stoppedMidFill(run.outcomes) };
     return notRunning(connection!, midFill.line, tabId);
   }
+  if (run.reading.pageKind === "account" || run.reading.pageKind === "sign-in") { busy = false; return accountView(tabId, session.id, ctx, run.reading, address); }
   const done: FilledPage = {
     tabId, sessionId: session.id, ctx, reading: run.reading, answers: run.answers, outcomes: run.outcomes, at: run.filledAt, portal, pkg: s.package, paths: run.paths,
     retried: new Set(), page: { portal: page.portal, address }, edits: new Map(), saveTicks: new Map(), typed: run.typed,
@@ -609,6 +626,63 @@ function startView(ctx: HTMLElement, tabId: number, portal: string) {
     foot: [fillPrimary(), fillBoundary()],
   });
   announce(words.heading);
+}
+
+function accountView(tabId: number, sessionId: string, ctx: HTMLElement, reading: PageReading, address: string) {
+  const creating = reading.pageKind === "account";
+  const password = reading.fields.find((f) => f.password);
+  const verification = h("div", { class: "callout", role: "status" }, "If the portal sends a verification email, its link will appear here.");
+  show({ connected: true, body: [ctx, h("h2", {}, creating ? "Create your account on the portal" : "Sign in on the portal"), creating ? h("ol", {}, h("li", {}, "Check that Email contains your job address."), h("li", {}, "Click the Password field. Chrome can suggest and save a strong password. Right-click → Suggest password if needed.", password && button("Show the Password field", () => void inPage(tabId, "show", [password.id]), "btn sm")), h("li", {}, "Read and tick the terms yourself."), h("li", {}, "Press Create Account on the portal, then click Fill this page.")) : h("p", {}, "Sign in with Chrome's saved password, then click Fill this page."), h("details", {}, h("summary", {}, "Why apply-kit doesn't make the password"), h("p", {}, "Chrome's password manager generates and stores it. apply-kit never reads, writes or keeps password values.")), creating && verification], foot: [fillPrimary(), fillBoundary()] });
+  if (!creating) return;
+  let stopped = false;
+  let pending = false;
+  let lastUrl: string | null = null;
+  const poll = async () => {
+    if (stopped || pending) return;
+    pending = true;
+    const result = await client.fill.verification(sessionId);
+    pending = false;
+    if (stopped) return;
+    if (!result.ok || !result.value.connected) { verification.textContent = "Check the job mailbox for the portal's email. Mailbox reading isn't connected."; return; }
+    if (result.value.url && result.value.url !== lastUrl) {
+      lastUrl = result.value.url;
+      verification.replaceChildren(h("b", {}, "Verification email arrived. "), h("a", { href: lastUrl, target: "_blank", rel: "noopener noreferrer" }, "Open the portal's verification link"));
+    }
+  };
+  const timer = setInterval(() => void poll(), 10_000);
+  const unwatch = watchForNewPage(browser.tabs, { tabId, url: address, title: undefined }, () => stopAccountPolling?.());
+  stopAccountPolling = () => { stopped = true; clearInterval(timer); unwatch(); };
+  void poll();
+}
+
+/** Unknown forms start with a copy list and require a separate click to fill. */
+async function unknownForm(tabId: number, sessionId: string, packageId: string, ctx: HTMLElement, address: string) {
+  const reading = await inPage<PageReading>(tabId, "read");
+  if (!reading) return announce("Chrome didn't let apply-kit read this form. Click the toolbar icon on it first.");
+  if (reading.pageKind === "account" || reading.pageKind === "sign-in") {
+    const answers = await client.fill.answer(sessionId, reading);
+    if (!answers.ok) return fillProblem(answers);
+    await inPage(tabId, "fill", [answers.value, []]);
+    return accountView(tabId, sessionId, ctx, reading, address);
+  }
+  const result = await client.fill.copyList(sessionId, reading);
+  if (!result.ok) return fillProblem(result);
+  const rows = result.value.rows.map((r) => {
+    const value = r.kind === "value" ? r.value : r.fileName;
+    const action = async (button: HTMLElement) => {
+      if (r.kind === "file") {
+        const revealed = await client.fill.reveal(sessionId, r.which);
+        return announce(revealed.ok ? "File shown in Finder." : "Couldn't reveal the file. Open your Packages folder.");
+      }
+      const ok = await navigator.clipboard.writeText(value).then(() => true, () => false);
+      button.textContent = ok ? "Copied" : "Copy failed";
+      announce(ok ? `${r.label} copied.` : "Couldn't copy. Select the value and copy it yourself.");
+      setTimeout(() => { button.textContent = "Copy"; }, 2000);
+    };
+    const copyButton = button(r.kind === "file" ? "Show in Finder" : "Copy", () => void action(copyButton), "btn sm");
+    return h("div", { class: "copyrow" }, h("div", { class: "copy-what" }, h("b", { lang: /[А-Яа-я]/u.test(r.label) ? "bg" : "en" }, r.label), h("p", { class: "meta" }, r.meaning), h("p", {}, value)), copyButton);
+  });
+  show({ connected: true, body: [ctx, h("h2", {}, "Copy into this form"), h("p", {}, "Nothing has been filled. Copy the values below, or explicitly fill the clearly labelled fields."), ...rows, h("p", { class: "meta" }, `${result.value.unmapped} fields apply-kit can't map`)], foot: [button("Fill the clear fields", () => void fillThisPage(packageId, true), "btn primary"), button("I've submitted this", () => void markSubmitted(tabId, sessionId, address), "btn"), fillBoundary()] });
 }
 
 /** The Filled view's state: the page as read, the answers, what the fill did, and what Kris has typed or unticked in the panel. */

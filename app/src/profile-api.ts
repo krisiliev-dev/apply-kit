@@ -134,6 +134,7 @@ function pieceInput(b: Body): PieceInput | string {
   return {
     ...(typeof b.id === "string" && { id: b.id }),
     kind: b.kind as PieceKind,
+    ...(typeof b.bulgarian === "string" ? { bulgarian: b.bulgarian } : {}),
     text: str(b.text),
     entry,
     belongsTo: str(b.belongsTo) || null,

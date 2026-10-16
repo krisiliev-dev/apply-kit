@@ -8,6 +8,7 @@ import { deletePiece, fetchPiece, fetchPieces, savePiece } from "../api.ts";
 import { angleLabel, kindLabel, message, navLink, pieceName, type Go } from "./common.tsx";
 
 interface Draft {
+  bulgarian: string;
   kind: PieceKind;
   text: string;
   title: string;
@@ -22,11 +23,11 @@ interface Draft {
 }
 
 const blank = (kind: PieceKind): Draft => ({
-  kind, text: "", title: "", organisation: "", city: "", start: "", end: "", belongsTo: "", tags: [], angles: [], numberSource: null,
+  bulgarian: "", kind, text: "", title: "", organisation: "", city: "", start: "", end: "", belongsTo: "", tags: [], angles: [], numberSource: null,
 });
 
 const draftOf = (p: ProfilePiece): Draft => ({
-  kind: p.kind, text: p.text, title: p.entry?.title ?? "", organisation: p.entry?.organisation ?? "", city: p.entry?.city ?? "",
+  bulgarian: p.bulgarian ?? "", kind: p.kind, text: p.text, title: p.entry?.title ?? "", organisation: p.entry?.organisation ?? "", city: p.entry?.city ?? "",
   start: p.entry?.start ?? "", end: p.entry?.end ?? "", belongsTo: p.belongsTo ?? "", tags: p.tags, angles: p.angles, numberSource: p.numberSource,
 });
 
@@ -114,6 +115,7 @@ export function PieceEditor({ id, go, announce, onSaved }: {
       const result = await savePiece({
         ...(piece && { id: piece.id }),
         kind: draft.kind,
+        bulgarian: draft.bulgarian,
         text: draft.text,
         entry: hasEntry ? { title: draft.title, organisation: draft.organisation, city: draft.city || null, start: draft.start, end: draft.end || null } : null,
         belongsTo: hasEntry ? null : draft.belongsTo || null,
@@ -306,6 +308,11 @@ export function PieceEditor({ id, go, announce, onSaved }: {
           </fieldset>
 
           {error && <p className="err" role="alert">{error}</p>}
+          {(draft.kind === "role" || draft.kind === "skill") && <div className="field">
+            <label htmlFor="pe-bulgarian">Verified Bulgarian {draft.kind === "role" ? "job title" : "skill wording"} (optional)</label>
+            <p className="help" id="pe-bulgarian-help">Enter only a translation you have checked against the original above. Saving confirms that it describes the same role or skill. Employers and dates stay unchanged; tool names can stay in Latin.</p>
+            <input id="pe-bulgarian" lang="bg" maxLength={200} value={draft.bulgarian} aria-describedby="pe-bulgarian-help" onChange={(e) => set({ bulgarian: e.target.value })} />
+          </div>}
           <div className="row">
             <button className="btn primary" type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</button>
             <a className="btn ghost" href="/profile" onClick={navLink(go)}>Cancel</a>

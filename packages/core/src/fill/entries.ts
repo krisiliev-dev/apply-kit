@@ -30,7 +30,7 @@ const parts: Record<EntrySection, [Part, RegExp][]> = {
   ],
 };
 
-const partOf = (f: ReadField, section: EntrySection): Part | null => parts[section].find(([, re]) => re.test(normaliseLabel(f.label)))?.[0] ?? null;
+const partOf = (f: ReadField, section: EntrySection): Part | null => parts[section].find(([, re]) => re.test(normaliseLabel(f.label.split("›").at(-1) ?? f.label)))?.[0] ?? null;
 const same = (a: string, b: string) => normaliseLabel(a) !== "" && normaliseLabel(a) === normaliseLabel(b);
 const year = (iso: string | null | undefined) => (iso ? iso.slice(0, 4) : "");
 const noun = { work: ["role", "roles"], education: ["degree", "degrees"] } as const;

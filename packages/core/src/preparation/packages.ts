@@ -894,7 +894,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
     const fix = r.contactFix;
     return {
       name: language === "bg" && contact.nameCyrillic ? contact.nameCyrillic : contact.nameLatin,
-      headline: first?.title ?? "",
+      headline: (language === "bg" ? plan.roles.map((role) => pieces.get(role.roleId)).find((p) => p?.entry)?.bulgarian : null) ?? first?.title ?? "",
       location: [contact.city || fix.city, contact.country || fix.country].filter(Boolean).join(", ") || undefined,
       email: contact.email,
       phone: contact.phone || fix.phone || undefined,
@@ -914,14 +914,14 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
       letterhead,
       summary: plan.summary?.text ?? "",
       experience: entries.map(({ role, entry }) => ({
-        title: entry!.title,
+        title: r.language === "bg" ? pieces.get(role.roleId)?.bulgarian ?? entry!.title : entry!.title,
         employer: entry!.organisation,
         place: entry!.city ?? undefined,
         start: month(entry!.start),
         end: entry!.end ? month(entry!.end) : "present",
         bullets: role.bullets.map((b) => b.text),
       })),
-      skills: plan.skills.map((id) => plan.skillWords?.[id] ?? pieces.get(id)?.text ?? "").filter(Boolean),
+      skills: plan.skills.map((id) => (r.language === "bg" ? pieces.get(id)?.bulgarian : null) ?? plan.skillWords?.[id] ?? pieces.get(id)?.text ?? "").filter(Boolean),
       education: plan.education.map((id) => pieces.get(id)?.entry).filter((e) => !!e).map((e) => ({
         degree: e.title, school: e.organisation, start: month(e.start), end: e.end ? month(e.end) : { text: "" },
       })),
@@ -1036,7 +1036,7 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         const entry = pieces.get(role.roleId)?.entry;
         return [...(entry ? [{ text: entryLabel(entry), pieceIds: [role.roleId] }] : []), ...role.bullets.map((b) => ({ text: b.text, pieceIds: b.pieceIds }))];
       }),
-      ...plan.skills.map((sid) => ({ text: plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "", pieceIds: [sid] })),
+      ...plan.skills.map((sid) => ({ text: (r.language === "bg" ? pieces.get(sid)?.bulgarian : null) ?? plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "", pieceIds: [sid] })),
       ...plan.education.map((eid) => { const e = pieces.get(eid)?.entry; return { text: e ? `${e.title} · ${e.organisation}` : "", pieceIds: [eid] }; }),
     ].filter((l) => l.text);
   }
@@ -2252,8 +2252,8 @@ export function createPackageStore(deps: PackageStoreDeps): PackageStore {
         label: `${angleLabel[r.angle]} · ${r.job.company}`,
         file: files.cv,
         ats: { passed: checks.filter((c) => c.passed).length, total: checks.length, accepted },
-        skills: plan.skills.map((sid) => plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "").filter(Boolean),
-        roles: plan.roles.map((x) => pieces.get(x.roleId)?.entry).filter((e) => !!e).map(entryAsSent),
+        skills: plan.skills.map((sid) => (r.language === "bg" ? pieces.get(sid)?.bulgarian : null) ?? plan.skillWords?.[sid] ?? pieces.get(sid)?.text ?? "").filter(Boolean),
+        roles: plan.roles.map((x) => { const p = pieces.get(x.roleId); return p?.entry ? { ...p.entry, title: r.language === "bg" ? p.bulgarian ?? p.entry.title : p.entry.title } : null; }).filter((e) => !!e).map(entryAsSent),
         education: plan.education.map((x) => pieces.get(x)?.entry).filter((e) => !!e).map(entryAsSent),
       },
       letter: letter && files.letter ? { text: letterText(letter.content), file: files.letter } : null,

@@ -21,7 +21,7 @@ describe("reading a Workable application", () => {
     const r = createWorkableFiller().read(workable().document);
 
     expect(r).toMatchObject({ pageKind: "form", jobRef: { portal: "workable", board: "dreamwire", jobId: "A1B2C3D4E5" }, stepLabel: null, stepCount: null });
-    expect(r.fields.map((f) => [f.id, f.label, f.kind, f.required])).toEqual([
+    expect(r.fields.filter((f) => f.kind !== "repeating").map((f) => [f.id, f.label, f.kind, f.required])).toEqual([
       ["firstname", "First name", "text", true],
       ["lastname", "Last name", "text", true],
       ["email", "Email", "email", true],
@@ -114,4 +114,32 @@ describe("filling a Workable application", () => {
     expect(page.presses).toEqual([]);
     expect(page.field("gdpr").checked).toBe(false);
   });
+});
+
+it("describes repeaters and fills education through the shared CV-entry contract", async () => {
+  const page = workable();
+  const filler = createWorkableFiller({ settleMs: 0 });
+  const reading = filler.read(page.document);
+  expect(reading.fields.find((f) => f.id === "education_0_school")?.entry).toEqual({ section: "education", index: 1 });
+  expect(reading.fields.find((f) => f.kind === "repeating" && f.entry?.section === "work")).toMatchObject({ value: "0", entry: { section: "work", index: 0 } });
+});
+
+it("adds only the requested profile entries through Add and undoes its own additions", async () => {
+  const p = workable();
+  const section = p.document.querySelector('[data-ui="experience"]')!;
+  section.querySelector("button")!.addEventListener("click", () => {
+    const entry = p.document.createElement("div");
+    entry.className = "entry";
+    entry.innerHTML = '<label for="experience_0_title">Title</label><input id="experience_0_title"><button type="button" class="remove-entry">Remove</button>';
+    entry.querySelector("button")!.addEventListener("click", () => entry.remove());
+    section.prepend(entry);
+  });
+  const filler = createWorkableFiller({ settleMs: 0 });
+  const result = await filler.fill(p.document, [{ fieldId: "section-work", kind: "entries", section: "work", add: 1, duplicates: [], source: "cv-version", basis: "1 role on your CV" }]);
+  expect(result[0]?.outcome).toBe("filled");
+  expect(section.querySelectorAll(".entry")).toHaveLength(1);
+  expect(filler.read(p.document).fields.find((f) => f.id === "experience_0_title")?.entry).toEqual({ section: "work", index: 1 });
+  filler.undo(p.document);
+  expect(section.querySelectorAll(".entry")).toHaveLength(0);
+  expect(p.presses.some((s) => /Submit/.test(s))).toBe(false);
 });

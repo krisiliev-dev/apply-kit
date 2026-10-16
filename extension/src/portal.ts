@@ -119,3 +119,13 @@ export const portals: { name: PortalName; label: string; hosts: string[] }[] = [
 
 /** The match patterns for "Allow the 6 portals": the manifest's optional_host_permissions, exactly. */
 export const portalOrigins: string[] = portals.flatMap((p) => p.hosts.map((h) => `https://*.${h}/*`));
+
+
+/** Tenant on Workday account pages that carry no job reference. */
+export function portalTenant(address: string): string | null {
+  try {
+    const url = new URL(address);
+    if (!/myworkday(jobs|site)\.com$/.test(url.hostname)) return null;
+    return /\/recruiting\/([^/]+)\//.exec(url.pathname)?.[1]?.toLowerCase() ?? /^([a-z0-9-]+)\.wd\d+\./.exec(url.hostname)?.[1] ?? null;
+  } catch { return null; }
+}

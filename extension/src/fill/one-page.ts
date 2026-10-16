@@ -7,11 +7,11 @@
 // values into fields still empty; each value is read back once after the page settles. It keeps only
 // the previous values and which fields it filled, in the page's isolated world. It never presses a
 // button (an entry's Add included).
-import type { FieldKind, FieldOutcome, FieldStructure, PageReading, ReadField } from "@apply-kit/core";
+import type { EntrySection, FieldKind, FieldOutcome, FieldStructure, PageReading, ReadField } from "@apply-kit/core";
 import { describingAttribute } from "@apply-kit/core/field-report";
 import { recognisePortal } from "../portal.ts";
 import type { FileToAttach, Filler } from "./greenhouse.ts";
-import { attachFile, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark } from "./page-actions.ts";
+import { attachFile, choose, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark } from "./page-actions.ts";
 
 export interface PageShape {
   /** The application form, or null when the page shows none. */
@@ -34,6 +34,7 @@ type Control = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 interface Item {
   el: HTMLElement;
   closed: boolean;
+  repeating?: EntrySection;
 }
 
 const optionalWords = /\(?\boptional\b\)?/i;
@@ -75,6 +76,7 @@ function items(doc: Document, shape: PageShape): Item[] {
   const groups = new Set<string>();
   for (const el of walk(root) as HTMLElement[]) {
     const tag = el.tagName.toLowerCase();
+    if (shape.entries && el.matches(shape.entries.section)) out.push({ el, closed: false, repeating: /education|образ/iu.test(shape.entries.name(el)) ? "education" : "work" });
     if (shape.components?.[tag] && !el.shadowRoot && !el.querySelector("input, select, textarea")) {
       out.push({ el, closed: true });
       continue;
@@ -98,7 +100,8 @@ function radios(el: Element): HTMLInputElement[] {
   return name ? Array.from(rootOf(el).querySelectorAll<HTMLInputElement>("input[type=radio]")).filter((r) => r.getAttribute("name") === name) : [el as HTMLInputElement];
 }
 
-function fieldId({ el }: Item, index: number): string {
+function fieldId({ el, repeating }: Item, index: number): string {
+  if (repeating) return `section-${repeating}`;
   if (isRadio(el)) return el.getAttribute("name") || el.id || `field-${index}`;
   return el.id || el.getAttribute("name") || hostOf(el)?.id || `field-${index}`;
 }
@@ -154,6 +157,7 @@ function ownLabel(el: Element): string {
 }
 
 function valueOf({ el, closed }: Item): string {
+  if (typeOf(el) === "password") return "";
   if (closed) return "";
   const type = typeOf(el);
   if (type === "radio") {
@@ -170,6 +174,10 @@ function valueOf({ el, closed }: Item): string {
 
 function readField(item: Item, index: number, shape: PageShape): ReadField {
   const { el, closed } = item;
+  if (item.repeating && shape.entries) return { id: fieldId(item, index), label: shape.entries.name(el), kind: "repeating", required: false, value: String(el.querySelectorAll(shape.entries.entry).length), options: [], maxLength: null, consent: false, password: false, hint: null, entry: { section: item.repeating, index: 0 } };
+  const ownEntry = shape.entries && closestAcross(el, shape.entries.entry);
+  const section = ownEntry && closestAcross(ownEntry, shape.entries!.section);
+  const entry = ownEntry && section ? { section: /education|образ/iu.test(shape.entries!.name(section)) ? "education" as const : "work" as const, index: Array.from(section.querySelectorAll(shape.entries!.entry)).indexOf(ownEntry) + 1 } : null;
   const { raw, label } = labelOf(item, shape);
   const kind = kindOf(item, shape);
   const hint = el.getAttribute("autocomplete");
@@ -185,9 +193,10 @@ function readField(item: Item, index: number, shape: PageShape): ReadField {
     options: closed ? [] : kind === "select" ? Array.from((el as HTMLSelectElement).options).filter((o) => o.value !== "").map((o) => o.text.trim())
       : kind === "radio" ? radios(el).map(ownLabel) : [],
     maxLength: Number.isFinite(max) && max > 0 ? max : null,
-    consent: (kind === "checkbox" || kind === "radio") && consentWords.test(label),
+    consent: consentWords.test(label),
     password: typeOf(el) === "password",
-    hint: hint && hint !== "on" && hint !== "off" ? hint : null,
+    hint: typeOf(el) === "month" ? "month-year" : hint && hint !== "on" && hint !== "off" ? hint : null,
+    ...(entry ? { entry } : {}),
   };
 }
 
@@ -198,6 +207,7 @@ const chosen = (el: Element) => (el as HTMLInputElement).files?.[0]?.name ?? "";
 
 export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { settleMs?: number } = {}): Filler {
   /** Field id → the value it had before apply-kit changed it. */
+  const addedEntries: Element[] = [];
   const previous = new Map<string, string>();
   /** File fields apply-kit attached a file to (Undo empties them). */
   const attached = new Set<string>();
@@ -311,7 +321,23 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
       const toVerify: string[] = [];
       for (const a of answers) {
         if (a.kind === "file") continue;
-        if (a.kind === "entries") { report(a.fieldId, "needs-you"); continue; }
+        if (a.kind === "entries") {
+          const own = items(doc, shape).find((i) => i.repeating === a.section);
+          let count = 0;
+          if (own && shape.entries) {
+            for (let n = 0; n < Math.min(a.add, 50); n++) {
+              const before = Array.from(own.el.querySelectorAll(shape.entries.entry));
+              const add = own.el.querySelector<HTMLButtonElement>('button[type="button"].add-entry, button[type="button"][data-ui^="add-"]');
+              if (!add || !choose(add)) break;
+              for (let waited = 0; own.el.querySelectorAll(shape.entries.entry).length <= before.length && waited < 2000; waited += 50) await new Promise<void>((resolve) => setTimeout(resolve, 50));
+              const fresh = Array.from(own.el.querySelectorAll(shape.entries.entry)).filter((el) => !before.includes(el));
+              if (!fresh.length) break;
+              addedEntries.push(...fresh); count++;
+            }
+          }
+          report(a.fieldId, count === a.add ? "filled" : "needs-you", count === a.add ? "cv-version" : null);
+          continue;
+        }
         const found = find(doc, a.fieldId);
         if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
         // A closed component can't be read or filled: Kris types (or pastes) apply-kit's value.
@@ -373,6 +399,10 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
 
     undo(doc) {
       let restored = 0;
+      for (const entry of addedEntries.splice(0).reverse()) {
+        const remove = entry.querySelector('button[type="button"].remove-entry, button[type="button"][data-ui^="remove-"], button[type="button"][aria-label^="Remove"]');
+        if (remove && choose(remove)) restored++;
+      }
       for (const id of attached) {
         const found = find(doc, id);
         if (found && clearFile(found.el, found.field.label)) restored++;
