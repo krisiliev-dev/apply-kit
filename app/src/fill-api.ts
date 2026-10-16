@@ -3,7 +3,7 @@
 // job each time), asks for the answers to the page's fields and records what was filled. Values pass
 // through in the answers only; the record never holds them.
 import type { Context, Hono } from "hono";
-import { FillError, type FieldOutcome, type FillEngine, type FillPage, type PageReading } from "@apply-kit/core";
+import { FillError, type FieldOutcome, type MarkResult, type FillEngine, type FillPage, type PageReading } from "@apply-kit/core";
 import { jsonBody } from "./profile-api.ts";
 
 const portals = ["workday", "greenhouse", "lever", "smartrecruiters", "workable", "ashby"];
@@ -33,7 +33,27 @@ export function mountFillApi(app: Hono, fill: FillEngine): void {
     const outcomes = Array.isArray(b.outcomes) ? (b.outcomes as FieldOutcome[]) : null;
     return sessionId && reading && outcomes ? fill.recordPage(sessionId, reading, outcomes) : bad("Send the sessionId, the page's reading and the outcomes");
   }));
+  // { sessionId, portalUrl }: Kris clicked Mark as submitted (or "I've submitted this") in the panel.
+  app.post("/api/ext/fill/submitted", (c) => withBody(c, async (b) => {
+    const sessionId = str(b.sessionId);
+    if (!sessionId) return bad("Send the sessionId and the portal page's address");
+    return marked(await fill.markSubmitted({ sessionId }, { portalUrl: str(b.portalUrl), via: "extension" }));
+  }));
+  // { applicationId }: the panel's Undo after marking.
+  app.post("/api/ext/fill/submitted/undo", (c) => withBody(c, (b) => {
+    const applicationId = str(b.applicationId);
+    return applicationId ? fill.undoMarkSubmitted(applicationId) : bad("Send the applicationId");
+  }));
+
+  // The Job page's "Mark as submitted", for an application sent outside the extension, and its Undo.
+  app.post("/api/packages/:id/submitted", (c) => withBody(c, async () =>
+    marked(await fill.markSubmitted({ packageId: c.req.param("id") }, { portalUrl: null, via: "app" }))));
+  app.post("/api/applications/:id/submitted/undo", (c) => withBody(c, () => fill.undoMarkSubmitted(c.req.param("id"))));
 }
+
+/** A mark that created nothing answers 422 with the reason (and the Application to open instead). */
+const marked = (r: MarkResult) => (r.marked ? r : new Refused(r));
+class Refused { constructor(readonly body: MarkResult) {} }
 
 class BadRequest extends Error {}
 const bad = (message: string): never => { throw new BadRequest(message); };
@@ -43,7 +63,9 @@ async function withBody(c: Context, act: (body: Body) => unknown) {
   const body = await jsonBody(c);
   if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
   try {
-    return c.json(await act(body));
+    const result = await act(body);
+    if (result instanceof Refused) return c.json(result.body, 422);
+    return c.json(result);
   } catch (err) {
     if (err instanceof BadRequest) return c.json({ error: err.message }, 400);
     if (err instanceof FillError) return c.json({ problem: err.problem, error: err.message }, 409);
