@@ -12,7 +12,20 @@ export interface FixturePage {
   field(id: string): HTMLInputElement;
 }
 
-export function openFixture(name: string, url: string, { controlled = false }: { controlled?: boolean } = {}): FixturePage {
+export interface FixtureOptions {
+  /** React-style inputs that ignore direct `value` writes. */
+  controlled?: boolean;
+  /**
+   * How the page's upload boxes take a file: from the input's `change` (the default), only from a
+   * `drop` on the box (the input ignores `change`), or not at all (the box rejects the file and says so).
+   * An accepted file's name shows in the box, as portals show it.
+   */
+  uploads?: "change" | "drop-only" | "reject";
+  /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields. */
+  cvParser?: { delayMs: number; values: Record<string, string> };
+}
+
+export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser }: FixtureOptions = {}): FixturePage {
   const window = new Window({ url, settings: { disableJavaScriptEvaluation: true, navigation: { disableMainFrameNavigation: true } } });
   const document = window.document as unknown as Document;
   document.body.innerHTML = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
@@ -30,6 +43,25 @@ export function openFixture(name: string, url: string, { controlled = false }: {
       Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
       el.addEventListener("input", () => { state = native.get!.call(el) as string; });
     }
+  }
+  for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[type=file]"))) {
+    const box = input.closest(".field, .file-upload")!;
+    const accept = (file: File | undefined) => {
+      if (!file) return;
+      if (uploads === "reject") {
+        input.value = "";
+        box.querySelector(".filename")!.textContent = "";
+        box.append(Object.assign(document.createElement("p"), { className: "error", textContent: "We couldn't read this file. Try another one." }));
+        return;
+      }
+      box.querySelector(".filename")!.textContent = file.name;
+      if (cvParser && input.id === "resume") {
+        setTimeout(() => { for (const [id, v] of Object.entries(cvParser.values)) (document.getElementById(id) as HTMLInputElement).value = v; }, cvParser.delayMs);
+      }
+    };
+    input.addEventListener("change", () => { if (uploads !== "drop-only") accept(input.files?.[0]); });
+    box.addEventListener("dragover", (e) => e.preventDefault());
+    box.addEventListener("drop", (e) => { e.preventDefault(); accept((e as DragEvent).dataTransfer?.files[0]); });
   }
   return { document, presses, field: (id) => document.getElementById(id) as HTMLInputElement };
 }

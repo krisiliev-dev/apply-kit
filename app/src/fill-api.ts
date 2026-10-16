@@ -3,13 +3,20 @@
 // job each time), asks for the answers to the page's fields and records what was filled. Values pass
 // through in the answers only; the record never holds them.
 import type { Context, Hono } from "hono";
-import { FillError, type FieldOutcome, type MarkResult, type FillEngine, type FillPage, type PageReading } from "@apply-kit/core";
+import { FillError, type FieldOutcome, type MarkResult, type FillEngine, type FillPage, type PackageFileKind, type PageReading } from "@apply-kit/core";
 import { jsonBody } from "./profile-api.ts";
 
 const portals = ["workday", "greenhouse", "lever", "smartrecruiters", "workable", "ashby"];
 type Body = Record<string, unknown>;
 
-export function mountFillApi(app: Hono, fill: FillEngine): void {
+/** Shows a file in Finder (`open -R`), for "Show in Finder" when a file won't attach. */
+export interface Revealer {
+  reveal(path: string): Promise<void>;
+}
+
+const fileWords = { cv: "CV", letter: "letter" } as const;
+
+export function mountFillApi(app: Hono, fill: FillEngine, revealer?: Revealer): void {
   // { page: { portal, host, jobRef }, sessionId? }: which package fits, opening nothing.
   app.post("/api/ext/fill/match", (c) => withBody(c, (b) => {
     const page = pageOf(b.page);
@@ -49,6 +56,29 @@ export function mountFillApi(app: Hono, fill: FillEngine): void {
   app.post("/api/packages/:id/submitted", (c) => withBody(c, async () =>
     marked(await fill.markSubmitted({ packageId: c.req.param("id") }, { portalUrl: null, via: "app" }))));
   app.post("/api/applications/:id/submitted/undo", (c) => withBody(c, () => fill.undoMarkSubmitted(c.req.param("id"))));
+  // { sessionId, which: "cv" | "letter" }: the package's file, as base64, for the panel to attach.
+  app.post("/api/ext/fill/file", (c) => withBody(c, async (b) => {
+    const { sessionId, which } = fileRequest(b);
+    const file = await fill.packageFile(sessionId, which);
+    if (!file) return notFound(`Your package has no ${fileWords[which]}`);
+    return { which, fileName: file.fileName, size: file.size, path: file.path, type: "application/pdf", base64: Buffer.from(file.bytes).toString("base64") };
+  }));
+  // { sessionId, which }: "Show in Finder" for the session's file, in the Packages folder. Never a path from the extension.
+  app.post("/api/ext/fill/reveal", (c) => withBody(c, async (b) => {
+    const { sessionId, which } = fileRequest(b);
+    const file = await fill.packageFile(sessionId, which);
+    if (!file) return notFound(`Your package has no ${fileWords[which]}`);
+    if (!file.path) return notFound(`The ${fileWords[which]} isn't in your Packages folder: apply-kit couldn't write it there`);
+    if (!revealer) return notFound("Show in Finder isn't available here");
+    await revealer.reveal(file.path);
+    return { revealed: file.path };
+  }));
+}
+
+function fileRequest(b: Body): { sessionId: string; which: PackageFileKind } {
+  const sessionId = str(b.sessionId);
+  const which = b.which === "cv" || b.which === "letter" ? b.which : null;
+  return sessionId && which ? { sessionId, which } : bad("Send the sessionId and which file: \"cv\" or \"letter\"");
 }
 
 /** A mark that created nothing answers 422 with the reason (and the Application to open instead). */
@@ -56,6 +86,8 @@ const marked = (r: MarkResult) => (r.marked ? r : new Refused(r));
 class Refused { constructor(readonly body: MarkResult) {} }
 
 class BadRequest extends Error {}
+class NotFound extends Error {}
+const notFound = (message: string): never => { throw new NotFound(message); };
 const bad = (message: string): never => { throw new BadRequest(message); };
 const str = (v: unknown): string | null => (typeof v === "string" && v ? v : null);
 
@@ -68,6 +100,7 @@ async function withBody(c: Context, act: (body: Body) => unknown) {
     return c.json(result);
   } catch (err) {
     if (err instanceof BadRequest) return c.json({ error: err.message }, 400);
+    if (err instanceof NotFound) return c.json({ error: err.message }, 404);
     if (err instanceof FillError) return c.json({ problem: err.problem, error: err.message }, 409);
     throw err;
   }

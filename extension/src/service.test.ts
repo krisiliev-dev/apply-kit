@@ -126,6 +126,20 @@ describe("the extension talking to apply-kit", () => {
     expect(writes).toEqual([]);
   });
 
+  it("fetches a package file and asks apply-kit to show it in Finder, naming only the session and which file", async () => {
+    const calls: [string, unknown][] = [];
+    const service = fakeService((r) => {
+      calls.push([new URL(r.url).pathname, r.body]);
+      if (r.url.endsWith("/api/ext/fill/file")) return json({ which: "cv", fileName: "Mira_Petrova_CV.pdf", size: 9, path: "/x/Mira_Petrova_CV.pdf", type: "application/pdf", base64: "JVBERi1mYWtl" });
+      return json({ revealed: "/x/Mira_Petrova_CV.pdf" });
+    });
+    const client = createClient({ fetch: service, store: memoryStore({ token: "t" }).store });
+
+    expect(await client.fill.file("s-1", "cv")).toMatchObject({ ok: true, value: { fileName: "Mira_Petrova_CV.pdf", base64: "JVBERi1mYWtl" } });
+    expect(await client.fill.reveal("s-1", "cv")).toEqual({ ok: true, value: { revealed: "/x/Mira_Petrova_CV.pdf" } });
+    expect(calls).toEqual([["/api/ext/fill/file", { sessionId: "s-1", which: "cv" }], ["/api/ext/fill/reveal", { sessionId: "s-1", which: "cv" }]]);
+  });
+
   it("marks the tab's session submitted and undoes it, and passes on a mark that created nothing with its reason", async () => {
     const sent: [string, unknown][] = [];
     const refused = { marked: false, reason: "You already have an open Application for Security Engineer at Kestrel Payments.", application: { id: "a0" } };
