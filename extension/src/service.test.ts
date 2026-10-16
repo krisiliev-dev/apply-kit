@@ -140,6 +140,18 @@ describe("the extension talking to apply-kit", () => {
     expect(calls).toEqual([["/api/ext/fill/file", { sessionId: "s-1", which: "cv" }], ["/api/ext/fill/reveal", { sessionId: "s-1", which: "cv" }]]);
   });
 
+  it("sends a field report: the field's structure and the page's address, nothing kept in the browser", async () => {
+    const calls: [string, unknown][] = [];
+    const service = fakeService((r) => { calls.push([new URL(r.url).pathname, r.body]); return json({ id: "r1" }); });
+    const { store, writes } = memoryStore({ token: "t" });
+    const field = { tag: "input", type: "tel", role: null, kind: "tel" as const, attributes: { id: "phone" }, labelChain: [{ from: "label[for]", text: "Phone Number" }], options: [] };
+    const report = { portal: "greenhouse", address: "https://job-boards.greenhouse.io/kestrel/jobs/4410", stepLabel: null, field };
+
+    expect(await createClient({ fetch: service, store }).fill.report(report)).toEqual({ ok: true, value: { id: "r1" } });
+    expect(calls).toEqual([["/api/ext/fill/report", report]]);
+    expect(writes).toEqual([]);
+  });
+
   it("marks the tab's session submitted and undoes it, and passes on a mark that created nothing with its reason", async () => {
     const sent: [string, unknown][] = [];
     const refused = { marked: false, reason: "You already have an open Application for Security Engineer at Kestrel Payments.", application: { id: "a0" } };

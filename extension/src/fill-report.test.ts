@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField, SubmittedApplication } from "@apply-kit/core";
 import {
-  characterCount, differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, saveTypedLabel, sourceWords, submitPrompt, typedAnswerLine,
+  characterCount, differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, saveTypedLabel, sourceWords, stoppedMidFill, stuckFields, submitPrompt, typedAnswerLine,
 } from "./fill-report.ts";
 
 const field = (id: string, label: string, value = ""): ReadField => ({ id, label, kind: "text", required: true, value, options: [], maxLength: null, consent: false, password: false, hint: null });
@@ -253,5 +253,35 @@ describe("answers Kris typed on the portal", () => {
     expect(typedAnswerLine({ id: "1", question: "Are you willing to travel up to 10%?", answer: "Yes", kind: "yes-no", save: { ticked: true, note: null } })).toBe('"Are you willing to travel up to 10%?" → Yes');
     expect(saveTypedLabel(2)).toBe("Save 2 to the answer bank");
     expect(saveTypedLabel(1)).toBe("Save 1 to the answer bank");
+  });
+});
+
+describe("recovery", () => {
+  const phoneReading: PageReading = { ...reading, fields: [field("code", "Country Phone Code"), field("phone", "Phone Number"), field("fn", "First Name")] };
+  const phoneAnswers: FieldAnswer[] = [
+    { fieldId: "code", kind: "fill", value: "+359", source: "profile", basis: null },
+    { fieldId: "phone", kind: "fill", value: "88 000 0175", source: "profile", basis: "Without +359, which is in Country Phone Code" },
+    { fieldId: "fn", kind: "fill", value: "Mira", source: "profile", basis: null },
+  ];
+  const stuck: FieldOutcome[] = [{ fieldId: "code", outcome: "filled", source: "profile" }, { fieldId: "phone", outcome: "didnt-stick", source: null }, { fieldId: "fn", outcome: "filled", source: "profile" }];
+
+  it("names a field that didn't stick and gives its value to copy in the field's format, with Try once more", () => {
+    expect(stuckFields(phoneReading, phoneAnswers, stuck, new Set(), "Greenhouse")).toEqual([{
+      fieldId: "phone", label: "Phone Number", heading: "Phone Number didn't stick",
+      text: "Greenhouse cleared or changed it right after filling. Paste it in yourself, in the format the field wants:",
+      copyLabel: "Phone Number · without +359, which is in Country Phone Code", value: "88 000 0175", tryOnceMore: true,
+    }]);
+    expect(fieldRows(phoneReading, phoneAnswers, stuck).find((r) => r.fieldId === "phone")).toMatchObject({ value: "88 000 0175", chip: { tone: "gap", word: "Didn't stick" }, offer: "88 000 0175" });
+  });
+
+  it("offers Try once more only once per field", () => {
+    expect(stuckFields(phoneReading, phoneAnswers, stuck, new Set(["phone"]), "Greenhouse")).toEqual([expect.objectContaining({
+      tryOnceMore: false, text: "Greenhouse cleared it again after Try once more. Paste it in yourself, in the format the field wants:",
+    })]);
+  });
+
+  it("says how many fields stay filled when apply-kit stops answering mid-fill", () => {
+    expect(stoppedMidFill(stuck)).toBe("apply-kit stopped answering after filling 2 fields on this page. They stay filled, and Undo this page still puts them back.");
+    expect(stoppedMidFill([stuck[0]!])).toBe("apply-kit stopped answering after filling 1 field on this page. It stays filled, and Undo this page still puts it back.");
   });
 });

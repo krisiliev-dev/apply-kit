@@ -2,7 +2,7 @@
 // Prepare's engine seeded through its own interface (Mira Petrova, made up). The extension reads the
 // page and fills it; the engine decides which package a page belongs to and what goes in each field.
 import { describe, expect, it } from "vitest";
-import { createFillEngine, createTracker, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
+import { createFillEngine, createTracker, fieldReportFixture, type FieldStructure, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
 import { fixtureFetch, memoryDb } from "./harness.ts";
 import { memoryPackageFolder } from "./preparation-harness.ts";
 import { approved, kestrelJob, mira, started } from "./package-fixtures.ts";
@@ -161,6 +161,16 @@ describe("answering a page's contact fields from the master profile", () => {
       { fieldId: "q1", kind: "fill", value: "https://www.linkedin.com/in/mira-petrova-example", source: "profile", basis: null },
       { fieldId: "q2", kind: "skip", reason: "Your profile has no website" },
       { fieldId: "q3", kind: "needs-you", reason: "Your profile has no GitHub link", basis: null },
+    ]);
+  });
+
+  it("gives the national number when the country code is a field of its own, and says so", async () => {
+    const t = await filling();
+    const answers = await t.fill.answer(t.sessionId, reading([field("code", "Country Phone Code"), field("phone", "Phone Number")]));
+
+    expect(answers).toEqual([
+      { fieldId: "code", kind: "fill", value: "+359", source: "profile", basis: null },
+      { fieldId: "phone", kind: "fill", value: "88 000 0175", source: "profile", basis: "Without +359, which is in Country Phone Code" },
     ]);
   });
 
@@ -803,5 +813,57 @@ describe("saving answers to the answer bank", () => {
     expect(t.preparation.listAnswers({ search: "Notice period" }).answers[0]).toMatchObject({
       versions: { en: "1 month" }, portalEdit: { text: "2 months", before: "1 month", portal: "Kestrel Payments Greenhouse form" },
     });
+  });
+});
+
+describe("field reports", () => {
+  const phone: FieldStructure = {
+    tag: "input", type: "tel", role: null, kind: "tel",
+    attributes: { id: "phone", type: "tel", autocomplete: "tel-national", "aria-required": "true" },
+    labelChain: [{ from: "label[for]", text: "Phone Number" }, { from: "placeholder", text: "e.g. 87 123 4567" }],
+    options: [],
+  };
+  const address = "https://job-boards.greenhouse.io/kestrel/jobs/4410?gh_src=mira.petrova%40example.com&for=Mira#app";
+
+  it("saves the field's structure with the portal, host and path, never the query", () => {
+    const t = setup();
+
+    const r = t.fill.reportField({ portal: "greenhouse", address, stepLabel: "My Information", field: phone });
+
+    expect(r).toEqual({ id: expect.any(String), portal: "greenhouse", host: "job-boards.greenhouse.io", path: "/kestrel/jobs/4410", stepLabel: "My Information", field: phone, createdAt: "2026-10-12T07:30:00.000Z" });
+    expect(JSON.stringify(t.fill.fieldReports())).not.toMatch(/gh_src|mira|Mira|#app/);
+  });
+
+  it("keeps only the structure: a value sent along, or a value attribute, is never stored", () => {
+    const t = setup();
+    const sent = { ...phone, value: "+359 88 000 0175", attributes: { ...phone.attributes, value: "+359 88 000 0175", "aria-valuetext": "+359 88 000 0175" } } as FieldStructure;
+
+    t.fill.reportField({ portal: "greenhouse", address, stepLabel: null, field: sent });
+
+    expect(t.fill.fieldReports()[0]!.field).toEqual(phone);
+    expect(JSON.stringify(t.fill.fieldReports())).not.toContain("88 000 0175");
+  });
+
+  it("lists reports newest first, deletes one, and copies one as a fixture", async () => {
+    const t = setup();
+    const first = t.fill.reportField({ portal: "greenhouse", address, stepLabel: null, field: phone });
+    await t.clock.advance(60_000);
+    const code: FieldStructure = { tag: "select", type: null, role: null, kind: "select", attributes: { id: "phone_code" }, labelChain: [{ from: "label[for]", text: "Country Phone Code" }], options: ["+43", "+359"] };
+    const second = t.fill.reportField({ portal: "greenhouse", address, stepLabel: null, field: code });
+
+    expect(t.fill.fieldReports().map((r) => r.id)).toEqual([second.id, first.id]);
+    expect(fieldReportFixture(first)).toBe([
+      "<!-- Field report: greenhouse · job-boards.greenhouse.io/kestrel/jobs/4410 · reported 2026-10-12. Structure only, no values.",
+      "     Label chain: label[for] \"Phone Number\" · placeholder \"e.g. 87 123 4567\". Wrap it in the portal's form to make a synthetic fixture. -->",
+      "<div class=\"field\">",
+      "  <label for=\"phone\">Phone Number</label>",
+      "  <input id=\"phone\" type=\"tel\" autocomplete=\"tel-national\" aria-required=\"true\">",
+      "</div>",
+    ].join("\n"));
+    expect(fieldReportFixture(second)).toContain("<select id=\"phone_code\"><option value=\"\">Select…</option><option>+43</option><option>+359</option></select>");
+
+    expect(t.fill.deleteFieldReport(first.id)).toBe(true);
+    expect(t.fill.deleteFieldReport(first.id)).toBe(false);
+    expect(t.fill.fieldReports().map((r) => r.id)).toEqual([second.id]);
   });
 });

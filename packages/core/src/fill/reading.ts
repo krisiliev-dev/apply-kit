@@ -125,3 +125,39 @@ export function countOutcomes(outcomes: { outcome: Outcome }[]): OutcomeCounts {
   }
   return counts;
 }
+
+/**
+ * A field's structure for a field report (spec #23 "Report this field"): what a filler needs to learn
+ * the field, never what's in it. Becomes a synthetic fixture later (#50).
+ */
+export interface FieldStructure {
+  tag: string;
+  type: string | null;
+  role: string | null;
+  kind: FieldKind;
+  /** The element's attributes that describe it (id, name, type, autocomplete, aria-*, data-qa…): never `value`. */
+  attributes: Record<string, string>;
+  /** Where its label can come from, in the order the filler looks: `from` names the source ("label[for]", "aria-labelledby", "legend"…). */
+  labelChain: { from: string; text: string }[];
+  /** A select's or radio group's options, as the portal words them. */
+  options: string[];
+}
+
+/** "Report this field": the field's structure and where it was (the page's address; apply-kit keeps its host and path only). */
+export interface FieldReportInput {
+  portal: string;
+  address: string;
+  stepLabel: string | null;
+  field: FieldStructure;
+}
+
+/** A saved field report: portal, host and path (no query), step label, the field's structure. Never a value. */
+export interface FieldReport {
+  id: string;
+  portal: string;
+  host: string;
+  path: string;
+  stepLabel: string | null;
+  field: FieldStructure;
+  createdAt: string;
+}
