@@ -1,3 +1,4 @@
+import { createAiBudget, type AiBudget } from "./budget.ts";
 // The tracker: Track's own module beside the discovery engine, sharing its database and clock. It
 // owns the Application (GLOSSARY "After applying"): created by hand or with "I applied" on a Job,
 // listed grouped by Status, and moved only through Events that each name their cause. Events are
@@ -702,8 +703,9 @@ export interface Tracker {
   }>;
   /**
    * Undoes an Event: a Status change goes back to the Status before (only while nothing has moved it
-   * since); undoing an Application's creation takes it off the list. The Event is kept, marked undone,
-   * and the reversal is recorded. Throws a TrackerError when refused.
+   * since); undoing an Application's creation takes it off the list. Undoing a package marked submitted
+   * ("Submitted → Applied", "Package attached") is undoSubmission. The Event is kept, marked undone, and
+   * the reversal is recorded. Throws a TrackerError when refused.
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /**
@@ -717,7 +719,7 @@ export interface Tracker {
   /**
    * Undoes record submission (Apply's Undo): the Application is taken off the list (or, when the package
    * was attached to one made another way, the package is taken off it). Refused (a TrackerError) once
-   * anything has happened to it since. Returns the package.
+   * anything has happened to it since. The package is approved again in Prepare. Returns the package.
    */
   undoSubmission(applicationId: string): Promise<{ packageId: string; event: ApplicationEvent }>;
   /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
@@ -844,6 +846,7 @@ export interface TrackerDeps {
   assistant?: TrackAssistant;
   /** The monthly AI cap shared with Discover (AI_MONTHLY_CAP_USD). Unset or 0 means no AI spending. */
   aiMonthlyCapUsd?: number;
+  budget?: AiBudget;
   /** The user's own addresses: mail from them is a sent copy, left for follow-ups. */
   ownAddresses?: string[];
   /** The Master profile (Prepare's): evidence for drafts, true stories for the prep sheet, and where stories added there go. */
@@ -889,8 +892,9 @@ const movesStatus = "(kind IN ('created', 'status') OR (kind = 'email' AND to_st
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice, packages }: TrackerDeps): Tracker {
+export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, budget: sharedBudget, ownAddresses = [], profile, voice, packages }: TrackerDeps): Tracker {
   migrate(db);
+  const budget = sharedBudget ?? createAiBudget({ db, clock, capUsd: aiMonthlyCapUsd });
   const now = () => clock.now().toISOString();
   const today = () => sofiaDay(clock.now());
 
@@ -1113,18 +1117,32 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const submission = r ? submissionOf(r) : null;
     if (!r || !submission) throw new TrackerError("not-found", "There's no Application made by marking a package submitted with that id.");
     const all = allEvents(applicationId);
-    const attached = r.created_how !== "submission";
-    const created = attached ? all.filter((e) => e.kind === "submission" && !e.undoneAt).at(-1)! : all.find((e) => e.kind === "created")!;
-    const later = all.slice(all.findIndex((e) => e.id === created.id) + 1);
-    if (later.length > 0) {
-      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
-    }
-    const { event } = await undoEvent(created.id);
+    const marked = r.created_how !== "submission" ? all.filter((e) => e.kind === "submission" && !e.undoneAt).at(-1)! : all.find((e) => e.kind === "created")!;
+    const { event } = undoMarkedSubmitted(marked, submission);
     return { packageId: submission.packageId, event };
   }
 
+  /**
+   * The one way marking a package submitted is undone, whether from Apply's Undo or the Event's Undo on
+   * the timeline: refused once anything has happened to the Application since; the package is approved
+   * again in Prepare.
+   */
+  function undoMarkedSubmitted(marked: ApplicationEvent, submission: Submission) {
+    const all = allEvents(marked.applicationId);
+    const later = all.slice(all.findIndex((e) => e.id === marked.id) + 1);
+    if (later.length > 0) {
+      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, marked.applicationId);
+    }
+    const done = reverse(marked);
+    packages?.undoPackageSubmitted(submission.packageId);
+    return done;
+  }
+
   /** Each Application's searchable text: job, company, contacts and the text of the emails matched to it, lower-cased. */
+  let searchCache: { changes: number; texts: Map<string, string> } | null = null;
   function searchTexts(): Map<string, string> {
+    const changes = Number(db.prepare("SELECT total_changes() AS n").get()?.n ?? 0);
+    if (searchCache?.changes === changes) return searchCache.texts;
     const out = new Map<string, string>();
     const add = (id: string, text: string) => out.set(id, `${out.get(id) ?? ""}\n${text.toLowerCase()}`);
     for (const r of db.prepare("SELECT id, title, company FROM application WHERE removed_at IS NULL").all()) add(String(r.id), `${String(r.title)}\n${String(r.company)}`);
@@ -1137,6 +1155,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       const body = String(r.text) || String(r.html).replace(/<[^>]*>/g, " ");
       add(String(r.application_id), `${String(r.from_header)}\n${String(r.subject)}\n${body}\n${str(r.summary) ?? ""}`);
     }
+    searchCache = { changes, texts: out };
     return out;
   }
 
@@ -1214,9 +1233,20 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (ev.kind === "cv") throw new TrackerError("not-undoable", "Attach another CV to replace this one.", ev.applicationId);
     const app = db.prepare("SELECT * FROM application WHERE id = ?").get(ev.applicationId)!;
     if (app.removed_at) throw new TrackerError("not-found", "That Application was removed.", ev.applicationId);
+    const submission = submissionOf(app);
+    if (submission && (ev.kind === "submission" || (ev.kind === "created" && app.created_how === "submission"))) return undoMarkedSubmitted(ev, submission);
+    if (submission && ev.kind === "created") {
+      throw new TrackerError("not-undoable", "A package is marked submitted on this Application. Undo \"Package attached\" first.", ev.applicationId);
+    }
     if (ev.kind !== "note" && movedSince(ev, String(app.status))) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this can't be undone. Set the Status you want instead.", ev.applicationId);
     }
+    return reverse(ev);
+  }
+
+  /** Reverses an Event that may be undone: kept, marked undone, with the reversal recorded. */
+  function reverse(ev: ApplicationEvent): { application: ApplicationSummary | null; event: ApplicationEvent } {
+    const eventId = ev.id;
     db.exec("BEGIN");
     try {
       db.prepare("UPDATE application_event SET undone_at = ? WHERE id = ?").run(now(), eventId);
@@ -1516,9 +1546,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
   /** The AI budget shared with Discover: what this month spent so far, and recording a spend. */
   const month = () => clock.now().toISOString().slice(0, 7);
-  const spentThisMonth = () => Number(db.prepare("SELECT COALESCE(SUM(cost_usd), 0) AS s FROM ai_spend WHERE month = ?").get(month())?.s ?? 0);
-  const spend = (task: "track-classify" | "track-draft", usd: number) =>
-    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, ?, NULL, ?)").run(now(), month(), task, usd);
+
 
   function followUpSettings(): FollowUpSettings {
     const r = db.prepare("SELECT value FROM track_settings WHERE id = 1").get();
@@ -2077,25 +2105,27 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   }
 
   async function makeDraft(followUpId: string, base: DraftInput): Promise<{ draft: FollowUpDraftText } | { noDraft: NoDraft }> {
-    const cap = Math.max(0, aiMonthlyCapUsd ?? 0);
+    const cap = budget.info().capUsd;
     if (!assistant || cap === 0) return { noDraft: { reason: "no-ai" } };
     const input: DraftInput = {
       ...base,
       evidence: profile ? await profile.evidence({ requirements: base.requirements, language: base.language }).catch(() => []) : [],
-      ...voiceFor(base.language),
+      ...voiceFor(base.language, false),
     };
     const estimate = assistant.estimateDraftUsd(input);
-    if (spentThisMonth() + estimate > cap) return { noDraft: budgetOut(cap) };
     let body: string;
     let model: string;
     try {
-      const out = await assistant.draft(input);
-      spend("track-draft", Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      const result = await budget.call({ task: "track-draft", estimateUsd: estimate }, () => {
+        Object.assign(input, voiceFor(base.language));
+        return assistant.draft(input);
+      });
+      if (result.refused) return { noDraft: budgetOut(cap) };
+      const out = result.result;
       body = draftOutputSchema.safeParse(out.draft).data?.body ?? "";
       model = out.model;
     } catch (err) {
-      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
-      if (typeof billed === "number" && billed > 0) spend("track-draft", billed);
+      void err;
       return { noDraft: { reason: "failed", why: "the Track assistant didn't answer" } };
     }
     const checked = checkDraft(body, input);
@@ -2117,10 +2147,10 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
   const voiceLanguage = (language: string): "en" | "bg" | null => (language === "en" || language === "bg" ? language : null);
 
   /** What a draft is sent to sound like the user: Prepare's voice rules and excerpts in its language (on record there as sent). */
-  function voiceFor(language: string): { voice: string[]; voiceRules: string[] } {
+  function voiceFor(language: string, record = true): { voice: string[]; voiceRules: string[] } {
     const lang = voiceLanguage(language);
     if (!voice || !lang) return { voice: [], voiceRules: [] };
-    const context = voice.voiceContext({ language: lang, purpose: "follow-up" });
+    const context = voice.voiceContext({ language: lang, purpose: "follow-up", record });
     return { voice: context.excerpts.map((e) => e.text), voiceRules: context.rules.map((r) => r.text) };
   }
 
@@ -2311,21 +2341,14 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     };
     if (!assistant) throw new TrackerError("budget", "The prep sheet needs the AI, which isn't set up.", applicationId);
     const estimate = assistant.estimatePrepSheetUsd(input);
-    if (spentThisMonth() + estimate > Math.max(0, aiMonthlyCapUsd ?? 0)) {
-      throw new TrackerError("budget", "This month's AI budget is used up, so the prep sheet can't be built until next month. Your stories are still in your Master profile.", applicationId);
-    }
-    let out: Awaited<ReturnType<typeof assistant.buildPrepSheet>>;
+    let result;
     try {
-      out = await assistant.buildPrepSheet(input);
-    } catch (err) {
-      const billed = (err as { costUsd?: unknown } | null)?.costUsd;
-      if (typeof billed === "number" && billed > 0) {
-        db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-prep', NULL, ?)").run(now(), month(), billed);
-      }
+      result = await budget.call({ task: "track-prep", estimateUsd: estimate }, () => assistant.buildPrepSheet(input));
+    } catch {
       throw new TrackerError("invalid", "The prep sheet couldn't be built just now. Try again in a minute.", applicationId);
     }
-    db.prepare("INSERT INTO ai_spend (at, month, task, posting_id, cost_usd) VALUES (?, ?, 'track-prep', NULL, ?)")
-      .run(now(), month(), Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+    if (result.refused) throw new TrackerError("budget", "This month's AI budget is used up, so the prep sheet can't be built until next month. Your stories are still in your Master profile.", applicationId);
+    const out = result.result;
     const parsed = prepSheetDraftSchema.safeParse(out.sheet);
     if (!parsed.success) throw new TrackerError("invalid", "The prep sheet came back unreadable. Try again in a minute.", applicationId);
     const known = new Set(storyList.map((s) => s.id));
@@ -2387,20 +2410,16 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (assistant) {
       const input = classifyInput(m);
       const estimate = assistant.estimateClassifyUsd(input);
-      if (spentThisMonth() + estimate <= Math.max(0, aiMonthlyCapUsd ?? 0)) {
-        try {
-          const out = await assistant.classify(input);
-          spend("track-classify", Number.isFinite(out.costUsd) && out.costUsd >= 0 ? out.costUsd : estimate);
+      try {
+        const result = await budget.call({ task: "track-classify", estimateUsd: estimate }, () => assistant.classify(input));
+        if (!result.refused) {
+          const out = result.result;
           const parsed = emailClassificationSchema.safeParse(out.classification);
           if (parsed.success) return { c: parsed.data, by: "assistant", model: out.model };
-        } catch (err) {
-          const billed = (err as { costUsd?: unknown } | null)?.costUsd;
-          if (typeof billed === "number" && billed > 0) {
-            spend("track-classify", billed);
-          }
         }
-      }
+      } catch { /* Rule-based matching remains available after a failed call. */ }
     }
+
     const rules = ruleClassify(m);
     return rules ? { c: rules, by: "rules", model: null } : { c: null, by: "none", model: null };
   }

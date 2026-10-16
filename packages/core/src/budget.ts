@@ -18,7 +18,7 @@ export interface BudgetInfo {
 }
 
 /** What a model call is for, as booked in the ledger. */
-export type AiTask = "extraction" | WriterTask;
+export type AiTask = "extraction" | WriterTask | "track-classify" | "track-draft" | "track-prep";
 
 export interface AiCharge {
   task: AiTask;

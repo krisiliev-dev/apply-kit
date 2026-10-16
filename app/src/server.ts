@@ -413,7 +413,10 @@ export function createServer({ engine, preparation, fill, tracker, scheduler, pa
     }));
   });
   // A visit to Applications: records it and returns "Since your last visit" (Status changes made by email).
-  app.post("/api/applications/visit", async (c) => c.json(await tracker.visit()));
+  app.post("/api/applications/visit", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return c.json(await tracker.visit());
+  });
   // The Stats strip: applications per week with the pace, response rate, interviews, what's working.
   app.get("/api/applications/stats", async (c) => c.json(await tracker.stats()));
   app.get("/api/applications/jobs", async (c) => c.json(await tracker.findJobs(c.req.query("q") ?? "")));
@@ -433,8 +436,14 @@ export function createServer({ engine, preparation, fill, tracker, scheduler, pa
   // Offers and closing: accept (Accepted, with withdrawals to send), decline (Withdrawn, "declined offer") and its
   // optional draft, the offer's details ({ baseSalary, startDate, workPattern, contract, other }) and a rejection's
   // optional lesson and likely reason ({ lesson, reason }).
-  app.post("/api/applications/:id/accept", async (c) => trackerCall(c, () => tracker.acceptOffer(c.req.param("id"))));
-  app.post("/api/applications/:id/decline", async (c) => trackerCall(c, () => tracker.declineOffer(c.req.param("id"))));
+  app.post("/api/applications/:id/accept", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.acceptOffer(c.req.param("id")));
+  });
+  app.post("/api/applications/:id/decline", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, () => tracker.declineOffer(c.req.param("id")));
+  });
   app.get("/api/applications/:id/decline-draft", async (c) => trackerCall(c, () => tracker.declineDraft(c.req.param("id"))));
   app.put("/api/applications/:id/offer", async (c) => {
     const body = await jsonBody(c);
