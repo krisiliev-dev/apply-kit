@@ -50,9 +50,10 @@ export interface ApplicationEvent {
    * cv: the user attached the CV they sent. email: an email was matched here (and, when `to` is
    * set, moved the Status). undo: an earlier Event was undone. follow-up-sent, follow-up-skipped,
    * follow-up-snoozed: what the user did with a follow-up (`followUpId`). interview: an interview
-   * was set or changed (read from an invite email, or by you).
+   * was set or changed (read from an invite email, or by you). submission: a package marked submitted
+   * was attached to an Application made another way (added by hand, "I applied").
    */
-  kind: "created" | "status" | "note" | "cv" | "email" | "undo" | "interview" | FollowUpEventKind;
+  kind: "created" | "status" | "note" | "cv" | "email" | "undo" | "interview" | "submission" | FollowUpEventKind;
   cause: EventCause;
   /** For a Status change (and its undo): the Status before and after. */
   from: Status | null;
@@ -415,7 +416,7 @@ export interface SubmissionInput extends Submission {
 export type SubmissionResult =
   /** `alreadyRecorded`: the package already had its Application; this is it, unchanged. */
   | { outcome: "recorded"; alreadyRecorded: boolean; application: ApplicationSummary & { submission: Submission } }
-  /** The Job already has an open Application made another way: nothing was added (Track #35 attaches the package to it). */
+  /** The Job's open Application already has another package: nothing was added. */
   | { outcome: "already-open"; application: ApplicationSummary; message: string };
 
 export type GroupKey = "accepted" | "offer" | "interviewing" | "screening" | "applied" | "closed";
@@ -688,15 +689,17 @@ export interface Tracker {
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /**
-   * Record submission (Apply's "Mark as submitted"; Track #35 extends it): creates the Application in
-   * Applied for the package's Job, with the package, portal, portal address, when and how. Once per
-   * package: asked again, it returns the Application it made. A Job with an open Application made
-   * another way gets nothing new ("already-open").
+   * Record submission (Apply's "Mark as submitted"): creates the Application in Applied for the
+   * package's Job ("Submitted → Applied"), with the package, portal, portal address, when and how.
+   * Once per package: asked again, it returns the Application it has. A Job with an open Application
+   * made another way (by hand, "I applied") gets the package attached to that one instead, its Status
+   * and date applied kept. A Job whose open Application has another package gets nothing ("already-open").
    */
   recordSubmission(input: SubmissionInput): Promise<SubmissionResult>;
   /**
-   * Undoes record submission (Apply's Undo): the Application is taken off the list. Refused (a
-   * TrackerError) once anything has happened to it since. Returns the package it was made from.
+   * Undoes record submission (Apply's Undo): the Application is taken off the list (or, when the package
+   * was attached to one made another way, the package is taken off it). Refused (a TrackerError) once
+   * anything has happened to it since. Returns the package.
    */
   undoSubmission(applicationId: string): Promise<{ packageId: string; event: ApplicationEvent }>;
   /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
@@ -1006,7 +1009,20 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const existing = db.prepare("SELECT * FROM application WHERE package_id = ? AND submitted_at IS NOT NULL AND removed_at IS NULL ORDER BY rowid LIMIT 1").get(input.packageId);
     if (existing) return recorded(existing, true);
     const open = openOnJob(input.jobId);
-    if (open) return alreadyOpen(open);
+    if (open && row(open.id)!.package_id) return alreadyOpen(open);
+    if (open) {
+      db.exec("BEGIN");
+      try {
+        db.prepare("UPDATE application SET package_id = ?, portal = ?, portal_url = ?, submitted_at = ?, submitted_via = ? WHERE id = ?")
+          .run(input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via, open.id);
+        addEvent({ applicationId: open.id, kind: "submission", cause: "you", from: null, to: null, text: "Package attached: marked as submitted", undoes: null });
+        db.exec("COMMIT");
+      } catch (err) {
+        db.exec("ROLLBACK");
+        throw err;
+      }
+      return recorded(row(open.id)!, false);
+    }
 
     const job = await discovery.getJob(input.jobId);
     const target = job?.postings.find((p) => p.isTarget) ?? job?.postings[0];
@@ -1022,8 +1038,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         id, job?.id ?? input.jobId, job?.company ?? input.job.company, job?.title ?? input.job.title, sofiaDay(new Date(input.submittedAt)), now(),
         job?.url ?? null, input.angle ?? job?.fit.angle ?? null, source, input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via,
       );
-      const text = input.via === "app" ? "Marked as submitted on the Job page" : `Marked as submitted${portal ? ` on ${portal}` : ""}`;
-      addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text, undoes: null });
+      addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text: "Submitted → Applied", undoes: null });
       db.exec("COMMIT");
     } catch (err) {
       db.exec("ROLLBACK");
@@ -1037,8 +1052,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const submission = r ? submissionOf(r) : null;
     if (!r || !submission) throw new TrackerError("not-found", "There's no Application made by marking a package submitted with that id.");
     const all = allEvents(applicationId);
-    const created = all.find((e) => e.kind === "created")!;
-    const later = all.filter((e) => e.id !== created.id);
+    const attached = r.created_how !== "submission";
+    const created = attached ? all.filter((e) => e.kind === "submission" && !e.undoneAt).at(-1)! : all.find((e) => e.kind === "created")!;
+    const later = all.slice(all.findIndex((e) => e.id === created.id) + 1);
     if (later.length > 0) {
       throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
     }
@@ -1150,6 +1166,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         // The follow-up's state comes from its Events still standing, so it is as it was before.
         const text = ev.kind === "follow-up-snoozed" ? "Snooze undone" : ev.kind === "follow-up-sent" ? "Undone: not sent after all" : "Undone: not skipped after all";
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text, undoes: eventId, followUpId: ev.followUpId ?? undefined });
+      } else if (ev.kind === "submission") {
+        db.prepare("UPDATE application SET package_id = NULL, portal = NULL, portal_url = NULL, submitted_at = NULL, submitted_via = NULL WHERE id = ?").run(ev.applicationId);
+        event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Package taken off: not submitted after all", undoes: eventId });
       } else if (ev.kind === "created") {
         db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), ev.applicationId);
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Adding undone: removed", undoes: eventId });
@@ -1303,8 +1322,11 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const all = allEvents(applicationId);
     const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
     const posting = await postingOf(app);
+    const submission = submissionOf(row(applicationId)!);
+    const submittedHow = submission ? (submission.via === "app" ? "Marked on the Job page" : `${submission.portal ? portalLabel(submission.portal) : "The portal"}, marked in the extension`) : null;
     const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
-      id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, detail: null, undoneAt: e.undoneAt,
+      id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, undoneAt: e.undoneAt,
+      detail: (e.kind === "submission" && !e.undoneAt) || (e.kind === "created" && app.createdHow === "submission") ? submittedHow : null,
       undoable: !e.undoneAt && (e.kind === "note" || ((e.kind === "status" || (e.kind === "email" && !!e.to) || isFollowUpEvent(e)) && !movedSince(e, app.status))),
       email: e.kind === "email" && e.emailId ? matchedEmail(e.emailId) : null,
     }));
@@ -1335,7 +1357,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const setter = standing.filter((e) => e.kind === "created" || e.kind === "status" || (e.kind === "email" && !!e.to)).at(-1);
     const followUp = currentFollowUp(row(applicationId)!);
     return {
-      ...app, submission: submissionOf(row(applicationId)!), statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
+      ...app, submission, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
       nextStep: nextStepOf(app, standing, followUp, thankYous, interviews), followUp, interviews, thankYous, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
       closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
