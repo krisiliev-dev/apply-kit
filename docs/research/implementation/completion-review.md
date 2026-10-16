@@ -29,3 +29,11 @@ The integrated suite passed 1,402 tests across 104 files; TypeScript and ESLint 
 ## Limits and first use
 
 Portal fixtures cannot establish compatibility with every employer’s current custom form. Real accounts, consent, submission, sending email and the five-application timing trial remain manual. Issue #50 stays open for that evidence. Verification email sender matching is a relevance filter, not an authentication guarantee; links are displayed for the user to review and open, never followed automatically. No personal documents, mailbox contents or credential values were inspected for this review.
+
+## Real AI release checks
+
+The final eight-case tailoring run (`tailoring-2026-10-16T14-12-48Z`) generated every part: no missing parts, eight one-page CVs, and no over-limit answers. It cost $0.033731. The honesty validator refused three lines and raised 22 gap flags; four letters need edits before approval. These are reviewable drafts, not automatically approved applications. The earlier reasoning-enabled run had one CV timeout and three letters fail on a provider rate limit.
+
+The final 50-posting extraction report (`extraction-2026-10-16T14-06-05Z`) records 89% requirement F1, 97% years F1, 86% location F1 and 96% language accuracy, with one failed read. The failed long posting and the invalid-language-code case both passed targeted real calls after the output-boundary fixes. The 50-case scores predate that last guard and output-limit adjustment; they are not a claim of perfect screening.
+
+A real Track call classified a fictional rejection correctly within its short output allowance. The running service reports its mailbox connected; only the health state was inspected. The initial tailoring run started before a service ledger existed; its cost was subsequently booked, together with a conservative reserve for the initial extraction failures whose billed usage had been lost before the fix. Subsequent checks booked spending normally. Synthetic evaluation reports and PDFs remain gitignored locally.
