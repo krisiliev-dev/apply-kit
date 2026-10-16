@@ -37,3 +37,7 @@ With the panel opened from `action.onClicked`, the grant then:
 
 So: the extension opens its panel from `action.onClicked` (not `openPanelOnActionClick`), and the panel re-reads the tab when the icon is clicked again. `activeTab` covers a portal for as long as the tab stays on that portal's site, which is most of an application; the optional host permission is kept for the cross-site cases (account redirects, a company page that opens its portal, embedded forms) and so that Kris doesn't have to click the icon after each of those.
 
+
+## Choosing inside a form control (Apply #43)
+
+Some portals' fields are answered by a click: Ashby's yes/no questions are two buttons, and Ashby's location keeps only a suggestion picked from its list. Page actions therefore has one `choose()` that clicks, and only after `choiceRefusal` accepts the element: one of exactly two `type="button"` buttons reading Yes/No (Да/Не) side by side, or a `role=option` inside a `role=listbox`. Links, submit buttons (a `<button>` without `type="button"` is one), and every other button are refused. The guard test checks that this is the only click in the extension and that `choose()` checks the refusal first; each portal's filler test checks that every Submit, link and consent control on its fixtures is refused. A portal form embedded in a company page is filled in its frame (found by its address with `allFrames`, which needs the portals permission); without it the panel offers "Open the form on its own", a plain link Kris clicks.
