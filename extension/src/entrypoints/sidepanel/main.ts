@@ -9,7 +9,7 @@
 // fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
 // it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PackageFileKind, PackageInBrief, PageReading } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FieldStructure, FillPage, FillStart, MarkResult, PackageFileKind, PackageInBrief, PageReading } from "@apply-kit/core";
 import { countOutcomes } from "@apply-kit/core/fill";
 import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
@@ -479,7 +479,7 @@ async function fillThisPage(packageId?: string) {
     midFill = { tabId, line: stoppedMidFill(run.outcomes) };
     return notRunning(connection!, midFill.line, tabId);
   }
-  filled({ tabId, ctx, reading: run.reading, answers: run.answers, outcomes: run.outcomes, at: run.filledAt, portal, pkg: s.package, sessionId: session.id, paths: run.paths, retried: new Set() });
+  filled({ tabId, ctx, reading: run.reading, answers: run.answers, outcomes: run.outcomes, at: run.filledAt, portal, pkg: s.package, sessionId: session.id, paths: run.paths, retried: new Set(), page: { portal: page.portal, address: tab.url! } });
 }
 
 const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: icons.x, closed: icons.dash } as const;
@@ -490,12 +490,21 @@ function filled(f: {
   pkg: PackageInBrief; sessionId: string; paths: Map<PackageFileKind, string | null>;
   /** Fields Try once more was used on: it's offered once per field, never in a loop. */
   retried: ReadonlySet<string>;
+  /** The page's portal and address, for "Report this field" (apply-kit keeps the host and path only). */
+  page: { portal: string; address: string };
 }, announceIt = true) {
   const rows = fieldRows(f.reading, f.answers, f.outcomes);
   const counts = countOutcomes(f.outcomes);
   const files = fileReport(f.pkg, f.answers, f.outcomes, f.portal);
   const fileChip = (line: Node | string, meta: string | null) => h("div", { class: "filechip" }, svg(icons.file), h("span", {}, line, meta && h("span", { class: "meta block" }, meta)));
   const attachedChips = files.attached.map((a) => fileChip(h("span", {}, h("b", {}, a.label), ` ${a.line}`), a.meta));
+  // "Report this field": the field's structure (never its value), saved on this laptop so the filler can be fixed.
+  const report = async (fieldId: string, label: string) => {
+    const field = await inPage<FieldStructure>(f.tabId, "describe", [fieldId]);
+    if (!field) return announce(`${label} isn't on this page any more, so there's nothing to report.`);
+    const r = await client.fill.report({ portal: f.page.portal, address: f.page.address, stepLabel: f.reading.stepLabel, field });
+    announce(r.ok ? `Saved a report of ${label} on this laptop, without its value. It's in apply-kit's Settings, under the Chrome extension.` : r.state === "error" ? r.error : "apply-kit isn't answering, so the report wasn't saved.");
+  };
   // A file the portal didn't take: what happened, then the file one click away (Finder, or its path).
   const failedBlocks = files.failed.flatMap((x) => {
     const path = f.paths.get(x.which) ?? null;
@@ -512,7 +521,8 @@ function filled(f: {
       fileChip(`${x.fileName} · ${x.size}`, path ? "In your Packages folder" : "Not in your Packages folder: open the package in apply-kit to download it."),
       h("div", { class: "row" },
         button("Show in Finder", () => void reveal(), "btn sm", { "aria-label": `Show ${x.fileName} in Finder` }),
-        path ? button("Copy file path", () => void copy(), "btn ghost sm") : ""),
+        path ? button("Copy file path", () => void copy(), "btn ghost sm") : "",
+        button("Report the upload box", () => void report(x.fieldId, `the ${x.which === "cv" ? "CV" : "cover letter"} upload box`), "btn ghost sm")),
       h("p", { class: "meta" }, `Then drag it onto the ${x.which === "cv" ? "CV" : "cover letter"} box, or click Attach there and pick it. Click Fill this page again afterwards: ${f.portal} may change fields while reading it.`),
     ];
   });
@@ -548,7 +558,9 @@ function filled(f: {
       button("Copy", () => void copy(x.value, x.label), "btn sm", { "aria-label": `Copy ${x.label}` })),
     h("div", { class: "row" },
       x.tryOnceMore && button("Try once more", () => void tryOnceMore(x), "btn ghost sm", { "aria-label": `Try ${x.label} once more` }),
-      button("Show on page", () => void showOnPage({ fieldId: x.fieldId, label: x.label } as FieldRow), "btn ghost sm", { "aria-label": `Show ${x.label} on page` })),
+      button("Show on page", () => void showOnPage({ fieldId: x.fieldId, label: x.label } as FieldRow), "btn ghost sm", { "aria-label": `Show ${x.label} on page` }),
+      button("Report this field", () => void report(x.fieldId, x.label), "btn ghost sm", { "aria-label": `Report ${x.label}` })),
+    h("p", { class: "meta" }, `"Report" saves the field's structure on this laptop (no values) so the ${f.portal} filler can be fixed. Nothing is sent anywhere.`),
   )));
   const list = h("ul", { class: "flist" }, ...rows.map((r) => h("li", {},
     button("", () => void showOnPage(r), "frow"),
