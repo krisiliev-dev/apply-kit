@@ -85,9 +85,13 @@ export function widgetRefusal(el: Element, words = ""): string | null {
   // An option is the portal's wording of an answer ("Next week"), not a control that moves the page.
   if (role === "option") return null;
   const automation = (el.getAttribute("data-automation-id") ?? "").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ");
-  if (navigation.test(`${el.textContent ?? ""} ${el.getAttribute("aria-label") ?? ""} ${automation}`)) return "a navigation control";
+  const said = `${el.textContent ?? ""} ${el.getAttribute("aria-label") ?? ""} ${automation}`;
+  if (navigation.test(said) || moving.test(said)) return "a navigation control";
   return null;
 }
+
+/** Widgets that move, close or leave the page, or open the file picker (English and Bulgarian): never pressed. */
+const moving = /\b(back|previous|close|cancel|exit|withdraw|select files|upload)\b|назад|затвори|откажи/iu;
 
 /** Presses a widget with the click the filler was given. False if there's none, or the control is refused. */
 export function pressWidget(el: Element, press: Press | null, words = ""): boolean {

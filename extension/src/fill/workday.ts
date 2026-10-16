@@ -270,7 +270,7 @@ export function createWorkdayFiller({ press = null, settleMs = 1500, waitMs = 30
       }
       case "date": r = { outcome: (await setDate(f, value)) && valueOf(f, doc) === value ? "filled" : "didnt-stick" }; break;
       case "radio": {
-        const box = choiceBoxes(f).find((b) => norm(choiceLabel(b)) === norm(value)) ?? choiceBoxes(f).find((b) => matchOption(value, [choiceLabel(b)]).hasOwnProperty("pick"));
+        const box = choiceBoxes(f).find((b) => norm(choiceLabel(b)) === norm(value)) ?? choiceBoxes(f).find((b) => "pick" in matchOption(value, [choiceLabel(b)]));
         r = { outcome: box && setChecked(box, true, f.label) && valueOf(f, doc) === choiceLabel(box) ? "filled" : "didnt-stick" };
         break;
       }
