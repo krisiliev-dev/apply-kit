@@ -8,7 +8,8 @@
     "./profile": "./src/preparation/profile.ts",
     "./answers": "./src/preparation/answers.ts",
     "./screening": "./src/preparation/screening.ts",
-    "./fill": "./src/fill/reading.ts"
+    "./fill": "./src/fill/reading.ts",
+    "./field-report": "./src/fill/field-report.ts"
   },
   "dependencies": {
     "fast-xml-parser": "5.11.1",

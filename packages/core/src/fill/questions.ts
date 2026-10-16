@@ -46,8 +46,8 @@ export const answerKindWords = (k: AnswerKind) => kindWords[k];
 export function kindFits(kind: AnswerKind, field: FieldKind): boolean {
   const fits: Record<AnswerKind, FieldKind[]> = {
     text: ["text", "textarea", "email", "tel", "url", "select", "radio", "typeahead"],
-    "yes-no": ["select", "radio", "typeahead", "checkbox", "text"],
-    choice: ["select", "radio", "typeahead", "text"],
+    "yes-no": ["select", "radio", "typeahead", "checkbox", "text", "yes-no"],
+    choice: ["select", "radio", "typeahead", "text", "yes-no"],
     number: ["number", "text", "select", "radio", "typeahead"],
     date: ["date", "text", "select", "radio"],
     rule: ["text", "number", "select", "radio", "typeahead", "textarea"],
@@ -172,4 +172,38 @@ const diversityTopics: [RegExp, string][] = [
 export function diversityTopic(label: string): string | null {
   const q = normaliseQuestion(label);
   return diversityTopics.find(([re]) => re.test(q))?.[1] ?? null;
+}
+
+// ---------------------------------------------------------------- new questions
+
+const ourWords = new Set(["us", "our", "ours", "нас", "наш", "наша", "нашата", "нашия", "нашият", "нашето", "нашите"]);
+
+/**
+ * A question asked about this company or this job ("Why do you want to join us?", "Have you worked
+ * at Kestrel Payments before?"): its answer won't fit the next form, so it isn't ticked for the bank.
+ */
+export function oneOffQuestion(question: string, company: string): boolean {
+  const words = normaliseQuestion(question).split(" ");
+  const text = ` ${words.join(" ")} `;
+  const name = normaliseQuestion(company);
+  if (name && text.includes(` ${name} `)) return true;
+  const first = name.split(" ")[0] ?? "";
+  if (first.length >= 4 && words.includes(first)) return true;
+  if (words.some((w) => ourWords.has(w))) return true;
+  return / this (role|position|job|team|company|opportunity) | тази (позиция|роля|работа) /u.test(text);
+}
+
+/** "In under 150 words" → 150: a word limit the question states, or null. */
+export function wordLimit(label: string): number | null {
+  const m = /(\d+)\s*(words?|думи)/iu.exec(label);
+  return m ? Number(m[1]) : null;
+}
+
+/** The answer-bank kind for an answer typed into this field. */
+export function answerKindOf(field: ReadField): AnswerKind {
+  if (field.kind === "checkbox") return "yes-no";
+  if (field.kind === "number") return "number";
+  if (field.kind === "date") return "date";
+  if (field.options.length > 0) return field.options.every((o) => yesNoOf(o) !== null) ? "yes-no" : "choice";
+  return "text";
 }

@@ -1,10 +1,10 @@
 // The Greenhouse filler at its interface (read, fill, undo) on synthetic Greenhouse pages in
 // happy-dom: the classic board and the new React board. Made-up companies; the values are a made-up
 // person's (Mira Petrova). No live sites.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FieldAnswer } from "@apply-kit/core";
 import { openFixture } from "./fixtures/load.ts";
-import { createGreenhouseFiller } from "./greenhouse.ts";
+import { createGreenhouseFiller, type FileToAttach } from "./greenhouse.ts";
 import { refusal } from "./page-actions.ts";
 
 const classic = () => openFixture("greenhouse-classic.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029");
@@ -77,13 +77,13 @@ describe("reading Greenhouse's confirmation page", () => {
 });
 
 describe("filling a Greenhouse page", () => {
-  it("sets the new board's React-style inputs through the native setter, so the form registers them", () => {
+  it("sets the new board's React-style inputs through the native setter, so the form registers them", async () => {
     const page = newBoard();
     // The controlled inputs ignore a direct write, as React does.
     page.field("preferred_name").value = "Mimi";
     expect(page.field("preferred_name").value).toBe("");
 
-    const outcomes = createGreenhouseFiller().fill(page.document, [
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [
       fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com"), fill("phone", "+359 88 000 0175"),
       { fieldId: "question_31002", kind: "needs-you", reason: "Your profile has no GitHub link", basis: null },
       { fieldId: "gdpr_consent", kind: "skip", reason: "Consent boxes are yours to tick" },
@@ -101,9 +101,9 @@ describe("filling a Greenhouse page", () => {
     expect(marks(page.document)).toEqual(["first_name:filled", "last_name:filled", "email:filled", "phone:filled", "question_31002:needs-you"]);
   });
 
-  it("draws marks as an outline and badge that can't be clicked and aren't read out", () => {
+  it("draws marks as an outline and badge that can't be clicked and aren't read out", async () => {
     const page = classic();
-    createGreenhouseFiller().fill(page.document, [fill("first_name", "Mira")]);
+    await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [fill("first_name", "Mira")]);
 
     const m = page.document.querySelector<HTMLElement>("[data-apply-kit-mark]")!;
     expect(m.getAttribute("aria-hidden")).toBe("true");
@@ -112,11 +112,11 @@ describe("filling a Greenhouse page", () => {
     expect(m.textContent).toBe("✓");
   });
 
-  it("keeps a field that already has a value, and replaces it only when asked", () => {
+  it("keeps a field that already has a value, and replaces it only when asked", async () => {
     const page = classic();
-    const filler = createGreenhouseFiller();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
 
-    const [phone] = filler.fill(page.document, [fill("phone", "+359 88 000 0175")]);
+    const [phone] = await filler.fill(page.document, [fill("phone", "+359 88 000 0175")]);
 
     expect(phone).toEqual({ fieldId: "phone", outcome: "kept", source: null });
     expect(page.field("phone").value).toBe("+359 000 0000");
@@ -127,31 +127,31 @@ describe("filling a Greenhouse page", () => {
     expect(marks(page.document)).toEqual(["phone:filled"]);
   });
 
-  it("filling twice fills only what's still empty, and keeps what Kris changed", () => {
+  it("filling twice fills only what's still empty, and keeps what Kris changed", async () => {
     const page = classic();
-    const filler = createGreenhouseFiller();
-    filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova")]);
+    const filler = createGreenhouseFiller({ settleMs: 0 });
+    await filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova")]);
     page.field("last_name").value = "Petrova-Ivanova";
 
-    const again = filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com")]);
+    const again = await filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com")]);
 
     expect(again.map((o) => o.outcome)).toEqual(["filled", "kept", "filled"]);
     expect(page.field("last_name").value).toBe("Petrova-Ivanova");
     expect(page.field("email").value).toBe("mira.petrova@example.com");
   });
 
-  it("picks a dropdown's option by its text", () => {
+  it("picks a dropdown's option by its text", async () => {
     const page = classic();
     const id = "job_application_answers_attributes_3_answer_selected_options_attributes_3_question_option_id";
-    const [o] = createGreenhouseFiller().fill(page.document, [{ fieldId: id, kind: "fill", value: "Company website", source: "answer-bank", basis: null }]);
+    const [o] = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [{ fieldId: id, kind: "fill", value: "Company website", source: "answer-bank", basis: null }]);
     expect(o).toEqual({ fieldId: id, outcome: "filled", source: "answer-bank" });
     expect((page.document.getElementById(id) as HTMLSelectElement).value).toBe("102");
   });
 
-  it("undo restores every value it changed and removes its marks", () => {
+  it("undo restores every value it changed and removes its marks", async () => {
     const page = newBoard();
-    const filler = createGreenhouseFiller();
-    filler.fill(page.document, [fill("first_name", "Mira"), fill("email", "mira.petrova@example.com"), { fieldId: "question_31002", kind: "needs-you", reason: "", basis: null }]);
+    const filler = createGreenhouseFiller({ settleMs: 0 });
+    await filler.fill(page.document, [fill("first_name", "Mira"), fill("email", "mira.petrova@example.com"), { fieldId: "question_31002", kind: "needs-you", reason: "", basis: null }]);
 
     expect(filler.undo(page.document)).toBe(2);
 
@@ -161,14 +161,194 @@ describe("filling a Greenhouse page", () => {
   });
 });
 
+describe("attaching the package's files", () => {
+  const cvName = "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf";
+  const letterName = "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf";
+  const cv: FileToAttach = { which: "cv", fileName: cvName, type: "application/pdf", base64: "JVBERi1mYWtlIENW" };
+  const letter: FileToAttach = { which: "letter", fileName: letterName, type: "application/pdf", base64: "JVBERi1mYWtlIGxldHRlcg==" };
+  const attach = (fieldId: string, which: "cv" | "letter"): FieldAnswer => ({ fieldId, kind: "file", which, fileName: which === "cv" ? cvName : letterName, size: 12, source: "package", basis: "Your package's CV, v1" });
+  const filesPage = (options: Parameters<typeof openFixture>[2] = {}) => openFixture("greenhouse-files.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029", options);
+  const dropPage = () => openFixture("greenhouse-dropzone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { uploads: "drop-only" });
+  const shown = (doc: Document, inputId: string) => doc.getElementById(inputId)!.closest(".field, .file-upload")!.querySelector(".filename")!.textContent;
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("attaches the CV and the letter through the file inputs, named as in the package", async () => {
+    const page = filesPage();
+
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [attach("resume", "cv"), attach("cover_letter", "letter")], [cv, letter]);
+
+    expect(outcomes).toEqual([{ fieldId: "resume", outcome: "filled", source: "package" }, { fieldId: "cover_letter", outcome: "filled", source: "package" }]);
+    expect(page.field("resume").files![0]!.name).toBe(cvName);
+    expect(await page.field("resume").files![0]!.text()).toBe("%PDF-fake CV");
+    expect(shown(page.document, "resume")).toBe(cvName);
+    expect(shown(page.document, "cover_letter")).toBe(letterName);
+    expect(marks(page.document)).toEqual(["resume:filled", "cover_letter:filled"]);
+    expect(page.presses).toEqual([]);
+  });
+
+  it("drops the CV on a box that ignores the input's change, and pastes the letter into the text-only option", async () => {
+    const page = dropPage();
+
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [
+      attach("resume", "cv"), { fieldId: "cover_letter_text", kind: "fill", value: "Dear Kestrel Payments team,", source: "package", basis: "Your package's letter, v1" },
+    ], [cv]);
+
+    expect(outcomes).toEqual([{ fieldId: "resume", outcome: "filled", source: "package" }, { fieldId: "cover_letter_text", outcome: "filled", source: "package" }]);
+    expect(shown(page.document, "resume")).toBe(cvName);
+    expect(page.field("cover_letter_text").value).toBe("Dear Kestrel Payments team,");
+    expect(page.presses).toEqual([]);
+  });
+
+  it("attaches files first and lets the page settle, so the portal's CV reading can't overwrite what's filled; what it read is kept", async () => {
+    vi.useFakeTimers();
+    const page = filesPage({ cvParser: { delayMs: 800, values: { first_name: "MIRA", phone: "0880000175" } } });
+
+    // The answers in the portal's order: the CV field comes after the names.
+    const filling = createGreenhouseFiller({ settleMs: 1500 }).fill(page.document, [
+      fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("phone", "+359 88 000 0175"), attach("resume", "cv"),
+    ], [cv]);
+    await vi.advanceTimersByTimeAsync(3000);
+    const outcomes = await filling;
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(outcomes).toEqual([
+      { fieldId: "first_name", outcome: "kept", source: null },
+      { fieldId: "last_name", outcome: "filled", source: "profile" },
+      { fieldId: "phone", outcome: "kept", source: null },
+      { fieldId: "resume", outcome: "filled", source: "package" },
+    ]);
+    expect(["first_name", "last_name", "phone"].map((id) => page.field(id).value)).toEqual(["MIRA", "Petrova", "0880000175"]);
+  });
+
+  it("says the CV didn't attach when the portal rejects it, and leaves the other fields filled", async () => {
+    const page = filesPage({ uploads: "reject" });
+
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [fill("first_name", "Mira"), attach("resume", "cv")], [cv]);
+
+    expect(outcomes).toEqual([{ fieldId: "first_name", outcome: "filled", source: "profile" }, { fieldId: "resume", outcome: "didnt-stick", source: null }]);
+    expect(marks(page.document)).toEqual(["resume:didnt-stick", "first_name:filled"]);
+  });
+
+  it("filling again keeps the CV it attached, and undo takes it off", async () => {
+    const page = filesPage();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
+    await filler.fill(page.document, [attach("resume", "cv")], [cv]);
+
+    const again = await filler.fill(page.document, [attach("resume", "cv")], [cv]);
+    expect(again).toEqual([{ fieldId: "resume", outcome: "filled", source: "package" }]);
+    expect(page.field("resume").files).toHaveLength(1);
+
+    expect(filler.undo(page.document)).toBe(1);
+    expect(page.field("resume").files).toHaveLength(0);
+    expect(marks(page.document)).toEqual([]);
+  });
+});
+
+describe("a value that doesn't stick", () => {
+  // The phone number as the field wants it: its country code has a dropdown of its own.
+  const answers = [fill("phone_code", "+359"), fill("phone", "88 000 0175")];
+  const phonePage = (times?: number) =>
+    openFixture("greenhouse-phone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { controlled: true, clears: { id: "phone", afterMs: 200, times } });
+  const typed = (el: HTMLElement) => { let n = 0; el.addEventListener("change", () => n++); return () => n; };
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("reads every filled value back once after the settle wait: one the page cleared didn't stick", async () => {
+    vi.useFakeTimers();
+    const page = phonePage();
+
+    const filling = createGreenhouseFiller({ settleMs: 1000 }).fill(page.document, answers);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await filling).toEqual([{ fieldId: "phone_code", outcome: "filled", source: "profile" }, { fieldId: "phone", outcome: "didnt-stick", source: null }]);
+    expect(page.field("phone").value).toBe("");
+    expect(marks(page.document)).toEqual(["phone_code:filled", "phone:didnt-stick"]);
+  });
+
+  it("Try once more puts the value in once and reports again: filled when it stays", async () => {
+    vi.useFakeTimers();
+    const page = phonePage(1);
+    const filler = createGreenhouseFiller({ settleMs: 1000 });
+    const filling = filler.fill(page.document, answers);
+    await vi.advanceTimersByTimeAsync(1000);
+    await filling;
+
+    const retry = filler.retry(page.document, "phone", "88 000 0175");
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await retry).toBe("filled");
+    expect(page.field("phone").value).toBe("88 000 0175");
+    expect(marks(page.document)).toEqual(["phone_code:filled", "phone:filled"]);
+  });
+
+  it("Try once more never loops: one attempt, and didn't stick again when the page clears it again", async () => {
+    vi.useFakeTimers();
+    const page = phonePage();
+    const filler = createGreenhouseFiller({ settleMs: 1000 });
+    const filling = filler.fill(page.document, answers);
+    await vi.advanceTimersByTimeAsync(1000);
+    await filling;
+    const attempts = typed(page.field("phone"));
+
+    const retry = filler.retry(page.document, "phone", "88 000 0175");
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await retry).toBe("didnt-stick");
+    expect(attempts()).toBe(1);
+    expect(page.field("phone").value).toBe("");
+    expect(marks(page.document)).toEqual(["phone_code:filled", "phone:didnt-stick"]);
+    expect(page.presses).toEqual([]);
+  });
+});
+
+describe("describing a field for a field report", () => {
+  // Mira Petrova's (made-up) values, typed into every field the fixtures have.
+  const persona = ["Mira", "Petrova", "mira.petrova@example.com", "+359 88 000 0175", "88 000 0175", "Plovdiv", "https://www.linkedin.com/in/mira-petrova-example", "https://mira-petrova.example.com", "I like detection engineering"];
+
+  it("gives the field's structure (tag, type, role, attributes, label chain, options), never a value", async () => {
+    const page = openFixture("greenhouse-phone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { controlled: true });
+    const filler = createGreenhouseFiller({ settleMs: 0 });
+    await filler.fill(page.document, [fill("phone_code", "+359"), fill("phone", "88 000 0175")]);
+
+    expect(filler.describe(page.document, "phone")).toEqual({
+      tag: "input", type: "tel", role: null, kind: "tel",
+      attributes: { id: "phone", class: "input", type: "tel", "aria-required": "true", autocomplete: "tel-national", placeholder: "e.g. 87 123 4567", "data-qa": "phone-input" },
+      labelChain: [{ from: "label[for]", text: "Phone Number" }, { from: "placeholder", text: "e.g. 87 123 4567" }],
+      options: [],
+    });
+    expect(filler.describe(page.document, "phone_code")).toMatchObject({ tag: "select", kind: "select", options: ["+43", "+359", "+49"] });
+    expect(filler.describe(page.document, "nope")).toBeNull();
+  });
+
+  it("holds none of the values filled into the page, whatever the field", async () => {
+    for (const page of [
+      openFixture("greenhouse-classic.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029"),
+      openFixture("greenhouse-new.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { controlled: true }),
+      openFixture("greenhouse-questions.html", "https://boards.greenhouse.io/vireohealth/jobs/4471077"),
+    ]) {
+      const filler = createGreenhouseFiller({ settleMs: 0 });
+      const fields = filler.read(page.document).fields;
+      // Every text field gets one of Mira's values; the page's own pre-filled value is a value too.
+      await filler.fill(page.document, fields.filter((f) => !["select", "radio", "checkbox", "file"].includes(f.kind)).map((f, i) => fill(f.id, persona[i % persona.length]!)));
+      const values = [...persona, "+359 000 0000"];
+
+      const described = JSON.stringify(fields.map((f) => filler.describe(page.document, f.id)));
+
+      for (const v of values) expect(described, v).not.toContain(v);
+      expect(described).not.toContain("\"value\"");
+    }
+  });
+});
+
 describe("what filling never does", () => {
-  it("never presses Submit or ticks a consent box, even when told to fill one", () => {
+  it("never presses Submit or ticks a consent box, even when told to fill one", async () => {
     for (const page of [classic(), newBoard()]) {
-      const filler = createGreenhouseFiller();
+      const filler = createGreenhouseFiller({ settleMs: 0 });
       const reading = filler.read(page.document);
       const consent = reading.fields.find((f) => f.consent)!;
 
-      const outcomes = filler.fill(page.document, reading.fields.map((f) => fill(f.id, f.kind === "checkbox" ? "checked" : "Mira")));
+      const outcomes = await filler.fill(page.document, reading.fields.map((f) => fill(f.id, f.kind === "checkbox" ? "checked" : "Mira")));
       filler.undo(page.document);
 
       expect(page.presses).toEqual([]);
@@ -178,9 +358,11 @@ describe("what filling never does", () => {
   });
 
   it("refuses every submit, navigation and consent control on the fixtures", () => {
-    for (const page of [classic(), newBoard()]) {
+    const files = openFixture("greenhouse-files.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029");
+    const drop = openFixture("greenhouse-dropzone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410");
+    for (const page of [classic(), newBoard(), files, drop]) {
       const controls = Array.from(page.document.querySelectorAll("button, input[type=button], input[type=submit], a, form, input[type=checkbox]"));
-      expect(controls.length).toBeGreaterThan(2);
+      expect(controls.length).toBeGreaterThanOrEqual(2);
       for (const el of controls) {
         const label = el.closest("label")?.textContent ?? page.document.querySelector(`label[for="${el.id}"]`)?.textContent ?? "";
         expect(refusal(el, label), el.outerHTML.slice(0, 80)).not.toBeNull();
@@ -230,12 +412,12 @@ describe("custom and demographic questions", () => {
     expect(r.fields.find((f) => f.id === ids.office)!.consent).toBe(false);
   });
 
-  it("fills the questions it has answers for, skips the voluntary ones, marks what needs Kris, and leaves consent alone", () => {
+  it("fills the questions it has answers for, skips the voluntary ones, marks what needs Kris, and leaves consent alone", async () => {
     const page = questions();
-    const filler = createGreenhouseFiller();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
     const bankFill = (fieldId: string, value: string): FieldAnswer => ({ fieldId, kind: "fill", value, source: "answer-bank", basis: null });
 
-    const outcomes = filler.fill(page.document, [
+    const outcomes = await filler.fill(page.document, [
       bankFill(ids.sponsorship, "No"),
       { fieldId: ids.notice, kind: "fill", value: "1 month", source: "package", basis: "Approved screening answer in this package" },
       bankFill(ids.relocate, "No"),
@@ -262,5 +444,47 @@ describe("custom and demographic questions", () => {
     // Undo unticks and clears what it changed.
     filler.undo(doc);
     expect([page.field("relocate_no").checked, page.field(ids.office).checked, page.field(ids.notice).value]).toEqual([false, false, ""]);
+  });
+});
+
+describe("needs-you items Kris answers", async () => {
+  const questions = () => openFixture("greenhouse-questions.html", "https://boards.greenhouse.io/vireohealth/jobs/4471077");
+  const detection = "job_application_answers_attributes_4_text_value";
+  const relocate = "job_application[answers_attributes][2][boolean_value]";
+  const needsYou = (fieldId: string): FieldAnswer => ({ fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null });
+  const draft = "At Northwind Bank I rewrote our brute-force alert to group failed logins by source.";
+
+  it("fills only that one field from the panel, and marks it Kris's on the next fill", async () => {
+    const page = questions();
+    const filler = createGreenhouseFiller();
+    await filler.fill(page.document, [needsYou(detection), needsYou(relocate), needsYou("first_name")]);
+
+    expect(filler.fillOne(page.document, detection, draft)).toBe("filled");
+    expect(filler.fillOne(page.document, relocate, "No")).toBe("filled");
+
+    expect(page.field(detection).value).toBe(draft);
+    expect(page.field("relocate_no").checked).toBe(true);
+    expect(page.field("first_name").value).toBe("");
+    expect(marks(page.document)).toEqual(["first_name:needs-you", `${detection}:filled`, `${relocate}:filled`]);
+    const again = await filler.fill(page.document, [needsYou(detection), needsYou(relocate), needsYou("first_name")]);
+    expect(again).toEqual([
+      { fieldId: detection, outcome: "filled", source: "you" },
+      { fieldId: relocate, outcome: "filled", source: "you" },
+      { fieldId: "first_name", outcome: "needs-you", source: null },
+    ]);
+    expect(page.presses).toEqual([]);
+  });
+
+  it("keeps an answer Kris typed on the page into a needs-you field, as his", async () => {
+    const page = questions();
+    const filler = createGreenhouseFiller();
+    await filler.fill(page.document, [needsYou(detection)]);
+    page.field(detection).value = "Typed on the page by Mira.";
+
+    const [o] = await filler.fill(page.document, [needsYou(detection)]);
+
+    expect(o).toEqual({ fieldId: detection, outcome: "kept", source: null });
+    expect(page.field(detection).value).toBe("Typed on the page by Mira.");
+    expect(marks(page.document)).toEqual([`${detection}:kept`]);
   });
 });

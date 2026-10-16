@@ -1,0 +1,13 @@
+<!-- Synthetic SmartRecruiters OneClick second step: the screening questions some postings ask after the
+     first page, in spl-* web components with open shadow roots (built by smartrecruiters.ts). Made-up
+     company and job; no real person's data. -->
+<main class="oc-application">
+  <header class="oc-header"><h1 class="job-title">Application Security Engineer</h1><p class="company">Nordlicht Bank · Sofia, Bulgaria</p></header>
+  <form id="oc-form" class="oc-form" novalidate>
+    <h2 class="step-title">Screening questions</h2>
+    <spl-radio-group id="q-right-to-work" required><template data-shadow="open"><fieldset><legend>Do you have the right to work in Bulgaria?</legend><label><input id="q-right-to-work-yes" type="radio" name="q-right-to-work" value="yes" required>Yes</label><label><input id="q-right-to-work-no" type="radio" name="q-right-to-work" value="no">No</label></fieldset></template></spl-radio-group>
+    <spl-select id="q-notice" required><template data-shadow="open"><div class="field"><label for="q-notice-select">What is your notice period?</label><select id="q-notice-select" required><option value="">Select</option><option value="0">Immediately</option><option value="1">1 month</option><option value="2">2 months or more</option></select></div></template></spl-select>
+    <spl-textarea id="q-why" required><template data-shadow="open"><div class="field"><label for="q-why-input">Why are you interested in this role?</label><textarea id="q-why-input" required maxlength="2000"></textarea></div></template></spl-textarea>
+    <div class="oc-actions"><button type="button" class="back">Back</button><button type="submit" class="submit">Submit</button></div>
+  </form>
+</main>

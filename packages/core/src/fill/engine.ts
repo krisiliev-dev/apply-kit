@@ -1,31 +1,56 @@
+import { findVerificationLink } from "./verification.ts";
 // Apply's fill engine (spec #23, ticket #38): which approved package a portal page belongs to, the
 // fill session that ties a browser tab to it, what goes in each field of the page, and the record of
 // each page filled (never its values). It reads Prepare only through `PrepareForApply`
 // (docs/contracts.md). The extension reads and fills the page; this decides.
 import { randomUUID } from "node:crypto";
 import type { PrepareForApply } from "../preparation/engine.ts";
-import { sameJobReference, type ApprovedPackage, type PageJobReference, type SubmittedVia } from "../preparation/contracts.ts";
+import { sameJobReference, type ApprovedPackage, type PageJobReference, type ProfileForApply, type SubmittedVia } from "../preparation/contracts.ts";
 import { TrackerError, type ApplicationSummary, type Submission, type Tracker } from "../tracker.ts";
 import type { Clock, SqlDatabase } from "../ports.ts";
+import type { PackageFolder } from "../preparation/ports.ts";
 import { migrate } from "../schema.ts";
-import { minMatchConfidence, type Answer } from "../preparation/answers.ts";
+import { minMatchConfidence, type Answer, type AnswerKind } from "../preparation/answers.ts";
 import { isSalaryQuestion } from "../preparation/screening.ts";
-import { contactValue } from "./contact.ts";
-import { answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, similarity } from "./questions.ts";
-import { countOutcomes, type FieldAnswer, type FieldOutcome, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
+import { contactValue, normaliseLabel } from "./contact.ts";
+import { planSection, type SectionPlan } from "./entries.ts";
+import { answerKindOf, answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, oneOffQuestion, similarity, wordLimit } from "./questions.ts";
+import {
+  type CopyList, type CopyRow,
+  countOutcomes, type FieldAnswer, type FieldOutcome, type FieldReport, type FieldReportInput, type PackageFileKind, type PageReading, type PendingAnswer, type ReadField, type RecordedFill, type RecordedPage, type SaveOffer, type SavedAnswers, type SavePick,
+} from "./reading.ts";
+import { fieldStructure, whereReported } from "./field-report.ts";
 
 export interface FillDeps {
   db: SqlDatabase;
   clock: Clock;
   prepare: Pick<PrepareForApply,
-    "approvedPackages" | "packageForApply" | "profileForApply" | "findAnswer" | "listAnswers" | "recordAnswerUse" | "markPackageSubmitted">;
+    | "approvedPackages" | "packageForApply" | "profileForApply" | "packageFile" | "findAnswer" | "listAnswers" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit"
+    | "draftAnswer" | "markPackageSubmitted">;
   /** Track: "Mark as submitted" creates the Application through its record submission. */
   track: Pick<Tracker, "recordSubmission" | "undoSubmission">;
+  /**
+   * The packages folder, to copy an approved file to Kris's Packages folder on first use when approval
+   * couldn't ("Show in Finder" needs it there). Freezing the same bytes again only finds the file and its copy.
+   */
+  packages?: Pick<PackageFolder, "freeze">;
+  mailboxConnected?: () => boolean;
+  refreshMailbox?: () => Promise<void>;
 }
 
-/** The page Kris is on, as the extension recognised it from the tab's address. */
+/** A package file to attach: its bytes, the name the portal gets, and its copy in the Packages folder (null if it couldn't be written). */
+export interface PackageFileForFill {
+  which: PackageFileKind;
+  fileName: string;
+  size: number;
+  path: string | null;
+  bytes: Uint8Array;
+}
+
+/** The page Kris is on, as the extension recognised it from the tab's address ("unknown": a form apply-kit doesn't know, #47). */
 export interface FillPage {
-  portal: PageJobReference["portal"];
+  tenant?: string | null;
+  portal: PageJobReference["portal"] | "unknown";
   host: string;
   jobRef: PageJobReference | null;
 }
@@ -51,7 +76,7 @@ export interface PackageInBrief {
   job: { title: string; company: string };
   jobRef: PageJobReference | null;
   language: "en" | "bg";
-  cv: { fileName: string; label: string; angle: ApprovedPackage["angle"]; ats: ApprovedPackage["cv"]["ats"] };
+  cv: { fileName: string; size: number; label: string; angle: ApprovedPackage["angle"]; ats: ApprovedPackage["cv"]["ats"] };
   /** How many approved screening answers it carries. */
   answers: number;
   /** Whether it has an approved letter. */
@@ -59,9 +84,15 @@ export interface PackageInBrief {
 }
 
 export type FillMatch =
-  /** `why`: the page's job ID is the target posting's, the page is another posting of the package's Job, or Kris chose it. */
-  | { kind: "matched"; why: "job-id" | "same-job" | "chosen"; continued: boolean; package: PackageInBrief; session: FillSession | null }
-  /** Approved packages on the same board, none for this job ID: Kris picks one (or none). */
+  /**
+   * `why`: the page's job ID is the target posting's, the page is another posting of the package's Job,
+   * the package's target posting is on this site (a form apply-kit doesn't know), or Kris chose it.
+   */
+  | { kind: "matched"; why: "job-id" | "same-job" | "target-host" | "chosen"; continued: boolean; package: PackageInBrief; session: FillSession | null }
+  /**
+   * Approved packages on the same board, none for this job ID; or, on a form apply-kit doesn't know with
+   * no package targeting its site, every approved package not yet submitted, newest first: Kris picks one (or none).
+   */
   | { kind: "choose"; candidates: PackageInBrief[] }
   /** No approved package for this page; `job` when the Job has a package that isn't approved yet. */
   | { kind: "no-package"; job: { id: string; packageId: string; packageState: "draft"; reason: string } | null };
@@ -90,12 +121,38 @@ export type MarkResult =
 export interface FillEngine {
   /** Which package fits the page, without opening or ending anything (what the panel shows before Fill). */
   matchPage(page: FillPage, options?: FillOptions): Promise<FillStart>;
+  verification(sessionId: string): Promise<{ connected: boolean; url: string | null }>;
   /** Every Fill starts here: re-reads the job, keeps the tab's session for the same job, ends it for a different one, and opens one on a match. */
   startFill(page: FillPage, options?: FillOptions): Promise<FillStart>;
-  /** The answer for each field of the page, in its order. Throws once the session has ended. */
-  answer(sessionId: string, reading: PageReading): FieldAnswer[];
-  /** Records what the fill did on a page: counts and per-field outcome and source, no values. */
-  recordPage(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): RecordedPage;
+  /**
+   * The copy list on a form apply-kit doesn't know (#47): the value for each field it can map, under the
+   * form's own label with its meaning in English, in the form's order; files as the package's own. Fills
+   * nothing and drafts nothing. Throws once the session has ended.
+   */
+  copyList(sessionId: string, reading: PageReading): CopyList;
+  /**
+   * The answer for each field of the page, in its order. A new required free-text question still
+   * empty gets a draft from Prepare's drafter (once per session), within the AI cap. Rejects once the
+   * session has ended.
+   */
+  answer(sessionId: string, reading: PageReading): Promise<FieldAnswer[]>;
+  /**
+   * Records what the fill did on a page: counts and per-field outcome and source, no values. The
+   * reading is taken before filling, so a value in a field left to Kris (needs you, or empty) on an
+   * earlier fill is one Kris typed on the portal: it's kept pending in the session and returned with
+   * the others still waiting.
+   */
+  recordPage(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): RecordedFill;
+  /** The session's package's CV or letter, exactly as approved; null when the package has no such file. Throws once the session has ended. */
+  packageFile(sessionId: string, which: PackageFileKind): Promise<PackageFileForFill | null>;
+  /** The answers Kris typed on the portal in this session, waiting to be saved or declined ("Did you submit?"). */
+  pendingAnswers(sessionId: string): PendingAnswer[];
+  /**
+   * "Save to answer bank": writes the picked answers through Prepare with the job and portal as their
+   * source. A question the bank has with another answer becomes a portal edit for Kris to settle in
+   * Profile. Saved answers stop being pending.
+   */
+  saveAnswers(sessionId: string, picks: SavePick[]): SavedAnswers;
   /** The pages recorded in a session, oldest first. */
   pages(sessionId: string): RecordedPage[];
   session(sessionId: string): FillSession | null;
@@ -104,19 +161,29 @@ export interface FillEngine {
    * Mark as submitted, for the tab's session (the panel) or a package (the Job page): Track creates
    * the Application in Applied with the package, portal, address, time and how; the package becomes
    * "submitted"; the session ends. Once per package: marking again returns the first, `alreadyMarked`.
+   * The answers typed on the portal whose ids are in `saveAnswers` (ticked) are saved; the rest are discarded.
    */
-  markSubmitted(target: { sessionId: string } | { packageId: string }, how: { portalUrl: string | null; via: SubmittedVia }): Promise<MarkResult>;
+  markSubmitted(target: { sessionId: string } | { packageId: string }, how: { portalUrl: string | null; via: SubmittedVia; saveAnswers?: string[] }): Promise<MarkResult>;
   /** Undo after marking: the Application goes and the package is approved again. Refused (FillError) once the Application has a later Event. */
   undoMarkSubmitted(applicationId: string): Promise<{ packageId: string }>;
+  /** "Report this field": keeps the field's structure, the portal, host and path (never the query) and step label. Never a value. */
+  reportField(report: FieldReportInput): FieldReport;
+  /** The saved field reports, newest first. */
+  fieldReports(): FieldReport[];
+  /** Deletes one; false if there's no such report. */
+  deleteFieldReport(id: string): boolean;
 }
 
+const noAnswer = "apply-kit has no answer for this yet";
+const optionalNoAnswer = "Optional, and apply-kit has no answer for it yet";
+
 export class FillError extends Error {
-  constructor(readonly problem: "no-session" | "session-ended" | "not-found" | "not-undoable", message: string) {
+  constructor(readonly problem: "no-session" | "session-ended" | "not-found" | "not-undoable" | "bad-report", message: string) {
     super(message);
   }
 }
 
-export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillEngine {
+export function createFillEngine({ db, clock, prepare, track, packages, mailboxConnected, refreshMailbox }: FillDeps): FillEngine {
   migrate(db);
 
   const toSession = (r: Record<string, unknown>): FillSession => ({
@@ -242,14 +309,18 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
 
   /** A fresh match for the page, opening a session on a match when `commit`. */
   function match(page: FillPage, packageId: string | undefined, commit: boolean): FillMatch {
-    const matched = (pkg: ApprovedPackage, why: "job-id" | "same-job" | "chosen"): FillMatch =>
+    const matched = (pkg: ApprovedPackage, why: Extract<FillMatch, { kind: "matched" }>["why"]): FillMatch =>
       ({ kind: "matched", why, continued: false, package: brief(pkg), session: commit ? start(pkg, page) : null });
     if (packageId) {
       const r = prepare.packageForApply({ packageId });
       if (r.kind === "approved") return matched(r.package, "chosen");
       return { kind: "no-package", job: r.kind === "not-approved" ? { id: r.jobId, packageId: r.packageId, packageState: "draft", reason: r.reason } : null };
     }
-    if (!page.jobRef) return { kind: "no-package", job: null };
+    if (page.portal === "unknown") return matchUnknown(page, matched);
+    if (!page.jobRef) {
+      const candidates = page.tenant ? prepare.approvedPackages().filter((p) => p.targetPosting.jobRef?.portal === page.portal && p.targetPosting.jobRef.board?.toLowerCase() === page.tenant!.toLowerCase()) : [];
+      return candidates.length ? { kind: "choose", candidates: candidates.map(brief) } : { kind: "no-package", job: null };
+    }
     const approved = prepare.approvedPackages();
     const exact = approved.filter((p) => sameJobReference(p.targetPosting.jobRef, page.jobRef));
     if (exact.length === 1) return matched(exact[0]!, "job-id");
@@ -263,11 +334,21 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
     return { kind: "no-package", job: null };
   }
 
+  /** A form apply-kit doesn't know: the package whose target posting is on this site, else Kris picks from those not yet submitted. */
+  function matchUnknown(page: FillPage, matched: (pkg: ApprovedPackage, why: "target-host") => FillMatch): FillMatch {
+    const open = prepare.approvedPackages().filter((p) => p.state === "approved");
+    const host = bareHost(page.host);
+    const here = open.filter((p) => bareHost(hostOf(p.targetPosting.url)) === host);
+    if (here.length === 1) return matched(here[0]!, "target-host");
+    const candidates = here.length > 1 ? here : open;
+    return candidates.length > 0 ? { kind: "choose", candidates: candidates.map(brief) } : { kind: "no-package", job: null };
+  }
+
   async function begin(page: FillPage, { sessionId, packageId }: FillOptions, commit: boolean): Promise<FillStart> {
     const current = sessionId ? session(sessionId) : null;
     if (current && !current.endedAt && !packageId) {
       // A page without a job reference (a sign-in page) continues the session only on the same host.
-      const same = page.jobRef ? sameJobReference(current.jobRef, page.jobRef) : current.host === page.host;
+      const same = page.jobRef ? sameJobReference(current.jobRef, page.jobRef) : current.host === page.host && (!page.tenant || current.jobRef?.board?.toLowerCase() === page.tenant.toLowerCase());
       const pkg = same ? approvedById(current.packageId) : null;
       if (same && pkg) return { kind: "matched", why: "job-id", continued: true, package: brief(pkg), session: current };
       if (page.jobRef && !same) {
@@ -283,40 +364,224 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
     return match(page, packageId, commit);
   }
 
+  /** What goes in each field, before any drafting: from the profile, the package, the answer bank, or Kris. */
+  function decide(fields: ReadField[], pkg: ApprovedPackage | null): FieldAnswer[] {
+    const profile = prepare.profileForApply();
+    // One letter per page: as a file where the page takes one, its text only where there's no file field for it.
+    const letterAsFile = !!pkg?.letter && fields.some((f) => f.kind === "file" && letterLabel.test(f.label));
+    // Repeating sections (Workday) fill from the CV in the package: its roles and education, as sent.
+    const plans: SectionPlan[] = [];
+    if (fields.some((f) => f.entry)) {
+      const roles = pkg?.cv.roles ?? profile.roles;
+      const education = (pkg?.cv.education ?? profile.education).map((e) => ({ ...e, field: profile.education.find((p) => p.organisation === e.organisation && p.title === e.title)?.field ?? null }));
+      plans.push(planSection("work", fields, roles), planSection("education", fields, education));
+    }
+    return fields.map((f): FieldAnswer => {
+      const fieldId = f.id;
+      if (f.entry) {
+        const planned = plans.map((p) => (f.kind === "repeating" && p.section?.fieldId === fieldId ? p.section : p.fields.get(fieldId))).find(Boolean);
+        if (planned) return planned;
+      }
+      if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
+      if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
+      if (f.kind === "file") return fileAnswer(f, pkg);
+      if ((letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) || (letterBox.test(f.label) && f.kind === "textarea")) {
+        if (letterAsFile) return { fieldId, kind: "skip", reason: letterAttached };
+        if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
+      }
+      if (pkg && positionLabel.test(normaliseLabel(f.label)) && f.options.length === 0 && (f.kind === "text" || f.kind === "textarea")) {
+        return { fieldId, kind: "fill", value: pkg.job.title, source: "package", basis: "The job your package is for" };
+      }
+      const contact = contactValue(f, profile, fields);
+      if (contact?.value) {
+        if (f.options.length === 0) return { fieldId, kind: "fill", value: contact.value, source: "profile", basis: contact.basis };
+        const option = f.options.find((o) => o.trim().toLowerCase() === contact.value!.toLowerCase());
+        if (option) return { fieldId, kind: "fill", value: option, source: "profile", basis: contact.basis };
+        return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
+      }
+      if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
+      if (skillsLabel.test(normaliseLabel(f.label)) && (f.kind === "typeahead" || f.kind === "textarea")) {
+        const skills = pkg?.cv.skills ?? profile.skills;
+        if (skills.length) return { fieldId, kind: "fill", value: skills.join("\n"), source: "cv-version", basis: f.kind === "typeahead" ? "The skills on the CV in your package, one at a time" : "The skills on the CV in your package" };
+      }
+      const packaged = fromPackage(f, pkg);
+      if (packaged) return packaged;
+      const banked = fromBank(f, pkg?.language ?? "en");
+      if (banked) return banked.answer;
+      if (isSalaryQuestion(f.label)) return { fieldId, kind: "needs-you", reason: "Salary is yours to decide for each job", basis: null };
+      return f.required
+        ? { fieldId, kind: "needs-you", reason: noAnswer, basis: nearMiss(f), save: saveOffer(f.label, pkg) }
+        : { fieldId, kind: "skip", reason: optionalNoAnswer };
+    });
+  }
+
+  /** What a filled field asks for, in English, for the copy list. */
+  function meaningFor(f: ReadField, a: Extract<FieldAnswer, { kind: "fill" }>, pkg: ApprovedPackage | null, profile: ProfileForApply, fields: ReadField[], language: string): string {
+    if (pkg?.letter && a.value === pkg.letter.text) return `cover letter, ${language}, ${a.value.length.toLocaleString("en-GB")} characters`;
+    if (pkg && a.source === "package" && a.value === pkg.job.title && positionLabel.test(normaliseLabel(f.label))) return "the job you're applying for";
+    if (a.source === "profile") return contactValue(f, profile, fields)?.meaning ?? f.label;
+    if (a.source === "answer-bank") return prepare.findAnswer(f.label, pkg?.language ?? "en")?.question ?? f.label;
+    return f.label;
+  }
+
+  /** Ticked for a question that will come up again; unticked, with why, for a one-off for this company. */
+  function saveOffer(question: string, pkg: ApprovedPackage | null, written = false): SaveOffer {
+    const company = pkg?.job.company ?? "";
+    return written || oneOffQuestion(question, company)
+      ? { ticked: false, note: `This reads as a one-off for ${company || "this company"}` }
+      : { ticked: true, note: null };
+  }
+
+  /** Session + question + limits → a draft already made, so filling the page again doesn't draft (or bill) again. */
+  const drafted = new Map<string, FieldAnswer>();
+
+  /** A new required free-text question, still empty, gets Prepare's draft; the cap or a failure leaves it to Kris with the reason. */
+  async function withDraft(s: FillSession, pkg: ApprovedPackage | null, f: ReadField, a: FieldAnswer): Promise<FieldAnswer> {
+    if (a.kind !== "needs-you" || a.reason !== noAnswer || !pkg || !f.required || f.value.trim() !== "" || (f.kind !== "textarea" && f.kind !== "text")) return a;
+    const key = JSON.stringify([s.id, f.label, f.maxLength]);
+    const kept = drafted.get(key);
+    if (kept) return { ...kept, fieldId: f.id };
+    const r = await prepare.draftAnswer(pkg.id, { question: f.label, language: pkg.language, maxChars: f.maxLength, maxWords: wordLimit(f.label) });
+    if (!r.drafted) return { ...a, reason: r.reason };
+    const pieces = r.pieces.map((p) => `"${p.label}"`).join(", ");
+    const answer: FieldAnswer = {
+      ...a,
+      reason: "A new question: check the draft before you fill it",
+      basis: `Drafted from your master profile${pieces ? `: ${pieces}` : ""}${/[.!?]"?$/.test(pieces) ? "" : "."} Nothing added that isn't there.`,
+      draft: r.text,
+      save: saveOffer(f.label, pkg, r.companySpecific),
+    };
+    drafted.set(key, answer);
+    return answer;
+  }
+
+  // ---- answers Kris typed on the portal, and saving to the answer bank (#42) ----
+
+  const pendingRow = (s: FillSession, pkg: ApprovedPackage | null) => (r: Record<string, unknown>): PendingAnswer => ({
+    id: String(r.id), question: String(r.question), answer: String(r.answer), kind: r.kind as AnswerKind, save: saveOffer(String(r.question), pkg),
+  });
+  const pending = (s: FillSession): PendingAnswer[] =>
+    db.prepare("SELECT * FROM fill_pending_answer WHERE session_id = ? ORDER BY id").all(s.id).map(pendingRow(s, approvedById(s.packageId)));
+
+  /**
+   * A field left to Kris on the last fill of its page (needs you, or empty and skipped), that has a
+   * value now apply-kit didn't put there, for a question the bank doesn't have: Kris typed it.
+   */
+  function noteTyped(s: FillSession, reading: PageReading, outcomes: Map<string, FieldOutcome>) {
+    const last = new Map<string, RecordedPage["fields"][number]>();
+    for (const p of pages(s.id)) for (const f of p.fields) last.set(f.label, f);
+    const pkg = approvedById(s.packageId);
+    const waiting = new Set(pending(s).map((p) => p.question));
+    const typed = reading.fields.filter((f) => {
+      const before = last.get(f.label);
+      const leftToKris = waiting.has(f.label) || (before && (before.outcome === "needs-you" || before.outcome === "skipped") && before.empty);
+      return leftToKris && f.value.trim() !== "" && outcomes.get(f.id)?.outcome !== "filled" && !f.password && !f.consent && f.kind !== "file";
+    });
+    if (typed.length === 0) return;
+    const decided = decide(typed, pkg);
+    typed.forEach((f, i) => {
+      const a = decided[i]!;
+      const unknown = (a.kind === "needs-you" && a.save) || (a.kind === "skip" && a.reason === optionalNoAnswer);
+      if (!unknown) return;
+      db.prepare("DELETE FROM fill_pending_answer WHERE session_id = ? AND question = ?").run(s.id, f.label);
+      db.prepare("INSERT INTO fill_pending_answer (session_id, question, answer, kind, created_at) VALUES (?, ?, ?, ?, ?)")
+        .run(s.id, f.label, f.value.trim(), answerKindOf(f), clock.now().toISOString());
+    });
+  }
+
+  const portalNames: Record<string, string> = { workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", smartrecruiters: "SmartRecruiters", workable: "Workable", ashby: "Ashby" };
+
+  function save(s: FillSession, picks: SavePick[]): SavedAnswers {
+    const pkg = approvedById(s.packageId);
+    const language = pkg?.language ?? "en";
+    const where = `${pkg?.job.company ?? "A"} ${portalNames[s.portal] ?? s.portal} form`.trim();
+    const result: SavedAnswers = { saved: [], refused: [] };
+    for (const pick of picks) {
+      const p = "pendingId" in pick
+        ? pending(s).find((x) => x.id === pick.pendingId)
+        : { question: pick.question.trim(), answer: pick.answer.trim(), kind: pick.kind };
+      if (!p) continue;
+      if (!p.question || !p.answer) {
+        result.refused.push({ question: p.question, reason: "Answer it first." });
+        continue;
+      }
+      const m = prepare.findAnswer(p.question, language);
+      if (m && m.confidence === 1 && (m.fill.action === "fill" || m.fill.action === "no-version")) {
+        const same = m.fill.action === "fill" && m.fill.value === p.answer;
+        if (!same) prepare.recordPortalEdit(m.answerId, { language, text: p.answer, portal: where, jobId: pkg?.jobId ?? null });
+        result.saved.push({ question: p.question, answerId: m.answerId, how: same ? "same" : "portal-edit" });
+      } else if (m && m.confidence === 1) {
+        result.refused.push({ question: p.question, reason: "Your answer bank asks you this each time or leaves it blank, so it isn't saved." });
+        continue;
+      } else {
+        const r = prepare.saveAnswer({ question: p.question, versions: { [language]: p.answer }, category: "screening", kind: p.kind }, { from: where, jobId: pkg?.jobId ?? null, portal: s.portal });
+        if (!r.saved) {
+          result.refused.push({ question: p.question, reason: r.problems[0]!.message });
+          continue;
+        }
+        result.saved.push({ question: p.question, answerId: r.answer.id, how: "added" });
+      }
+      db.prepare("DELETE FROM fill_pending_answer WHERE session_id = ? AND question = ?").run(s.id, p.question);
+    }
+    return result;
+  }
+
   return {
+    async verification(sessionId) {
+      const s = openSession(sessionId);
+      const connected = mailboxConnected?.() ?? false;
+      if (!connected) return { connected, url: null };
+      try { await refreshMailbox?.(); } catch { return { connected: false, url: null }; }
+      const messages = db.prepare("SELECT from_header, received_at, text, html FROM mail_message WHERE received_at >= ? ORDER BY received_at DESC LIMIT 100").all(s.startedAt).map((m) => ({ from: String(m.from_header), receivedAt: String(m.received_at), text: String(m.text), html: String(m.html) }));
+      return { connected, url: findVerificationLink({ portal: s.portal, host: s.host, tenant: s.jobRef?.board ?? null, startedAt: s.startedAt }, messages, clock.now()) };
+    },
     matchPage: (page, options = {}) => begin(page, options, false),
     startFill: (page, options = {}) => begin(page, options, true),
 
-    answer(sessionId, reading) {
+    copyList(sessionId, reading) {
       const s = openSession(sessionId);
-      const profile = prepare.profileForApply();
       const pkg = approvedById(s.packageId);
-      return reading.fields.map((f): FieldAnswer => {
-        const fieldId = f.id;
-        if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
-        if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
-        if (f.kind === "file") {
-          const letter = /cover|letter|мотивац/i.test(f.label);
-          const file = letter ? pkg?.letter?.file : pkg?.cv.file;
-          return { fieldId, kind: "needs-you", reason: `Attach the ${letter ? "letter" : "CV"} yourself for now`, basis: file ? `Your package's ${letter ? "letter" : "CV"}: ${file.fileName}` : null };
+      const profile = prepare.profileForApply();
+      const language = pkg?.language === "bg" ? "Bulgarian" : "English";
+      const decided = decide(reading.fields, pkg);
+      const rows: CopyRow[] = [];
+      let unmapped = 0;
+      decided.forEach((a, i) => {
+        const f = reading.fields[i]!;
+        const base = { fieldId: f.id, label: f.label };
+        if (a.kind === "file") {
+          rows.push({ ...base, kind: "file", which: a.which, fileName: a.fileName, meaning: `${a.which === "cv" ? "CV" : "cover letter"}, ${language} version` });
+        } else if (a.kind === "fill") {
+          rows.push({ ...base, kind: "value", value: a.value, meaning: meaningFor(f, a, pkg, profile, reading.fields, language) });
+        } else if (!(a.kind === "skip" && (f.consent || f.password || a.byRule || a.reason === letterAttached))) {
+          unmapped++;
         }
-        const contact = contactValue(f, profile);
-        if (contact?.value) {
-          if (f.options.length === 0) return { fieldId, kind: "fill", value: contact.value, source: "profile", basis: contact.basis };
-          const option = f.options.find((o) => o.trim().toLowerCase() === contact.value!.toLowerCase());
-          if (option) return { fieldId, kind: "fill", value: option, source: "profile", basis: contact.basis };
-          return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
-        }
-        if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
-        const packaged = fromPackage(f, pkg);
-        if (packaged) return packaged;
-        const banked = fromBank(f, pkg?.language ?? "en");
-        if (banked) return banked.answer;
-        if (isSalaryQuestion(f.label)) return { fieldId, kind: "needs-you", reason: "Salary is yours to decide for each job", basis: null };
-        return f.required
-          ? { fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: nearMiss(f) }
-          : { fieldId, kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" };
       });
+      return { rows, unmapped };
+    },
+
+    async answer(sessionId, reading) {
+      const s = openSession(sessionId);
+      if (reading.jobRef && !sameJobReference(s.jobRef, reading.jobRef)) {
+        endSession(s.id, "different-job");
+        throw new FillError("session-ended", "This page is a different job. Match its package before filling.");
+      }
+      const pkg = approvedById(s.packageId);
+      const decided = decide(reading.fields, pkg);
+      const answers: FieldAnswer[] = [];
+      // One at a time: each draft is a billed call, checked against the cap before it's made.
+      for (const [i, a] of decided.entries()) answers.push(await withDraft(s, pkg, reading.fields[i]!, a));
+      return answers;
+    },
+
+    async packageFile(sessionId, which) {
+      const s = openSession(sessionId);
+      const pkg = approvedById(s.packageId);
+      const file = pkg ? await prepare.packageFile(pkg.id, which, pkg.version) : null;
+      if (!pkg || !file) return null;
+      let path = file.copy;
+      if (!path && packages) path = await packages.freeze(pkg.id, pkg.version, file.fileName, file.bytes).then((r) => r.copy, () => null);
+      return { which, fileName: file.fileName, size: file.size, path, bytes: file.bytes };
     },
 
     recordPage(sessionId, reading, outcomes) {
@@ -331,14 +596,27 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
         const id = fromBank(f, language)?.answerId;
         if (id) prepare.recordAnswerUse(id);
       }
+      noteTyped(s, reading, byId);
       const fields = reading.fields.flatMap((f) => {
         const o = byId.get(f.id);
-        return o ? [{ label: f.label, kind: f.kind, outcome: o.outcome, source: o.source }] : [];
+        return o ? [{ label: f.label, kind: f.kind, outcome: o.outcome, source: o.source, empty: f.value.trim() === "" }] : [];
       });
       const page: RecordedPage = { stepLabel: reading.stepLabel, pageKind: reading.pageKind, filledAt: clock.now().toISOString(), counts: countOutcomes(fields), fields };
       db.prepare("INSERT INTO fill_page (session_id, step_label, page_kind, filled_at, counts, fields) VALUES (?, ?, ?, ?, ?, ?)")
         .run(sessionId, page.stepLabel, page.pageKind, page.filledAt, JSON.stringify(page.counts), JSON.stringify(page.fields));
-      return page;
+      return { ...page, typedAnswers: pending(s) };
+    },
+
+    pendingAnswers: (sessionId) => {
+      const s = session(sessionId);
+      if (!s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
+      return pending(s);
+    },
+
+    saveAnswers(sessionId, picks) {
+      const s = session(sessionId);
+      if (!s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
+      return save(s, picks);
     },
 
     pages,
@@ -346,7 +624,7 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
     session,
     endSession,
 
-    async markSubmitted(target, { portalUrl, via }) {
+    async markSubmitted(target, { portalUrl, via, saveAnswers: ticked = [] }) {
       const s = "sessionId" in target ? session(target.sessionId) : null;
       if ("sessionId" in target && !s) throw new FillError("no-session", "This tab's fill session isn't known. Click Fill this page to start again.");
       const packageId = s ? s.packageId : (target as { packageId: string }).packageId;
@@ -361,10 +639,42 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
         portal: s?.portal ?? pkg.targetPosting.jobRef?.portal ?? null, portalUrl, submittedAt, via,
       });
       if (recorded.outcome === "already-open") return { marked: false, reason: recorded.message, application: recorded.application };
+      if (s) {
+        // The answers typed on the portal: the ticked ones go to the bank, the rest are declined.
+        const waiting = pending(s);
+        save(s, waiting.filter((p) => ticked.includes(p.id)).map((p) => ({ pendingId: p.id })));
+        db.prepare("DELETE FROM fill_pending_answer WHERE session_id = ?").run(s.id);
+      }
       const marked = recorded.alreadyRecorded ? null : prepare.markPackageSubmitted(pkg.id, { via, portalUrl, at: submittedAt });
       if (s && !s.endedAt) endSession(s.id, "submitted");
       const now = marked?.marked ? marked.package : pkg;
       return { marked: true, alreadyMarked: recorded.alreadyRecorded, application: recorded.application, package: brief(now) };
+    },
+
+    reportField({ portal, address, stepLabel, field }) {
+      const where = whereReported(address);
+      const structure = fieldStructure(field);
+      if (!where || !structure) throw new FillError("bad-report", "Send the page's address and the field's structure.");
+      const report: FieldReport = {
+        id: randomUUID(), portal: String(portal).slice(0, 40), ...where,
+        stepLabel: typeof stepLabel === "string" && stepLabel.trim() ? stepLabel.trim().slice(0, 200) : null,
+        field: structure, createdAt: clock.now().toISOString(),
+      };
+      db.prepare("INSERT INTO field_report (id, portal, host, path, step_label, field, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(report.id, report.portal, report.host, report.path, report.stepLabel, JSON.stringify(report.field), report.createdAt);
+      return report;
+    },
+
+    fieldReports() {
+      return db.prepare("SELECT * FROM field_report ORDER BY created_at DESC, rowid DESC").all().map((r) => ({
+        id: String(r.id), portal: String(r.portal), host: String(r.host), path: String(r.path),
+        stepLabel: r.step_label == null ? null : String(r.step_label), field: JSON.parse(String(r.field)) as FieldReport["field"], createdAt: String(r.created_at),
+      }));
+    },
+
+    deleteFieldReport(id) {
+      const result = db.prepare("DELETE FROM field_report WHERE id = ?").run(id) as { changes?: number | bigint } | undefined;
+      return Number(result?.changes ?? 0) > 0;
     },
 
     async undoMarkSubmitted(applicationId) {
@@ -380,10 +690,41 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
   };
 }
 
+const skillsLabel = /^(type to add )?skills$|^умения$/u;
+const bareHost = (host: string) => host.toLowerCase().replace(/^www\./, "");
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
+}
+
+/** "Desired position", "Position applied for", "Желана позиция": the job the package is for. */
+const positionLabel = /^(desired |applied |the )?(position|role|job title|job)( applied for| you are applying for)?$|^(желана )?позиция$|^длъжност$/u;
+const letterAttached = "Your letter is attached as a file";
+
+const letterLabel = /\bcover(ing)? ?letter\b|\bmotivation(al)? letter\b|мотивационно писмо/iu;
+/** Lever's "Additional information" box, where the cover letter goes (a text area only: a one-line field is a different question). */
+const letterBox = /^additional information$/iu;
+const cvLabel = /\b(resume|résumé|cv|curriculum)\b|автобиография/iu;
+
+/** A file field: the package's CV or letter, or Kris's when the package has no such file. */
+function fileAnswer(f: ReadField, pkg: ApprovedPackage | null): FieldAnswer {
+  const fieldId = f.id;
+  const which = letterLabel.test(f.label) ? "letter" : cvLabel.test(f.label) ? "cv" : null;
+  const file = which === "letter" ? pkg?.letter?.file : which === "cv" ? pkg?.cv.file : null;
+  if (which && file && pkg) {
+    return { fieldId, kind: "file", which, fileName: file.fileName, size: file.size, source: "package", basis: `Your package's ${which === "cv" ? "CV" : "letter"}${pkg.language === "bg" ? " in Bulgarian" : ""}, v${pkg.version}` };
+  }
+  const reason = which === "letter" ? "Your package has no letter" : "apply-kit has no file for this";
+  return f.required ? { fieldId, kind: "needs-you", reason, basis: null } : { fieldId, kind: "skip", reason };
+}
+
 function brief(p: ApprovedPackage): PackageInBrief {
   return {
     id: p.id, version: p.version, approvedAt: p.approvedAt, job: p.job, jobRef: p.targetPosting.jobRef, language: p.language,
-    cv: { fileName: p.cv.file.fileName, label: p.cv.label, angle: p.angle, ats: p.cv.ats },
+    cv: { fileName: p.cv.file.fileName, size: p.cv.file.size, label: p.cv.label, angle: p.angle, ats: p.cv.ats },
     answers: p.answers.length, letter: p.letter !== null,
   };
 }

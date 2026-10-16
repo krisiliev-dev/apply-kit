@@ -588,6 +588,8 @@ export interface DiscoveryEngine {
    * or after `since`, or all of them, oldest first.
    */
   storedMail(since?: Date): Promise<MailMessage[]>;
+  /** Refresh only job mail while waiting for a portal verification message. */
+  refreshMail(): Promise<void>;
   /** Saves open Jobs (new → saved). */
   save(jobIds: string[]): Promise<Decision>;
   /** Passes open Jobs, with the reason and note Kris gave (both optional, never defaulted). */
@@ -1069,9 +1071,19 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
    * what alert Sources read: the store's emails from the last 14 days. `finish` hands the emails this
    * read stored to `onMailStored`, reading first if no Source did; after a failed read, nothing.
    */
+  let activeMailRead: Promise<MailMessage[]> | null = null;
+  const readMailOnce = () => activeMailRead ??= mailStore.read().finally(() => { activeMailRead = null; });
+  let lastVerificationRead = 0;
+  async function refreshMail() {
+    const at = clock.now().getTime();
+    if (at - lastVerificationRead < 10_000) return;
+    lastVerificationRead = at;
+    const messages = await readMailOnce();
+    await deps.onMailStored?.(messages);
+  }
   function mailboxRead(): { recent: () => Promise<AlertEmail[]>; finish: () => Promise<void> } {
     let read: Promise<MailMessage[]> | null = null;
-    const once = () => (read ??= mailStore.read());
+    const once = () => (read ??= readMailOnce());
     return {
       recent: async () => {
         await once();
@@ -2374,6 +2386,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return adjustment(learn("boost", matcher, job.id, null, null));
     },
 
+    refreshMail,
     async storedMail(since) {
       return mailStore.since(since);
     },

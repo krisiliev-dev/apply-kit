@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField, SubmittedApplication } from "@apply-kit/core";
-import { differentJobLine, fieldRows, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, sourceWords, submitPrompt } from "./fill-report.ts";
+import {
+  characterCount, differentJobLine, duplicatesReport, earlierPages, fieldRows, fileReport, fileSize, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, pageSummary, reviewChecks, saveTypedLabel, sourceWords, startScreen, stepLine, stoppedMidFill, stuckFields, submitPrompt, typedAnswerLine, type PageSummary,
+} from "./fill-report.ts";
 
 const field = (id: string, label: string, value = ""): ReadField => ({ id, label, kind: "text", required: true, value, options: [], maxLength: null, consent: false, password: false, hint: null });
 const reading: PageReading = {
@@ -25,7 +27,7 @@ const outcomes: FieldOutcome[] = [
 const brief: PackageInBrief = {
   id: "p1", version: 3, approvedAt: "2026-10-12T07:30:00Z", job: { title: "Security Engineer", company: "Kestrel Payments" },
   jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" }, language: "en",
-  cv: { fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", label: "Security · Kestrel Payments", angle: "security", ats: { passed: 10, total: 10, accepted: [] } },
+  cv: { fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", size: 151_552, label: "Security · Kestrel Payments", angle: "security", ats: { passed: 10, total: 10, accepted: [] } },
   answers: 6, letter: true,
 };
 
@@ -73,6 +75,41 @@ describe("what the Fill view says", () => {
   it("says a different job got nothing from the old package", () => {
     expect(differentJobLine({ packageId: "p1", job: { title: "Security Engineer", company: "Kestrel Payments" }, jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" } }, { title: "Cloud Security Analyst", jobId: "4420" }))
       .toBe("The tab moved from Security Engineer (4410) to Cloud Security Analyst (4420). Nothing was filled from the Security Engineer package.");
+  });
+
+  it("names a file's size in KB, or MB from a megabyte", () => {
+    expect([fileSize(151_552), fileSize(300), fileSize(1_258_291)]).toEqual(["148 KB", "1 KB", "1.2 MB"]);
+  });
+
+  describe("the package's files on the page", () => {
+    const cvName = "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf";
+    const fileReading: PageReading = { ...reading, fields: [field("fn", "First Name"), { ...field("resume", "Resume/CV"), kind: "file" }, { ...field("letter", "Cover Letter"), kind: "textarea" }] };
+    const cvAnswer: FieldAnswer = { fieldId: "resume", kind: "file", which: "cv", fileName: cvName, size: 151_552, source: "package", basis: "Your package's CV, v3" };
+    const fn: FieldAnswer = { fieldId: "fn", kind: "fill", value: "Mira", source: "profile", basis: null };
+    const letterText: FieldAnswer = { fieldId: "letter", kind: "fill", value: "Dear Kestrel Payments team,", source: "package", basis: "Your package's letter, v3" };
+
+    it("shows the attached CV as a chip: name, size, angle, version, approval date, ATS check", () => {
+      const r = fileReport(brief, [fn, cvAnswer], [{ fieldId: "fn", outcome: "filled", source: "profile" }, { fieldId: "resume", outcome: "filled", source: "package" }], "Greenhouse");
+      expect(r).toEqual({
+        attached: [{ which: "cv", fieldId: "resume", fileName: cvName, label: "CV attached:", line: `${cvName} · 148 KB`, meta: "Security angle · v3 · approved 12 Oct · ATS check passed" }],
+        failed: [], letter: "This page has no cover letter field, so your letter wasn't used.",
+      });
+      expect(fieldRows(fileReading, [cvAnswer], [{ fieldId: "resume", outcome: "filled", source: "package" }]).map((x) => [x.label, x.value, x.chip.word, x.why])).toEqual([["Resume/CV", cvName, "Package", "Your package's CV, v3"]]);
+    });
+
+    it("says the CV didn't attach and how to attach it yourself", () => {
+      const r = fileReport(brief, [cvAnswer, letterText], [{ fieldId: "resume", outcome: "didnt-stick", source: null }, { fieldId: "letter", outcome: "filled", source: "package" }], "Greenhouse");
+      expect(r).toEqual({
+        attached: [],
+        failed: [{ which: "cv", fieldId: "resume", fileName: cvName, size: "148 KB", chip: "CV not attached", heading: "Your CV didn't attach.", text: "Greenhouse's upload box didn't accept the file from apply-kit. Attach it yourself: it's ready in your Packages folder." }],
+        letter: null,
+      });
+      expect(fieldRows(fileReading, [cvAnswer], [{ fieldId: "resume", outcome: "didnt-stick", source: null }]).map((x) => [x.value, x.chip.word, x.why])).toEqual([["Not attached", "Didn't attach", "Attach it yourself from your Packages folder."]]);
+    });
+
+    it("says nothing about the letter when the package has none", () => {
+      expect(fileReport({ ...brief, letter: false }, [fn], [{ fieldId: "fn", outcome: "filled", source: "profile" }], "Greenhouse").letter).toBeNull();
+    });
   });
 });
 
@@ -137,5 +174,207 @@ describe("question rows", () => {
       ["Describe a detection rule", "Not filled", "Needs you", "apply-kit has no answer for this yet", "max 1,000 characters"],
       ["Gender", "Not filled", "Skipped · your rule", "Your rule leaves voluntary questions blank", null],
     ]);
+  });
+});
+
+describe("a typeahead with two places that fit (#43)", () => {
+  it("names both places and asks Kris to pick one on the page, with apply-kit's value as the basis", () => {
+    const r: PageReading = { ...reading, fields: [{ ...field("loc", "Current location"), kind: "typeahead" }] };
+    const a: FieldAnswer[] = [{ fieldId: "loc", kind: "fill", value: "Sofia, Bulgaria", source: "profile", basis: null }];
+    const o: FieldOutcome[] = [{ fieldId: "loc", outcome: "needs-you", source: null, choices: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] }];
+
+    expect(fieldRows(r, a, o).map((x) => [x.value, x.chip.word, x.why])).toEqual([[
+      "Sofia, Sofia City, Bulgaria or Sofia, Sofia Province, Bulgaria", "Needs you",
+      "More than one place fits \"Sofia, Bulgaria\" (from your profile). Pick yours on the page; apply-kit doesn't choose between them.",
+    ]]);
+    expect(needsYouItems(r, a, o)).toEqual([{
+      fieldId: "loc", question: "Current location", limit: null, control: { kind: "choice", options: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] }, value: "",
+      basis: "More than one place fits \"Sofia, Bulgaria\" (from your profile). Pick yours; apply-kit doesn't choose between them.", save: null,
+    }]);
+  });
+});
+
+describe("needs-you items", () => {
+  const r: PageReading = { ...reading, fields: [
+    { ...field("sal", "Expected gross monthly salary (EUR)"), kind: "number" },
+    { ...field("det", "Describe a detection rule you wrote."), kind: "textarea", maxLength: 1000 },
+    { ...field("clr", "Have you ever held a government security clearance?"), kind: "radio", options: ["Yes", "No"] },
+    { ...field("src", "How did you hear about us?"), kind: "select", options: ["LinkedIn", "Referral", "Company website"] },
+    { ...field("cv", "Resume/CV"), kind: "file" },
+    field("fn", "First Name"),
+  ] };
+  const a: FieldAnswer[] = [
+    { fieldId: "sal", kind: "needs-you", reason: "Your answer bank says: ask each time", basis: "Your rule: \"Upper half\".", suggestion: "3300" },
+    { fieldId: "det", kind: "needs-you", reason: "A new question: check the draft before you fill it", basis: "Drafted from your master profile: \"Wrote 30 detection rules.\" Nothing added that isn't there.", draft: "At Northwind Bank I wrote 30 detection rules.", save: { ticked: false, note: "This reads as a one-off for Kestrel Payments" } },
+    { fieldId: "clr", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null, save: { ticked: true, note: null } },
+    { fieldId: "src", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null, save: { ticked: true, note: null } },
+    { fieldId: "cv", kind: "needs-you", reason: "Attach the CV yourself for now", basis: null },
+    { fieldId: "fn", kind: "fill", value: "Mira", source: "profile", basis: null },
+  ];
+  const o: FieldOutcome[] = a.map((x) => ({ fieldId: x.fieldId, outcome: x.kind === "fill" ? "filled" : "needs-you", source: x.kind === "fill" ? "profile" : null }));
+
+  it("gives each one the right control, its suggestion or draft, its basis and its Save to answer bank tick", () => {
+    expect(needsYouItems(r, a, o)).toEqual([
+      { fieldId: "sal", question: "Expected gross monthly salary (EUR)", limit: null, control: { kind: "number" }, value: "3300", basis: "Your answer bank says: ask each time. Your rule: \"Upper half\".", save: null },
+      {
+        fieldId: "det", question: "Describe a detection rule you wrote.", limit: "max 1,000 characters", control: { kind: "long-text", max: 1000 }, value: "At Northwind Bank I wrote 30 detection rules.",
+        basis: "A new question: check the draft before you fill it. Drafted from your master profile: \"Wrote 30 detection rules.\" Nothing added that isn't there.", save: { ticked: false, note: "This reads as a one-off for Kestrel Payments" },
+      },
+      { fieldId: "clr", question: "Have you ever held a government security clearance?", limit: null, control: { kind: "yes-no", options: ["Yes", "No"] }, value: "", basis: "apply-kit has no answer for this yet", save: { ticked: true, note: null } },
+      { fieldId: "src", question: "How did you hear about us?", limit: null, control: { kind: "choice", options: ["LinkedIn", "Referral", "Company website"] }, value: "", basis: "apply-kit has no answer for this yet", save: { ticked: true, note: null } },
+      { fieldId: "cv", question: "Resume/CV", limit: null, control: { kind: "file" }, value: "", basis: "Attach the CV yourself for now", save: null },
+    ]);
+  });
+
+  it("only lists what still needs Kris: an item he filled from the panel shows as You", () => {
+    const filledByKris = o.map((x) => (x.fieldId === "clr" ? { ...x, outcome: "filled" as const, source: "you" as const } : x));
+    expect(needsYouItems(r, a, filledByKris).map((i) => i.fieldId)).toEqual(["sal", "det", "src", "cv"]);
+    expect(fieldRows(r, a, filledByKris).find((x) => x.fieldId === "clr")).toMatchObject({ chip: { tone: "met", word: "You" } });
+  });
+
+  it("shows an answer Kris typed on the page as his", () => {
+    const typed = { ...r, fields: r.fields.map((f) => (f.id === "clr" ? { ...f, value: "No" } : f)) };
+    const kept = o.map((x) => (x.fieldId === "clr" ? { ...x, outcome: "kept" as const } : x));
+    expect(fieldRows(typed, a, kept).find((x) => x.fieldId === "clr")).toMatchObject({ value: "No", chip: { tone: "met", word: "You" }, why: "You answered this on the page.", offer: null });
+  });
+
+  it("names the Fill button after the value", () => {
+    expect(fillButtonLabel({ kind: "number" }, "3300")).toBe("Fill 3,300");
+    expect(fillButtonLabel({ kind: "yes-no", options: ["Yes", "No"] }, "No")).toBe('Fill "No"');
+    expect(fillButtonLabel({ kind: "choice", options: ["LinkedIn"] }, "")).toBe("Fill");
+    expect(fillButtonLabel({ kind: "long-text", max: 1000 }, "At Northwind…")).toBe("Fill this answer");
+  });
+});
+
+describe("character count", () => {
+  it("is always visible, and announced once when 50 or fewer characters are left", () => {
+    let warned = false;
+    const at = (length: number) => {
+      const c = characterCount(length, 1000, warned);
+      warned = c.warned;
+      return [c.text, c.announce];
+    };
+    expect(at(312)).toEqual(["312 / 1,000", null]);
+    expect(at(950)).toEqual(["950 / 1,000", "50 characters left"]);
+    expect(at(960)).toEqual(["960 / 1,000", null]);
+    expect(at(999)).toEqual(["999 / 1,000", null]);
+    // Back over 50 left, then down again: said once more.
+    expect(at(900)).toEqual(["900 / 1,000", null]);
+    expect(at(990)).toEqual(["990 / 1,000", "10 characters left"]);
+    expect(characterCount(999, 1000, false).announce).toBe("1 character left");
+  });
+});
+
+describe("answers Kris typed on the portal", () => {
+  it("lists each as question → answer, and counts the ones to save", () => {
+    expect(typedAnswerLine({ id: "1", question: "Are you willing to travel up to 10%?", answer: "Yes", kind: "yes-no", save: { ticked: true, note: null } })).toBe('"Are you willing to travel up to 10%?" → Yes');
+    expect(saveTypedLabel(2)).toBe("Save 2 to the answer bank");
+    expect(saveTypedLabel(1)).toBe("Save 1 to the answer bank");
+  });
+});
+
+describe("recovery", () => {
+  const phoneReading: PageReading = { ...reading, fields: [field("code", "Country Phone Code"), field("phone", "Phone Number"), field("fn", "First Name")] };
+  const phoneAnswers: FieldAnswer[] = [
+    { fieldId: "code", kind: "fill", value: "+359", source: "profile", basis: null },
+    { fieldId: "phone", kind: "fill", value: "88 000 0175", source: "profile", basis: "Without +359, which is in Country Phone Code" },
+    { fieldId: "fn", kind: "fill", value: "Mira", source: "profile", basis: null },
+  ];
+  const stuck: FieldOutcome[] = [{ fieldId: "code", outcome: "filled", source: "profile" }, { fieldId: "phone", outcome: "didnt-stick", source: null }, { fieldId: "fn", outcome: "filled", source: "profile" }];
+
+  it("names a field that didn't stick and gives its value to copy in the field's format, with Try once more", () => {
+    expect(stuckFields(phoneReading, phoneAnswers, stuck, new Set(), "Greenhouse")).toEqual([{
+      fieldId: "phone", label: "Phone Number", heading: "Phone Number didn't stick",
+      text: "Greenhouse cleared or changed it right after filling. Paste it in yourself, in the format the field wants:",
+      copyLabel: "Phone Number · without +359, which is in Country Phone Code", value: "88 000 0175", tryOnceMore: true,
+    }]);
+    expect(fieldRows(phoneReading, phoneAnswers, stuck).find((r) => r.fieldId === "phone")).toMatchObject({ value: "88 000 0175", chip: { tone: "gap", word: "Didn't stick" }, offer: "88 000 0175" });
+  });
+
+  it("offers Try once more only once per field", () => {
+    expect(stuckFields(phoneReading, phoneAnswers, stuck, new Set(["phone"]), "Greenhouse")).toEqual([expect.objectContaining({
+      tryOnceMore: false, text: "Greenhouse cleared it again after Try once more. Paste it in yourself, in the format the field wants:",
+    })]);
+  });
+
+  it("says how many fields stay filled when apply-kit stops answering mid-fill", () => {
+    expect(stoppedMidFill(stuck)).toBe("apply-kit stopped answering after filling 2 fields on this page. They stay filled, and Undo this page still puts them back.");
+    expect(stoppedMidFill([stuck[0]!])).toBe("apply-kit stopped answering after filling 1 field on this page. It stays filled, and Undo this page still puts it back.");
+  });
+});
+
+describe("what the Fill view says on Workday", () => {
+  const wd = (fields: ReadField[], stepLabel = "My Experience"): PageReading => ({ pageKind: "form", jobRef: { portal: "workday", board: "kestrelpayments", jobId: "R-10482" }, stepLabel, stepCount: { current: 2, total: 6 }, fields });
+  const section = { ...field("workExperience", "Work Experience", "3"), kind: "repeating" as const, required: false, entry: { section: "work" as const, index: 0 } };
+  const dupes = [{ index: 3, words: "Junior Security Analyst, Orbital Bank, from 2023" }, { index: 4, words: "SOC Intern, Varna Telecom, from 2022" }];
+  const entries = (add: number, duplicates = dupes): FieldAnswer => ({ fieldId: "workExperience", kind: "entries", section: "work", add, duplicates, source: "cv-version", basis: "2 roles on the CV in your package" });
+
+  it("reports Workday's duplicates in words, with Remove and Keep, and nothing removed yet", () => {
+    expect(duplicatesReport([entries(0)])).toEqual({
+      section: "work", fieldId: "workExperience", indexes: [3, 4],
+      question: "Workday added 2 job entries after reading your CV",
+      basis: "\"Junior Security Analyst, Orbital Bank, from 2023\" and \"SOC Intern, Varna Telecom, from 2022\" repeat roles on your CV. Nothing was removed.",
+      remove: "Remove the 2 duplicates", keep: "Keep them", show: "Work Experience 3",
+    });
+    expect(duplicatesReport([entries(0, [dupes[0]!])])).toMatchObject({ question: "Workday added 1 job entry after reading your CV", remove: "Remove the duplicate" });
+    expect(duplicatesReport([entries(0, [])])).toBeNull();
+  });
+
+  it("lists a section as its entries, and a list apply-kit couldn't press as a choice for Kris", () => {
+    const rows = fieldRows(wd([section, { ...field("country", "Country"), kind: "select" }, { ...field("city", "City"), kind: "typeahead" }]), [
+      entries(1, []), { fieldId: "country", kind: "fill", value: "Bulgaria", source: "profile", basis: null }, { fieldId: "city", kind: "fill", value: "Sofia", source: "profile", basis: null },
+    ], [
+      { fieldId: "workExperience", outcome: "needs-you", source: null }, { fieldId: "country", outcome: "needs-you", source: null },
+      { fieldId: "city", outcome: "needs-you", source: null, choices: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] },
+    ]);
+    expect(rows.map((r) => [r.label, r.value, r.chip.word, r.why, r.choices])).toEqual([
+      ["Work Experience", "Add 1 more entry", "Needs you", "Add it with Workday's Add button; apply-kit can't press it. 2 roles on the CV in your package", null],
+      ["Country", "Choose: Bulgaria", "Needs you", "apply-kit can't open Workday's lists yet. Choose it on the page", null],
+      ["City", "Suggested: Sofia, Sofia City, Bulgaria", "Needs you", "Workday offers more than one match for \"Sofia\"", ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"]],
+    ]);
+    const done = fieldRows(wd([section]), [entries(0, [])], [{ fieldId: "workExperience", outcome: "filled", source: "cv-version" }]);
+    expect(done.map((r) => [r.value, r.chip.word, r.why])).toEqual([["3 entries", "CV version", "2 roles on the CV in your package"]]);
+  });
+
+  it("says where Kris is: the step and count Workday prints, or only 'this page'", () => {
+    expect(stepLine(wd([]), "Workday", "14:04")).toBe("Page 2 of 6, as Workday shows it. Filled 14:04.");
+    expect(stepLine({ ...wd([]), stepCount: null }, "Workday", "14:04")).toBe("Filled 14:04.");
+  });
+
+  const pages: PageSummary[] = [
+    { step: "My Information", filled: 6, chosen: ["City"], cv: null, duplicatesRemoved: 0, didntStick: ["Phone Number"], byRule: 0 },
+    { step: "My Experience", filled: 9, chosen: [], cv: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", duplicatesRemoved: 2, didntStick: [], byRule: 0 },
+    { step: "Voluntary Disclosures", filled: 0, chosen: [], cv: null, duplicatesRemoved: 0, didntStick: [], byRule: 3 },
+  ];
+
+  it("summarises the earlier pages, one line each", () => {
+    expect(earlierPages(pages)).toEqual({
+      heading: "Earlier pages · 16 filled",
+      lines: ["My Information · 7 filled (1 you chose: City), 1 to paste yourself", "My Experience · 9 filled, CV attached, 2 Workday duplicates removed", "Voluntary Disclosures · 3 left blank by your rule"],
+    });
+    expect(earlierPages([])).toBeNull();
+  });
+
+  it("lists what's worth a look on the review page", () => {
+    expect(reviewChecks(pages)).toEqual([
+      { tone: "ok", text: "CV attached: Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf" },
+      { tone: "ok", text: "16 fields filled across 3 pages" },
+      { tone: "nb", text: "1 value to paste yourself: Phone Number" },
+      { tone: "nb", text: "2 Workday duplicates removed on My Experience" },
+      { tone: "dim", text: "3 voluntary questions left blank, by your rule" },
+    ]);
+    expect(reviewChecks([])).toEqual([{ tone: "dim", text: "No pages filled in this panel yet" }]);
+  });
+
+  it("summarises a page as it's left", () => {
+    expect(pageSummary(wd([section, { ...field("resume", "Resume/CV"), kind: "file" }, field("x", "Gender")]), [
+      entries(0), { fieldId: "resume", kind: "file", which: "cv", fileName: "cv.pdf", size: 1, source: "package", basis: "" }, { fieldId: "x", kind: "skip", reason: "", byRule: true },
+    ], [{ fieldId: "workExperience", outcome: "filled", source: "cv-version" }, { fieldId: "resume", outcome: "filled", source: "package" }, { fieldId: "x", outcome: "skipped", source: null }], { chosen: [], duplicatesRemoved: 2 })).toEqual({
+      step: "My Experience", filled: 2, chosen: [], cv: "cv.pdf", duplicatesRemoved: 2, didntStick: [], byRule: 1,
+    });
+  });
+
+  it("on Workday's start screen, says to choose Apply Manually, in words", () => {
+    expect(startScreen("Workday")).toEqual({ heading: "Choose Apply Manually on Workday", text: "apply-kit fills the form you get after it, page by page. Autofill with Resume makes Workday read your CV and add entries of its own to check. apply-kit never presses these choices." });
   });
 });

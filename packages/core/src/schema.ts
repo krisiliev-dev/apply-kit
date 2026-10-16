@@ -806,6 +806,29 @@ const migrations: string[] = [
    ALTER TABLE application ADD COLUMN submitted_at TEXT;
    ALTER TABLE application ADD COLUMN submitted_via TEXT;
    CREATE INDEX application_package ON application(package_id);`,
+  // Apply #48: "Report this field" keeps a portal field's structure (tag, type, role, attributes,
+  // label chain, options, as JSON) with the portal, host and path (never the query) and step label:
+  // never a value. Settings › Extension lists them with Copy as fixture and Delete.
+  `CREATE TABLE field_report (
+     id TEXT PRIMARY KEY,
+     portal TEXT NOT NULL,
+     host TEXT NOT NULL,
+     path TEXT NOT NULL,
+     step_label TEXT,
+     field TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );`,
+  // Apply #42: answers Kris typed on the portal into needs-you or empty fields, kept pending in the
+  // fill session until he saves them to the answer bank (or marks as submitted) or declines them.
+  `CREATE TABLE fill_pending_answer (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     session_id TEXT NOT NULL REFERENCES fill_session(id),
+     question TEXT NOT NULL,
+     answer TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );`,
+  `ALTER TABLE profile_piece ADD COLUMN bulgarian TEXT;`,
 ];
 
 export function migrate(db: SqlDatabase): void {

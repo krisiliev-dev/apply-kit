@@ -157,6 +157,10 @@ export type {
   EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, PackageConfirmation, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";
 export { createFillEngine, FillError } from "./fill/engine.ts";
-export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageInBrief, SessionEnd, MarkResult, SubmittedApplication } from "./fill/engine.ts";
+export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageFileForFill, PackageInBrief, SessionEnd, MarkResult, SubmittedApplication } from "./fill/engine.ts";
 export { countOutcomes } from "./fill/reading.ts";
-export type { PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, RecordedPage } from "./fill/reading.ts";
+export { fieldReportFixture, fieldStructure } from "./fill/field-report.ts";
+export type {
+  PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, PackageFileKind, RecordedPage, RecordedFill, PendingAnswer, SaveOffer, SavePick, SavedAnswers, FieldStructure, FieldReportInput, FieldReport, EntrySection, DuplicateEntry,
+  CopyRow, CopyList,
+} from "./fill/reading.ts";

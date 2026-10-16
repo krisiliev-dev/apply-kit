@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PageReading, RecordedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, CopyList, FieldAnswer, FieldOutcome, FieldReport, FieldReportInput, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, PendingAnswer, RecordedFill, SavedAnswers, SavePick } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -26,16 +26,40 @@ export type CaptureAnswer = { ok: true; report: CaptureReport } | { ok: false; s
 export type Answer<T> = { ok: true; value: T } | { ok: false; state: "not-running" | "unpaired" } | { ok: false; state: "error"; error: string; problem?: string };
 
 export interface FillClient {
+  verification(sessionId: string): Promise<Answer<{ connected: boolean; url: string | null }>>;
   /** Which package fits the page; opens nothing. */
   match(page: FillPage, sessionId: string | null): Promise<Answer<FillStart>>;
   /** A Fill click: re-reads the job, keeps or ends the tab's session, opens one on a match. */
   start(page: FillPage, options: { sessionId?: string | null; packageId?: string }): Promise<Answer<FillStart>>;
   answer(sessionId: string, reading: PageReading): Promise<Answer<FieldAnswer[]>>;
-  record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedPage>>;
-  /** Kris's "Mark as submitted": the Application is created (or was already); a mark that created nothing says why. */
-  markSubmitted(sessionId: string, portalUrl: string | null): Promise<Answer<MarkResult>>;
+  /** The copy list on a form apply-kit doesn't know: values under the form's labels, in its order. Held in the panel only while shown. */
+  copyList(sessionId: string, reading: PageReading): Promise<Answer<CopyList>>;
+  /** Records the fill; returns the answers Kris typed on the portal that are waiting. */
+  record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedFill>>;
+  /** The answers Kris typed on the portal in this session, waiting ("Did you submit?"). */
+  pending(sessionId: string): Promise<Answer<PendingAnswer[]>>;
+  /** Save to answer bank: typed answers by id, or one Kris filled from the panel. */
+  saveAnswers(sessionId: string, picks: SavePick[]): Promise<Answer<SavedAnswers>>;
+  /** Kris's "Mark as submitted", with the typed answers he left ticked: the Application is created (or was already); a mark that created nothing says why. */
+  markSubmitted(sessionId: string, portalUrl: string | null, saveAnswers: string[]): Promise<Answer<MarkResult>>;
   /** Undo after marking (kept in the panel until it closes). */
   undoMarkSubmitted(applicationId: string): Promise<Answer<{ packageId: string }>>;
+  /** The package's CV or letter as base64, held in the panel's memory only while it's attached. */
+  file(sessionId: string, which: PackageFileKind): Promise<Answer<PackageFileBytes>>;
+  /** "Report this field": apply-kit keeps the field's structure on this laptop (host and path, never the query; never a value). */
+  report(report: FieldReportInput): Promise<Answer<FieldReport>>;
+  /** "Show in Finder": apply-kit reveals the session's file in the Packages folder. */
+  reveal(sessionId: string, which: PackageFileKind): Promise<Answer<{ revealed: string }>>;
+}
+
+/** A package file as the service sends it; `path` is its copy in the Packages folder, or null. */
+export interface PackageFileBytes {
+  which: PackageFileKind;
+  fileName: string;
+  size: number;
+  path: string | null;
+  type: string;
+  base64: string;
 }
 
 export interface Client {
@@ -110,8 +134,15 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       match: (page, sessionId) => post("/api/ext/fill/match", { page, sessionId }),
       start: (page, options) => post("/api/ext/fill/start", { page, ...options }),
       answer: (sessionId, reading) => post("/api/ext/fill/answer", { sessionId, reading }),
+      verification: (sessionId) => post("/api/ext/fill/verification", { sessionId }),
+      copyList: (sessionId, reading) => post("/api/ext/fill/copy-list", { sessionId, reading }),
       record: (sessionId, reading, outcomes) => post("/api/ext/fill/record", { sessionId, reading, outcomes }),
-      markSubmitted: (sessionId, portalUrl) => post("/api/ext/fill/submitted", { sessionId, portalUrl }, [422]),
+      file: (sessionId, which) => post("/api/ext/fill/file", { sessionId, which }),
+      reveal: (sessionId, which) => post("/api/ext/fill/reveal", { sessionId, which }),
+      report: (report) => post("/api/ext/fill/report", report),
+      pending: (sessionId) => post("/api/ext/fill/pending", { sessionId }),
+      saveAnswers: (sessionId, picks) => post("/api/ext/fill/save-answers", { sessionId, picks }),
+      markSubmitted: (sessionId, portalUrl, saveAnswers) => post("/api/ext/fill/submitted", { sessionId, portalUrl, saveAnswers }, [422]),
       undoMarkSubmitted: (applicationId) => post("/api/ext/fill/submitted/undo", { applicationId }),
     },
 

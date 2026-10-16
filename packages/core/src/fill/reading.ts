@@ -2,11 +2,17 @@
 // Plain data shared by the fill engine and the extension: the extension reads the page into a
 // `PageReading`, the engine answers each field, the extension fills and reports `FieldOutcome`s.
 // Browser-safe: types and pure helpers only.
+import type { AnswerKind } from "../preparation/answers.ts";
 import type { PageJobReference } from "../preparation/contracts.ts";
 
-export type PageKind = "form" | "account" | "sign-in" | "review" | "confirmation" | "posting" | "other";
+/** `start`: the portal's "how do you want to apply?" screen (Workday's Autofill with Resume / Apply Manually). */
+export type PageKind = "form" | "account" | "sign-in" | "review" | "confirmation" | "posting" | "start" | "other";
 
-export type FieldKind = "text" | "email" | "tel" | "url" | "textarea" | "number" | "date" | "select" | "typeahead" | "radio" | "checkbox" | "file";
+export type FieldKind = "text" | "email" | "tel" | "url" | "textarea" | "number" | "date" | "select" | "typeahead" | "radio" | "checkbox" | "file"
+  /** Two buttons, Yes and No, that act as one choice (Ashby). */
+  | "yes-no" | "repeating";
+
+export type EntrySection = "work" | "education";
 
 /** One field on the page, in the portal's order. Its current value is read, but never stored. */
 export interface ReadField {
@@ -24,8 +30,10 @@ export interface ReadField {
   consent: boolean;
   /** A password: never touched. */
   password: boolean;
-  /** The field's autocomplete token ("given-name", "email"), when the portal gives one. */
+  /** The field's autocomplete token ("given-name", "email"), when the portal gives one; "month-year" or "year" for a portal's split date inputs. */
   hint: string | null;
+  /** A field inside a repeating section's entry (Work Experience 2 › Job Title), or the section itself (a `repeating` field, index 0). */
+  entry?: { section: EntrySection; index: number } | null;
 }
 
 export interface PageReading {
@@ -39,15 +47,44 @@ export interface PageReading {
   fields: ReadField[];
 }
 
+/** Which of the package's files a file field gets. */
+export type PackageFileKind = "cv" | "letter";
+
 /** Where a filled value came from, as the panel names it. */
 export type FillSource = "profile" | "answer-bank" | "package" | "cv-version" | "you";
+
+/**
+ * "Save to answer bank" on a needs-you answer or an answer Kris typed: offered only for a question
+ * the answer bank doesn't have; ticked for a question that will come up again, unticked (with why)
+ * for a one-off for this company. Nothing is saved without the tick.
+ */
+export interface SaveOffer {
+  ticked: boolean;
+  note: string | null;
+}
 
 /** The engine's answer for one field: a value to fill, something for Kris, or a field to leave alone. */
 export type FieldAnswer =
   | { fieldId: string; kind: "fill"; value: string; source: FillSource; basis: string | null }
-  | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string }
+  /** Attach the package's frozen CV or letter: the extension fetches its bytes (`packageFile`) and attaches them first. */
+  | { fieldId: string; kind: "file"; which: PackageFileKind; fileName: string; size: number; source: "package"; basis: string }
+  /** `draft`: a new free-text question drafted from the master profile (`basis` cites the pieces); `save`: see SaveOffer. */
+  | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string; draft?: string; save?: SaveOffer }
   /** `byRule`: left blank by Kris's answer-bank rule ("Skipped · your rule"). */
-  | { fieldId: string; kind: "skip"; reason: string; byRule?: true };
+  | { fieldId: string; kind: "skip"; reason: string; byRule?: true }
+  /**
+   * A repeating section: add this many entries with the portal's own Add control (never more than the
+   * CV has), and the entries the portal added itself that repeat a CV entry, reported, removed only on Kris's click.
+   */
+  | { fieldId: string; kind: "entries"; section: EntrySection; add: number; duplicates: DuplicateEntry[]; source: "cv-version"; basis: string };
+
+/** An entry the portal added (Workday reading the CV) that repeats one of the CV's entries. */
+export interface DuplicateEntry {
+  /** Its position in the section, from 1, as the portal numbers it ("Work Experience 4"). */
+  index: number;
+  /** "Junior Security Analyst, Orbital Bank, 2023–2025". */
+  words: string;
+}
 
 export type Outcome = "filled" | "kept" | "didnt-stick" | "skipped" | "needs-you";
 
@@ -56,6 +93,8 @@ export interface FieldOutcome {
   fieldId: string;
   outcome: Outcome;
   source: FillSource | null;
+  /** A typeahead or list with more than one plausible match: the options for Kris to choose between. */
+  choices?: string[];
 }
 
 export interface OutcomeCounts {
@@ -72,7 +111,29 @@ export interface RecordedPage {
   pageKind: PageKind;
   filledAt: string;
   counts: OutcomeCounts;
-  fields: { label: string; kind: FieldKind; outcome: Outcome; source: FillSource | null }[];
+  /** `empty`: whether the field was empty when the page was read (so a later value is one Kris typed). */
+  fields: { label: string; kind: FieldKind; outcome: Outcome; source: FillSource | null; empty: boolean }[];
+}
+
+/** An answer Kris typed on the portal into a needs-you or empty field, kept in the session until saved or declined. */
+export interface PendingAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  kind: AnswerKind;
+  save: SaveOffer;
+}
+
+/** A page as recorded, with every answer Kris typed on the portal in this session that's still waiting. */
+export type RecordedFill = RecordedPage & { typedAnswers: PendingAnswer[] };
+
+/** What "Save to answer bank" saves: an answer typed on the portal (by its id), or one Kris filled from the panel. */
+export type SavePick = { pendingId: string } | { question: string; answer: string; kind: AnswerKind };
+
+export interface SavedAnswers {
+  /** `added` to the bank; `portal-edit`: the bank has this question with another answer, so Kris chooses in Profile; `same`: nothing to change. */
+  saved: { question: string; answerId: string; how: "added" | "portal-edit" | "same" }[];
+  refused: { question: string; reason: string }[];
 }
 
 export function countOutcomes(outcomes: { outcome: Outcome }[]): OutcomeCounts {
@@ -85,4 +146,54 @@ export function countOutcomes(outcomes: { outcome: Outcome }[]): OutcomeCounts {
     else counts.skipped++;
   }
   return counts;
+}
+
+/**
+ * A field's structure for a field report (spec #23 "Report this field"): what a filler needs to learn
+ * the field, never what's in it. Becomes a synthetic fixture later (#50).
+ */
+export interface FieldStructure {
+  tag: string;
+  type: string | null;
+  role: string | null;
+  kind: FieldKind;
+  /** The element's attributes that describe it (id, name, type, autocomplete, aria-*, data-qa…): never `value`. */
+  attributes: Record<string, string>;
+  /** Where its label can come from, in the order the filler looks: `from` names the source ("label[for]", "aria-labelledby", "legend"…). */
+  labelChain: { from: string; text: string }[];
+  /** A select's or radio group's options, as the portal words them. */
+  options: string[];
+}
+
+/** "Report this field": the field's structure and where it was (the page's address; apply-kit keeps its host and path only). */
+export interface FieldReportInput {
+  portal: string;
+  address: string;
+  stepLabel: string | null;
+  field: FieldStructure;
+}
+
+/** A saved field report: portal, host and path (no query), step label, the field's structure. Never a value. */
+export interface FieldReport {
+  id: string;
+  portal: string;
+  host: string;
+  path: string;
+  stepLabel: string | null;
+  field: FieldStructure;
+  createdAt: string;
+}
+
+/**
+ * One value in the copy list on a form apply-kit doesn't know (#47): under the form's own label (in
+ * its language), what it asks for in English, and the value to paste, or the package's file to attach.
+ */
+export type CopyRow =
+  | { fieldId: string; label: string; meaning: string; kind: "value"; value: string }
+  | { fieldId: string; label: string; meaning: string; kind: "file"; which: PackageFileKind; fileName: string };
+
+/** The copy list: rows in the form's order, and how many fields apply-kit can't map (left out). Consent boxes and passwords are Kris's and aren't counted. */
+export interface CopyList {
+  rows: CopyRow[];
+  unmapped: number;
 }

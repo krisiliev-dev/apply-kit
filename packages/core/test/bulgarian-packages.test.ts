@@ -246,3 +246,16 @@ describe("an answer the bank has only in English, in a Bulgarian package", () =>
     expect(question(r.package, "Describe a security incident").save).toMatchObject({ offered: false, savedTo: bankId });
   });
 });
+
+it("prints only user-verified Bulgarian titles and skills while keeping employers and dates unchanged", async () => {
+  const t = mira();
+  const pieces = t.preparation.listPieces().groups.flatMap((g) => g.pieces);
+  const role = pieces.find((p) => p.kind === "role")!;
+  const skill = pieces.find((p) => p.kind === "skill" && p.text === "Wazuh")!;
+  expect(t.preparation.savePiece({ ...role, ...{ bulgarian: "Анализатор по сигурност" } }).saved).toBe(true);
+  expect(t.preparation.savePiece({ ...skill, ...{ bulgarian: "Работа с Wazuh" } }).saved).toBe(true);
+  const pkg = await started(t, vitoshaJob());
+  const cv = await readBack((await t.preparation.packageCv(pkg.id))!.pdf);
+  expect(cv).toContain("Анализатор по сигурност · Northwind Bank, Sofia 03.2022 – досега");
+  expect(cv).toContain("Работа с Wazuh");
+});

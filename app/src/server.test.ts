@@ -3,13 +3,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { describe, expect, it } from "vitest";
-import { createAiBudget, createEngine, createFillEngine, createPairing, createPreparationEngine, createTracker, type DocumentToRender, type Scheduler } from "@apply-kit/core";
+import { createAiBudget, createEngine, createFillEngine, createPairing, createPreparationEngine, createTracker, FillError, type DocumentToRender, type FillEngine, type PackageFileForFill, type Scheduler } from "@apply-kit/core";
+import type { Revealer } from "./fill-api.ts";
 import { createServer } from "./server.ts";
 
 const port = 4310;
 
 // The service as the extension and the UI see it: an in-memory engine, no network, a fixed clock.
-function service(uiDir = "/nonexistent/") {
+function service(uiDir = "/nonexistent/", stand: { fill?: FillEngine; revealer?: Revealer } = {}) {
   const db = new DatabaseSync(":memory:");
   const clock = { now: () => new Date("2026-10-12T07:30:00Z") };
   const engine = createEngine({
@@ -36,8 +37,8 @@ function service(uiDir = "/nonexistent/") {
   const pairing = createPairing({ db, clock });
   const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const fill = createFillEngine({ db, clock, prepare: preparation, track: tracker });
-  const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port });
+  const fill = stand.fill ?? createFillEngine({ db, clock, prepare: preparation, track: tracker });
+  const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port, revealer: stand.revealer });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
   });
@@ -389,6 +390,23 @@ describe("the extension's fill endpoints", () => {
     expect(await start.json()).toEqual({ kind: "no-package", job: null });
   });
 
+  it("match a form apply-kit doesn't know (no job reference), and give its copy list only with the token and a session", async () => {
+    const s = service();
+    expect((await s.request("/api/ext/fill/copy-list", s.json({ sessionId: "s1", reading }))).status).toBe(401);
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+    const company = { portal: "unknown", host: "careers.ostravabank.example", jobRef: null };
+
+    const match = await s.request("/api/ext/fill/match", s.json({ page: company, sessionId: null }, auth));
+    expect(match.status).toBe(200);
+    expect(await match.json()).toEqual({ kind: "no-package", job: null });
+    expect((await s.request("/api/ext/fill/match", s.json({ page: { ...company, jobRef: greenhouse.jobRef, portal: "unknown!" } }, auth))).status).toBe(400);
+
+    expect((await s.request("/api/ext/fill/copy-list", s.json({ sessionId: "s1" }, auth))).status).toBe(400);
+    const unknown = await s.request("/api/ext/fill/copy-list", s.json({ sessionId: "s1", reading }, auth));
+    expect(unknown.status).toBe(409);
+    expect(await unknown.json()).toMatchObject({ problem: "no-session" });
+  });
+
   it("refuse a malformed page or reading, and an unknown session", async () => {
     const s = service();
     const auth = { authorization: `Bearer ${await paired(s)}` };
@@ -417,6 +435,58 @@ describe("the extension's fill endpoints", () => {
     expect(undo.status).toBe(409);
     expect(await undo.json()).toMatchObject({ problem: "not-found" });
   });
+
+  it("pending answers and Save to answer bank need the token, a session and well-formed picks", async () => {
+    const s = service();
+    for (const path of ["/api/ext/fill/pending", "/api/ext/fill/save-answers"]) {
+      expect((await s.request(path, s.json({ sessionId: "s1" }))).status, path).toBe(401);
+    }
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    expect((await s.request("/api/ext/fill/pending", s.json({}, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ question: 3 }] }, auth))).status).toBe(400);
+    const pending = await s.request("/api/ext/fill/pending", s.json({ sessionId: "s1" }, auth));
+    expect(pending.status).toBe(409);
+    expect(await pending.json()).toMatchObject({ problem: "no-session" });
+    const save = await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ pendingId: "1" }, { question: "Do you hold a security clearance?", answer: "No", kind: "yes-no" }] }, auth));
+    expect(save.status).toBe(409);
+  });
+});
+
+describe("field reports", () => {
+  const phone = {
+    tag: "input", type: "tel", role: null, kind: "tel",
+    attributes: { id: "phone", type: "tel", autocomplete: "tel-national" },
+    labelChain: [{ from: "label[for]", text: "Phone Number" }], options: [],
+  };
+  const address = "https://job-boards.greenhouse.io/kestrel/jobs/4410?gh_src=mira.petrova%40example.com";
+
+  it("the panel saves one with the pairing token; Settings lists it with Copy as fixture, and deletes it", async () => {
+    const s = service();
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, stepLabel: null, field: phone }))).status).toBe(401);
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const saved = await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, stepLabel: "My Information", field: { ...phone, value: "+359 88 000 0175" } }, auth));
+    expect(saved.status).toBe(200);
+    const { id } = (await saved.json()) as { id: string };
+
+    const list = await s.request("/api/field-reports");
+    const body = (await list.json()) as { reports: { id: string; host: string; path: string; stepLabel: string; fixture: string }[] };
+    expect(body.reports).toEqual([expect.objectContaining({ id, portal: "greenhouse", host: "job-boards.greenhouse.io", path: "/kestrel/jobs/4410", stepLabel: "My Information", field: phone })]);
+    expect(body.reports[0]!.fixture).toContain("<input id=\"phone\" type=\"tel\" autocomplete=\"tel-national\">");
+    expect(JSON.stringify(body)).not.toMatch(/gh_src|mira|88 000 0175/);
+
+    expect((await s.request(`/api/field-reports/${id}/delete`, s.json({}))).status).toBe(200);
+    expect((await s.request(`/api/field-reports/${id}/delete`, s.json({}))).status).toBe(404);
+    expect(await (await s.request("/api/field-reports")).json()).toEqual({ reports: [] });
+  });
+
+  it("refuses a report without the page's address or the field's structure", async () => {
+    const s = service();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address: "not a page", field: phone }, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, field: null }, auth))).status).toBe(400);
+  });
 });
 
 describe("Mark as submitted on the Job page", () => {
@@ -430,6 +500,68 @@ describe("Mark as submitted on the Job page", () => {
     expect(await mark.json()).toEqual({ marked: false, reason: "There's no such package.", application: null });
     expect(undo.status).toBe(409);
     expect(await undo.json()).toMatchObject({ problem: "not-found" });
+  });
+});
+
+describe("the extension's package-file endpoints", () => {
+  // The fill engine stands in for a session on Mira Petrova's (made-up) approved package: these
+  // endpoints only carry its files to the panel and ask Finder to show them.
+  const cv: PackageFileForFill = { which: "cv", fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", size: 9, path: "/Users/mira/Documents/apply-kit Packages/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", bytes: new TextEncoder().encode("%PDF-fake") };
+  const letter: PackageFileForFill = { ...cv, which: "letter", fileName: "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", path: "/Users/mira/Documents/apply-kit Packages/Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf" };
+  function withFiles(files: Record<string, PackageFileForFill | null> = { cv, letter }) {
+    const revealed: string[] = [];
+    const fill = {
+      packageFile: async (sessionId: string, which: "cv" | "letter") => {
+        if (sessionId !== "s1") throw new FillError("no-session", "This tab's fill session isn't known.");
+        return files[which] ?? null;
+      },
+    } as unknown as FillEngine;
+    const s = service("/nonexistent/", { fill, revealer: { reveal: async (path: string) => { revealed.push(path); } } });
+    return { ...s, revealed };
+  }
+
+  it("need the pairing token", async () => {
+    const s = withFiles();
+    for (const path of ["/api/ext/fill/file", "/api/ext/fill/reveal"]) expect((await s.request(path, s.json({ sessionId: "s1", which: "cv" }))).status, path).toBe(401);
+    expect(s.revealed).toEqual([]);
+  });
+
+  it("give the package's CV as base64, named as in the package", async () => {
+    const s = withFiles();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const res = await s.request("/api/ext/fill/file", s.json({ sessionId: "s1", which: "cv" }, auth));
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ which: "cv", fileName: cv.fileName, size: 9, path: cv.path, type: "application/pdf", base64: "JVBERi1mYWtl" });
+  });
+
+  it("Show in Finder reveals the session's file, the letter when asked for the letter", async () => {
+    const s = withFiles();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const res = await s.request("/api/ext/fill/reveal", s.json({ sessionId: "s1", which: "letter" }, auth));
+
+    expect(res.status).toBe(200);
+    expect(s.revealed).toEqual([letter.path]);
+  });
+
+  it("say so when the package has no such file or it isn't in the Packages folder, and refuse an unknown session", async () => {
+    const s = withFiles({ cv: { ...cv, path: null }, letter: null });
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const noLetter = await s.request("/api/ext/fill/file", s.json({ sessionId: "s1", which: "letter" }, auth));
+    const noCopy = await s.request("/api/ext/fill/reveal", s.json({ sessionId: "s1", which: "cv" }, auth));
+    const unknown = await s.request("/api/ext/fill/reveal", s.json({ sessionId: "s2", which: "cv" }, auth));
+    const bad = await s.request("/api/ext/fill/file", s.json({ sessionId: "s1", which: "photo" }, auth));
+
+    expect(noLetter.status).toBe(404);
+    expect(await noLetter.json()).toEqual({ error: "Your package has no letter" });
+    expect(noCopy.status).toBe(404);
+    expect(await noCopy.json()).toEqual({ error: "The CV isn't in your Packages folder: apply-kit couldn't write it there" });
+    expect(unknown.status).toBe(409);
+    expect(bad.status).toBe(400);
+    expect(s.revealed).toEqual([]);
   });
 });
 

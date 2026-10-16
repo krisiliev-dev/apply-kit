@@ -1,7 +1,7 @@
 // A made-up master profile and job for package tests that go all the way to approval (#67):
 // Mira Petrova's profile and answer bank, Kestrel Payments' recorded Greenhouse form, and a CV that
 // reads back like the real template. Made-up people, companies and postings only.
-import type { PackageJob, PieceInput } from "../src/index.ts";
+import type { DraftAnswerInput, DraftedAnswer, PackageJob, PieceInput } from "../src/index.ts";
 import { fixtureFetch } from "./harness.ts";
 import {
   createTestPreparation, fakeWriter, recordedDraftAnswer, recordedDraftAnswerBg, recordedLetter, recordedLetterBg, recordedTailoredCv, recordedTailoredCvBg, recordedWhyAnswer, templateRenderer,
@@ -13,16 +13,20 @@ const kestrelQuestions = "https://boards-api.greenhouse.io/v1/boards/kestrel/job
 export const withIds = <T>(recorded: T, ids: Record<string, string>): T =>
   JSON.parse(JSON.stringify(recorded).replace(/"piece-([a-z]+)"/g, (m, key: string) => (ids[key] ? JSON.stringify(ids[key]) : m))) as T;
 
-type Options = Parameters<typeof createTestPreparation>[0] & { phone?: string };
+type Options = Parameters<typeof createTestPreparation>[0] & {
+  phone?: string;
+  /** Overrides the recorded drafts for the questions it answers (undefined: the recorded draft). */
+  draftAnswer?: (input: DraftAnswerInput) => DraftedAnswer | Error | undefined;
+};
 
 /** Mira Petrova's made-up master profile and answer bank, with Kestrel's recorded form and a CV that reads like the real template. */
-export function mira({ phone = "+359 88 000 0175", ...options }: Options = {}) {
+export function mira({ phone = "+359 88 000 0175", draftAnswer, ...options }: Options = {}) {
   const ids: Record<string, string> = {};
   // The writer writes in the package's language: the Bulgarian recordings for a Bulgarian package.
   const writer = fakeWriter({
     tailorCv: (input) => withIds(input.language === "bg" ? recordedTailoredCvBg : recordedTailoredCv, ids),
     writeLetter: (input) => withIds(input.language === "bg" ? recordedLetterBg : recordedLetter, ids),
-    draftAnswer: (input) => withIds(/^why/i.test(input.question) ? recordedWhyAnswer : input.language === "bg" ? recordedDraftAnswerBg : recordedDraftAnswer, ids),
+    draftAnswer: (input) => draftAnswer?.(input) ?? withIds(/^why/i.test(input.question) ? recordedWhyAnswer : input.language === "bg" ? recordedDraftAnswerBg : recordedDraftAnswer, ids),
   });
   const t = createTestPreparation({ writer, renderer: templateRenderer(), fetch: fixtureFetch({ [kestrelQuestions]: "greenhouse-kestrel-4410-questions.json" }), ...options });
   const save = (key: string, input: PieceInput) => {

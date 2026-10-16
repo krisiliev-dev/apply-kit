@@ -1,5 +1,5 @@
 import type {
-  LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
+  LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice, FieldReport,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
@@ -261,6 +261,17 @@ export async function fetchPairedDevices(signal?: AbortSignal): Promise<PairedDe
 
 export async function unpairDevice(id: string): Promise<void> {
   await json(await postJson(`/api/pairing/devices/${encodeURIComponent(id)}/unpair`));
+}
+
+/** A field report as Settings lists it, with its text for "Copy as fixture". */
+export type ListedFieldReport = FieldReport & { fixture: string };
+
+export async function fetchFieldReports(signal?: AbortSignal): Promise<ListedFieldReport[]> {
+  return (await json<{ reports: ListedFieldReport[] }>(await fetch("/api/field-reports", { signal }))).reports;
+}
+
+export async function deleteFieldReport(id: string): Promise<void> {
+  await json(await postJson(`/api/field-reports/${encodeURIComponent(id)}/delete`));
 }
 
 // ---------- Profile (#53) ----------

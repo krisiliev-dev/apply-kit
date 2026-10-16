@@ -1,0 +1,22 @@
+<!-- Synthetic Greenhouse new job board application (job-boards.greenhouse.io) whose phone number has
+     its country code in a dropdown of its own, as many portals ask for it. The test setup can make the
+     phone field clear itself after a value is typed (a portal reformatting the number). Made-up company
+     and job; no real person's data. -->
+<main class="main">
+  <div class="job__header"><h1 class="section-header">Security Engineer</h1><div class="job__location">Sofia</div></div>
+  <div class="application--container">
+    <h2 class="section-header">Apply for this job</h2>
+    <form id="application-form" class="application--form">
+      <div class="application--questions">
+        <div class="text-input-wrapper"><label id="first_name-label" for="first_name" class="label">First Name<span aria-hidden="true">*</span></label><input id="first_name" class="input" type="text" maxlength="255" aria-required="true" autocomplete="given-name"></div>
+        <div class="text-input-wrapper"><label id="last_name-label" for="last_name" class="label">Last Name<span aria-hidden="true">*</span></label><input id="last_name" class="input" type="text" maxlength="255" aria-required="true" autocomplete="family-name"></div>
+        <div class="text-input-wrapper"><label id="email-label" for="email" class="label">Email<span aria-hidden="true">*</span></label><input id="email" class="input" type="email" maxlength="255" aria-required="true" autocomplete="email"></div>
+        <div class="select__container"><label id="phone_code-label" for="phone_code" class="label">Country Phone Code<span aria-hidden="true">*</span></label>
+          <select id="phone_code" class="select" aria-required="true" autocomplete="tel-country-code"><option value="">Select…</option><option value="AT">+43</option><option value="BG">+359</option><option value="DE">+49</option></select></div>
+        <div class="text-input-wrapper"><label id="phone-label" for="phone" class="label">Phone Number<span aria-hidden="true">*</span></label><input id="phone" class="input" type="tel" aria-required="true" autocomplete="tel-national" placeholder="e.g. 87 123 4567" data-qa="phone-input"></div>
+        <div class="text-input-wrapper"><label id="question_32001-label" for="question_32001" class="label">How did you hear about us?</label><input id="question_32001" class="input" type="text" maxlength="255"></div>
+      </div>
+      <div class="application--submit"><button type="submit" class="btn btn--rounded">Submit application</button></div>
+    </form>
+  </div>
+</main>

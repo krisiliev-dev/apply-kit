@@ -689,3 +689,8 @@ dialog.dlg.wide { width: min(720px, calc(100vw - 2 * var(--s-5))) }
 .offer-acts { display: flex; flex-wrap: wrap; gap: var(--s-3) }
 .reject-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
 .reject-form legend { padding: 0; margin-bottom: var(--s-2); font-size: var(--fs-small); font-weight: 600 }
+
+/* Settings › Chrome extension › Field reports (#48): name and where on the left, Copy as fixture and Delete wrap under it on narrow screens. */
+.field-reports { list-style: none; margin: 0; padding: 0 }
+.field-reports li { flex-wrap: wrap; padding-top: var(--s-3); border-top: 1px solid var(--rule) }
+.field-reports li .grow { flex-basis: var(--w-field-min); overflow-wrap: anywhere }

@@ -41,6 +41,8 @@ export interface PieceSource {
 }
 
 export interface ProfilePiece {
+  /** Bulgarian title or skill wording explicitly verified by the user. */
+  bulgarian?: string;
   id: string;
   kind: PieceKind;
   /** What Kris did (an achievement), the skill, or a role's or education's description (may be empty). */
@@ -86,6 +88,7 @@ export type DisputeChoice = { version: number } | { askCoach: true };
 
 /** A new piece (no id) or an edit of one (its id). The source and status are kept on edit. */
 export interface PieceInput {
+  bulgarian?: string;
   id?: string;
   kind: PieceKind;
   text: string;
@@ -221,6 +224,7 @@ export interface DeletedPiece {
 
 export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Clock }): ProfileStore {
   const rowToPiece = (r: Record<string, unknown>): ProfilePiece => ({
+    ...(r.bulgarian ? { bulgarian: String(r.bulgarian) } : {}),
     id: String(r.id),
     kind: r.kind as PieceKind,
     text: String(r.text),
@@ -253,7 +257,9 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     const before = input.id ? get(input.id) : null;
     if (input.id && !before) return { saved: false, problems: [{ field: "kind", message: "This piece no longer exists. It may have been deleted.", fixes: [] }] };
     const hasEntry = input.kind === "role" || input.kind === "education";
+    const translated = (typeof input.bulgarian === "string" ? input.bulgarian.trim() : before?.bulgarian) || undefined;
     const piece: ProfilePiece = {
+      ...(!origin && (input.kind === "role" || input.kind === "skill") ? (translated ? { bulgarian: translated } : {}) : before?.bulgarian ? { bulgarian: before.bulgarian } : {}),
       id: before?.id ?? `piece:${crypto.randomUUID()}`,
       kind: input.kind,
       text: input.text.trim(),
@@ -275,6 +281,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     const strict = piece.status === "confirmed";
     const problems = [...required(piece, input, strict), ...check(piece, strict)];
     if (problems.length > 0) return { saved: false, problems };
+    if (piece.bulgarian && piece.bulgarian.length > 200) return { saved: false, problems: [{ field: "text", message: "Keep the verified Bulgarian title or skill within 200 characters.", fixes: [] }] };
     write(piece);
     return { saved: true, piece };
   }
@@ -294,6 +301,7 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
       piece.source.from, piece.source.quote, piece.checkThis ? 1 : 0, piece.dispute ? JSON.stringify(piece.dispute) : null,
       piece.createdAt, piece.updatedAt,
     );
+    db.prepare("UPDATE profile_piece SET bulgarian = ? WHERE id = ?").run(piece.bulgarian ?? null, piece.id);
   }
 
   function confirm(id: string): SavePieceResult {
