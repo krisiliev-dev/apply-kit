@@ -559,6 +559,11 @@ h2[tabindex="-1"]:focus { outline: none }
 .pkg .item:first-child { border-top: 0; padding-top: 0 }
 .pkg .item b { font-weight: 600; overflow-wrap: anywhere }
 .pkg .cv-row { flex-wrap: nowrap; align-items: flex-start; min-width: 0 }
+.pkg .as-sent { flex-basis: 100%; margin: 0; background: var(--surface-sunken); border-radius: var(--r-control); padding: var(--s-4); white-space: pre-wrap; overflow-wrap: anywhere; line-height: var(--lh-body); color: var(--ink) }
+.pkg .as-sent[hidden] { display: none }
+.pkg .qa { display: grid; gap: var(--s-4); white-space: normal }
+.pkg .qa dt { font-weight: 600 }
+.pkg .qa dd { margin: var(--s-1) 0 0; white-space: pre-wrap }
 .doc-thumb { aspect-ratio: 210 / 297; width: 72px; background: var(--doc-paper); border: 1px solid var(--rule); border-radius: var(--r-sheet); padding: var(--s-2); display: grid; gap: 3px; align-content: start; flex: none }
 .doc-thumb i { display: block; height: 3px; background: var(--doc-rule); border-radius: 2px }
 .doc-thumb i.h { background: var(--doc-accent); width: 60% }
@@ -684,3 +689,8 @@ dialog.dlg.wide { width: min(720px, calc(100vw - 2 * var(--s-5))) }
 .offer-acts { display: flex; flex-wrap: wrap; gap: var(--s-3) }
 .reject-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-3); min-width: 0 }
 .reject-form legend { padding: 0; margin-bottom: var(--s-2); font-size: var(--fs-small); font-weight: 600 }
+
+/* Settings › Chrome extension › Field reports (#48): name and where on the left, Copy as fixture and Delete wrap under it on narrow screens. */
+.field-reports { list-style: none; margin: 0; padding: 0 }
+.field-reports li { flex-wrap: wrap; padding-top: var(--s-3); border-top: 1px solid var(--rule) }
+.field-reports li .grow { flex-basis: var(--w-field-min); overflow-wrap: anywhere }

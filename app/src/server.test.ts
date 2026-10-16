@@ -418,6 +418,58 @@ describe("the extension's fill endpoints", () => {
     expect(undo.status).toBe(409);
     expect(await undo.json()).toMatchObject({ problem: "not-found" });
   });
+
+  it("pending answers and Save to answer bank need the token, a session and well-formed picks", async () => {
+    const s = service();
+    for (const path of ["/api/ext/fill/pending", "/api/ext/fill/save-answers"]) {
+      expect((await s.request(path, s.json({ sessionId: "s1" }))).status, path).toBe(401);
+    }
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    expect((await s.request("/api/ext/fill/pending", s.json({}, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ question: 3 }] }, auth))).status).toBe(400);
+    const pending = await s.request("/api/ext/fill/pending", s.json({ sessionId: "s1" }, auth));
+    expect(pending.status).toBe(409);
+    expect(await pending.json()).toMatchObject({ problem: "no-session" });
+    const save = await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ pendingId: "1" }, { question: "Do you hold a security clearance?", answer: "No", kind: "yes-no" }] }, auth));
+    expect(save.status).toBe(409);
+  });
+});
+
+describe("field reports", () => {
+  const phone = {
+    tag: "input", type: "tel", role: null, kind: "tel",
+    attributes: { id: "phone", type: "tel", autocomplete: "tel-national" },
+    labelChain: [{ from: "label[for]", text: "Phone Number" }], options: [],
+  };
+  const address = "https://job-boards.greenhouse.io/kestrel/jobs/4410?gh_src=mira.petrova%40example.com";
+
+  it("the panel saves one with the pairing token; Settings lists it with Copy as fixture, and deletes it", async () => {
+    const s = service();
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, stepLabel: null, field: phone }))).status).toBe(401);
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    const saved = await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, stepLabel: "My Information", field: { ...phone, value: "+359 88 000 0175" } }, auth));
+    expect(saved.status).toBe(200);
+    const { id } = (await saved.json()) as { id: string };
+
+    const list = await s.request("/api/field-reports");
+    const body = (await list.json()) as { reports: { id: string; host: string; path: string; stepLabel: string; fixture: string }[] };
+    expect(body.reports).toEqual([expect.objectContaining({ id, portal: "greenhouse", host: "job-boards.greenhouse.io", path: "/kestrel/jobs/4410", stepLabel: "My Information", field: phone })]);
+    expect(body.reports[0]!.fixture).toContain("<input id=\"phone\" type=\"tel\" autocomplete=\"tel-national\">");
+    expect(JSON.stringify(body)).not.toMatch(/gh_src|mira|88 000 0175/);
+
+    expect((await s.request(`/api/field-reports/${id}/delete`, s.json({}))).status).toBe(200);
+    expect((await s.request(`/api/field-reports/${id}/delete`, s.json({}))).status).toBe(404);
+    expect(await (await s.request("/api/field-reports")).json()).toEqual({ reports: [] });
+  });
+
+  it("refuses a report without the page's address or the field's structure", async () => {
+    const s = service();
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address: "not a page", field: phone }, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/report", s.json({ portal: "greenhouse", address, field: null }, auth))).status).toBe(400);
+  });
 });
 
 describe("Mark as submitted on the Job page", () => {
@@ -757,6 +809,23 @@ describe("the Applications routes", () => {
 
     expect((await s.request("/api/applications/no-such-id")).status).toBe(404);
     expect((await s.request("/api/applications/no-such-id/cv")).status).toBe(404);
+  });
+
+  it("lists the CV versions sent and picks one for an Application added by hand; no Package as sent without one", async () => {
+    const s = service();
+    const add = async (company: string) => ((await (await s.request("/api/applications", s.json({ job: { company, title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }))).json()) as { application: { id: string } }).application.id;
+    const first = await add("Fennel Studio");
+    const second = await add("Pixelmoor");
+    const pdf = new TextEncoder().encode("%PDF-1.7\n%%EOF\n");
+    await s.request(`/api/applications/${encodeURIComponent(first)}/cv?name=cv.pdf&label=Design%20v2`, { method: "PUT", headers: { "content-type": "application/pdf" }, body: pdf });
+
+    expect(await (await s.request("/api/applications/cv-versions")).json()).toEqual(["Design v2"]);
+    const picked = await s.request(`/api/applications/${encodeURIComponent(second)}/cv-version`, s.json({ label: "Design v2" }));
+    expect(picked.status).toBe(200);
+    expect(await (await s.request(`/api/applications/${encodeURIComponent(second)}`)).json()).toMatchObject({ cvVersion: "Design v2", package: null });
+    expect((await s.request(`/api/applications/${encodeURIComponent(second)}/cv-version`, s.json({ label: "Nope" }))).status).toBe(422);
+    expect((await s.request(`/api/applications/${encodeURIComponent(second)}/package/cv`)).status).toBe(404);
+    expect((await s.request("/api/applications/emails/%3Cnone%40example.com%3E/package", s.json({ answer: "mark-applied" }))).status).toBe(404);
   });
 
   it("carries Track's markers on the Feed and the Job: All open keeps an applied Job with its Application", async () => {

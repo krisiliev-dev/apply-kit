@@ -3,7 +3,7 @@
 // job each time), asks for the answers to the page's fields and records what was filled. Values pass
 // through in the answers only; the record never holds them.
 import type { Context, Hono } from "hono";
-import { FillError, type FieldOutcome, type MarkResult, type FillEngine, type FillPage, type PackageFileKind, type PageReading } from "@apply-kit/core";
+import { FillError, answerKinds, fieldReportFixture, type AnswerKind, type FieldOutcome, type MarkResult, type FillEngine, type FillPage, type FieldStructure, type PackageFileKind, type PageReading, type SavePick } from "@apply-kit/core";
 import { jsonBody } from "./profile-api.ts";
 
 const portals = ["workday", "greenhouse", "lever", "smartrecruiters", "workable", "ashby"];
@@ -40,17 +40,45 @@ export function mountFillApi(app: Hono, fill: FillEngine, revealer?: Revealer): 
     const outcomes = Array.isArray(b.outcomes) ? (b.outcomes as FieldOutcome[]) : null;
     return sessionId && reading && outcomes ? fill.recordPage(sessionId, reading, outcomes) : bad("Send the sessionId, the page's reading and the outcomes");
   }));
-  // { sessionId, portalUrl }: Kris clicked Mark as submitted (or "I've submitted this") in the panel.
+  // { sessionId }: the answers Kris typed on the portal, waiting ("Did you submit?").
+  app.post("/api/ext/fill/pending", (c) => withBody(c, (b) => {
+    const sessionId = str(b.sessionId);
+    return sessionId ? fill.pendingAnswers(sessionId) : bad("Send the sessionId");
+  }));
+  // { sessionId, picks: [{ pendingId } | { question, answer, kind }] }: Save to answer bank.
+  app.post("/api/ext/fill/save-answers", (c) => withBody(c, (b) => {
+    const sessionId = str(b.sessionId);
+    const picks = picksOf(b.picks);
+    return sessionId && picks ? fill.saveAnswers(sessionId, picks) : bad("Send the sessionId and the picks: [{ pendingId } | { question, answer, kind }]");
+  }));
+  // { sessionId, portalUrl, saveAnswers? }: Kris clicked Mark as submitted (or "I've submitted this") in the panel, with the typed answers he left ticked.
   app.post("/api/ext/fill/submitted", (c) => withBody(c, async (b) => {
     const sessionId = str(b.sessionId);
     if (!sessionId) return bad("Send the sessionId and the portal page's address");
-    return marked(await fill.markSubmitted({ sessionId }, { portalUrl: str(b.portalUrl), via: "extension" }));
+    const saveAnswers = Array.isArray(b.saveAnswers) ? b.saveAnswers.filter((x): x is string => typeof x === "string") : [];
+    return marked(await fill.markSubmitted({ sessionId }, { portalUrl: str(b.portalUrl), via: "extension", saveAnswers }));
   }));
   // { applicationId }: the panel's Undo after marking.
   app.post("/api/ext/fill/submitted/undo", (c) => withBody(c, (b) => {
     const applicationId = str(b.applicationId);
     return applicationId ? fill.undoMarkSubmitted(applicationId) : bad("Send the applicationId");
   }));
+
+  // { portal, address, stepLabel, field }: "Report this field" in the panel. The engine keeps the field's
+  // structure, host and path only: never the query, never a value.
+  app.post("/api/ext/fill/report", (c) => withBody(c, (b) => {
+    const address = str(b.address);
+    if (!address || !b.field || typeof b.field !== "object") return bad("Send the page's address and the field's structure");
+    try {
+      return fill.reportField({ portal: str(b.portal) ?? "unknown", address, stepLabel: str(b.stepLabel), field: b.field as FieldStructure });
+    } catch (err) {
+      if (err instanceof FillError && err.problem === "bad-report") return bad(err.message);
+      throw err;
+    }
+  }));
+  // Settings › Extension: the field reports, each with its fixture text for "Copy as fixture"; Delete.
+  app.get("/api/field-reports", (c) => c.json({ reports: fill.fieldReports().map((r) => ({ ...r, fixture: fieldReportFixture(r) })) }));
+  app.post("/api/field-reports/:id/delete", (c) => withBody(c, () => (fill.deleteFieldReport(c.req.param("id")) ? { deleted: true } : notFound("There's no such field report"))));
 
   // The Job page's "Mark as submitted", for an application sent outside the extension, and its Undo.
   app.post("/api/packages/:id/submitted", (c) => withBody(c, async () =>
@@ -112,6 +140,17 @@ function pageOf(v: unknown): FillPage | null {
   const ref = p.jobRef as FillPage["jobRef"] | undefined;
   if (ref != null && (typeof ref !== "object" || !portals.includes(String(ref.portal)) || typeof ref.jobId !== "string")) return null;
   return { portal: p.portal!, host: p.host, jobRef: ref ? { portal: ref.portal, board: typeof ref.board === "string" ? ref.board : null, jobId: ref.jobId } : null };
+}
+
+function picksOf(v: unknown): SavePick[] | null {
+  if (!Array.isArray(v)) return null;
+  const picks: SavePick[] = [];
+  for (const p of v as Record<string, unknown>[]) {
+    if (p && typeof p.pendingId === "string") picks.push({ pendingId: p.pendingId });
+    else if (p && typeof p.question === "string" && typeof p.answer === "string" && answerKinds.includes(p.kind as AnswerKind)) picks.push({ question: p.question, answer: p.answer, kind: p.kind as AnswerKind });
+    else return null;
+  }
+  return picks;
 }
 
 function readingOf(v: unknown): PageReading | null {

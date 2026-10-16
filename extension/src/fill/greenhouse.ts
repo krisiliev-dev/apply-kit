@@ -2,7 +2,8 @@
 // new job board, and the embedded form) into its fields in the portal's order, fills the answers it's
 // given through page actions, and undoes what it changed. It keeps only the previous values and which
 // fields it filled, in the page's isolated world; nothing else. It never presses a button.
-import type { EntrySection, FieldAnswer, FieldKind, FieldOutcome, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
+import type { EntrySection, FieldAnswer, FieldKind, FieldOutcome, FieldStructure, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
+import { describingAttribute } from "@apply-kit/core/field-report";
 import { recognisePortal } from "../portal.ts";
 import { attachFile, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark, type FileBytes } from "./page-actions.ts";
 
@@ -11,15 +12,26 @@ export interface Filler {
   /**
    * Attaches the package's files first (`files`: the bytes for the page's file answers), lets the page
    * settle (the portal may read the CV and fill fields itself), then fills the answers' values into
-   * fields still empty; keeps non-empty ones; marks each field it reports. Outcomes in the answers' order.
+   * fields still empty; keeps non-empty ones; after one more settle reads every value it filled back
+   * once (a value the page cleared or changed didn't stick); marks each field it reports. Outcomes in
+   * the answers' order.
    */
   fill(doc: Document, answers: FieldAnswer[], files?: FileToAttach[]): Promise<FieldOutcome[]>;
+  /**
+   * "Try once more" on a field whose value didn't stick: puts the value in once, lets the page settle,
+   * reads it back once. Never loops; the panel offers it once per field.
+   */
+  retry(doc: Document, fieldId: string, value: string): Promise<FieldOutcome["outcome"]>;
   /** "Replace" on a kept field: puts apply-kit's value in (Undo restores the portal's). */
   replace(doc: Document, fieldId: string, value: string): FieldOutcome["outcome"];
+  /** "Fill …" on a needs-you item: puts Kris's answer from the panel in that one field; later fills report it as his ("You"). */
+  fillOne(doc: Document, fieldId: string, value: string): FieldOutcome["outcome"];
   /** Restores every value apply-kit changed on this page and removes its marks. Returns how many fields were restored. */
   undo(doc: Document): number;
   /** Show on page. False if the field is gone. */
   show(doc: Document, fieldId: string): boolean;
+  /** "Report this field": the field's structure, never its value (nor anything that contains it). Null if the field is gone. */
+  describe(doc: Document, fieldId: string): FieldStructure | null;
   /** Kris's choice for a needs-you choice (a typeahead with two plausible matches): picks that option. */
   pick?(doc: Document, fieldId: string, option: string): Promise<FieldOutcome["outcome"]>;
   /** "Remove the N duplicates": deletes those entries of a repeating section with the portal's own Delete. Returns how many went. */
@@ -139,6 +151,26 @@ function readField(el: Control, index: number): ReadField {
   };
 }
 
+/** Every place a field's label can come from, in the order the filler looks. */
+function labelChain(el: Control): { from: string; text: string }[] {
+  const doc = el.ownerDocument;
+  const chain: { from: string; text: string }[] = [];
+  const add = (from: string, text: string | null | undefined) => { const t = clean(text); if (t) chain.push({ from, text: t }); };
+  const byIds = (ids: string | null) => (ids ? ids.split(/\s+/).map((id) => doc.getElementById(id)?.textContent ?? "").join(" ") : "");
+  if (isRadio(el)) {
+    const group = el.closest("fieldset, [role=radiogroup]");
+    add("legend", group?.querySelector("legend")?.textContent);
+    add("group aria-labelledby", byIds(group?.getAttribute("aria-labelledby") ?? null));
+    add("group aria-label", group?.getAttribute("aria-label"));
+  }
+  if (el.id) add("label[for]", Array.from(doc.querySelectorAll("label")).find((l) => l.getAttribute("for") === el.id)?.textContent);
+  add("aria-labelledby", byIds(el.getAttribute("aria-labelledby")));
+  add("wrapping label", el.closest("label")?.textContent);
+  add("aria-label", el.getAttribute("aria-label"));
+  add("placeholder", el.getAttribute("placeholder"));
+  return chain;
+}
+
 /** The upload box around a file input: where the portal shows the chosen file's name and takes a dropped file. */
 function fileBox(el: Element): Element {
   return el.closest(".field, .file-upload, [class*=upload], [class*=drop]") ?? el.parentElement ?? el;
@@ -154,6 +186,8 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
   const settle = () => (settleMs > 0 ? new Promise<void>((done) => setTimeout(done, settleMs)) : Promise.resolve());
   /** Field id → the value apply-kit put in. */
   const filled = new Map<string, string>();
+  /** Fields Kris answered from the panel. */
+  const yours = new Set<string>();
 
   const find = (doc: Document, id: string) => {
     const all = controls(doc);
@@ -187,6 +221,16 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
     filled.set(id, now);
     mark(found.el, "filled", id);
     return "filled";
+  }
+
+  /** The single read-back after the settle wait: the value apply-kit put in is still there, or it didn't stick. */
+  function verify(doc: Document, id: string): FieldOutcome["outcome"] {
+    const found = find(doc, id);
+    const put = filled.get(id);
+    if (found && put !== undefined && valueOf(found.el).trim() === put.trim()) return "filled";
+    filled.delete(id);
+    if (found) mark(found.el, "didnt-stick", id);
+    return "didnt-stick";
   }
 
   return {
@@ -242,12 +286,21 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
         }
       }
 
+      const toVerify: string[] = [];
       for (const a of answers) {
         if (a.kind === "file") continue;
         const found = find(doc, a.fieldId);
         // Greenhouse has no repeating sections to add entries to.
         if (!found || a.kind === "skip" || a.kind === "entries") { report(a.fieldId, "skipped"); continue; }
         if (a.kind === "needs-you") {
+          const current = found.field.value;
+          // Answered: from the panel (Kris's), or typed on the page (kept, so apply-kit can offer it to the bank).
+          if (current.trim() !== "" && yours.has(a.fieldId) && filled.get(a.fieldId) === current) { report(a.fieldId, "filled", "you"); continue; }
+          if (current.trim() !== "") {
+            mark(found.el, "kept", a.fieldId);
+            report(a.fieldId, "kept");
+            continue;
+          }
           mark(found.el, "needs-you", a.fieldId);
           report(a.fieldId, "needs-you");
           continue;
@@ -264,13 +317,33 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
         }
         const outcome = put(doc, a.fieldId, a.value);
         report(a.fieldId, outcome, outcome === "filled" ? a.source : null);
+        if (outcome === "filled") toVerify.push(a.fieldId);
+      }
+      // Verify once: some portals reformat or clear a value just after it's typed.
+      if (toVerify.length) {
+        await settle();
+        for (const id of toVerify) if (verify(doc, id) === "didnt-stick") report(id, "didnt-stick");
       }
       return answers.map((a) => outcomes.get(a.fieldId)!);
+    },
+
+    async retry(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      if (put(doc, fieldId, value) !== "filled") return "didnt-stick";
+      await settle();
+      return verify(doc, fieldId);
     },
 
     replace(doc, fieldId, value) {
       unmark(doc, fieldId);
       return put(doc, fieldId, value);
+    },
+
+    fillOne(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      const outcome = put(doc, fieldId, value);
+      if (outcome === "filled") yours.add(fieldId);
+      return outcome;
     },
 
     undo(doc) {
@@ -286,8 +359,29 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
       }
       previous.clear();
       filled.clear();
+      yours.clear();
       removeMarks(doc);
       return restored;
+    },
+
+    describe(doc, fieldId) {
+      const found = find(doc, fieldId);
+      if (!found) return null;
+      const { el, field } = found;
+      // A free-text value can turn up in a portal's own text (a label echoing it): anything containing it is left out.
+      const value = ["select", "radio", "checkbox"].includes(field.kind) ? "" : field.value.trim();
+      const holds = (text: string) => value.length > 1 && text.toLowerCase().includes(value.toLowerCase());
+      const attributes: Record<string, string> = {};
+      for (const a of Array.from(el.attributes)) if (describingAttribute.test(a.name) && !holds(a.value)) attributes[a.name] = a.value;
+      return {
+        tag: el.tagName.toLowerCase(),
+        type: el.getAttribute("type"),
+        role: el.getAttribute("role"),
+        kind: field.kind,
+        attributes,
+        labelChain: labelChain(el).filter((l) => !holds(l.text)),
+        options: field.options.filter((o) => !holds(o)),
+      };
     },
 
     show(doc, fieldId) {

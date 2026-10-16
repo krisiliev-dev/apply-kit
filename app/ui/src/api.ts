@@ -1,5 +1,5 @@
 import type {
-  LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice,
+  LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice, FieldReport,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
@@ -261,6 +261,17 @@ export async function fetchPairedDevices(signal?: AbortSignal): Promise<PairedDe
 
 export async function unpairDevice(id: string): Promise<void> {
   await json(await postJson(`/api/pairing/devices/${encodeURIComponent(id)}/unpair`));
+}
+
+/** A field report as Settings lists it, with its text for "Copy as fixture". */
+export type ListedFieldReport = FieldReport & { fixture: string };
+
+export async function fetchFieldReports(signal?: AbortSignal): Promise<ListedFieldReport[]> {
+  return (await json<{ reports: ListedFieldReport[] }>(await fetch("/api/field-reports", { signal }))).reports;
+}
+
+export async function deleteFieldReport(id: string): Promise<void> {
+  await json(await postJson(`/api/field-reports/${encodeURIComponent(id)}/delete`));
 }
 
 // ---------- Profile (#53) ----------
@@ -656,6 +667,19 @@ export async function attachApplicationCv(id: string, file: File, label: string)
 /** Where the attached CV opens. */
 export const applicationCvUrl = (id: string) => `${applicationPath(id)}/cv`;
 
+/** Where a file of the Package as sent opens: its CV PDF or letter, exactly as approved. */
+export const packageFileUrl = (id: string, which: "cv" | "letter") => `${applicationPath(id)}/package/${which}`;
+
+/** The CV versions sent so far, for "Pick a CV version". */
+export async function fetchCvVersions(signal?: AbortSignal): Promise<string[]> {
+  return json(await fetch("/api/applications/cv-versions", { signal }));
+}
+
+/** "Pick a CV version": one sent before, without a file. */
+export async function pickCvVersion(id: string, label: string): Promise<{ event: ApplicationEvent }> {
+  return json(await postJson(`${applicationPath(id)}/cv-version`, { label }));
+}
+
 /** The Stats strip's numbers. */
 export async function fetchApplicationStats(signal?: AbortSignal): Promise<TrackStats> {
   return json(await fetch("/api/applications/stats", { signal }));
@@ -669,6 +693,16 @@ export async function fetchEmailsToMatch(signal?: AbortSignal): Promise<EmailToM
 /** Your answer to an email to match. Rejects with the reason in words (no choice: "Choose where this email belongs first."). */
 export async function answerEmail(emailId: string, answer: EmailAnswer): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }> {
   return json(await postJson(`/api/applications/emails/${encodeURIComponent(emailId)}/answer`, answer));
+}
+
+/** "Mark Applied, dated …?" for a confirmation about an approved package: mark it Applied, or not this package. */
+export async function answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this"): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }> {
+  return json(await postJson(`/api/applications/emails/${encodeURIComponent(emailId)}/package`, { answer }));
+}
+
+/** Undoes "Mark Applied": the Application is taken off and the question comes back. */
+export async function undoPackageConfirmation(emailId: string): Promise<void> {
+  await json(await postJson(`/api/applications/emails/${encodeURIComponent(emailId)}/package/undo`));
 }
 
 /** "Looks right" on the moved-by-email banner. */

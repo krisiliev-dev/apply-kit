@@ -140,6 +140,18 @@ describe("the extension talking to apply-kit", () => {
     expect(calls).toEqual([["/api/ext/fill/file", { sessionId: "s-1", which: "cv" }], ["/api/ext/fill/reveal", { sessionId: "s-1", which: "cv" }]]);
   });
 
+  it("sends a field report: the field's structure and the page's address, nothing kept in the browser", async () => {
+    const calls: [string, unknown][] = [];
+    const service = fakeService((r) => { calls.push([new URL(r.url).pathname, r.body]); return json({ id: "r1" }); });
+    const { store, writes } = memoryStore({ token: "t" });
+    const field = { tag: "input", type: "tel", role: null, kind: "tel" as const, attributes: { id: "phone" }, labelChain: [{ from: "label[for]", text: "Phone Number" }], options: [] };
+    const report = { portal: "greenhouse", address: "https://job-boards.greenhouse.io/kestrel/jobs/4410", stepLabel: null, field };
+
+    expect(await createClient({ fetch: service, store }).fill.report(report)).toEqual({ ok: true, value: { id: "r1" } });
+    expect(calls).toEqual([["/api/ext/fill/report", report]]);
+    expect(writes).toEqual([]);
+  });
+
   it("marks the tab's session submitted and undoes it, and passes on a mark that created nothing with its reason", async () => {
     const sent: [string, unknown][] = [];
     const refused = { marked: false, reason: "You already have an open Application for Security Engineer at Kestrel Payments.", application: { id: "a0" } };
@@ -152,13 +164,32 @@ describe("the extension talking to apply-kit", () => {
     const client = createClient({ fetch: service, store: memoryStore({ token: "t0k3n" }).store });
     const confirmation = "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation";
 
-    expect(await client.fill.markSubmitted("s-1", confirmation)).toEqual({ ok: true, value: { marked: true, alreadyMarked: false } });
-    expect(await client.fill.markSubmitted("s-2", confirmation)).toEqual({ ok: true, value: refused });
+    expect(await client.fill.markSubmitted("s-1", confirmation, ["7"])).toEqual({ ok: true, value: { marked: true, alreadyMarked: false } });
+    expect(await client.fill.markSubmitted("s-2", confirmation, [])).toEqual({ ok: true, value: refused });
     expect(await client.fill.undoMarkSubmitted("a1")).toEqual({ ok: false, state: "error", problem: "not-undoable", error: "Something has happened to this Application since you marked it." });
     expect(sent).toEqual([
-      ["/api/ext/fill/submitted", { sessionId: "s-1", portalUrl: confirmation }],
-      ["/api/ext/fill/submitted", { sessionId: "s-2", portalUrl: confirmation }],
+      ["/api/ext/fill/submitted", { sessionId: "s-1", portalUrl: confirmation, saveAnswers: ["7"] }],
+      ["/api/ext/fill/submitted", { sessionId: "s-2", portalUrl: confirmation, saveAnswers: [] }],
       ["/api/ext/fill/submitted/undo", { applicationId: "a1" }],
+    ]);
+  });
+
+  it("asks for the answers typed on the portal, and saves the picked ones to the answer bank", async () => {
+    const sent: [string, unknown][] = [];
+    const typed = [{ id: "7", question: "Have you ever held a government security clearance?", answer: "No", kind: "yes-no", save: { ticked: true, note: null } }];
+    const service = fakeService((r) => {
+      sent.push([new URL(r.url).pathname, r.body]);
+      if (r.url.endsWith("/api/ext/fill/pending")) return json(typed);
+      if (r.url.endsWith("/api/ext/fill/save-answers")) return json({ saved: [{ question: typed[0]!.question, answerId: "answer:1", how: "added" }], refused: [] });
+      return undefined;
+    });
+    const client = createClient({ fetch: service, store: memoryStore({ token: "t0k3n" }).store });
+
+    expect(await client.fill.pending("s-1")).toEqual({ ok: true, value: typed });
+    expect(await client.fill.saveAnswers("s-1", [{ pendingId: "7" }])).toMatchObject({ ok: true, value: { saved: [{ how: "added" }] } });
+    expect(sent).toEqual([
+      ["/api/ext/fill/pending", { sessionId: "s-1" }],
+      ["/api/ext/fill/save-answers", { sessionId: "s-1", picks: [{ pendingId: "7" }] }],
     ]);
   });
 

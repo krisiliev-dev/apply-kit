@@ -5,7 +5,8 @@
 // typeaheads and the repeating sections' Add and Delete need a press: the filler uses the one it's
 // given and, without one, leaves those widgets to Kris as needs-you fields. It never presses Back,
 // Save and Continue, Next or Submit; on the review step it only rings Submit.
-import type { EntrySection, FieldAnswer, FieldKind, FieldOutcome, PageReading, ReadField } from "@apply-kit/core";
+import type { EntrySection, FieldAnswer, FieldKind, FieldOutcome, FieldStructure, PageReading, ReadField } from "@apply-kit/core";
+import { describingAttribute } from "@apply-kit/core/field-report";
 import { recognisePortal } from "../portal.ts";
 import type { FileToAttach, Filler } from "./greenhouse.ts";
 import { attachFile, clearFile, consentWords, mark, pressWidget, refusal, removeMarks, setChecked, setValue, showField, unmark, type Press } from "./page-actions.ts";
@@ -315,6 +316,34 @@ export function createWorkdayFiller({ press = null, settleMs = 1500, waitMs = 30
     added.clear();
   }
 
+  /** A value Kris gave (or apply-kit's again) into one typed field: text, a date, a radio choice or a tick. Lists and typeaheads wait for Workday: `pick`. */
+  function putNow(doc: Document, fieldId: string, value: string): FieldOutcome["outcome"] {
+    const f = find(doc, fieldId);
+    if (!f?.control) return "didnt-stick";
+    unmark(doc, fieldId);
+    const before = valueOf(f, doc);
+    let ok: boolean;
+    if (f.kind === "date") {
+      const { month, year } = dateParts(f);
+      const [y, m] = value.split("-");
+      ok = !!year && setValue(year, y ?? "", f.label) && (!month || !m || setValue(month, m, f.label));
+    } else if (f.kind === "radio") {
+      const box = choiceBoxes(f).find((b) => norm(choiceLabel(b)) === norm(value));
+      ok = !!box && setChecked(box, true, f.label);
+    } else if (f.kind === "checkbox") ok = setChecked(f.control, value === "checked", f.label);
+    else if (["text", "email", "tel", "url", "number", "textarea"].includes(f.kind)) ok = setValue(f.control, value, f.label);
+    else ok = false;
+    const now = valueOf(f, doc);
+    if (!ok || now.trim() !== (f.kind === "radio" ? choiceBoxes(f).map(choiceLabel).find((l) => norm(l) === norm(value)) ?? value : value).trim()) {
+      mark(markAt(f), "didnt-stick", fieldId);
+      return "didnt-stick";
+    }
+    if (!previous.has(fieldId)) previous.set(fieldId, before);
+    filled.set(fieldId, now);
+    mark(markAt(f), "filled", fieldId);
+    return "filled";
+  }
+
   return {
     read(doc) {
       const text = root(doc).textContent ?? "";
@@ -404,18 +433,36 @@ export function createWorkdayFiller({ press = null, settleMs = 1500, waitMs = 30
     },
 
     replace(doc, fieldId, value) {
+      return putNow(doc, fieldId, value);
+    },
+
+    async retry(doc, fieldId, value) {
+      if (putNow(doc, fieldId, value) !== "filled") return "didnt-stick";
+      await sleep(settleMs);
       const f = find(doc, fieldId);
-      if (!f?.control) return "didnt-stick";
-      unmark(doc, fieldId);
-      // Text and dates only: a list or typeahead is replaced with "pick", which waits for Workday.
-      if (!["text", "email", "tel", "url", "number", "textarea", "date"].includes(f.kind)) return "didnt-stick";
-      const before = valueOf(f, doc);
-      const ok = f.kind === "date" ? (() => { const { month, year } = dateParts(f); const [y, m] = value.split("-"); return !!year && setValue(year, y!, f.label) && (!month || !m || setValue(month, m, f.label)); })() : setValue(f.control, value, f.label);
-      if (!ok || valueOf(f, doc).trim() !== value.trim()) { mark(markAt(f), "didnt-stick", fieldId); return "didnt-stick"; }
-      if (!previous.has(fieldId)) previous.set(fieldId, before);
-      filled.set(fieldId, value);
-      mark(markAt(f), "filled", fieldId);
-      return "filled";
+      const ok = !!f && valueOf(f, doc).trim() !== "";
+      if (f) mark(markAt(f), ok ? "filled" : "didnt-stick", fieldId);
+      return ok ? "filled" : "didnt-stick";
+    },
+
+    fillOne(doc, fieldId, value) {
+      return putNow(doc, fieldId, value);
+    },
+
+    describe(doc, fieldId): FieldStructure | null {
+      const f = find(doc, fieldId);
+      if (!f) return null;
+      const el = f.control ?? f.box;
+      const value = ["select", "radio", "checkbox", "repeating"].includes(f.kind) ? "" : valueOf(f, doc).trim();
+      const holds = (text: string) => value.length > 1 && text.toLowerCase().includes(value.toLowerCase());
+      const attributes: Record<string, string> = {};
+      for (const a of Array.from(el.attributes)) if (describingAttribute.test(a.name) && !holds(a.value)) attributes[a.name] = a.value;
+      attributes["data-automation-id"] ??= f.box.getAttribute("data-automation-id") ?? "";
+      return {
+        tag: el.tagName.toLowerCase(), type: el.getAttribute("type"), role: el.getAttribute("role"), kind: f.kind, attributes,
+        labelChain: [{ from: f.box.querySelector("legend") ? "legend" : "label", text: f.label }].filter((l) => l.text && !holds(l.text)),
+        options: toRead(f, doc).options.filter((o) => !holds(o)),
+      };
     },
 
     async pick(doc, fieldId, option) {

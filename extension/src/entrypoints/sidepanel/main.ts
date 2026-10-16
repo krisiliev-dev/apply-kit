@@ -9,16 +9,19 @@
 // fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
 // it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PackageFileKind, PackageInBrief, PageReading } from "@apply-kit/core";
+import type { AnswerKind, CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FieldStructure, FillPage, FillStart, MarkResult, PackageFileKind, PackageInBrief, PageReading, PendingAnswer } from "@apply-kit/core";
 import { countOutcomes } from "@apply-kit/core/fill";
 import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
 import "./panel.css";
 import { contextCard, fillStateFor, openingView, type PanelView, type PortalsAccess } from "../../context.ts";
-import { differentJobLine, duplicatesReport, earlierPages, fieldRows, fileReport, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, pageSummary, reviewChecks, startScreen, stepLine, submitPrompt, type FieldRow, type PageSummary } from "../../fill-report.ts";
+import {
+  characterCount, differentJobLine, duplicatesReport, earlierPages, fieldRows, fileReport, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, pageSummary, reviewChecks, saveTypedLabel, startScreen, stepLine, stoppedMidFill, stuckFields, submitPrompt, typedAnswerLine,
+  type AnswerControl, type FieldRow, type NeedsYouItem, type PageSummary, type StuckField,
+} from "../../fill-report.ts";
 import { watchForNewPage } from "../../page-watch.ts";
-import type { FileToAttach } from "../../fill/greenhouse.ts";
 import { runFiller } from "../../fill/in-page.ts";
+import { runFill } from "../../fill/run.ts";
 import { grabPage } from "../../grab.ts";
 import { portalOrigins, portals, recognisePortal } from "../../portal.ts";
 import { actionLabel, captureButtonLabel, itemStatus, previewHeading, resultSummary } from "../../report.ts";
@@ -108,12 +111,17 @@ async function start() {
   if (retryTimer) clearTimeout(retryTimer);
   busy = false;
   connection = await client.connect();
-  if (connection.state === "not-running") return notRunning(connection);
+  if (connection.state === "not-running") return notRunning(connection, midFill?.line, midFill?.tabId);
+  midFill = null;
   if (connection.state === "unpaired") return unpaired(connection);
   return ready();
 }
 
-function notRunning(c: Connection, during?: string) {
+/** Set when the app stopped answering mid-fill, so the retry keeps saying so (and keeps Undo) until the app is back. */
+let midFill: { tabId: number; line: string } | null = null;
+
+/** `undoTab`: the app stopped mid-fill on this tab; what's filled stays filled and Undo this page still works. */
+function notRunning(c: Connection, during?: string, undoTab?: number) {
   connection = c;
   const time = new Date().toLocaleTimeString("en-GB");
   show({
@@ -126,6 +134,7 @@ function notRunning(c: Connection, during?: string) {
       h("ol", { class: "steps" }, h("li", {}, h("div", {}, "Start apply-kit, or check it's still running.")), h("li", {}, h("div", {}, "Press Retry. Your place on this page is kept."))),
       h("p", { class: "meta", role: "status" }, `Retrying every ${retryMs / 1000} s · last try ${time} · ${c.serviceUrl}`),
       h("p", { class: "meta" }, during ?? "This page hasn't been touched. Packages aren't kept in the browser, so there's nothing to fill or capture into until the app is back."),
+      undoTab != null && button("Undo this page", () => void undoPage(undoTab), "btn ghost sm undo"),
     ],
     foot: [button("Retry", () => void start(), "btn primary")],
   });
@@ -471,68 +480,47 @@ async function fillThisPage(packageId?: string) {
     showMatch({ tab, page, card, match: s, keys, access });
     announce(what);
   };
-  const reading = await inPage<PageReading>(tabId, "read");
-  if (!reading) return stopped("Chrome didn't let apply-kit read this page. Click the apply-kit icon in the toolbar on it, then Fill this page.");
-  if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  if (submitPrompt({ known: true, pageKind: reading.pageKind }) === "ask") {
+  const run = await runFill({
+    client: client.fill, sessionId: session.id, stopRequested: () => stopRequested,
+    page: {
+      read: () => inPage<PageReading>(tabId, "read"),
+      fill: (answers, files) => inPage<FieldOutcome[]>(tabId, "fill", [answers, files]),
+    },
+  });
+
+  if (run.state === "stopped") return stopped(run.message);
+  if (run.state === "no-answer") return fillProblem(run.problem, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
+  if (run.state === "confirmation") {
     busy = false;
-    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal });
+    const waiting = await client.fill.pending(session.id);
+    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal, typed: waiting.ok ? waiting.value : [] });
   }
-  if (reading.pageKind === "start") {
+  if (run.state === "start") {
     busy = false;
     return startView(ctx, tabId, portal);
   }
-  const answers = await client.fill.answer(session.id, reading);
-  if (!answers.ok) return fillProblem(answers, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
-  if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  // The package's files for this page's file fields only, held here just long enough to attach them.
-  // One the app can't give is reported as not attached, with the file one click away.
-  const files: FileToAttach[] = [];
-  const paths = new Map<PackageFileKind, string | null>();
-  for (const a of answers.value) {
-    if (a.kind !== "file") continue;
-    const file = await client.fill.file(session.id, a.which);
-    if (!file.ok) continue;
-    files.push({ which: file.value.which, fileName: file.value.fileName, type: file.value.type, base64: file.value.base64 });
-    paths.set(a.which, file.value.path);
+  if (run.state === "stopped-mid-fill") {
+    // What's filled stays filled; Undo this page still works (the previous values live in the page).
+    busy = false;
+    if (run.problem.state === "unpaired") return unpaired(connection!, "apply-kit no longer knows this extension. Pair it again.");
+    midFill = { tabId, line: stoppedMidFill(run.outcomes) };
+    return notRunning(connection!, midFill.line, tabId);
   }
-  if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  let outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value, files]);
-  if (!outcomes) { files.length = 0; return stopped("Chrome didn't let apply-kit fill this page. Nothing was filled."); }
-  // Workday changes the page as it's filled (its CV reading adds entries; Add adds empty ones): read
-  // it again and fill what's new, in the same click, until it stops changing (three passes at most).
-  let now = reading;
-  let given = answers.value;
-  for (let pass = 1; pass < 3 && !stopRequested; pass++) {
-    const again = await inPage<PageReading>(tabId, "read");
-    if (!again || again.fields.map((x) => `${x.id}:${x.kind === "repeating" ? x.value : ""}`).join("|") === now.fields.map((x) => `${x.id}:${x.kind === "repeating" ? x.value : ""}`).join("|")) break;
-    const more = await client.fill.answer(session.id, again);
-    if (!more.ok) break;
-    const next = await inPage<FieldOutcome[]>(tabId, "fill", [more.value, files]);
-    if (!next) break;
-    [now, given, outcomes] = [again, more.value, next];
-  }
-  files.length = 0;
-  const recorded = await client.fill.record(session.id, now, outcomes);
-  const f = { tabId, url: tab.url ?? "", title: tab.title, ctx, reading: now, answers: given, outcomes, at: recorded.ok ? recorded.value.filledAt : new Date().toISOString(), portal, pkg: s.package, sessionId: session.id, paths, extras: { chosen: [], duplicatesRemoved: 0, duplicatesSettled: false } };
-  watchPage(f);
-  if (now.pageKind === "review") return reviewView(ctx, tabId, portal);
-  filled(f);
+  const done: FilledPage = {
+    tabId, sessionId: session.id, ctx, reading: run.reading, answers: run.answers, outcomes: run.outcomes, at: run.filledAt, portal, pkg: s.package, paths: run.paths,
+    retried: new Set(), page: { portal: page.portal, address: tab.url! }, edits: new Map(), saveTicks: new Map(), typed: run.typed,
+    title: tab.title, extras: { chosen: [], duplicatesRemoved: 0, duplicatesSettled: false },
+  };
+  watchPage(done);
+  filled(done);
 }
 
-type Filled = {
-  tabId: number; url: string; title: string | undefined; ctx: HTMLElement; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; at: string; portal: string;
-  pkg: PackageInBrief; sessionId: string; paths: Map<PackageFileKind, string | null>;
-  /** What Kris did on the list: options chosen, Workday's duplicates removed or kept. */
-  extras: { chosen: string[]; duplicatesRemoved: number; duplicatesSettled: boolean };
-};
-
 /** After a fill: when the tab's address or title changes, this page goes under Earlier pages. */
-let watched: Filled | null = null;
-function watchPage(f: Filled) {
+let watched: FilledPage | null = null;
+function watchPage(f: FilledPage) {
   watched = f;
   stopWatching?.();
-  stopWatching = watchForNewPage(browser.tabs, { tabId: f.tabId, url: f.url, title: f.title }, () => {
+  stopWatching = watchForNewPage(browser.tabs, { tabId: f.tabId, url: f.page.address, title: f.title }, () => {
     const left = watched!;
     earlier.set(left.tabId, [...(earlier.get(left.tabId) ?? []), pageSummary(left.reading, left.answers, left.outcomes, left.extras)]);
     newPage.add(left.tabId);
@@ -551,34 +539,143 @@ function startView(ctx: HTMLElement, tabId: number, portal: string) {
   announce(words.heading);
 }
 
-/** The review page (hi-fi "Review · you submit"): the reminder, Submit ringed on the page, and what's worth a look. */
-function reviewView(ctx: HTMLElement, tabId: number, portal: string) {
-  const tones = { ok: icons.check, nb: icons.partly, dim: icons.dash } as const;
-  show({
-    connected: true,
-    body: [
-      ctx,
-      h("div", { class: "remind", role: "status" }, h("b", {}, "Read the review page, then press Submit yourself."), h("span", {}, `apply-kit never submits. It's your name on it. ${portal}'s Submit is ringed on the page.`)),
-      h("div", { class: "stack" }, h("h3", {}, "Worth a look before you submit"),
-        h("ul", { class: "ticks" }, ...reviewChecks(earlier.get(tabId) ?? []).map((c) => h("li", { class: c.tone }, svg(tones[c.tone]), h("span", {}, c.text))))),
-      earlierDetails(tabId),
-    ],
-    foot: [fillPrimary(), h("p", { class: "bound" }, "After you press Submit, click Fill this page on the page that follows. On a confirmation page it asks whether you submitted instead of filling.")],
-  });
-  busy = false;
-  announce("Review: read the page, then press Submit yourself.");
+/** The Filled view's state: the page as read, the answers, what the fill did, and what Kris has typed or unticked in the panel. */
+interface FilledPage {
+  tabId: number;
+  sessionId: string;
+  ctx: HTMLElement;
+  pkg: PackageInBrief;
+  paths: Map<PackageFileKind, string | null>;
+  /** Fields Try once more was used on: it's offered once per field, never in a loop. */
+  retried: ReadonlySet<string>;
+  /** The page's portal and address, for "Report this field" (apply-kit keeps the host and path only). */
+  page: { portal: string; address: string };
+  reading: PageReading;
+  answers: FieldAnswer[];
+  outcomes: FieldOutcome[];
+  /** Field id → Kris's edit of a suggestion or draft, kept while the panel shows this page. */
+  edits: Map<string, string>;
+  /** Field id → the Save to answer bank tick, once Kris changed it. */
+  saveTicks: Map<string, boolean>;
+  /** Answers Kris typed on the portal, waiting. */
+  typed: PendingAnswer[];
+  at: string;
+  portal: string;
+  /** The tab's title when filled: a new one means Kris moved on (Workday's steps). */
+  title: string | undefined;
+  /** What Kris did on the list: options chosen, Workday's duplicates removed or kept. */
+  extras: { chosen: string[]; duplicatesRemoved: number; duplicatesSettled: boolean };
+}
+
+/** Typed answer id → its tick, once Kris changed it; kept until the panel closes. */
+const typedTicks = new Map<string, boolean>();
+const typedTicked = (p: PendingAnswer) => typedTicks.get(p.id) ?? p.save.ticked;
+
+/** "Answers you typed on the portal": each offered one by one with its tick. */
+function typedBlock(typed: PendingAnswer[], extra: Child[]) {
+  if (typed.length === 0) return null;
+  return h("div", { class: "stack" },
+    h("h3", {}, "Answers you typed on the portal"),
+    ...typed.map((p) => {
+      const box = h("input", { type: "checkbox", ...(typedTicked(p) ? { checked: "" } : {}) }) as HTMLInputElement;
+      box.addEventListener("change", () => typedTicks.set(p.id, box.checked));
+      return h("label", { class: "opt" }, box, h("span", {}, typedAnswerLine(p), p.save.note && h("span", { class: "meta block" }, p.save.note)));
+    }),
+    ...extra,
+  );
+}
+
+const answerKindFor = (c: AnswerControl): AnswerKind =>
+  c.kind === "yes-no" || c.kind === "tick" ? "yes-no" : c.kind === "choice" ? "choice" : c.kind === "number" ? "number" : "text";
+
+/** One needs-you item: the question, its basis, the control holding the suggestion or draft, Save to answer bank, Fill and Show on page. */
+function needsYouItem(f: FilledPage, item: NeedsYouItem, onFill: (item: NeedsYouItem, value: string, save: boolean) => void, onShow: () => void): HTMLElement {
+  const id = `ny-${item.fieldId.replace(/[^\w-]/g, "_")}`;
+  const basisId = `${id}-b`;
+  const value = () => f.edits.get(item.fieldId) ?? item.value;
+  const fillBtn = item.control.kind === "file" ? null : button(fillButtonLabel(item.control, value()), () => onFill(item, value(), !!saveBox?.checked), "btn primary sm");
+  const changed = (v: string) => {
+    f.edits.set(item.fieldId, v);
+    if (fillBtn) fillBtn.textContent = fillButtonLabel(item.control, v);
+  };
+  const q = (tag: "label" | "legend") => h(tag, { class: "q", ...(tag === "label" ? { for: id } : {}) }, item.question, item.limit && h("span", { class: "meta" }, ` (${item.limit})`));
+  const basis = h("p", { class: "basis", id: basisId }, item.basis);
+  let control: Node | null = null;
+  let count: HTMLElement | null = null;
+  const c = item.control;
+  if (c.kind === "yes-no" || (c.kind === "choice" && c.options.length <= 6)) {
+    control = h("fieldset", { "aria-describedby": basisId }, q("legend"), ...c.options.map((o) => {
+      const r = h("input", { type: "radio", name: id, value: o, ...(o === value() ? { checked: "" } : {}) }) as HTMLInputElement;
+      r.addEventListener("change", () => changed(o));
+      return h("label", { class: "opt" }, r, h("span", {}, o));
+    }));
+  } else if (c.kind === "choice") {
+    const sel = h("select", { id, class: "input", "aria-describedby": basisId }, h("option", { value: "" }, "Choose…"), ...c.options.map((o) => h("option", { value: o, ...(o === value() ? { selected: "" } : {}) }, o))) as HTMLSelectElement;
+    sel.addEventListener("change", () => changed(sel.value));
+    control = sel;
+  } else if (c.kind === "tick") {
+    const box = h("input", { id, type: "checkbox", ...(value() === "checked" ? { checked: "" } : {}), "aria-describedby": basisId }) as HTMLInputElement;
+    box.addEventListener("change", () => changed(box.checked ? "checked" : ""));
+    control = h("label", { class: "opt" }, box, h("span", {}, item.question));
+  } else if (c.kind !== "file") {
+    const max = c.kind === "number" ? null : c.max;
+    count = max ? h("span", { class: "cnt", id: `${id}-c` }) : null;
+    const input = (c.kind === "long-text"
+      ? h("textarea", { id, class: "input", rows: "6", "aria-describedby": count ? `${basisId} ${id}-c` : basisId })
+      : h("input", { id, class: "input", ...(c.kind === "number" ? { inputmode: "numeric" } : {}), "aria-describedby": count ? `${basisId} ${id}-c` : basisId })) as HTMLInputElement | HTMLTextAreaElement;
+    if (max) input.setAttribute("maxlength", String(max));
+    input.value = value();
+    let warned = false;
+    const update = () => {
+      if (!max || !count) return;
+      const counted = characterCount(input.value.length, max, warned);
+      warned = counted.warned;
+      count.textContent = counted.text;
+      if (counted.announce) announce(counted.announce);
+    };
+    // The count shows from the start; only typing announces it.
+    if (max && count) {
+      const first = characterCount(input.value.length, max, true);
+      count.textContent = first.text;
+      warned = max - input.value.length <= 50;
+    }
+    input.addEventListener("input", () => { changed(input.value); update(); });
+    control = input;
+  }
+  let saveBox: HTMLInputElement | null = null;
+  if (item.save) {
+    saveBox = h("input", { type: "checkbox", ...((f.saveTicks.get(item.fieldId) ?? item.save.ticked) ? { checked: "" } : {}) }) as HTMLInputElement;
+    saveBox.addEventListener("change", () => f.saveTicks.set(item.fieldId, saveBox!.checked));
+  }
+  const usesFieldset = control instanceof HTMLFieldSetElement;
+  const ticked = f.saveTicks.get(item.fieldId) ?? item.save?.ticked;
+  return h("div", { class: "need", id: `need-${item.fieldId}`, tabindex: "-1" }, h("div", {},
+    usesFieldset ? null : c.kind === "tick" || c.kind === "file" ? h("p", { class: "q" }, item.question, item.limit && h("span", { class: "meta" }, ` (${item.limit})`)) : q("label"),
+    usesFieldset ? control : basis,
+    usesFieldset ? basis : control,
+    count,
+    saveBox && h("label", { class: "opt" }, saveBox, h("span", {}, "Save to answer bank", !ticked && item.save?.note && h("span", { class: "meta block" }, `Off: ${item.save.note.charAt(0).toLowerCase()}${item.save.note.slice(1)}`))),
+    h("div", { class: "row" }, fillBtn, button("Show on page", onShow, "btn ghost sm", { "aria-label": `Show ${item.question} on page` })),
+  ));
 }
 
 const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: icons.x, closed: icons.dash } as const;
 
 /** The Filled state: counts, what needs Kris first, then every field in the portal's order, Undo this page. */
-function filled(f: Filled, announceIt = true) {
+function filled(f: FilledPage, announceIt = true) {
   watched = f;
   const rows = fieldRows(f.reading, f.answers, f.outcomes);
   const counts = countOutcomes(f.outcomes);
   const files = fileReport(f.pkg, f.answers, f.outcomes, f.portal);
   const fileChip = (line: Node | string, meta: string | null) => h("div", { class: "filechip" }, svg(icons.file), h("span", {}, line, meta && h("span", { class: "meta block" }, meta)));
   const attachedChips = files.attached.map((a) => fileChip(h("span", {}, h("b", {}, a.label), ` ${a.line}`), a.meta));
+  // "Report this field": the field's structure (never its value), saved on this laptop so the filler can be fixed.
+  const report = async (fieldId: string, label: string) => {
+    const field = await inPage<FieldStructure>(f.tabId, "describe", [fieldId]);
+    if (!field) return announce(`${label} isn't on this page any more, so there's nothing to report.`);
+    const r = await client.fill.report({ portal: f.page.portal, address: f.page.address, stepLabel: f.reading.stepLabel, field });
+    announce(r.ok ? `Saved a report of ${label} on this laptop, without its value. It's in apply-kit's Settings, under the Chrome extension.` : r.state === "error" ? r.error : "apply-kit isn't answering, so the report wasn't saved.");
+  };
   // A file the portal didn't take: what happened, then the file one click away (Finder, or its path).
   const failedBlocks = files.failed.flatMap((x) => {
     const path = f.paths.get(x.which) ?? null;
@@ -595,7 +692,8 @@ function filled(f: Filled, announceIt = true) {
       fileChip(`${x.fileName} · ${x.size}`, path ? "In your Packages folder" : "Not in your Packages folder: open the package in apply-kit to download it."),
       h("div", { class: "row" },
         button("Show in Finder", () => void reveal(), "btn sm", { "aria-label": `Show ${x.fileName} in Finder` }),
-        path ? button("Copy file path", () => void copy(), "btn ghost sm") : ""),
+        path ? button("Copy file path", () => void copy(), "btn ghost sm") : "",
+        button("Report the upload box", () => void report(x.fieldId, `the ${x.which === "cv" ? "CV" : "cover letter"} upload box`), "btn ghost sm")),
       h("p", { class: "meta" }, `Then drag it onto the ${x.which === "cv" ? "CV" : "cover letter"} box, or click Attach there and pick it. Click Fill this page again afterwards: ${f.portal} may change fields while reading it.`),
     ];
   });
@@ -605,6 +703,23 @@ function filled(f: Filled, announceIt = true) {
     toldF6 = true;
   };
   const chip = (tone: string, icon: string, text: string) => h("span", { class: `chip ${tone}` }, svg(icon), text);
+  const items = needsYouItems(f.reading, f.answers, f.outcomes);
+  const fillItem = async (item: NeedsYouItem, value: string, save: boolean) => {
+    if (!value.trim()) return announce(`Give an answer for ${item.question} first.`);
+    const outcome = await inPage<FieldOutcome["outcome"]>(f.tabId, "fillOne", [item.fieldId, value]);
+    if (outcome !== "filled") return announce(outcome === null ? "Chrome didn't let apply-kit fill this page." : `${item.question} didn't take the answer. Paste it into the field yourself.`);
+    let saved = "";
+    if (save) {
+      const r = await client.fill.saveAnswers(f.sessionId, [{ question: item.question, answer: value === "checked" ? "Yes" : value, kind: answerKindFor(item.control) }]);
+      const refused = r.ok ? r.value.refused[0] : null;
+      saved = !r.ok ? " It wasn't saved to your answer bank: apply-kit stopped answering." : refused ? ` Not saved to your answer bank: ${refused.reason}` : r.value.saved[0]?.how === "portal-edit" ? " Your answer bank has another answer to this; choose which to keep in Profile." : " Saved to your answer bank.";
+    }
+    const outcomes = f.outcomes.map((o) => (o.fieldId === item.fieldId ? { ...o, outcome: "filled" as const, source: "you" as const } : o));
+    filled({ ...f, outcomes }, false);
+    announce(`Filled ${item.question}${/[.?!]$/.test(item.question) ? "" : "."}${saved}`);
+    const next = focusAfterFill(outcomes);
+    (next ? document.getElementById(`need-${next}`) : document.getElementById("fill-btn"))?.focus();
+  };
   // A choice between plausible matches (hi-fi "Filled · 1 to review", City): the first is suggested; Kris's pick is filled.
   const pickChoice = async (r: FieldRow) => {
     const option = body.querySelector<HTMLInputElement>(`input[name="choice-${CSS.escape(r.fieldId)}"]:checked`)?.value ?? r.choices![0]!;
@@ -613,16 +728,56 @@ function filled(f: Filled, announceIt = true) {
     announce(outcome === "filled" ? `Filled ${r.label}: ${option}.` : `${r.label} didn't take "${option}". Choose it on the page.`);
     filled({ ...f, outcomes, extras: outcome === "filled" ? { ...f.extras, chosen: [...f.extras.chosen, r.label] } : f.extras }, false);
   };
-  const needs = rows.filter((r) => r.outcome === "needs-you").map((r) => h("div", { class: "need", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
+  // Values apply-kit had but couldn't put in: a choice between matches, or a Workday list it can't open.
+  const choices = rows.filter((r) => r.outcome === "needs-you" && f.answers.find((a) => a.fieldId === r.fieldId)?.kind !== "needs-you").map((r) => h("div", { class: "need", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
     r.choices
       ? h("fieldset", {}, h("legend", { class: "q" }, `${r.label}: ${r.why}`), h("div", { class: "pick" }, ...r.choices.map((c, i) => h("label", { class: "opt" },
         h("input", { type: "radio", name: `choice-${r.fieldId}`, value: c, ...(i === 0 ? { checked: "" } : {}) }), h("span", {}, c)))))
-      : h("p", { class: "q" }, r.label, r.limit && h("span", { class: "meta" }, ` (${r.limit})`)),
+      : h("p", { class: "q" }, r.label),
     !r.choices && r.why && h("p", { class: "basis" }, r.why),
-    !r.choices && r.value.startsWith("Suggested: ") && h("p", { class: "suggest" }, r.value),
+    !r.choices && h("p", { class: "suggest" }, r.value),
     h("div", { class: "row" },
       r.choices && button(`Fill ${r.label}`, () => void pickChoice(r), "btn primary sm"),
       button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
+  )));
+  const needs = items.map((item) => needsYouItem(f, item, (i, v, save) => void fillItem(i, v, save), () => void showOnPage(rows.find((r) => r.fieldId === item.fieldId)!)));
+  const review = f.reading.pageKind === "review";
+  const saveTyped = async () => {
+    const picked = f.typed.filter(typedTicked);
+    if (picked.length === 0) return announce("Nothing ticked, so nothing was saved.");
+    const r = await client.fill.saveAnswers(f.sessionId, picked.map((p) => ({ pendingId: p.id })));
+    if (!r.ok) return announce("Nothing was saved: apply-kit stopped answering.");
+    const done = new Set(r.value.saved.map((x) => x.question));
+    filled({ ...f, typed: f.typed.filter((p) => !done.has(p.question)) }, false);
+    announce(`Saved ${done.size} to your answer bank.`);
+  };
+  const typed = typedBlock(f.typed, review
+    ? [button(saveTypedLabel(f.typed.filter(typedTicked).length), () => void saveTyped(), "btn sm", { id: "save-typed" })]
+    : [h("p", { class: "meta" }, "Saved to your answer bank when you mark as submitted, unless you untick it.")]);
+  if (review) typed?.addEventListener("change", () => { const b = document.getElementById("save-typed"); if (b) b.textContent = saveTypedLabel(f.typed.filter(typedTicked).length); });
+  // A value that didn't stick: the field named, the value ready to paste in the field's format, Try once more (once).
+  const copy = async (value: string, what: string) => {
+    const ok = await navigator.clipboard.writeText(value).then(() => true, () => false);
+    announce(ok ? `${what} copied.` : `Couldn't copy ${what}.`);
+  };
+  const tryOnceMore = async (x: StuckField) => {
+    const outcome = await inPage<FieldOutcome["outcome"]>(f.tabId, "retry", [x.fieldId, x.value]);
+    const source = f.answers.find((a) => a.fieldId === x.fieldId);
+    const outcomes = f.outcomes.map((o) => (o.fieldId === x.fieldId ? { ...o, outcome: outcome ?? "didnt-stick", source: outcome === "filled" && source?.kind === "fill" ? source.source : null } : o));
+    announce(outcome === "filled" ? `${x.label} is filled now.` : outcome === null ? "Chrome didn't let apply-kit fill this page." : `${x.label} didn't stick again. Paste it in yourself.`);
+    filled({ ...f, outcomes, retried: new Set([...f.retried, x.fieldId]) }, false);
+    document.getElementById(outcome === "filled" ? "fill-btn" : `stuck-${x.fieldId}`)?.focus();
+  };
+  const stuck = stuckFields(f.reading, f.answers, f.outcomes, f.retried, f.portal).map((x) => h("div", { class: "need", id: `stuck-${x.fieldId}`, tabindex: "-1" }, h("div", {},
+    h("div", { class: "stack-tight", role: "alert" }, h("p", { class: "q" }, x.heading), h("p", { class: "basis" }, x.text)),
+    h("div", { class: "copyrow" },
+      h("div", { class: "copy-what" }, h("div", { class: "k" }, x.copyLabel), h("div", { class: "v" }, x.value)),
+      button("Copy", () => void copy(x.value, x.label), "btn sm", { "aria-label": `Copy ${x.label}` })),
+    h("div", { class: "row" },
+      x.tryOnceMore && button("Try once more", () => void tryOnceMore(x), "btn ghost sm", { "aria-label": `Try ${x.label} once more` }),
+      button("Show on page", () => void showOnPage({ fieldId: x.fieldId, label: x.label } as FieldRow), "btn ghost sm", { "aria-label": `Show ${x.label} on page` }),
+      button("Report this field", () => void report(x.fieldId, x.label), "btn ghost sm", { "aria-label": `Report ${x.label}` })),
+    h("p", { class: "meta" }, `"Report" saves the field's structure on this laptop (no values) so the ${f.portal} filler can be fixed. Nothing is sent anywhere.`),
   )));
   // Workday's duplicates (hi-fi "CV attached"): reported; removed only on Kris's click, with Workday's own Delete.
   const dupes = f.extras.duplicatesSettled ? null : duplicatesReport(f.answers);
@@ -677,18 +832,23 @@ function filled(f: Filled, announceIt = true) {
         h("p", { class: "meta" }, stepLine(f.reading, f.portal, time)),
       ),
       ...failedBlocks,
+      ...stuck,
       ...attachedChips,
       files.letter && h("p", { class: "meta" }, files.letter),
       ...needs,
+      ...choices,
       dupesItem,
       list,
+      typed,
       h("p", { class: "meta" }, "On the page: a tick marks each field apply-kit filled, a \"?\" each field that needs you, a half circle each value it kept. Select a row to see its field."),
       button("Undo this page", () => void undoPage(f.tabId), "btn ghost sm undo"),
+      h("p", { class: "meta" }, "You can also type an answer straight into the portal. apply-kit notices it when you next click Fill this page, and offers to save it."),
       h("div", { class: "callout" },
         h("b", {}, `Next: check the page, then press ${f.portal}'s own button yourself.`),
         h("span", {}, "apply-kit never presses Next or Submit. The package stays with this tab until you mark it submitted or close the tab."),
       ),
       earlierDetails(f.tabId),
+      review && h("section", {}, h("h2", {}, "Worth a look before you submit"), h("p", {}, "Review the application, then press Submit on the portal yourself."), h("ul", {}, ...reviewChecks(earlier.get(f.tabId) ?? []).map((c) => h("li", {}, c.text)))),
     ],
     foot: [fillPrimary(), fillBoundary()],
   });
@@ -697,10 +857,11 @@ function filled(f: Filled, announceIt = true) {
   if (!announceIt) return;
   announce(fillAnnouncement(counts));
   const first = focusAfterFill(f.outcomes);
-  (first ? document.getElementById(`need-${first}`) : document.getElementById("fill-btn"))?.focus();
+  (first ? document.getElementById(`need-${first}`) : document.querySelector<HTMLElement>("[id^=stuck-]") ?? document.getElementById("fill-btn"))?.focus();
 }
 
 async function undoPage(tabId: number) {
+  midFill = null;
   const restored = await inPage<number>(tabId, "undo");
   announce(restored === null ? "Chrome didn't let apply-kit undo on this page." : `Undone: ${restored === 1 ? "1 field is" : `${restored} fields are`} back to how ${restored === 1 ? "it was" : "they were"}, and the marks are gone.`);
   busy = false;
@@ -718,16 +879,17 @@ const applicationLink = (id: string, label = "Open the Application", cls = "btn 
   h("a", { class: cls, href: `${connection!.serviceUrl}/applications/${encodeURIComponent(id)}`, target: "_blank", rel: "noopener" }, label);
 
 /** The portal's confirmation page: a hint, not proof. Nothing is created until Kris clicks Mark as submitted. */
-function didYouSubmit(d: { tabId: number; ctx: HTMLElement; sessionId: string; portalUrl: string | null; portal: string }) {
+function didYouSubmit(d: { tabId: number; ctx: HTMLElement; sessionId: string; portalUrl: string | null; portal: string; typed: PendingAnswer[] }) {
   show({
     connected: true,
     body: [
       d.ctx,
       h("div", { class: "lead-h" }, h("h2", {}, "Did you submit?"), h("p", { class: "muted" }, `${d.portal} is showing its confirmation page, which usually means yes.`)),
       h("p", { class: "meta" }, "Marking creates the Application with this package linked, so apply-kit can match the company's emails to it."),
+      typedBlock(d.typed, [h("p", { class: "meta" }, "Saved to your answer bank when you mark as submitted, unless you untick it.")]),
     ],
     foot: [
-      button("Mark as submitted", () => void markSubmitted(d.tabId, d.sessionId, d.portalUrl), "btn primary", { id: "mark-btn" }),
+      button("Mark as submitted", () => void markSubmitted(d.tabId, d.sessionId, d.portalUrl, d.typed.filter(typedTicked).map((p) => p.id)), "btn primary", { id: "mark-btn" }),
       button("Not yet", () => { announce("Not marked. Click Fill this page on the confirmation page when you're ready."); void ready(); }, "btn ghost"),
     ],
   });
@@ -735,9 +897,9 @@ function didYouSubmit(d: { tabId: number; ctx: HTMLElement; sessionId: string; p
   document.getElementById("mark-btn")?.focus();
 }
 
-async function markSubmitted(tabId: number, sessionId: string, portalUrl: string | null) {
+async function markSubmitted(tabId: number, sessionId: string, portalUrl: string | null, saveAnswers: string[] = []) {
   busy = true;
-  const r = await client.fill.markSubmitted(sessionId, portalUrl);
+  const r = await client.fill.markSubmitted(sessionId, portalUrl, saveAnswers);
   if (!r.ok) return fillProblem(r, "Nothing was marked: apply-kit stopped answering.");
   const m = r.value;
   if (!m.marked) {

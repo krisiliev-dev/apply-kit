@@ -25,6 +25,11 @@ export interface FixtureOptions {
   cvParser?: { delayMs: number; values: Record<string, string> };
   /** Controls a filler may press (a portal's own list buttons, Add and Delete): not noted as presses. Navigation always is. */
   widgets?: string;
+  /**
+   * A field that clears itself `afterMs` after a value is typed into it (a portal reformatting the
+   * number as it's typed), the first `times` times (default: every time).
+   */
+  clears?: { id: string; afterMs: number; times?: number };
 }
 
 /** React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value. */
@@ -45,7 +50,7 @@ export function portalWrite(el: HTMLInputElement | HTMLTextAreaElement, value: s
   else el.value = value;
 }
 
-export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, widgets }: FixtureOptions = {}): FixturePage {
+export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, widgets, clears }: FixtureOptions = {}): FixturePage {
   const window = new Window({ url, settings: { disableJavaScriptEvaluation: true, navigation: { disableMainFrameNavigation: true } } });
   const document = window.document as unknown as Document;
   document.body.innerHTML = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
@@ -58,6 +63,16 @@ export function openFixture(name: string, url: string, { controlled = false, upl
 
   if (controlled) {
     for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=file]), textarea"))) controlInput(el);
+  }
+  if (clears) {
+    const el = document.getElementById(clears.id) as HTMLInputElement;
+    const native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!;
+    let left = clears.times ?? Infinity;
+    el.addEventListener("input", () => {
+      if (left <= 0 || native.get!.call(el) === "") return;
+      left--;
+      setTimeout(() => portalWrite(el, ""), clears.afterMs);
+    });
   }
   for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[type=file]"))) {
     const box = input.closest(".field, .file-upload")!;
