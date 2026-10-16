@@ -63,6 +63,8 @@ export interface FieldOutcome {
   fieldId: string;
   outcome: Outcome;
   source: FillSource | null;
+  /** A typeahead's suggestions when more than one fits the answer: Kris picks (a needs-you outcome). */
+  choices?: string[];
 }
 
 export interface OutcomeCounts {

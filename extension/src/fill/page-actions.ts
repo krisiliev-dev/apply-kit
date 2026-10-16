@@ -189,3 +189,39 @@ export function showField(el: Element): void {
   el.scrollIntoView({ block: "center", behavior: "smooth" });
   (el as HTMLElement).focus({ preventScroll: true });
 }
+
+// ---------- choosing inside a form control: a yes/no button, a suggestion in a field's own list ----------
+
+const yesNoWords = /^(yes|no|да|не)$/iu;
+const buttonText = (el: Element) => (el.textContent ?? "").replace(/\s+/g, " ").trim();
+const isYesNoButton = (el: Element) => {
+  const tag = el.tagName.toLowerCase();
+  return (tag === "button" || el.getAttribute("role") === "button") && (el.getAttribute("type") ?? "").toLowerCase() === "button" && yesNoWords.test(buttonText(el));
+};
+
+/**
+ * Why apply-kit won't choose this, or null when it's a form control's own choice: one of the two
+ * buttons of a yes/no question (Ashby), or a suggestion in a typeahead's list (`role=option` inside a
+ * `role=listbox`). Choosing one is filling, not navigating. Everything else is refused: links,
+ * submit buttons (a `<button>` is one unless it says `type="button"`), and any other button.
+ */
+export function choiceRefusal(el: Element): string | null {
+  const tag = el.tagName.toLowerCase();
+  const role = (el.getAttribute("role") ?? "").toLowerCase();
+  if (tag === "a" || role === "link" || el.closest("a") || el.querySelector("a")) return "a link";
+  if (role === "option") return el.closest("[role=listbox]") && !el.querySelector("button, input") ? null : "not a suggestion in a field's list";
+  if (tag === "button" || role === "button" || tag === "input") {
+    if (!isYesNoButton(el)) return "not a yes/no answer";
+    const pair = Array.from(el.parentElement?.children ?? []).filter((c) => c.tagName.toLowerCase() === "button" || c.getAttribute("role") === "button");
+    if (pair.length !== 2 || !pair.every(isYesNoButton)) return "not a yes/no question";
+    return null;
+  }
+  return "not a choice";
+}
+
+/** Chooses a yes/no button or a suggestion as a person's click would. False if refused. The only click apply-kit makes. */
+export function choose(el: Element): boolean {
+  if (choiceRefusal(el)) return false;
+  (el as HTMLElement).click();
+  return true;
+}

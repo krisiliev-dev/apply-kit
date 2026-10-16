@@ -22,7 +22,10 @@ const read = (file: string) => readFileSync(file, "utf8").replace(/^\s*\/\/.*$/g
 /** The one background script: it only makes the toolbar icon and the keyboard command open the panel. */
 const background = "src/entrypoints/background.ts";
 
-/** Page actions: the one module that sets values, sends input events and scrolls a field into view, inside a fill Kris clicked. */
+/**
+ * Page actions: the one module that sets values, sends input events, scrolls a field into view and
+ * chooses inside a form control (a yes/no button, a typeahead's suggestion), inside a fill Kris clicked.
+ */
 const pageActions = "src/fill/page-actions.ts";
 
 const forbidden: [RegExp, string][] = [
@@ -46,6 +49,18 @@ function tabListeners(text: string): string[] {
   }
   return found;
 }
+/** Page actions' choose(): the source of the one function allowed to click. */
+function choosing(text: string): string {
+  const at = text.indexOf("export function choose(");
+  if (at < 0) return "";
+  let depth = 0;
+  let i = text.indexOf("{", at);
+  for (; i < text.length; i++) {
+    depth += text[i] === "{" ? 1 : text[i] === "}" ? -1 : 0;
+    if (depth === 0) break;
+  }
+  return text.slice(at, i + 1);
+}
 const injects = /executeScript|insertCSS|grabPage|\bfill\w*\(|\bcapture\w*\(/i;
 
 describe("the extension only acts when Kris clicks", () => {
@@ -58,7 +73,9 @@ describe("the extension only acts when Kris clicks", () => {
   });
 
   it("never scrolls, clicks, pages, opens listings or runs by itself", () => {
-    const found = files.flatMap((file) => forbidden.filter(([re]) => re.test(read(file))).map(([, what]) => `${file.slice(root.length)} ${what}`));
+    // Page actions' one click, choosing inside a form control, is checked on its own below.
+    const text = (file: string) => (file.slice(root.length) === pageActions ? read(file).replace(choosing(read(file)), "") : read(file));
+    const found = files.flatMap((file) => forbidden.filter(([re]) => re.test(text(file))).map(([, what]) => `${file.slice(root.length)} ${what}`));
     expect(found).toEqual([]);
   });
 
@@ -68,8 +85,12 @@ describe("the extension only acts when Kris clicks", () => {
     expect(outside.map((f) => f.slice(root.length))).toEqual([]);
     // The panel's own document may focus its own controls, but never sends events into a page.
     expect(read(join(root, "src/entrypoints/sidepanel/main.ts"))).not.toMatch(/dispatchEvent\(|scrollIntoView/);
-    // Page actions never press anything: no clicks, no form submission.
-    expect(read(join(root, pageActions))).not.toMatch(/\.click\(|\.submit\(|requestSubmit|new (Mouse|Keyboard|Pointer)Event/);
+    // Page actions press nothing (no form submission, no made-up mouse or key events) and click only
+    // to choose inside a form control: once, in choose(), after choiceRefusal has said yes.
+    const actions = read(join(root, pageActions));
+    expect(actions).not.toMatch(/\.submit\(|requestSubmit|new (Mouse|Keyboard|Pointer)Event/);
+    expect(actions.match(/\.click\(/g)).toHaveLength(1);
+    expect(choosing(actions)).toMatch(/^export function choose\(el: Element\): boolean \{\s*if \(choiceRefusal\(el\)\) return false;\s*\(el as HTMLElement\)\.click\(\);/);
   });
 
   it("keeps in the browser's session storage only which fill session each tab is in", () => {
