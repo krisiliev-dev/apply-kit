@@ -39,9 +39,9 @@ export interface PackageFileForFill {
   bytes: Uint8Array;
 }
 
-/** The page Kris is on, as the extension recognised it from the tab's address. */
+/** The page Kris is on, as the extension recognised it from the tab's address ("unknown": a form apply-kit doesn't know, #47). */
 export interface FillPage {
-  portal: PageJobReference["portal"];
+  portal: PageJobReference["portal"] | "unknown";
   host: string;
   jobRef: PageJobReference | null;
 }
@@ -75,9 +75,15 @@ export interface PackageInBrief {
 }
 
 export type FillMatch =
-  /** `why`: the page's job ID is the target posting's, the page is another posting of the package's Job, or Kris chose it. */
-  | { kind: "matched"; why: "job-id" | "same-job" | "chosen"; continued: boolean; package: PackageInBrief; session: FillSession | null }
-  /** Approved packages on the same board, none for this job ID: Kris picks one (or none). */
+  /**
+   * `why`: the page's job ID is the target posting's, the page is another posting of the package's Job,
+   * the package's target posting is on this site (a form apply-kit doesn't know), or Kris chose it.
+   */
+  | { kind: "matched"; why: "job-id" | "same-job" | "target-host" | "chosen"; continued: boolean; package: PackageInBrief; session: FillSession | null }
+  /**
+   * Approved packages on the same board, none for this job ID; or, on a form apply-kit doesn't know with
+   * no package targeting its site, every approved package not yet submitted, newest first: Kris picks one (or none).
+   */
   | { kind: "choose"; candidates: PackageInBrief[] }
   /** No approved package for this page; `job` when the Job has a package that isn't approved yet. */
   | { kind: "no-package"; job: { id: string; packageId: string; packageState: "draft"; reason: string } | null };
@@ -266,13 +272,14 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
 
   /** A fresh match for the page, opening a session on a match when `commit`. */
   function match(page: FillPage, packageId: string | undefined, commit: boolean): FillMatch {
-    const matched = (pkg: ApprovedPackage, why: "job-id" | "same-job" | "chosen"): FillMatch =>
+    const matched = (pkg: ApprovedPackage, why: Extract<FillMatch, { kind: "matched" }>["why"]): FillMatch =>
       ({ kind: "matched", why, continued: false, package: brief(pkg), session: commit ? start(pkg, page) : null });
     if (packageId) {
       const r = prepare.packageForApply({ packageId });
       if (r.kind === "approved") return matched(r.package, "chosen");
       return { kind: "no-package", job: r.kind === "not-approved" ? { id: r.jobId, packageId: r.packageId, packageState: "draft", reason: r.reason } : null };
     }
+    if (page.portal === "unknown") return matchUnknown(page, matched);
     if (!page.jobRef) return { kind: "no-package", job: null };
     const approved = prepare.approvedPackages();
     const exact = approved.filter((p) => sameJobReference(p.targetPosting.jobRef, page.jobRef));
@@ -285,6 +292,16 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
     const sameBoard = board ? approved.filter((p) => p.targetPosting.jobRef?.portal === page.portal && p.targetPosting.jobRef.board.toLowerCase() === board) : [];
     if (sameBoard.length > 0) return { kind: "choose", candidates: sameBoard.map(brief) };
     return { kind: "no-package", job: null };
+  }
+
+  /** A form apply-kit doesn't know: the package whose target posting is on this site, else Kris picks from those not yet submitted. */
+  function matchUnknown(page: FillPage, matched: (pkg: ApprovedPackage, why: "target-host") => FillMatch): FillMatch {
+    const open = prepare.approvedPackages().filter((p) => p.state === "approved");
+    const host = bareHost(page.host);
+    const here = open.filter((p) => bareHost(hostOf(p.targetPosting.url)) === host);
+    if (here.length === 1) return matched(here[0]!, "target-host");
+    const candidates = here.length > 1 ? here : open;
+    return candidates.length > 0 ? { kind: "choose", candidates: candidates.map(brief) } : { kind: "no-package", job: null };
   }
 
   async function begin(page: FillPage, { sessionId, packageId }: FillOptions, commit: boolean): Promise<FillStart> {
@@ -440,6 +457,15 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
       }
     },
   };
+}
+
+const bareHost = (host: string) => host.toLowerCase().replace(/^www\./, "");
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return "";
+  }
 }
 
 const letterLabel = /\bcover(ing)? ?letter\b|\bmotivation(al)? letter\b|мотивационно писмо/iu;
