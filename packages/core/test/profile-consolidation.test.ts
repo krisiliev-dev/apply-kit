@@ -139,12 +139,12 @@ describe("profile consolidation", () => {
     expect(p.groups[0]!.keep.id).toBe(b);
   });
 
-  it("rejects unknown or repeated model IDs and prevents stale undo from overwriting edits", async () => {
+  it("rejects unknown IDs, ignores repeated suggestions and prevents stale undo from overwriting edits", async () => {
     const t = stand(); const a = t.add("skill", "Python"), b = t.add("skill", "Python programming");
     t.suggest([{ ids: [a, "invented"], reason: "Match" }]);
     await expect(t.preparation.previewConsolidation()).rejects.toThrow(/unknown/i);
     t.suggest([{ ids: [a, b], reason: "Match" }, { ids: [a, b], reason: "Again" }]);
-    await expect(t.preparation.previewConsolidation()).rejects.toThrow(/repeated|overlap/i);
+    expect((await t.preparation.previewConsolidation()).groups).toHaveLength(1);
     t.suggest([{ ids: [a, b], reason: "Match" }]);
     const p = await t.preparation.previewConsolidation();
     t.preparation.applyConsolidation(p.id, [p.groups[0]!.id]);

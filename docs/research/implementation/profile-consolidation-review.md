@@ -4,7 +4,7 @@ Scope: uncommitted changes from 5b930e4 adding cross-import AI duplicate proposa
 
 ## Invariants and boundaries
 
-The model supplies existing IDs and explanations only. The core rejects unknown and overlapping IDs, incompatible kinds, numeric differences (including precision and hedge direction), disputes, scanned-text flags, incompatible classifications, conflicting Bulgarian equivalents and multiple confirmed decisions. Employment guards distinguish periods, employers, seniority and known locations. Date precision cannot be lost. Unique role descriptions stay separate. Facts spanning roles require the corresponding eligible role merge.
+The model supplies existing IDs and explanations only. The core rejects unknown IDs and removes IDs repeated in later proposals, incompatible kinds, numeric differences (including precision and hedge direction), disputes, scanned-text flags, incompatible classifications, conflicting Bulgarian equivalents and multiple confirmed decisions. Employment guards distinguish periods, employers, seniority and known locations. Date precision cannot be lost. Unique role descriptions stay separate. Facts spanning roles require the corresponding eligible role merge.
 
 Preview cannot mutate profile pieces. Apply uses an immediate SQLite transaction, preserves the displayed keeper and original rows, reparents children, and aggregates all source citations. No confirmation is performed. Undo restores the original parent/discard fields and source mappings only when the profile fingerprint still matches and no newer analysis exists. JSON mutation guards retain the existing localhost/CORS boundary. AI calls retain configured provider routing and the shared monthly budget; quotes and contact fields are excluded from the reconciliation prompt.
 
@@ -16,7 +16,7 @@ An independent adversarial reviewer reproduced three defects using in-memory fix
 - Quantity comparison rounded values and omitted hedge direction. It now compares exact parsed values and directions; regressions cover opposing bounds and nearby percentages.
 - Keeper selection could prefer a year-only date and missing city. It now prefers richer entries and blocks any remaining loss of date precision or conflicting location.
 
-All three received failing tests before fixes. Source-link flattening, fingerprint checks and transactional undo had no further verified findings in this focused review.
+All three received failing tests before fixes. A live model response repeated IDs across groups; an additional failing regression drove first-suggestion-wins handling, dropping later repeated IDs and any resulting singleton. Groups never overlap at apply. Source-link flattening, fingerprint checks and transactional undo had no further verified findings in this focused review.
 
 ## Verification
 

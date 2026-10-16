@@ -41,11 +41,12 @@ export function createConsolidationStore(deps: PreparationDeps, profile: Profile
   function groupsOf(id: string, pieces: ProfilePiece[], suggestions: ConsolidationSuggestion[]): ConsolidationGroup[] {
     const byId = new Map(pieces.map(p => [p.id, p]));
     const used = new Set<string>();
-    const groups = suggestions.map((s, i): ConsolidationGroup => {
+    const groups = suggestions.flatMap((s, i): ConsolidationGroup[] => {
       if (s.ids.length < 2 || s.ids.some(key => !byId.has(key))) throw new Error("The model proposed an unknown piece or an incomplete group. Nothing changed.");
-      if (s.ids.some(key => used.has(key)) || new Set(s.ids).size !== s.ids.length) throw new Error("The model repeated a piece in overlapping groups. Nothing changed.");
-      s.ids.forEach(key => used.add(key));
-      const members = s.ids.map(key => byId.get(key)!);
+      const ids = [...new Set(s.ids)].filter(key => !used.has(key));
+      if (ids.length < 2) return [];
+      ids.forEach(key => used.add(key));
+      const members = ids.map(key => byId.get(key)!);
       members.sort((a, b) => Number(b.status === "confirmed") - Number(a.status === "confirmed") || Number(!!b.belongsTo) - Number(!!a.belongsTo) || Number(!!b.entry?.end) - Number(!!a.entry?.end) || ((b.entry?.start.length ?? 0) + Number(!!b.entry?.city)) - ((a.entry?.start.length ?? 0) + Number(!!a.entry?.city)) || b.text.length - a.text.length);
       const keep = members[0]!;
       let blockedReason: string | null = null;
@@ -68,7 +69,7 @@ export function createConsolidationStore(deps: PreparationDeps, profile: Profile
         else if (members.some(p => seniority(p.entry!.title) !== seniority(e.title))) blockedReason = "Possible promotion or different seniority.";
         else if (keep.status === "confirmed" && members.some(p => p.entry!.end !== e.end || p.entry!.start !== e.start || normal(p.entry!.title) !== normal(e.title))) blockedReason = "A confirmed role has different facts; review the versions first.";
       }
-      return { id: `${id}:${i}`, keep, others: members.slice(1), reason: s.reason, blockedReason, requires: [] };
+      return [{ id: `${id}:${i}`, keep, others: members.slice(1), reason: s.reason, blockedReason, requires: [] }];
     });
     const roleGroups = new Map<string, ConsolidationGroup>();
     for (const g of groups.filter(g => g.keep.entry)) for (const p of [g.keep, ...g.others]) roleGroups.set(p.id, g);
