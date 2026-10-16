@@ -417,6 +417,22 @@ describe("the extension's fill endpoints", () => {
     expect(undo.status).toBe(409);
     expect(await undo.json()).toMatchObject({ problem: "not-found" });
   });
+
+  it("pending answers and Save to answer bank need the token, a session and well-formed picks", async () => {
+    const s = service();
+    for (const path of ["/api/ext/fill/pending", "/api/ext/fill/save-answers"]) {
+      expect((await s.request(path, s.json({ sessionId: "s1" }))).status, path).toBe(401);
+    }
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    expect((await s.request("/api/ext/fill/pending", s.json({}, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ question: 3 }] }, auth))).status).toBe(400);
+    const pending = await s.request("/api/ext/fill/pending", s.json({ sessionId: "s1" }, auth));
+    expect(pending.status).toBe(409);
+    expect(await pending.json()).toMatchObject({ problem: "no-session" });
+    const save = await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ pendingId: "1" }, { question: "Do you hold a security clearance?", answer: "No", kind: "yes-no" }] }, auth));
+    expect(save.status).toBe(409);
+  });
 });
 
 describe("Mark as submitted on the Job page", () => {
