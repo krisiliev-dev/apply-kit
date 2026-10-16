@@ -605,6 +605,8 @@ function showMarked(m: Extract<MarkResult, { marked: true }>) {
   });
   busy = false;
   announce(`${banner.lead} ${banner.rest}`);
+  // The button pressed is gone: focus moves to the state's primary action.
+  foot.querySelector<HTMLElement>(".btn.primary")?.focus();
 }
 
 /** The reminder on the Fill view after marking: Undo stays until the panel closes. */
