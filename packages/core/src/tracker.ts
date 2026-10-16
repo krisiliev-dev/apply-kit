@@ -6,7 +6,8 @@
 // Its public interface below is the testing seam (test/tracker.test.ts).
 import { randomUUID } from "node:crypto";
 import type { DiscoveryEngine } from "./engine.ts";
-import type { VoiceForDrafts } from "./preparation/engine.ts";
+import type { PrepareForTrack, VoiceForDrafts } from "./preparation/engine.ts";
+import type { ApprovedPackage } from "./preparation/contracts.ts";
 import { angleLabel, type Angle } from "./fit/angles.ts";
 import {
   addDays, bannedPhrases, checkDraft, daysBetween, defaultFollowUpSettings, draftWords, outlineOf, parseFollowUpSettings,
@@ -334,8 +335,10 @@ export interface RejectionView {
 export interface ApplicationDetail extends ApplicationSummary {
   /** When it got its current Status (the Event still standing that set it). */
   statusSince: string;
-  /** The CV version it counts under in What's working: the attached CV's label (or, later, the Package's). */
+  /** The CV version it counts under in What's working: its Package's CV label, else the attached CV's. */
   cvVersion: string | null;
+  /** The Package as sent (Prepare's read-only snapshot, never changed once submitted), or null without one. */
+  package: ApprovedPackage | null;
   /** The CV attached by hand, or null. */
   cv: AttachedCv | null;
   /** Null when added by hand without a link. */
@@ -713,6 +716,8 @@ export interface Tracker {
   attachCv(applicationId: string, cv: AttachCvInput): Promise<{ cv: AttachedCv; event: ApplicationEvent }>;
   /** The attached CV file, or null. */
   cvFile(applicationId: string): Promise<{ fileName: string; bytes: Uint8Array } | null>;
+  /** A file of the Package as sent (the CV PDF, or the letter), exactly as approved; null without one. */
+  packageFile(applicationId: string, which: "cv" | "letter"): Promise<{ fileName: string; sha256: string; bytes: Uint8Array } | null>;
   /** Jobs to pick from when adding (title or company containing the words), any state. */
   findJobs(query: string, limit?: number): Promise<JobChoice[]>;
   /** What Track knows about each of these Jobs, keyed by the id asked with (unknown ids are left out). */
@@ -815,7 +820,12 @@ export interface TrackerDeps {
    * draft before marking it sent, recorded as evidence to learn the voice from.
    */
   voice?: VoiceForDrafts;
+  /** Prepare's packages: the Package as sent, and approved packages not yet submitted (a confirmation email for one asks you). */
+  packages?: PackagesForTrack;
 }
+
+/** What the tracker reads from Prepare's packages (docs/contracts.md › PrepareForTrack). */
+export type PackagesForTrack = Pick<PrepareForTrack, "packageSnapshot" | "approvedWithoutApplication" | "packageFile" | "markPackageSubmitted" | "undoPackageSubmitted">;
 
 const statusLabel: Record<Status, string> = {
   applied: "Applied", screening: "Screening", interviewing: "Interviewing", offer: "Offer",
@@ -846,7 +856,7 @@ const movesStatus = "(kind IN ('created', 'status') OR (kind = 'email' AND to_st
 type Row = Record<string, unknown>;
 const str = (v: unknown) => (v == null ? null : String(v));
 
-export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice }: TrackerDeps): Tracker {
+export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd, ownAddresses = [], profile, voice, packages }: TrackerDeps): Tracker {
   migrate(db);
   const now = () => clock.now().toISOString();
   const today = () => sofiaDay(clock.now());
@@ -1003,6 +1013,22 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       : null;
   }
 
+  /** The CV label of a package as approved (what What's working counts it under), or null when Prepare isn't wired. */
+  const cvLabelOf = (packageId: string) => packages?.packageSnapshot(packageId)?.cv.label ?? null;
+
+  /** The Package as sent of an Application, or null. */
+  function packageOf(r: Row): ApprovedPackage | null {
+    const packageId = str(r.package_id);
+    return packageId && r.submitted_at && packages ? packages.packageSnapshot(packageId) : null;
+  }
+
+  async function packageFile(applicationId: string, which: "cv" | "letter") {
+    const r = row(applicationId);
+    const sent = r ? packageOf(r) : null;
+    const file = sent ? await packages!.packageFile(sent.id, which, sent.version) : null;
+    return file ? { fileName: file.fileName, sha256: file.sha256, bytes: file.bytes } : null;
+  }
+
   async function recordSubmission(input: SubmissionInput): Promise<SubmissionResult> {
     const recorded = (r: Row, alreadyRecorded: boolean) =>
       ({ outcome: "recorded" as const, alreadyRecorded, application: { ...summaryOf(r), submission: submissionOf(r)! } });
@@ -1013,8 +1039,9 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (open) {
       db.exec("BEGIN");
       try {
-        db.prepare("UPDATE application SET package_id = ?, portal = ?, portal_url = ?, submitted_at = ?, submitted_via = ? WHERE id = ?")
-          .run(input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via, open.id);
+        // The package is what was sent, so its CV label is the CV version (over a CV attached by hand).
+        db.prepare("UPDATE application SET package_id = ?, portal = ?, portal_url = ?, submitted_at = ?, submitted_via = ?, cv_version = COALESCE(?, cv_version) WHERE id = ?")
+          .run(input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via, cvLabelOf(input.packageId), open.id);
         addEvent({ applicationId: open.id, kind: "submission", cause: "you", from: null, to: null, text: "Package attached: marked as submitted", undoes: null });
         db.exec("COMMIT");
       } catch (err) {
@@ -1032,11 +1059,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     db.exec("BEGIN");
     try {
       db.prepare(
-        `INSERT INTO application (id, job_id, company, title, status, applied_on, created_how, created_at, posting_url, angle, source, package_id, portal, portal_url, submitted_at, submitted_via)
-         VALUES (?, ?, ?, ?, 'applied', ?, 'submission', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO application (id, job_id, company, title, status, applied_on, created_how, created_at, posting_url, angle, source, package_id, portal, portal_url, submitted_at, submitted_via, cv_version)
+         VALUES (?, ?, ?, ?, 'applied', ?, 'submission', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(
         id, job?.id ?? input.jobId, job?.company ?? input.job.company, job?.title ?? input.job.title, sofiaDay(new Date(input.submittedAt)), now(),
         job?.url ?? null, input.angle ?? job?.fit.angle ?? null, source, input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via,
+        cvLabelOf(input.packageId),
       );
       addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text: "Submitted → Applied", undoes: null });
       db.exec("COMMIT");
@@ -1167,7 +1195,10 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
         const text = ev.kind === "follow-up-snoozed" ? "Snooze undone" : ev.kind === "follow-up-sent" ? "Undone: not sent after all" : "Undone: not skipped after all";
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text, undoes: eventId, followUpId: ev.followUpId ?? undefined });
       } else if (ev.kind === "submission") {
-        db.prepare("UPDATE application SET package_id = NULL, portal = NULL, portal_url = NULL, submitted_at = NULL, submitted_via = NULL WHERE id = ?").run(ev.applicationId);
+        db.prepare(
+          `UPDATE application SET package_id = NULL, portal = NULL, portal_url = NULL, submitted_at = NULL, submitted_via = NULL,
+             cv_version = (SELECT label FROM application_cv WHERE application_id = application.id) WHERE id = ?`,
+        ).run(ev.applicationId);
         event = addEvent({ applicationId: ev.applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Package taken off: not submitted after all", undoes: eventId });
       } else if (ev.kind === "created") {
         db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), ev.applicationId);
@@ -1357,7 +1388,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const setter = standing.filter((e) => e.kind === "created" || e.kind === "status" || (e.kind === "email" && !!e.to)).at(-1);
     const followUp = currentFollowUp(row(applicationId)!);
     return {
-      ...app, submission, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
+      ...app, submission, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), package: packageOf(row(applicationId)!), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
       nextStep: nextStepOf(app, standing, followUp, thankYous, interviews), followUp, interviews, thankYous, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
       closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
@@ -2789,6 +2820,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     jobMarkers,
     addByHand,
     recordSubmission,
+    packageFile,
     undoSubmission,
     list,
     get: detail,
