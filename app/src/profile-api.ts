@@ -12,6 +12,22 @@ const MAX_PHOTO_BASE64 = 7 * 1024 * 1024;
 export function mountProfileApi(app: Hono, preparation: PreparationEngine): void {
   app.get("/api/profile/summary", (c) => c.json(preparation.profileSummary()));
 
+  app.get("/api/profile/consolidations/latest", (c) => c.json(preparation.latestConsolidation()));
+  app.post("/api/profile/consolidations", async (c) => {
+    if (!await jsonBody(c)) return c.json({ error: "Send a JSON body" }, 415);
+    try { return c.json(await preparation.previewConsolidation(), 201); }
+    catch (err) { return c.json({ error: err instanceof Error ? err.message : "Consolidation failed" }, 422); }
+  });
+  app.post("/api/profile/consolidations/:id/:action", async (c) => {
+    const body = await jsonBody(c);
+    if (!body) return c.json({ error: "Send a JSON body" }, 415);
+    const action = c.req.param("action");
+    if (action !== "apply" && action !== "undo") return c.json({ error: "Unknown consolidation action" }, 404);
+    if (action === "apply" && (!Array.isArray(body.groups) || body.groups.some(g => typeof g !== "string"))) return c.json({ error: "Choose groups by ID" }, 400);
+    try { return c.json(action === "undo" ? preparation.undoConsolidation(c.req.param("id")) : preparation.applyConsolidation(c.req.param("id"), body.groups as string[])); }
+    catch (err) { return c.json({ error: err instanceof Error ? err.message : "Consolidation failed" }, 409); }
+  });
+
   // ?kind=achievement&angle=security&q=splunk, each optional.
   app.get("/api/profile/pieces", (c) => {
     const kind = c.req.query("kind") || undefined;

@@ -928,3 +928,17 @@ describe("cross-origin form posts cannot change Track", () => {
     expect(response.status).toBe(415);
   });
 });
+
+
+describe("profile consolidation API guards", () => {
+  it("requires JSON and validates selected groups before touching the profile", async () => {
+    const s = service();
+    expect(await (await s.request("/api/profile/consolidations/latest")).json()).toBeNull();
+    expect((await s.request("/api/profile/consolidations", { method: "POST", body: "{}" })).status).toBe(415);
+    expect((await s.request("/api/profile/consolidations/missing/apply", s.json({ groups: [1] }))).status).toBe(400);
+    expect((await s.request("/api/profile/consolidations/missing/apply", s.json({ groups: ["unknown"] }))).status).toBe(409);
+    expect((await s.request("/api/profile/consolidations/missing/undo", { method: "POST" })).status).toBe(415);
+    expect((await s.request("/api/profile/consolidations", s.json({}))).status).toBe(422);
+    expect(s.preparation.listPieces().total).toBe(0);
+  });
+});

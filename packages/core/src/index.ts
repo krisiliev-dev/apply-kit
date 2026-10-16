@@ -164,3 +164,5 @@ export type {
   PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, PackageFileKind, RecordedPage, RecordedFill, PendingAnswer, SaveOffer, SavePick, SavedAnswers, FieldStructure, FieldReportInput, FieldReport, EntrySection, DuplicateEntry,
   CopyRow, CopyList,
 } from "./fill/reading.ts";
+
+export type { ProfileConsolidator, ConsolidationSuggestion, ConsolidationGroup, ConsolidationPreview } from "./preparation/consolidation.ts";

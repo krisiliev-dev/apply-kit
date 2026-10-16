@@ -1,5 +1,5 @@
 import type {
-  LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice, FieldReport,
+  ConsolidationPreview, LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice, FieldReport,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
@@ -821,4 +821,17 @@ export async function saveFollowUpSettings(settings: FollowUpSettings): Promise<
   return json(await fetch("/api/settings/follow-ups", {
     method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(settings),
   }));
+}
+
+export async function fetchProfileConsolidation(): Promise<ConsolidationPreview | null> {
+  return json(await fetch("/api/profile/consolidations/latest"));
+}
+export async function analyseProfile(): Promise<ConsolidationPreview> {
+  return json(await postJson("/api/profile/consolidations", {}));
+}
+export async function applyProfileConsolidation(id: string, groups: string[]): Promise<ConsolidationPreview> {
+  return json(await postJson(`/api/profile/consolidations/${encodeURIComponent(id)}/apply`, { groups }));
+}
+export async function undoProfileConsolidation(id: string): Promise<ConsolidationPreview> {
+  return json(await postJson(`/api/profile/consolidations/${encodeURIComponent(id)}/undo`, {}));
 }

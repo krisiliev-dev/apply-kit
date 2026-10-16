@@ -235,7 +235,9 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     numberSource: (r.number_source ?? null) as NumberSource | null,
     status: r.status as PieceStatus,
     source: { from: String(r.source_from), quote: r.source_quote == null ? null : String(r.source_quote) },
-    alsoFrom: db.prepare("SELECT source_from, source_quote FROM import_merge WHERE piece_id = ? ORDER BY id").all(String(r.id))
+    alsoFrom: db.prepare(`SELECT source_from, source_quote FROM import_merge WHERE piece_id = ?
+         UNION SELECT p.source_from, p.source_quote FROM profile_merge_source m JOIN profile_piece p ON p.id = m.piece_id WHERE m.into_id = ?
+         UNION SELECT i.source_from, i.source_quote FROM profile_merge_source m JOIN import_merge i ON i.piece_id = m.piece_id WHERE m.into_id = ?`).all(String(r.id), String(r.id), String(r.id))
       .map((m) => ({ from: String(m.source_from), quote: m.source_quote == null ? null : String(m.source_quote) })),
     checkThis: Number(r.check_this ?? 0) === 1,
     dispute: r.dispute == null ? null : (JSON.parse(String(r.dispute)) as PieceDispute),
@@ -426,8 +428,8 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
     return result;
   }
 
-  const discarded = () => db.prepare("SELECT * FROM profile_piece WHERE discarded_at IS NOT NULL ORDER BY rowid").all().map(rowToPiece);
-  const everything = () => db.prepare("SELECT * FROM profile_piece ORDER BY rowid").all().map(rowToPiece);
+  const discarded = () => db.prepare("SELECT * FROM profile_piece WHERE discarded_at IS NOT NULL AND id NOT IN (SELECT piece_id FROM profile_merge_source) ORDER BY rowid").all().map(rowToPiece);
+  const everything = () => db.prepare("SELECT * FROM profile_piece WHERE id NOT IN (SELECT piece_id FROM profile_merge_source) ORDER BY rowid").all().map(rowToPiece);
 
   return { save, revise, reinstate: write, confirm, get, all, list, remove, summary, dispute, resolveDispute, discard, restore, discarded, unconfirm, everything, grouped };
 }

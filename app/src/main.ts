@@ -6,6 +6,7 @@ import { openDatabase } from "./db.ts";
 import { createImapMailReader, readMailSettings } from "./mail.ts";
 import { createServer } from "./server.ts";
 import { createOpenRouterExtractor } from "./extraction/openrouter.ts";
+import { createProfileConsolidator } from "./writing/consolidation.ts";
 import { createOpenRouterWriter } from "./writing/openrouter.ts";
 import { createFileStore } from "./files.ts";
 import { createChromiumRenderer } from "./documents/chromium.ts";
@@ -68,6 +69,7 @@ const preparation = createPreparationEngine({
   clock,
   budget,
   writer,
+  consolidator: config.ai.openRouterApiKey ? createProfileConsolidator({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers }) : undefined,
   renderer,
   pdfReader: createPdfJsReader(),
   files: createFileStore(join(dirname(config.dbPath), "files")),

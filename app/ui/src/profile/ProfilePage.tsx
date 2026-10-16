@@ -11,6 +11,7 @@ import { SearchSettingsPage } from "../settings/SearchSettingsPage.tsx";
 import { AnglesPage } from "./AnglesPage.tsx";
 import { AnswerBank } from "./AnswerBank.tsx";
 import { AnswerEditor } from "./AnswerEditor.tsx";
+import { ConsolidationPanel } from "./ConsolidationPanel.tsx";
 import { ContactPanel } from "./ContactPanel.tsx";
 import { LearnedPieces } from "./LearnedPieces.tsx";
 import { PieceEditor } from "./PieceEditor.tsx";
@@ -216,6 +217,7 @@ function MasterProfile({ go, announce, flash, clearFlash, onChanged, learned }: 
         </div>
       )}
       {contactPanel}
+      <ConsolidationPanel onChanged={changed} />
       <section className="panel" aria-labelledby="pieces-h">
         <div className="sec-head">
           <h2 className="grow" id="pieces-h">Master profile <span className="meta">· {list.total} {list.total === 1 ? "piece" : "pieces"} · {list.confirmed} confirmed</span></h2>

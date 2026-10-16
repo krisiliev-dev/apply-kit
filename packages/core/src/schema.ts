@@ -829,6 +829,15 @@ const migrations: string[] = [
      created_at TEXT NOT NULL
    );`,
   `ALTER TABLE profile_piece ADD COLUMN bulgarian TEXT;`,
+  `CREATE TABLE profile_consolidation (
+     id TEXT PRIMARY KEY, preview TEXT NOT NULL, fingerprint TEXT NOT NULL, snapshot TEXT, created_at TEXT NOT NULL
+   );
+   CREATE TABLE profile_merge_source (
+     piece_id TEXT PRIMARY KEY REFERENCES profile_piece(id) ON DELETE CASCADE,
+     into_id TEXT NOT NULL REFERENCES profile_piece(id) ON DELETE CASCADE,
+     CHECK(piece_id != into_id)
+   );
+   CREATE INDEX profile_merge_source_into ON profile_merge_source(into_id);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

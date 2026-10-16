@@ -1,6 +1,7 @@
 // The preparation engine: Prepare's deep module, beside the discovery engine and sharing its
 // database, clock, settings and AI budget. It will own the master profile, angles, answer bank,
 // voice, imports, the coach interview and packages (spec #51); each ticket adds its operations here.
+import { createConsolidationStore, type ConsolidationPreview } from "./consolidation.ts";
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
 import type { BudgetInfo } from "../budget.ts";
@@ -70,6 +71,10 @@ export interface DocumentDraft {
 }
 
 export interface PreparationEngine {
+  previewConsolidation(): Promise<ConsolidationPreview>;
+  latestConsolidation(): ConsolidationPreview | null;
+  applyConsolidation(id: string, groups: string[]): ConsolidationPreview;
+  undoConsolidation(id: string): ConsolidationPreview;
   /** This month's AI spending against the cap, shared with Discover, so Prepare can say when a part must wait. */
   budget(): BudgetInfo;
 
@@ -473,6 +478,7 @@ export type VoiceForDrafts = Pick<PreparationEngine, "voiceContext" | "recordVoi
 export function createPreparationEngine(deps: PreparationDeps): PreparationEngine {
   migrate(deps.db);
   const profile = createProfileStore(deps);
+  const consolidation = createConsolidationStore(deps, profile);
   const contact = createContactStore(deps);
   const imports = createImportStore(deps, profile);
   const angles = createAngleStore({ db: deps.db, clock: deps.clock, pieces: () => profile.all() });
@@ -669,6 +675,10 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     angles: () => angles.list(),
     saveAngle: (input) => angles.save(input),
     closestAngle: (posting) => angles.closest(posting),
+    previewConsolidation: () => consolidation.preview(),
+    latestConsolidation: () => consolidation.latest(),
+    applyConsolidation: (id, groups) => touched(consolidation.apply(id, groups)),
+    undoConsolidation: (id) => touched(consolidation.undo(id)),
     savePiece: (input, origin) => profile.save(input, origin),
     deletePiece: (id) => profile.remove(id),
     confirmPiece: (id) => touched(profile.confirm(id)),

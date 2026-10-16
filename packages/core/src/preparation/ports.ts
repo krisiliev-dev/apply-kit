@@ -80,6 +80,7 @@ export interface PreparationDeps {
   /** The monthly AI budget shared with the discovery engine: one cap over extraction and writing. */
   budget: AiBudget;
   writer: Writer;
+  consolidator?: import("./consolidation.ts").ProfileConsolidator;
   renderer: DocumentRenderer;
   pdfReader: PdfTextReader;
   files: FileStore;

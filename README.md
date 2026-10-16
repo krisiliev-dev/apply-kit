@@ -158,3 +158,9 @@ Only made-up people belong in the repository's set: it refuses a profile not mar
 - Never commit real CVs, profile data or secrets. Personal data stays local (`.gitignore` covers `.env*`, PDFs/DOCX/Pages, personal folders and `data`).
 - No automation that drives authenticated LinkedIn/jobs.bg sessions or defeats bot protection. Use official APIs, email alerts and user-driven capture instead.
 - The app drafts and pre-fills; you send messages and press Submit.
+
+### Consolidate overlapping profile imports
+
+In **Profile** or setup’s **Check drafts**, choose **Find duplicates with AI**. This compares the saved pieces across your CVs and other imports using your configured provider and monthly AI budget. Analysis leaves your profile unchanged and shows the proposed count reduction.
+
+Compare the original versions and sources, then choose **Merge selected**. Conflicting numbers, distinct employment periods, source disputes and incompatible confirmed decisions stay separate. Merging retains the displayed wording and every source; it never confirms pieces automatically. **Undo consolidation** restores the originals until another analysis, profile edit or import. Merged originals remain stored locally.

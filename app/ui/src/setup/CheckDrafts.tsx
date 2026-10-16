@@ -7,6 +7,7 @@ import type { DraftFilter, DraftGroup, DraftsToCheck, ProfilePiece } from "@appl
 import { entryLabel } from "@apply-kit/core/profile";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { confirmDrafts, confirmPiece, discardPiece, fetchDrafts, resolveDispute, restorePiece, unconfirmPiece } from "../api.ts";
+import { ConsolidationPanel } from "../profile/ConsolidationPanel.tsx";
 import { Icon } from "../icons.tsx";
 import { angleLabel, kindLabel, pieceName } from "../profile/common.tsx";
 import { message, plural, stepPath, Steps, useNavLink, useSetup } from "./common.tsx";
@@ -63,6 +64,7 @@ export function CheckDrafts({ imported }: { imported: number | null }) {
         <h1 id="setup-h" tabIndex={-1}>Check what was drafted</h1>
         <p className="muted">Confirm what's true, edit what's close, discard what's wrong. Anything you're unsure about can wait: the coach asks about it next.</p>
       </div>
+      <ConsolidationPanel onChanged={said => { setKept([]); changed(said); }} />
       {error && <div className="banner error" role="alert"><span className="text"><b>Couldn't load the pieces.</b> {error}</span></div>}
       {drafts && c && (
         <>
