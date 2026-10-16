@@ -16,8 +16,9 @@ describe("the filler for a page", () => {
     }
   });
 
-  it("has no filler for portals that aren't filled yet or sites apply-kit doesn't know", () => {
-    expect(fillerFor("https://apply.workable.com/dreamwire/j/A1B2C3D4E5/apply/")).toBeNull();
+  it("registers Workable and SmartRecruiters and leaves unknown sites alone", () => {
+    expect(fillerFor("https://apply.workable.com/dreamwire/j/A1B2C3D4E5/apply/")).not.toBeNull();
+    expect(fillerFor("https://jobs.smartrecruiters.com/oneclick-ui/company/NordlichtBank/publication/123")).not.toBeNull();
     expect(fillerFor("https://larkspur-logistics.example/careers")).toBeNull();
   });
 });

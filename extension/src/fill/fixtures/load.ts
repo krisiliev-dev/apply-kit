@@ -24,7 +24,7 @@ export interface FixtureOptions {
    * An accepted file's name shows in the box, as portals show it.
    */
   uploads?: "change" | "drop-only" | "reject";
-  /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields. */
+  /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields (into a controlled input's state too). */
   cvParser?: { delayMs: number; values: Record<string, string> };
   /**
    * A field that clears itself `afterMs` after a value is typed into it (a portal reformatting the

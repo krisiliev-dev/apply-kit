@@ -37,10 +37,11 @@ function nativeSetter(el: Element, prop: "value" | "checked"): ((v: unknown) => 
   return null;
 }
 
+/** `input` and `change` as typing sends them: bubbling, and composed, so a web component hears its control from outside its shadow root. */
 function announceChange(el: Element) {
   const Event = el.ownerDocument.defaultView!.Event;
-  el.dispatchEvent(new Event("input", { bubbles: true }));
-  el.dispatchEvent(new Event("change", { bubbles: true }));
+  el.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  el.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
 }
 
 /** Sets a text field, textarea or select (by option text) as typing would. False if refused or impossible. */

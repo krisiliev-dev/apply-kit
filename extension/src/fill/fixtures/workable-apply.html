@@ -1,0 +1,47 @@
+<!-- Synthetic Workable application (apply.workable.com/{account}/j/{shortcode}/apply/): a React form with
+     data-ui attributes. Optional fields say "Optional" in their label; the others carry no required
+     attribute. Phone with a country picker (a button), CV (Workable reads it), cover letter, summary,
+     Experience and Education entries added with "+ Add", custom questions QA_<id>. Modelled on
+     docs/research/implementation/portals.md. Made-up company and job; no real person's data. -->
+<main class="careers-page">
+  <header><h1 data-ui="job-title">Detection Engineer</h1><p>Dreamwire · Sofia, Bulgaria · Hybrid</p></header>
+  <form id="application-form" data-ui="application-form" novalidate>
+    <section data-ui="personal-information">
+      <h2>Personal information</h2>
+      <div class="field"><label for="firstname">First name</label><input id="firstname" name="firstname" data-ui="firstname" type="text" autocomplete="given-name"></div>
+      <div class="field"><label for="lastname">Last name</label><input id="lastname" name="lastname" data-ui="lastname" type="text" autocomplete="family-name"></div>
+      <div class="field"><label for="email">Email</label><input id="email" name="email" data-ui="email" type="email" autocomplete="email"></div>
+      <div class="field"><label for="headline">Headline <span class="optional">(Optional)</span></label><input id="headline" name="headline" data-ui="headline" type="text"></div>
+      <div class="field phone"><label for="phone">Phone</label><div class="phone-input"><button type="button" class="country-picker" aria-label="Country code: Bulgaria +359" aria-haspopup="listbox">🇧🇬 +359</button><input id="phone" name="phone" data-ui="phone" type="tel" autocomplete="tel"></div></div>
+      <div class="field"><label for="address">Address <span class="optional">(Optional)</span></label><input id="address" name="address" data-ui="address" type="text"></div>
+    </section>
+    <section data-ui="profile">
+      <h2>Profile</h2>
+      <div class="field file-upload"><label id="resume-label">Resume</label><div class="drop"><span class="filename"></span><span class="hint">Upload a file or drag and drop here</span></div><input id="resume" name="resume" data-ui="resume" type="file" aria-labelledby="resume-label" accept=".pdf,.doc,.docx,.odt,.rtf"></div>
+      <div class="field"><label for="cover_letter">Cover letter <span class="optional">(Optional)</span></label><textarea id="cover_letter" name="cover_letter" data-ui="cover_letter"></textarea></div>
+      <div class="field"><label for="summary">Summary <span class="optional">(Optional)</span></label><textarea id="summary" name="summary" data-ui="summary"></textarea></div>
+      <div class="entries" data-ui="experience" data-section="Experience">
+        <h3>Experience <span class="optional">(Optional)</span></h3>
+        <button type="button" data-ui="add-experience">+ Add</button>
+      </div>
+      <div class="entries" data-ui="education" data-section="Education">
+        <h3>Education <span class="optional">(Optional)</span></h3>
+        <div class="entry" data-ui="education-entry">
+          <div class="field"><label for="education_0_school">School</label><input id="education_0_school" name="education[0][school]" type="text"></div>
+          <div class="field"><label for="education_0_field_of_study">Field of study <span class="optional">(Optional)</span></label><input id="education_0_field_of_study" name="education[0][field_of_study]" type="text"></div>
+          <div class="field"><label for="education_0_degree">Degree <span class="optional">(Optional)</span></label><input id="education_0_degree" name="education[0][degree]" type="text"></div>
+        </div>
+        <button type="button" data-ui="add-education">+ Add</button>
+      </div>
+    </section>
+    <section data-ui="questions">
+      <h2>Details</h2>
+      <div class="field"><label for="QA_6110201">What is your notice period?</label><input id="QA_6110201" name="QA_6110201" type="text"></div>
+      <fieldset class="field" data-ui="QA_6110202"><legend>Do you require visa sponsorship to work in Bulgaria?</legend><label><input id="QA_6110202_true" type="radio" name="QA_6110202" value="true">Yes</label><label><input id="QA_6110202_false" type="radio" name="QA_6110202" value="false">No</label></fieldset>
+      <fieldset class="field" data-ui="QA_6110203"><legend>Which SIEM have you used the most? <span class="optional">(Optional)</span></legend><label><input id="QA_6110203_0" type="radio" name="QA_6110203" value="0">Splunk</label><label><input id="QA_6110203_1" type="radio" name="QA_6110203" value="1">Microsoft Sentinel</label><label><input id="QA_6110203_2" type="radio" name="QA_6110203" value="2">Elastic</label></fieldset>
+      <div class="field"><label for="QA_6110204">When can you start?</label><input id="QA_6110204" name="QA_6110204" type="date"></div>
+      <div class="field"><label class="checkbox"><input id="gdpr" name="gdpr" type="checkbox">I have read and agree to the Privacy Policy</label></div>
+    </section>
+    <button type="submit" data-ui="apply-button">Submit application</button>
+  </form>
+</main>
