@@ -5,14 +5,15 @@ import { describe, expect, it } from "vitest";
 import { createFillEngine, createTracker, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
 import { fixtureFetch, memoryDb } from "./harness.ts";
 import { approved, kestrelJob, mira, started } from "./package-fixtures.ts";
+import type { FakeWriter } from "./preparation-harness.ts";
 
 const questions = (id: string) => `https://boards-api.greenhouse.io/v1/boards/kestrel/jobs/${id}?questions=true`;
 const kestrelBoard = "https://boards-api.greenhouse.io/v1/boards/kestrel/jobs?content=true";
 
 /** Mira with the fill engine on the same database and clock; Kestrel's two Greenhouse jobs answer the same recorded form. */
-function setup() {
+function setup(draftAnswer?: NonNullable<Parameters<typeof mira>[0]>["draftAnswer"]) {
   const db = memoryDb();
-  const t = mira({ db, fetch: fixtureFetch({ [questions("4410")]: "greenhouse-kestrel-4410-questions.json", [questions("4420")]: "greenhouse-kestrel-4410-questions.json", [kestrelBoard]: "greenhouse-kestrel.json" }) });
+  const t = mira({ db, draftAnswer, fetch: fixtureFetch({ [questions("4410")]: "greenhouse-kestrel-4410-questions.json", [questions("4420")]: "greenhouse-kestrel-4410-questions.json", [kestrelBoard]: "greenhouse-kestrel.json" }) });
   const tracker = createTracker({ db, clock: t.clock, discovery: t.discovery });
   const fill = createFillEngine({ db, clock: t.clock, prepare: t.preparation, track: tracker });
   return { ...t, fill, tracker };
@@ -106,7 +107,7 @@ describe("matching the page to a package", () => {
     });
     expect(t.fill.session(r1.session!.id)).toMatchObject({ endedAt: "2026-10-12T07:31:00.000Z", endReason: "different-job" });
     // Nothing is answered from the old package once its session has ended.
-    expect(() => t.fill.answer(r1.session!.id, reading([field("first_name", "First Name")]))).toThrow(/ended/);
+    await expect(t.fill.answer(r1.session!.id, reading([field("first_name", "First Name")]))).rejects.toThrow(/ended/);
   });
 
   it("a different job with no package ends the session and says so", async () => {
@@ -128,12 +129,14 @@ function reading(fields: ReadField[]): PageReading {
   return { pageKind: "form", jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" }, stepLabel: null, stepCount: null, fields };
 }
 
-async function filling() {
-  const t = setup();
+async function filling(writer: { draftAnswer?: Parameters<typeof setup>[0] } = {}) {
+  const t = setup(writer.draftAnswer);
   const pkg = await approved(t);
   const r = await t.fill.startFill(page("4410"));
   if (r.kind !== "matched") throw new Error(r.kind);
-  return { ...t, pkg, sessionId: r.session!.id };
+  // The questions the package's own answers were drafted for, so a test counts only the fill's drafts.
+  const pkgQuestions = new Set((t.writer as FakeWriter).calls.flatMap((c) => (c.task === "draft-answer" ? [c.input.question] : [])));
+  return { ...t, pkg, sessionId: r.session!.id, pkgQuestions };
 }
 
 describe("answering a page's contact fields from the master profile", () => {
@@ -145,7 +148,7 @@ describe("answering a page's contact fields from the master profile", () => {
       field("q1", "LinkedIn Profile", { required: false }), field("q2", "Website", { required: false }), field("q3", "GitHub", { required: true }),
     ];
 
-    const answers = t.fill.answer(t.sessionId, reading(fields));
+    const answers = await t.fill.answer(t.sessionId, reading(fields));
 
     expect(answers).toEqual([
       { fieldId: "first_name", kind: "fill", value: "Mira", source: "profile", basis: null },
@@ -162,16 +165,16 @@ describe("answering a page's contact fields from the master profile", () => {
 
   it("matches by the field's autocomplete hint when the label is the portal's own wording", async () => {
     const t = await filling();
-    const answers = t.fill.answer(t.sessionId, reading([field("a", "Vorname", { hint: "given-name" }), field("b", "Nachname", { hint: "family-name" })]));
+    const answers = await t.fill.answer(t.sessionId, reading([field("a", "Vorname", { hint: "given-name" }), field("b", "Nachname", { hint: "family-name" })]));
     expect(answers.map((a) => a.kind === "fill" && a.value)).toEqual(["Mira", "Petrova"]);
   });
 
   it("never fills passwords or consent boxes, and leaves what it has no answer for to Kris", async () => {
     const t = await filling();
-    const answers = t.fill.answer(t.sessionId, reading([
+    const answers = await t.fill.answer(t.sessionId, reading([
       field("pw", "Password", { kind: "text", password: true }),
       field("gdpr", "I agree to the privacy policy", { kind: "checkbox", consent: true }),
-      field("why", "What would you change in your last team?", { kind: "textarea" }),
+      field("why", "Have you ever held a government security clearance?", { kind: "radio", options: ["Yes", "No"] }),
       field("pronouns", "Pronouns", { required: false }),
       field("resume", "Resume/CV", { kind: "file" }),
     ]));
@@ -179,7 +182,7 @@ describe("answering a page's contact fields from the master profile", () => {
     expect(answers).toEqual([
       { fieldId: "pw", kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" },
       { fieldId: "gdpr", kind: "skip", reason: "Consent boxes are yours to tick" },
-      { fieldId: "why", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null },
+      { fieldId: "why", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null, save: { ticked: true, note: null } },
       { fieldId: "pronouns", kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" },
       { fieldId: "resume", kind: "needs-you", reason: "Attach the CV yourself for now", basis: `Your package's CV: ${t.pkg.approved!.cv.file.fileName}` },
     ]);
@@ -187,7 +190,7 @@ describe("answering a page's contact fields from the master profile", () => {
 
   it("picks the option that matches the profile, and leaves a dropdown without one to Kris", async () => {
     const t = await filling();
-    const answers = t.fill.answer(t.sessionId, reading([
+    const answers = await t.fill.answer(t.sessionId, reading([
       field("c1", "Country", { kind: "select", options: ["Austria", "bulgaria", "Croatia"] }),
       field("c2", "Country", { kind: "select", options: ["EU", "Other"] }),
     ]));
@@ -213,12 +216,12 @@ describe("recording a page", () => {
       stepLabel: null, pageKind: "form", filledAt: "2026-10-12T07:30:00.000Z",
       counts: { filled: 1, kept: 1, needsYou: 1, didntStick: 0, skipped: 0 },
       fields: [
-        { label: "First Name", kind: "text", outcome: "filled", source: "profile" },
-        { label: "Email", kind: "text", outcome: "kept", source: null },
-        { label: "Why us?", kind: "textarea", outcome: "needs-you", source: null },
+        { label: "First Name", kind: "text", outcome: "filled", source: "profile", empty: true },
+        { label: "Email", kind: "text", outcome: "kept", source: null, empty: false },
+        { label: "Why us?", kind: "textarea", outcome: "needs-you", source: null, empty: true },
       ],
     };
-    expect(recorded).toEqual(expected);
+    expect(recorded).toEqual({ ...expected, typedAnswers: [] });
     expect(t.fill.pages(t.sessionId)).toEqual([expected]);
     expect(JSON.stringify(t.fill.pages(t.sessionId))).not.toMatch(/Mira|old@example|mira\.petrova/);
   });
@@ -358,7 +361,7 @@ describe("answering questions from the answer bank", () => {
     bank(t, sponsorship);
     bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?", "Готови ли сте да се преместите?"], versions: { en: "No", bg: "Не" }, category: "standard", kind: "yes-no" });
 
-    const answers = t.fill.answer(t.sessionId, reading([
+    const answers = await t.fill.answer(t.sessionId, reading([
       field("q1", "Do you require visa sponsorship?", { kind: "select", options: yesNo }),
       field("q2", "Are you willing to relocate?", { kind: "radio", options: yesNo }),
     ]));
@@ -373,7 +376,7 @@ describe("answering questions from the answer bank", () => {
     const t = await filling();
     bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?"], versions: { en: "No" }, category: "standard", kind: "yes-no" });
 
-    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "select", options: yesNo })]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "select", options: yesNo })]));
 
     expect(a).toEqual({ fieldId: "q", kind: "fill", value: "No", source: "answer-bank", basis: 'Close wording of "Willing to relocate" in your answer bank' });
   });
@@ -382,11 +385,12 @@ describe("answering questions from the answer bank", () => {
     const t = await filling();
     bank(t, { question: "Do you hold any security certifications?", versions: { en: "CompTIA Security+" }, category: "screening" });
 
-    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Do you hold a security clearance?", { kind: "radio", options: yesNo })]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q", "Do you hold a security clearance?", { kind: "radio", options: yesNo })]));
 
     expect(a).toEqual({
       fieldId: "q", kind: "needs-you", reason: "apply-kit has no answer for this yet",
       basis: 'The closest answer bank entry ("Do you hold any security certifications?") is a different question, so it wasn\'t used',
+      save: { ticked: true, note: null },
     });
   });
 
@@ -394,7 +398,7 @@ describe("answering questions from the answer bank", () => {
     const t = await filling();
     bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?"], versions: { en: "No" }, category: "standard", kind: "yes-no" });
 
-    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "textarea" })]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "textarea" })]));
 
     expect(a).toEqual({
       fieldId: "q", kind: "needs-you", reason: "The closest answer is a yes/no answer, and this field asks for text",
@@ -422,7 +426,7 @@ describe("turning an answer into the field's format", () => {
     const t = await filling();
     bank(t, sponsorship);
 
-    const answers = t.fill.answer(t.sessionId, reading([
+    const answers = await t.fill.answer(t.sessionId, reading([
       field("q1", "Do you require visa sponsorship?", { kind: "select", options: ["Да", "Не"] }),
       field("q2", "Will you now or in the future require sponsorship?", { kind: "radio", options: ["Yes, I will", "No, I won't"] }),
     ]));
@@ -430,13 +434,13 @@ describe("turning an answer into the field's format", () => {
     expect(answers.map((a) => a.kind === "fill" && a.value)).toEqual(["Не", "No, I won't"]);
 
     bank(t, { question: "Нуждаете ли се от спонсорство за виза?", versions: { bg: "Не" }, category: "standard", kind: "yes-no" });
-    const [bg] = t.fill.answer(t.sessionId, reading([field("q2", "Нуждаете ли се от спонсорство за виза?", { kind: "radio", options: ["Yes, I will", "No, I won't"] })]));
+    const [bg] = await t.fill.answer(t.sessionId, reading([field("q2", "Нуждаете ли се от спонсорство за виза?", { kind: "radio", options: ["Yes, I will", "No, I won't"] })]));
     expect(bg).toMatchObject({ kind: "needs-you", reason: "Your answer bank has this only in Bulgarian" });
   });
 
   it("puts '1 month' in the notice-period option that holds it", async () => {
     const t = await filling();
-    const [a, b] = t.fill.answer(t.sessionId, reading([
+    const [a, b] = await t.fill.answer(t.sessionId, reading([
       field("q1", "Notice period", { kind: "select", options: ["Immediately", "Less than 2 weeks", "2–4 weeks", "1–2 months", "More than 2 months"] }),
       field("q2", "Notice period", { kind: "select", options: ["Up to 1 month", "1 month or more"] }),
     ]));
@@ -449,7 +453,7 @@ describe("turning an answer into the field's format", () => {
   it("puts a number in the range that holds it", async () => {
     const t = await filling();
     bank(t, { question: "Years of experience with SIEM tools", versions: { en: "4" }, category: "screening", kind: "number" });
-    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Years of experience with SIEM tools", { kind: "select", options: ["0-2", "3-5", "6+"] })]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q", "Years of experience with SIEM tools", { kind: "select", options: ["0-2", "3-5", "6+"] })]));
     expect(a).toMatchObject({ kind: "fill", value: "3-5" });
   });
 
@@ -457,7 +461,7 @@ describe("turning an answer into the field's format", () => {
     const t = await filling();
     bank(t, { question: "Earliest start date", wordings: ["When can you start?"], versions: { en: "Two weeks from offer" }, category: "standard", kind: "date" });
 
-    const [date, text] = t.fill.answer(t.sessionId, reading([field("d", "Earliest start date", { kind: "date" }), field("t", "When can you start?")]));
+    const [date, text] = await t.fill.answer(t.sessionId, reading([field("d", "Earliest start date", { kind: "date" }), field("t", "When can you start?")]));
 
     expect(date).toEqual({ fieldId: "d", kind: "fill", value: "2026-10-26", source: "answer-bank", basis: '"Two weeks from offer", counted from today' });
     expect(text).toEqual({ fieldId: "t", kind: "fill", value: "Two weeks from offer", source: "answer-bank", basis: null });
@@ -467,7 +471,7 @@ describe("turning an answer into the field's format", () => {
 describe("Kris's rules and the package's answers", () => {
   it("suggests salary from the rule, with the floor, and never fills it", async () => {
     const t = await filling();
-    const [a] = t.fill.answer(t.sessionId, reading([field("s", "Expected gross monthly salary", { kind: "number" })]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("s", "Expected gross monthly salary", { kind: "number" })]));
     expect(a).toEqual({
       fieldId: "s", kind: "needs-you", reason: "Your answer bank says: ask each time",
       basis: 'Your rule: "Upper half of the posting\'s stated range, never under €2,000 a month". The posting\'s range isn\'t known here, so this is your floor.',
@@ -477,7 +481,7 @@ describe("Kris's rules and the package's answers", () => {
 
   it("suggests the salary Kris approved in the package for this job, still without filling it", async () => {
     const t = await filling();
-    const [a] = t.fill.answer(t.sessionId, reading([field("s", "What are your salary expectations? (gross monthly, EUR)")]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("s", "What are your salary expectations? (gross monthly, EUR)")]));
     expect(a).toEqual({
       fieldId: "s", kind: "needs-you", reason: "Your answer bank says: ask each time",
       basis: "You chose 3400 for this job when you approved the package.", suggestion: "3400",
@@ -487,7 +491,7 @@ describe("Kris's rules and the package's answers", () => {
   it("leaves voluntary diversity questions blank by rule, and says 'prefer not to say' only where the portal requires an answer", async () => {
     const t = await filling();
     const decline = ["Male", "Female", "Decline To Self Identify"];
-    const answers = t.fill.answer(t.sessionId, reading([
+    const answers = await t.fill.answer(t.sessionId, reading([
       field("g", "Gender", { kind: "select", options: decline, required: false }),
       field("h", "Are you Hispanic/Latino?", { kind: "select", options: ["Yes", "No", "Decline To Self Identify"], required: false }),
       field("v", "Veteran Status", { kind: "select", options: ["I am not a protected veteran", "I don't wish to answer"], required: true }),
@@ -507,7 +511,7 @@ describe("Kris's rules and the package's answers", () => {
     const notice = t.preparation.listAnswers({ search: "Notice period" }).answers[0]!;
     t.preparation.saveAnswer({ id: notice.id, question: notice.question, wordings: notice.wordings.map((w) => w.text), versions: { en: "2 months" }, category: "standard" });
 
-    const answers = t.fill.answer(t.sessionId, reading([
+    const answers = await t.fill.answer(t.sessionId, reading([
       field("n", "What is your notice period?"),
       field("n2", "Notice period"),
       field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 1000 }),
@@ -521,7 +525,192 @@ describe("Kris's rules and the package's answers", () => {
 
   it("respects a field's character limit", async () => {
     const t = await filling();
-    const [a] = t.fill.answer(t.sessionId, reading([field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 100 })]));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 100 })]));
     expect(a).toMatchObject({ fieldId: "i", kind: "needs-you", reason: "Your answer is 178 characters; this field takes 100", basis: "Approved screening answer in this package" });
+  });
+});
+
+/** The writer the test preparation drafts with (a fake: recorded outputs, never live AI). */
+const drafts = (t: { writer: unknown; pkgQuestions: Set<string> }) => (t.writer as FakeWriter).calls
+  .filter((c) => c.task === "draft-answer" && !t.pkgQuestions.has((c.input as { question: string }).question));
+const phishing = 'Drafted from your master profile: "Ran the response to a phishing campaign against the claims team." Nothing added that isn\'t there.';
+
+describe("drafting answers to new questions", () => {
+  it("drafts a new required free-text question from the profile, within the field's limit and the package's language, citing the piece", async () => {
+    const t = await filling();
+
+    const answers = await t.fill.answer(t.sessionId, reading([
+      field("i", "Describe an incident you led the response to.", { kind: "textarea", maxLength: 600 }),
+      field("w", "In under 150 words, what did you learn from it?", { kind: "textarea" }),
+      field("o", "Anything else you'd like us to know?", { kind: "textarea", required: false }),
+      field("c", "Have you ever held a government security clearance?", { kind: "radio", options: yesNo }),
+    ]));
+
+    expect(answers[0]).toEqual({
+      fieldId: "i", kind: "needs-you", reason: "A new question: check the draft before you fill it", basis: phishing,
+      draft: expect.stringMatching(/^At Northwind Bank I ran the response to a phishing campaign/), save: { ticked: true, note: null },
+    });
+    expect(answers[1]).toMatchObject({ kind: "needs-you", draft: expect.any(String) });
+    // Optional and choice questions aren't drafted.
+    expect(answers[2]).toEqual({ fieldId: "o", kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" });
+    expect(answers[3]).not.toHaveProperty("draft");
+    expect(drafts(t).map((c) => c.input)).toMatchObject([
+      { question: "Describe an incident you led the response to.", language: "en", limit: { chars: 600, words: null } },
+      { question: "In under 150 words, what did you learn from it?", language: "en", limit: { chars: null, words: 150 } },
+    ]);
+  });
+
+  it("drafts once per question in a session, and not for a field Kris has already answered", async () => {
+    const t = await filling();
+    const r = reading([field("i", "Describe an incident you led the response to.", { kind: "textarea" }), field("j", "What tooling would you add first?", { kind: "textarea", value: "Typed by Mira" })]);
+
+    const first = await t.fill.answer(t.sessionId, r);
+    const again = await t.fill.answer(t.sessionId, r);
+
+    expect(again[0]).toEqual(first[0]);
+    expect(again[1]).not.toHaveProperty("draft");
+    expect(drafts(t)).toHaveLength(1);
+  });
+
+  it("leaves it to Kris without a draft, and says why, when this month's AI budget is reached", async () => {
+    const t = await filling();
+    await t.budget.call({ task: "draft-answer", estimateUsd: 0 }, async () => ({ costUsd: 10 }));
+
+    const [a] = await t.fill.answer(t.sessionId, reading([field("i", "Describe an incident you led the response to.", { kind: "textarea" })]));
+
+    expect(a).toEqual({
+      fieldId: "i", kind: "needs-you", reason: "Not drafted: this month's AI budget would be crossed. Write it yourself.", basis: null, save: { ticked: true, note: null },
+    });
+  });
+
+  it("leaves it to Kris without a draft when the drafter fails", async () => {
+    const t = await filling({ draftAnswer: (input) => (/led the response/.test(input.question) ? new Error("model unavailable") : undefined) });
+    const [a] = await t.fill.answer(t.sessionId, reading([field("i", "Describe an incident you led the response to.", { kind: "textarea" })]));
+    expect(a).toMatchObject({ kind: "needs-you", reason: expect.stringMatching(/^The draft failed \(model unavailable\)/) });
+    expect(a).not.toHaveProperty("draft");
+  });
+});
+
+describe("Save to answer bank: ticked for reusable questions, unticked for one-offs", () => {
+  it.each([
+    ["Have you ever held a government security clearance?", true],
+    ["Are you comfortable working on call one week a month?", true],
+    ["Have you worked at Kestrel Payments before?", false],
+    ["Why do you want to join us?", false],
+    ["Why are you interested in this role?", false],
+    ["Защо искате да работите при нас?", false],
+  ])("%s → ticked: %s", async (question, ticked) => {
+    const t = await filling();
+    await t.budget.call({ task: "draft-answer", estimateUsd: 0 }, async () => ({ costUsd: 10 }));
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q", question, { kind: "radio", options: yesNo })]));
+    expect(a).toMatchObject({ kind: "needs-you", save: ticked ? { ticked: true, note: null } : { ticked: false, note: "This reads as a one-off for Kestrel Payments" } });
+  });
+
+  it("is unticked for a draft written for this company", async () => {
+    const t = await filling();
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q", "Why payments security?", { kind: "textarea" })]));
+    expect(a).toMatchObject({ kind: "needs-you", draft: expect.stringMatching(/Kestrel Payments/), save: { ticked: false, note: "This reads as a one-off for Kestrel Payments" } });
+  });
+});
+
+describe("answers Kris typed on the portal", () => {
+  const clearance = (value = "") => field("c", "Have you ever held a government security clearance?", { kind: "radio", options: yesNo, value });
+  const oncall = (value = "") => field("o", "Are you comfortable working on call one week a month?", { kind: "textarea", value });
+  const pronouns = (value = "") => field("p", "Pronouns", { required: false, value });
+  const salary = (value = "") => field("s", "Expected gross monthly salary", { kind: "number", value });
+  const outcomes = (r: PageReading, typed: string[] = []) => r.fields.map((f) => ({ fieldId: f.id, outcome: typed.includes(f.id) ? "kept" as const : f.id === "first_name" ? "filled" as const : f.required ? "needs-you" as const : "skipped" as const, source: f.id === "first_name" ? "profile" as const : null }));
+
+  /** Fills the page once (everything empty), then Kris types into some fields and clicks Fill this page again. */
+  async function typedOn(t: Awaited<ReturnType<typeof filling>>, now: ReadField[], typed: string[]) {
+    const first = reading([field("first_name", "First Name"), clearance(), oncall(), pronouns(), salary()]);
+    expect(t.fill.recordPage(t.sessionId, first, outcomes(first)).typedAnswers).toEqual([]);
+    const again = reading(now);
+    return t.fill.recordPage(t.sessionId, again, outcomes(again, typed));
+  }
+
+  it("keeps a value typed into a needs-you or empty field as pending, and not an untouched one", async () => {
+    const t = await filling();
+
+    const r = await typedOn(t, [field("first_name", "First Name", { value: "Mira" }), clearance("No"), oncall(), pronouns("she/her"), salary("3300")], ["c", "p", "s"]);
+
+    expect(r.typedAnswers).toEqual([
+      { id: expect.any(String), question: "Have you ever held a government security clearance?", answer: "No", kind: "yes-no", save: { ticked: true, note: null } },
+      { id: expect.any(String), question: "Pronouns", answer: "she/her", kind: "text", save: { ticked: true, note: null } },
+    ]);
+    // Salary is decided for each job: never offered to the bank. The name was apply-kit's own fill.
+    expect(t.fill.pendingAnswers(t.sessionId)).toEqual(r.typedAnswers);
+  });
+
+  it("doesn't take a value the portal had before the first fill as typed", async () => {
+    const t = await filling();
+    const first = reading([clearance("Yes")]);
+    t.fill.recordPage(t.sessionId, first, outcomes(first, ["c"]));
+    const again = t.fill.recordPage(t.sessionId, first, outcomes(first, ["c"]));
+    expect(again.typedAnswers).toEqual([]);
+  });
+
+  it("keeps one pending answer per question, the latest typed", async () => {
+    const t = await filling();
+    await typedOn(t, [clearance("No")], ["c"]);
+    const r = t.fill.recordPage(t.sessionId, reading([clearance("Yes")]), outcomes(reading([clearance("Yes")]), ["c"]));
+    expect(r.typedAnswers).toMatchObject([{ question: "Have you ever held a government security clearance?", answer: "Yes" }]);
+  });
+
+  it("saves the ticked ones when marked as submitted, with the job and portal as their source, and declines the rest", async () => {
+    const t = await submitting();
+    const first = reading([clearance(), oncall()]);
+    t.fill.recordPage(t.sessionId, first, outcomes(first));
+    const again = reading([clearance("No"), oncall("Yes, with a day off after each week on call.")]);
+    const { typedAnswers } = t.fill.recordPage(t.sessionId, again, outcomes(again, ["c", "o"]));
+    const ticked = typedAnswers.filter((a) => a.question.startsWith("Have you")).map((a) => a.id);
+
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: null, via: "extension", saveAnswers: ticked });
+
+    expect(r).toMatchObject({ marked: true });
+    expect(t.preparation.listAnswers({ search: "security clearance" }).answers).toMatchObject([
+      { question: "Have you ever held a government security clearance?", versions: { en: "No" }, kind: "yes-no", category: "screening", source: { from: "Kestrel Payments Greenhouse form", jobId: t.jobId, portal: "greenhouse" } },
+    ]);
+    expect(t.preparation.listAnswers({ search: "on call" }).answers).toEqual([]);
+    expect(t.fill.pendingAnswers(t.sessionId)).toEqual([]);
+  });
+
+  it("saves nothing without a tick", async () => {
+    const t = await submitting();
+    const before = t.preparation.listAnswers({ pageSize: 100 }).total;
+    const first = reading([clearance()]);
+    t.fill.recordPage(t.sessionId, first, outcomes(first));
+    t.fill.recordPage(t.sessionId, reading([clearance("No")]), outcomes(reading([clearance("No")]), ["c"]));
+
+    await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: null, via: "extension" });
+
+    expect(t.preparation.listAnswers({ pageSize: 100 }).total).toBe(before);
+  });
+});
+
+describe("saving answers to the answer bank", () => {
+  it("saves an answer Kris filled from the panel, and a typed one by its id (Save N on a review page), so the next form fills them", async () => {
+    const t = await filling();
+    const first = reading([field("c", "Do you hold a security clearance?", { kind: "radio", options: yesNo })]);
+    t.fill.recordPage(t.sessionId, first, [{ fieldId: "c", outcome: "needs-you", source: null }]);
+    const again = reading([field("c", "Do you hold a security clearance?", { kind: "radio", options: yesNo, value: "No" })]);
+    const [typed] = t.fill.recordPage(t.sessionId, again, [{ fieldId: "c", outcome: "kept", source: null }]).typedAnswers;
+
+    const r = t.fill.saveAnswers(t.sessionId, [{ pendingId: typed!.id }, { question: "Describe your on-call experience.", answer: "A week in four at Northwind Bank.", kind: "text" }]);
+
+    expect(r).toEqual({ saved: [{ question: "Do you hold a security clearance?", answerId: expect.any(String), how: "added" }, { question: "Describe your on-call experience.", answerId: expect.any(String), how: "added" }], refused: [] });
+    expect(t.fill.pendingAnswers(t.sessionId)).toEqual([]);
+    const answers = await t.fill.answer(t.sessionId, reading([field("c", "Do you hold a security clearance?", { kind: "radio", options: yesNo }), field("d", "Describe your on-call experience.", { kind: "textarea" })]));
+    expect(answers).toMatchObject([{ kind: "fill", value: "No", source: "answer-bank" }, { kind: "fill", value: "A week in four at Northwind Bank.", source: "answer-bank" }]);
+  });
+
+  it("offers a different answer to a question the bank has as a portal edit, for Kris to settle in Profile", async () => {
+    const t = await filling();
+
+    const r = t.fill.saveAnswers(t.sessionId, [{ question: "Notice period", answer: "2 months", kind: "text" }]);
+
+    expect(r.saved).toMatchObject([{ question: "Notice period", how: "portal-edit" }]);
+    expect(t.preparation.listAnswers({ search: "Notice period" }).answers[0]).toMatchObject({
+      versions: { en: "1 month" }, portalEdit: { text: "2 months", before: "1 month", portal: "Kestrel Payments Greenhouse form" },
+    });
   });
 });

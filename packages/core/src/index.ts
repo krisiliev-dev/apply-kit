@@ -159,4 +159,6 @@ export type {
 export { createFillEngine, FillError } from "./fill/engine.ts";
 export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageInBrief, SessionEnd, MarkResult, SubmittedApplication } from "./fill/engine.ts";
 export { countOutcomes } from "./fill/reading.ts";
-export type { PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, RecordedPage } from "./fill/reading.ts";
+export type {
+  PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, RecordedPage, RecordedFill, PendingAnswer, SaveOffer, SavePick, SavedAnswers,
+} from "./fill/reading.ts";
