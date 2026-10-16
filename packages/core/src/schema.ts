@@ -818,6 +818,16 @@ const migrations: string[] = [
      field TEXT NOT NULL,
      created_at TEXT NOT NULL
    );`,
+  // Apply #42: answers Kris typed on the portal into needs-you or empty fields, kept pending in the
+  // fill session until he saves them to the answer bank (or marks as submitted) or declines them.
+  `CREATE TABLE fill_pending_answer (
+     id INTEGER PRIMARY KEY AUTOINCREMENT,
+     session_id TEXT NOT NULL REFERENCES fill_session(id),
+     question TEXT NOT NULL,
+     answer TEXT NOT NULL,
+     kind TEXT NOT NULL,
+     created_at TEXT NOT NULL
+   );`,
 ];
 
 export function migrate(db: SqlDatabase): void {

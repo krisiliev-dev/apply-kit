@@ -2,7 +2,9 @@
 // package, the package in words, the field rows in the portal's order with their source in words,
 // the end-of-fill announcement, and where focus goes after a fill.
 import { countOutcomes } from "@apply-kit/core/fill";
-import type { FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageFileKind, PackageInBrief, PageJobReference, PageKind, PageReading, SubmittedApplication } from "@apply-kit/core";
+import type {
+  FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageFileKind, PackageInBrief, PageJobReference, PageKind, PageReading, PendingAnswer, ReadField, SaveOffer, SubmittedApplication,
+} from "@apply-kit/core";
 
 const sources: Record<FillSource, string> = { profile: "Profile", "answer-bank": "Answer bank", package: "Package", "cv-version": "CV version", you: "You" };
 
@@ -54,18 +56,70 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
       case "filled":
         return [{ ...row, value: a.kind === "fill" ? a.value : f.value, chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
       case "kept":
+        // A needs-you field with a value: Kris answered it on the page.
+        if (a.kind === "needs-you") return [{ ...row, value: f.value, chip: { tone: "met", word: sourceWords("you") }, why: "You answered this on the page." }];
         return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" ? a.value : null }];
       case "needs-you":
         return [{
           ...row, value: a.kind === "needs-you" && a.suggestion ? `Suggested: ${a.suggestion}` : "Not filled", chip: { tone: "ask", word: "Needs you" },
           why: a.kind === "needs-you" ? [a.reason, a.basis].filter(Boolean).join(". ") : null,
-          limit: f.maxLength !== null && (f.kind === "textarea" || f.kind === "text") ? `max ${f.maxLength.toLocaleString("en-GB")} characters` : null,
+          limit: limitWords(f),
         }];
       case "didnt-stick":
         return [{ ...row, value: a.kind === "fill" ? a.value : "Empty: the value didn't stay", chip: { tone: "gap", word: "Didn't stick" }, why: "Paste it into the field yourself.", offer: a.kind === "fill" ? a.value : null }];
       case "skipped":
         return [{ ...row, value: "Not filled", chip: { tone: "closed", word: a.kind === "skip" && a.byRule ? "Skipped · your rule" : "Skipped" }, why: a.kind === "skip" ? a.reason : null }];
     }
+  });
+}
+
+const limitWords = (f: ReadField) => (f.maxLength !== null && (f.kind === "textarea" || f.kind === "text") ? `max ${f.maxLength.toLocaleString("en-GB")} characters` : null);
+
+/** How Kris answers a needs-you item in the panel: options as radios, a number, long text with its count, or (a file) only on the page. */
+export type AnswerControl =
+  | { kind: "yes-no"; options: string[] }
+  | { kind: "choice"; options: string[] }
+  | { kind: "number" }
+  | { kind: "long-text"; max: number | null }
+  | { kind: "text"; max: number | null }
+  | { kind: "tick" }
+  | { kind: "file" };
+
+export interface NeedsYouItem {
+  fieldId: string;
+  question: string;
+  limit: string | null;
+  control: AnswerControl;
+  /** The draft or suggestion to start from ("" for none). */
+  value: string;
+  /** Why it needs Kris, and what the suggestion or draft rests on. */
+  basis: string;
+  /** "Save to answer bank": null when not offered (the bank has it, it's decided per job, or it's a file). */
+  save: SaveOffer | null;
+}
+
+const yesNoWords = /^(yes|no|да|не)$/iu;
+
+function controlFor(f: ReadField): AnswerControl {
+  if (f.kind === "file") return { kind: "file" };
+  if (f.kind === "checkbox") return { kind: "tick" };
+  if (f.options.length > 0) return f.options.every((o) => yesNoWords.test(o.trim())) ? { kind: "yes-no", options: f.options } : { kind: "choice", options: f.options };
+  if (f.kind === "number") return { kind: "number" };
+  if (f.kind === "textarea") return { kind: "long-text", max: f.maxLength };
+  return { kind: "text", max: f.maxLength };
+}
+
+/** The needs-you items, first in the panel, in the portal's order: only what still needs Kris. */
+export function needsYouItems(reading: PageReading, answers: FieldAnswer[], outcomes: FieldOutcome[]): NeedsYouItem[] {
+  const answer = new Map(answers.map((a) => [a.fieldId, a]));
+  const outcome = new Map(outcomes.map((o) => [o.fieldId, o]));
+  return reading.fields.flatMap((f): NeedsYouItem[] => {
+    const a = answer.get(f.id);
+    if (a?.kind !== "needs-you" || outcome.get(f.id)?.outcome !== "needs-you") return [];
+    return [{
+      fieldId: f.id, question: f.label, limit: limitWords(f), control: controlFor(f), value: a.draft ?? a.suggestion ?? "",
+      basis: [a.reason, a.basis].filter(Boolean).join(". "), save: a.save ?? null,
+    }];
   });
 }
 
@@ -103,6 +157,28 @@ export function stuckFields(reading: PageReading, answers: FieldAnswer[], outcom
     }];
   });
 }
+
+/** "Fill 3,300", 'Fill "No"', "Fill this answer". */
+export function fillButtonLabel(control: AnswerControl, value: string): string {
+  const v = value.trim();
+  if (control.kind === "number" && /^\d+([.,]\d+)?$/.test(v)) return `Fill ${Number(v.replace(",", ".")).toLocaleString("en-GB")}`;
+  if (control.kind === "yes-no" || control.kind === "choice" || control.kind === "number") return v ? `Fill "${v}"` : "Fill";
+  return "Fill this answer";
+}
+
+/** The visible count ("312 / 1,000"), and what to announce: once, when 50 or fewer are left (again only after going back over 50). */
+export function characterCount(length: number, max: number, warned: boolean): { text: string; announce: string | null; warned: boolean } {
+  const text = `${length.toLocaleString("en-GB")} / ${max.toLocaleString("en-GB")}`;
+  const left = max - length;
+  if (left > 50) return { text, announce: null, warned: false };
+  if (warned) return { text, announce: null, warned };
+  return { text, announce: `${left} ${left === 1 ? "character" : "characters"} left`, warned: true };
+}
+
+/** An answer typed on the portal, as offered: "Question" → answer. */
+export const typedAnswerLine = (p: PendingAnswer) => `"${p.question}" → ${p.answer}`;
+
+export const saveTypedLabel = (n: number) => `Save ${n} to the answer bank`;
 
 /** The "app not running" state after the app stopped answering mid-fill: how many fields stay filled, and that Undo still works. */
 export function stoppedMidFill(outcomes: FieldOutcome[]): string {

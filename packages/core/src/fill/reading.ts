@@ -2,6 +2,7 @@
 // Plain data shared by the fill engine and the extension: the extension reads the page into a
 // `PageReading`, the engine answers each field, the extension fills and reports `FieldOutcome`s.
 // Browser-safe: types and pure helpers only.
+import type { AnswerKind } from "../preparation/answers.ts";
 import type { PageJobReference } from "../preparation/contracts.ts";
 
 export type PageKind = "form" | "account" | "sign-in" | "review" | "confirmation" | "posting" | "other";
@@ -45,12 +46,23 @@ export type PackageFileKind = "cv" | "letter";
 /** Where a filled value came from, as the panel names it. */
 export type FillSource = "profile" | "answer-bank" | "package" | "cv-version" | "you";
 
+/**
+ * "Save to answer bank" on a needs-you answer or an answer Kris typed: offered only for a question
+ * the answer bank doesn't have; ticked for a question that will come up again, unticked (with why)
+ * for a one-off for this company. Nothing is saved without the tick.
+ */
+export interface SaveOffer {
+  ticked: boolean;
+  note: string | null;
+}
+
 /** The engine's answer for one field: a value to fill, something for Kris, or a field to leave alone. */
 export type FieldAnswer =
   | { fieldId: string; kind: "fill"; value: string; source: FillSource; basis: string | null }
   /** Attach the package's frozen CV or letter: the extension fetches its bytes (`packageFile`) and attaches them first. */
   | { fieldId: string; kind: "file"; which: PackageFileKind; fileName: string; size: number; source: "package"; basis: string }
-  | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string }
+  /** `draft`: a new free-text question drafted from the master profile (`basis` cites the pieces); `save`: see SaveOffer. */
+  | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string; draft?: string; save?: SaveOffer }
   /** `byRule`: left blank by Kris's answer-bank rule ("Skipped · your rule"). */
   | { fieldId: string; kind: "skip"; reason: string; byRule?: true };
 
@@ -77,7 +89,29 @@ export interface RecordedPage {
   pageKind: PageKind;
   filledAt: string;
   counts: OutcomeCounts;
-  fields: { label: string; kind: FieldKind; outcome: Outcome; source: FillSource | null }[];
+  /** `empty`: whether the field was empty when the page was read (so a later value is one Kris typed). */
+  fields: { label: string; kind: FieldKind; outcome: Outcome; source: FillSource | null; empty: boolean }[];
+}
+
+/** An answer Kris typed on the portal into a needs-you or empty field, kept in the session until saved or declined. */
+export interface PendingAnswer {
+  id: string;
+  question: string;
+  answer: string;
+  kind: AnswerKind;
+  save: SaveOffer;
+}
+
+/** A page as recorded, with every answer Kris typed on the portal in this session that's still waiting. */
+export type RecordedFill = RecordedPage & { typedAnswers: PendingAnswer[] };
+
+/** What "Save to answer bank" saves: an answer typed on the portal (by its id), or one Kris filled from the panel. */
+export type SavePick = { pendingId: string } | { question: string; answer: string; kind: AnswerKind };
+
+export interface SavedAnswers {
+  /** `added` to the bank; `portal-edit`: the bank has this question with another answer, so Kris chooses in Profile; `same`: nothing to change. */
+  saved: { question: string; answerId: string; how: "added" | "portal-edit" | "same" }[];
+  refused: { question: string; reason: string }[];
 }
 
 export function countOutcomes(outcomes: { outcome: Outcome }[]): OutcomeCounts {

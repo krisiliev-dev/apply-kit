@@ -13,12 +13,12 @@
 // made, each linking to its Application (T-12). A mailbox read never moves rows under the user: when
 // it changes what's shown, a quiet line offers the update instead.
 import type {
-  Angle, ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, FollowUp, GroupKey, HealthSummary, NeedsYou, NeedsYouEntry, SinceLastVisit,
+  Angle, ApplicationGroup, ApplicationList, ApplicationSummary, EmailToMatch, FollowUp, GroupKey, HealthSummary, NeedsYou, NeedsYouEntry, PackageConfirmation, SinceLastVisit,
   Status, StatusFilter, TrackMailbox,
 } from "@apply-kit/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
-  acceptOffer, fetchApplicationList, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
+  acceptOffer, answerPackageConfirmation, undoPackageConfirmation, fetchApplicationList, fetchEmailsToMatch, fetchNeedsYou, fetchSources, fetchTrackMailbox, followUpAction, needsYouChanged,
   setApplicationStatus, undoApplicationEvent, visitApplications, type ApplicationListParams,
 } from "../api.ts";
 import { useToaster } from "../feed/toast.tsx";
@@ -27,7 +27,7 @@ import { AddApplicationDialog, type Added } from "./AddApplicationDialog.tsx";
 import { EmailToMatchItems } from "./EmailsToMatch.tsx";
 import type { FollowUpAction } from "./FollowUpWriter.tsx";
 import { MailboxBanner, mailWords, useMailReading } from "./MailState.tsx";
-import { FollowUpDialog, itemId, NeedsYouSection } from "./NeedsYou.tsx";
+import { FollowUpDialog, itemId, NeedsYouSection, PackageConfirmationItems } from "./NeedsYou.tsx";
 import { StatsStrip } from "./StatsStrip.tsx";
 import { WithdrawDialog } from "./Withdrawals.tsx";
 import { angleLabel, daysWord, dueWords, eventTime, followUpName, nextWords, shortDay, statusLabel, statusOrder, todaySofia, weekDay } from "./words.ts";
@@ -249,6 +249,40 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
     }
   }
 
+  /**
+   * "Mark Applied, dated …?": marks the package's Application Applied on the email's day (with Undo),
+   * or leaves the email to match by hand. Focus goes to the new row, or back to Needs you.
+   */
+  async function answerPackage(item: PackageConfirmation, answer: "mark-applied" | "not-this") {
+    const job = `${item.package.job.title} · ${item.package.job.company}`;
+    const toNeeds = () => requestAnimationFrame(() => document.getElementById("ny-h")?.focus());
+    try {
+      const r = await answerPackageConfirmation(item.email.id, answer);
+      const id = r.application?.id ?? null;
+      // Focus moves once the new list has rendered: to the new row, or back to Needs you.
+      let list: ApplicationList | null = null;
+      focusNext.current = () => (id && list ? focusApplication(id, groupOf(list, id)) : toNeeds());
+      list = await refresh();
+      if (answer === "not-this" || !id) {
+        toaster.announce("Not this package: nothing was added. The email waits under Needs you for you to match.");
+        return;
+      }
+      toaster.show({
+        message: `${job}: marked Applied, dated ${weekDay(item.appliedOn)}. Logged by you.`,
+        returnFocus: () => focusApplication(id, groupOf(list, id)),
+        undo: () => {
+          undoPackageConfirmation(item.email.id).then(() => refresh())
+            .then(() => { toNeeds(); toaster.announce("Undone. Nothing is marked Applied; the question is back in Needs you."); })
+            .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+        },
+      });
+    } catch (err) {
+      await refresh().catch(() => {});
+      toNeeds();
+      toaster.show({ message: `Couldn't mark it Applied: ${message(err)}` });
+    }
+  }
+
   /** Accepted in a row's select: the accept flow, never a silent change. The withdrawal dialog opens over the list. */
   async function accept(app: ApplicationSummary): Promise<boolean> {
     try {
@@ -416,13 +450,16 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
   if (list.total === 0) {
     return (
       <>
-        {(mailbox?.state === "failing" || mailbox?.state === "not-connected" || emails.length > 0) && (
+        {(mailbox?.state === "failing" || mailbox?.state === "not-connected" || emails.length > 0 || !!needs?.packageConfirmations.length) && (
           <div className="stack" style={{ gap: "var(--s-7)", marginBottom: "var(--s-7)" }}>
             <MailboxBanner mailbox={mailbox} />
-            {emails.length > 0 && (
+            {(emails.length > 0 || !!needs?.packageConfirmations.length) && (
               <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
-                <div className="sec-head"><h2 id="ny-h" tabIndex={-1}>Needs you · {emails.length}</h2></div>
-                <ul className="needs-queue"><EmailToMatchItems emails={emails} total={0} toaster={toaster} onAnswered={() => refresh()} /></ul>
+                <div className="sec-head"><h2 id="ny-h" tabIndex={-1}>Needs you · {emails.length + (needs?.packageConfirmations.length ?? 0)}</h2></div>
+                <ul className="needs-queue">
+                  <EmailToMatchItems emails={emails} total={0} toaster={toaster} onAnswered={() => refresh()} />
+                  <PackageConfirmationItems items={needs?.packageConfirmations ?? []} onAnswer={(item, answer) => { answerPackage(item, answer).catch(() => {}); }} />
+                </ul>
               </section>
             )}
           </div>
@@ -492,7 +529,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
 
       {visit && visit.changes.length > 0 && <SinceVisit visit={visit} />}
 
-      {list.total === 1 && !needs?.items.length && !needs?.offers.length && emails.length === 0 ? (
+      {list.total === 1 && !needs?.items.length && !needs?.offers.length && !needs?.packageConfirmations.length && emails.length === 0 ? (
         <div className="calm">
           <h2 className="sr-only">Needs you</h2>
           <h3>Nothing needs you yet</h3>
@@ -505,6 +542,7 @@ export function ApplicationsPage({ onHealth }: { onHealth: (h: HealthSummary) =>
         <NeedsYouSection
           needs={needs} onWrite={(entry, opener) => setWriting({ entries: [entry], index: 0, opener })} onSnooze={(e) => { actOn(e, "snooze").catch(() => {}); }}
           onReview={(entries, opener) => setWriting({ entries, index: 0, opener })} onSnoozeAll={(entries) => { snoozeAll(entries).catch(() => {}); }}
+          onPackage={(item, answer) => { answerPackage(item, answer).catch(() => {}); }}
           emails={<EmailToMatchItems emails={emails} total={list.total} toaster={toaster} onAnswered={() => refresh()} />}
         />
       )}
