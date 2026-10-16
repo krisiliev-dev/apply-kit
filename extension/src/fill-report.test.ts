@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField, SubmittedApplication } from "@apply-kit/core";
-import { differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, sourceWords, stoppedMidFill, stuckFields, submitPrompt } from "./fill-report.ts";
+import {
+  characterCount, differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, saveTypedLabel, sourceWords, stoppedMidFill, stuckFields, submitPrompt, typedAnswerLine,
+} from "./fill-report.ts";
 
 const field = (id: string, label: string, value = ""): ReadField => ({ id, label, kind: "text", required: true, value, options: [], maxLength: null, consent: false, password: false, hint: null });
 const reading: PageReading = {
@@ -185,6 +187,89 @@ describe("a typeahead with two places that fit (#43)", () => {
       "Sofia, Sofia City, Bulgaria or Sofia, Sofia Province, Bulgaria", "Needs you",
       "More than one place fits \"Sofia, Bulgaria\" (from your profile). Pick yours on the page; apply-kit doesn't choose between them.",
     ]]);
+    expect(needsYouItems(r, a, o)).toEqual([{
+      fieldId: "loc", question: "Current location", limit: null, control: { kind: "choice", options: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] }, value: "",
+      basis: "More than one place fits \"Sofia, Bulgaria\" (from your profile). Pick yours; apply-kit doesn't choose between them.", save: null,
+    }]);
+  });
+});
+
+describe("needs-you items", () => {
+  const r: PageReading = { ...reading, fields: [
+    { ...field("sal", "Expected gross monthly salary (EUR)"), kind: "number" },
+    { ...field("det", "Describe a detection rule you wrote."), kind: "textarea", maxLength: 1000 },
+    { ...field("clr", "Have you ever held a government security clearance?"), kind: "radio", options: ["Yes", "No"] },
+    { ...field("src", "How did you hear about us?"), kind: "select", options: ["LinkedIn", "Referral", "Company website"] },
+    { ...field("cv", "Resume/CV"), kind: "file" },
+    field("fn", "First Name"),
+  ] };
+  const a: FieldAnswer[] = [
+    { fieldId: "sal", kind: "needs-you", reason: "Your answer bank says: ask each time", basis: "Your rule: \"Upper half\".", suggestion: "3300" },
+    { fieldId: "det", kind: "needs-you", reason: "A new question: check the draft before you fill it", basis: "Drafted from your master profile: \"Wrote 30 detection rules.\" Nothing added that isn't there.", draft: "At Northwind Bank I wrote 30 detection rules.", save: { ticked: false, note: "This reads as a one-off for Kestrel Payments" } },
+    { fieldId: "clr", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null, save: { ticked: true, note: null } },
+    { fieldId: "src", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null, save: { ticked: true, note: null } },
+    { fieldId: "cv", kind: "needs-you", reason: "Attach the CV yourself for now", basis: null },
+    { fieldId: "fn", kind: "fill", value: "Mira", source: "profile", basis: null },
+  ];
+  const o: FieldOutcome[] = a.map((x) => ({ fieldId: x.fieldId, outcome: x.kind === "fill" ? "filled" : "needs-you", source: x.kind === "fill" ? "profile" : null }));
+
+  it("gives each one the right control, its suggestion or draft, its basis and its Save to answer bank tick", () => {
+    expect(needsYouItems(r, a, o)).toEqual([
+      { fieldId: "sal", question: "Expected gross monthly salary (EUR)", limit: null, control: { kind: "number" }, value: "3300", basis: "Your answer bank says: ask each time. Your rule: \"Upper half\".", save: null },
+      {
+        fieldId: "det", question: "Describe a detection rule you wrote.", limit: "max 1,000 characters", control: { kind: "long-text", max: 1000 }, value: "At Northwind Bank I wrote 30 detection rules.",
+        basis: "A new question: check the draft before you fill it. Drafted from your master profile: \"Wrote 30 detection rules.\" Nothing added that isn't there.", save: { ticked: false, note: "This reads as a one-off for Kestrel Payments" },
+      },
+      { fieldId: "clr", question: "Have you ever held a government security clearance?", limit: null, control: { kind: "yes-no", options: ["Yes", "No"] }, value: "", basis: "apply-kit has no answer for this yet", save: { ticked: true, note: null } },
+      { fieldId: "src", question: "How did you hear about us?", limit: null, control: { kind: "choice", options: ["LinkedIn", "Referral", "Company website"] }, value: "", basis: "apply-kit has no answer for this yet", save: { ticked: true, note: null } },
+      { fieldId: "cv", question: "Resume/CV", limit: null, control: { kind: "file" }, value: "", basis: "Attach the CV yourself for now", save: null },
+    ]);
+  });
+
+  it("only lists what still needs Kris: an item he filled from the panel shows as You", () => {
+    const filledByKris = o.map((x) => (x.fieldId === "clr" ? { ...x, outcome: "filled" as const, source: "you" as const } : x));
+    expect(needsYouItems(r, a, filledByKris).map((i) => i.fieldId)).toEqual(["sal", "det", "src", "cv"]);
+    expect(fieldRows(r, a, filledByKris).find((x) => x.fieldId === "clr")).toMatchObject({ chip: { tone: "met", word: "You" } });
+  });
+
+  it("shows an answer Kris typed on the page as his", () => {
+    const typed = { ...r, fields: r.fields.map((f) => (f.id === "clr" ? { ...f, value: "No" } : f)) };
+    const kept = o.map((x) => (x.fieldId === "clr" ? { ...x, outcome: "kept" as const } : x));
+    expect(fieldRows(typed, a, kept).find((x) => x.fieldId === "clr")).toMatchObject({ value: "No", chip: { tone: "met", word: "You" }, why: "You answered this on the page.", offer: null });
+  });
+
+  it("names the Fill button after the value", () => {
+    expect(fillButtonLabel({ kind: "number" }, "3300")).toBe("Fill 3,300");
+    expect(fillButtonLabel({ kind: "yes-no", options: ["Yes", "No"] }, "No")).toBe('Fill "No"');
+    expect(fillButtonLabel({ kind: "choice", options: ["LinkedIn"] }, "")).toBe("Fill");
+    expect(fillButtonLabel({ kind: "long-text", max: 1000 }, "At Northwind…")).toBe("Fill this answer");
+  });
+});
+
+describe("character count", () => {
+  it("is always visible, and announced once when 50 or fewer characters are left", () => {
+    let warned = false;
+    const at = (length: number) => {
+      const c = characterCount(length, 1000, warned);
+      warned = c.warned;
+      return [c.text, c.announce];
+    };
+    expect(at(312)).toEqual(["312 / 1,000", null]);
+    expect(at(950)).toEqual(["950 / 1,000", "50 characters left"]);
+    expect(at(960)).toEqual(["960 / 1,000", null]);
+    expect(at(999)).toEqual(["999 / 1,000", null]);
+    // Back over 50 left, then down again: said once more.
+    expect(at(900)).toEqual(["900 / 1,000", null]);
+    expect(at(990)).toEqual(["990 / 1,000", "10 characters left"]);
+    expect(characterCount(999, 1000, false).announce).toBe("1 character left");
+  });
+});
+
+describe("answers Kris typed on the portal", () => {
+  it("lists each as question → answer, and counts the ones to save", () => {
+    expect(typedAnswerLine({ id: "1", question: "Are you willing to travel up to 10%?", answer: "Yes", kind: "yes-no", save: { ticked: true, note: null } })).toBe('"Are you willing to travel up to 10%?" → Yes');
+    expect(saveTypedLabel(2)).toBe("Save 2 to the answer bank");
+    expect(saveTypedLabel(1)).toBe("Save 1 to the answer bank");
   });
 });
 

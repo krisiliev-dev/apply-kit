@@ -2,7 +2,7 @@
 // for the answers, fetch the package's files for the file fields, fill, record. The panel says what
 // came of it. If apply-kit stops answering after the page was filled, what's filled stays filled and
 // Undo this page still works: the previous values live in the page, not in the app.
-import type { FieldAnswer, FieldOutcome, PackageFileKind, PageReading } from "@apply-kit/core";
+import type { FieldAnswer, FieldOutcome, PackageFileKind, PageReading, PendingAnswer } from "@apply-kit/core";
 import { submitPrompt } from "../fill-report.ts";
 import type { Answer, FillClient } from "../service.ts";
 import type { FileToAttach } from "./greenhouse.ts";
@@ -16,7 +16,7 @@ export interface PageCalls {
 type Problem = Exclude<Answer<unknown>, { ok: true }>;
 
 export type FillRun =
-  | { state: "filled"; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; filledAt: string; paths: Map<PackageFileKind, string | null> }
+  | { state: "filled"; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; filledAt: string; paths: Map<PackageFileKind, string | null>; typed: PendingAnswer[] }
   /** The portal's confirmation page: the panel asks "Did you submit?". Nothing filled. */
   | { state: "confirmation"; reading: PageReading }
   /** Stopped (Kris's Stop, or Chrome refused the page) before anything was filled. */
@@ -54,5 +54,5 @@ export async function runFill({ client, page, sessionId, stopRequested, now = ()
   const recorded = await client.record(sessionId, reading, outcomes);
   const done = { reading, answers: answers.value, outcomes, paths };
   if (!recorded.ok && recorded.state !== "error") return { state: "stopped-mid-fill", problem: recorded, ...done };
-  return { state: "filled", ...done, filledAt: recorded.ok ? recorded.value.filledAt : now().toISOString() };
+  return { state: "filled", ...done, filledAt: recorded.ok ? recorded.value.filledAt : now().toISOString(), typed: recorded.ok ? recorded.value.typedAnswers ?? [] : [] };
 }

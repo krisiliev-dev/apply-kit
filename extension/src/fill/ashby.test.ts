@@ -176,3 +176,20 @@ describe("recovery on an Ashby page (#48)", () => {
     expect(JSON.stringify(filler.describe(page.document, linkedin))).not.toContain("mira-petrova");
   });
 });
+
+describe("answers Kris gives on an Ashby page (#42)", () => {
+  it("fills Kris's answer from the panel into one field, and later fills report it as his; a value he typed on the page is kept", async () => {
+    const page = application();
+    const filler = createAshbyFiller({ settleMs: 0 });
+    const why: FieldAnswer = { fieldId: "e5f6a7b8-why", kind: "needs-you", reason: "A new question: check the draft before you fill it", basis: null };
+    const sponsor: FieldAnswer = { fieldId: "q-sponsor", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null };
+    await filler.fill(page.document, [why, sponsor]);
+
+    expect(filler.fillOne(page.document, "e5f6a7b8-why", "Your team writes the detection tooling I want to build.")).toBe("filled");
+    choose(page.document.getElementById("q-sponsor")!.querySelectorAll("button")[1]!);
+
+    const again = await filler.fill(page.document, [why, sponsor]);
+    expect(again).toEqual([{ fieldId: "e5f6a7b8-why", outcome: "filled", source: "you" }, { fieldId: "q-sponsor", outcome: "kept", source: null }]);
+    expect(page.field("e5f6a7b8-why").value).toBe("Your team writes the detection tooling I want to build.");
+  });
+});

@@ -418,6 +418,22 @@ describe("the extension's fill endpoints", () => {
     expect(undo.status).toBe(409);
     expect(await undo.json()).toMatchObject({ problem: "not-found" });
   });
+
+  it("pending answers and Save to answer bank need the token, a session and well-formed picks", async () => {
+    const s = service();
+    for (const path of ["/api/ext/fill/pending", "/api/ext/fill/save-answers"]) {
+      expect((await s.request(path, s.json({ sessionId: "s1" }))).status, path).toBe(401);
+    }
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    expect((await s.request("/api/ext/fill/pending", s.json({}, auth))).status).toBe(400);
+    expect((await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ question: 3 }] }, auth))).status).toBe(400);
+    const pending = await s.request("/api/ext/fill/pending", s.json({ sessionId: "s1" }, auth));
+    expect(pending.status).toBe(409);
+    expect(await pending.json()).toMatchObject({ problem: "no-session" });
+    const save = await s.request("/api/ext/fill/save-answers", s.json({ sessionId: "s1", picks: [{ pendingId: "1" }, { question: "Do you hold a security clearance?", answer: "No", kind: "yes-no" }] }, auth));
+    expect(save.status).toBe(409);
+  });
 });
 
 describe("field reports", () => {
@@ -793,6 +809,23 @@ describe("the Applications routes", () => {
 
     expect((await s.request("/api/applications/no-such-id")).status).toBe(404);
     expect((await s.request("/api/applications/no-such-id/cv")).status).toBe(404);
+  });
+
+  it("lists the CV versions sent and picks one for an Application added by hand; no Package as sent without one", async () => {
+    const s = service();
+    const add = async (company: string) => ((await (await s.request("/api/applications", s.json({ job: { company, title: "UX Engineer" }, appliedOn: "2026-10-09", status: "applied" }))).json()) as { application: { id: string } }).application.id;
+    const first = await add("Fennel Studio");
+    const second = await add("Pixelmoor");
+    const pdf = new TextEncoder().encode("%PDF-1.7\n%%EOF\n");
+    await s.request(`/api/applications/${encodeURIComponent(first)}/cv?name=cv.pdf&label=Design%20v2`, { method: "PUT", headers: { "content-type": "application/pdf" }, body: pdf });
+
+    expect(await (await s.request("/api/applications/cv-versions")).json()).toEqual(["Design v2"]);
+    const picked = await s.request(`/api/applications/${encodeURIComponent(second)}/cv-version`, s.json({ label: "Design v2" }));
+    expect(picked.status).toBe(200);
+    expect(await (await s.request(`/api/applications/${encodeURIComponent(second)}`)).json()).toMatchObject({ cvVersion: "Design v2", package: null });
+    expect((await s.request(`/api/applications/${encodeURIComponent(second)}/cv-version`, s.json({ label: "Nope" }))).status).toBe(422);
+    expect((await s.request(`/api/applications/${encodeURIComponent(second)}/package/cv`)).status).toBe(404);
+    expect((await s.request("/api/applications/emails/%3Cnone%40example.com%3E/package", s.json({ answer: "mark-applied" }))).status).toBe(404);
   });
 
   it("carries Track's markers on the Feed and the Job: All open keeps an applied Job with its Application", async () => {

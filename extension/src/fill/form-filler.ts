@@ -241,6 +241,8 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
   const attached = new Set<string>();
   /** Field id → the value apply-kit put in. */
   const filled = new Map<string, string>();
+  /** Fields Kris answered from the panel (fillOne): reported as his ("You") while they hold his value. */
+  const yours = new Set<string>();
   const settle = () => (settleMs > 0 ? sleep(settleMs) : Promise.resolve());
 
   const find = (doc: Document, id: string) => {
@@ -399,6 +401,14 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
         if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
         const { item, field } = found;
         if (a.kind === "needs-you") {
+          const current = field.value;
+          // Answered: from the panel (Kris's), or typed on the page (kept, so apply-kit can offer it to the bank).
+          if (current.trim() !== "" && yours.has(a.fieldId) && filled.get(a.fieldId) === current) { report(a.fieldId, "filled", "you"); continue; }
+          if (current.trim() !== "") {
+            mark(markTarget(item, shape), "kept", a.fieldId);
+            report(a.fieldId, "kept");
+            continue;
+          }
           mark(markTarget(item, shape), "needs-you", a.fieldId);
           report(a.fieldId, "needs-you");
           continue;
@@ -409,7 +419,7 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
         if (current.trim() !== "") {
           // Filled by apply-kit on an earlier click and untouched since: still apply-kit's. Anything else
           // (Kris's value, or what the portal read from the CV) is kept.
-          if (filled.get(a.fieldId) === current) { report(a.fieldId, "filled", a.source); continue; }
+          if (filled.get(a.fieldId) === current) { report(a.fieldId, "filled", yours.has(a.fieldId) ? "you" : a.source); continue; }
           mark(markTarget(item, shape), "kept", a.fieldId);
           report(a.fieldId, "kept");
           continue;
@@ -440,6 +450,13 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
       return putNow(doc, fieldId, value).outcome;
     },
 
+    fillOne(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      const outcome = putNow(doc, fieldId, value).outcome;
+      if (outcome === "filled") yours.add(fieldId);
+      return outcome;
+    },
+
     undo(doc) {
       let restored = 0;
       for (const id of attached) {
@@ -450,6 +467,7 @@ export function createFormFiller(shape: FormShape, { settleMs = 1500, optionWait
       for (const restore of previous.values()) if (restore()) restored++;
       previous.clear();
       filled.clear();
+      yours.clear();
       removeMarks(doc);
       return restored;
     },
