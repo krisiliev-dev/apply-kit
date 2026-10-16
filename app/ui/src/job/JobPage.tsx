@@ -6,7 +6,7 @@
 // starts the Job's package, or shows "Continue package · step N of 5" or "Package ready".
 import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, JobMarker, JobRequirement, KeyFact, NeedsYouItem, FactSource, PrepareStatus, RequirementEvidence } from "@apply-kit/core";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { boostJob, confirmFact, fetchJob, fetchPrepareStatus, fetchSources, readJob, reopenJobs, setPackageLanguage, startPackage, undoAdjustment, undoApplicationEvent, undoDecision } from "../api.ts";
+import { boostJob, confirmFact, fetchJob, fetchPrepareStatus, fetchSources, markPackageSubmitted, readJob, reopenJobs, setPackageLanguage, startPackage, undoAdjustment, undoApplicationEvent, undoDecision, undoMarkSubmitted } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { Chevron, Icon } from "../icons.tsx";
 import { AskChip, StatusChip, statusLabel as requirementLabel } from "../requirements.tsx";
@@ -648,6 +648,40 @@ function Decide({ job, track, onReopen, onTracked, toaster }: {
       },
     });
   };
+  // "Mark as submitted" for a package sent outside the extension: the same fill-engine call the panel makes.
+  const [marking, setMarking] = useState(false);
+  const [markRefused, setMarkRefused] = useState<string | null>(null);
+  const markRef = useRef<HTMLButtonElement>(null);
+  async function markSubmitted(packageId: string) {
+    setMarking(true);
+    setMarkRefused(null);
+    try {
+      const r = await markPackageSubmitted(packageId);
+      if (!r.marked) {
+        setMarkRefused(r.reason);
+        return;
+      }
+      focusNext.current = "open";
+      await onTracked();
+      const a = r.application;
+      toaster.show({
+        message: r.alreadyMarked
+          ? `Already marked as submitted on ${shortDay(a.appliedOn)}.`
+          : `Marked as submitted · ${statusLabel[a.status]} ${shortDay(a.appliedOn)}. Track takes it from here.`,
+        returnFocus: () => (openRef.current ?? markRef.current)?.focus(),
+        undo: r.alreadyMarked ? undefined : () => {
+          undoMarkSubmitted(a.id)
+            .then(() => { focusNext.current = "applied"; return onTracked(); })
+            .then(() => toaster.announce("Undone: the Application is removed and the package is waiting to be submitted again."))
+            .catch((err: unknown) => toaster.show({ message: `Couldn't undo: ${message(err)}` }));
+        },
+      });
+    } catch (err) {
+      setMarkRefused(message(err));
+    } finally {
+      setMarking(false);
+    }
+  }
   const chip = status?.package ?? null;
   // No master profile: the button still opens the package, which shows setup and the quick start.
   const opensEmpty = status?.canStart === false && status.problem === "no-profile";
@@ -677,6 +711,16 @@ function Decide({ job, track, onReopen, onTracked, toaster }: {
         {error && <p className="why-off" role="alert">Couldn't reach the service: {error}</p>}
         {job.closed && <button className="btn ghost" type="button" onClick={onReopen}>It's still open: reopen</button>}
         <a className="btn" href={job.url} target="_blank" rel="noopener noreferrer">Open the posting<span className="sr-only"> (new tab)</span><span aria-hidden="true"> ↗</span></a>
+        {!open && chip?.kind === "ready" && (
+          <>
+            <button className="btn sm" type="button" ref={markRef} style={{ justifySelf: "start" }} disabled={marking} aria-describedby={markRefused ? "mark-why" : "mark-help"} onClick={() => void markSubmitted(chip.packageId)}>
+              {marking ? "Marking…" : "Mark as submitted"}
+            </button>
+            {markRefused
+              ? <p className="why-off" id="mark-why" role="alert">{markRefused}</p>
+              : <p className="meta" id="mark-help">Sent this package outside the extension? Marking creates the Application with the package linked.</p>}
+          </>
+        )}
         {!open && (
           <>
             <button className="btn ghost sm" type="button" ref={appliedRef} style={{ justifySelf: "start" }} onClick={() => setAdding(true)}>I applied without apply-kit…</button>
