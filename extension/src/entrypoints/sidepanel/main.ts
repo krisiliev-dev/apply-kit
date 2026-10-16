@@ -608,7 +608,7 @@ function filled(f: FilledPage, announceIt = true) {
     }
     const outcomes = f.outcomes.map((o) => (o.fieldId === item.fieldId ? { ...o, outcome: "filled" as const, source: "you" as const } : o));
     filled({ ...f, outcomes }, false);
-    announce(`Filled ${item.question}.${saved}`);
+    announce(`Filled ${item.question}${/[.?!]$/.test(item.question) ? "" : "."}${saved}`);
     const next = focusAfterFill(outcomes);
     (next ? document.getElementById(`need-${next}`) : document.getElementById("fill-btn"))?.focus();
   };

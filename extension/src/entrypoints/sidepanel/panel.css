@@ -97,3 +97,4 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .need fieldset { gap: var(--s-2) }
 .need legend.q { margin-bottom: var(--s-2) }
 .cnt { font-size: var(--fs-caption); color: var(--ink-3); justify-self: end; font-variant-numeric: tabular-nums }
+.stack > .btn { justify-self: start }
