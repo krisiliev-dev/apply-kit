@@ -330,16 +330,57 @@ describe("marking as submitted", () => {
     expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "submitted" } });
   });
 
-  it("creates nothing when the Job already has an open Application added by hand, and names it", async () => {
+  it("attaches the package to the Job's open Application added by hand instead of adding a second", async () => {
     const t = await submitting();
-    const byHand = await t.tracker.addByHand({ job: { jobId: t.jobId }, appliedOn: "2026-10-12", status: "applied", how: "i-applied" });
+    const byHand = await t.tracker.addByHand({ job: { jobId: t.jobId }, appliedOn: "2026-10-11", status: "screening", how: "i-applied" });
     if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+    await t.clock.advance(5 * 60_000);
 
     const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
 
-    expect(r).toMatchObject({ marked: false, reason: expect.stringMatching(/already have an open Application/), application: { id: byHand.application.id } });
+    expect(r).toMatchObject({
+      marked: true, alreadyMarked: false,
+      application: { id: byHand.application.id, status: "screening", submission: { packageId: t.pkg.id, portal: "greenhouse", portalUrl: confirmation, via: "extension" } },
+    });
     expect((await t.tracker.list()).total).toBe(1);
-    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "approved" } });
+    const app = (await t.tracker.get(byHand.application.id))!;
+    // Still the Application added by hand, at the Status it had, with the date applied it was given.
+    expect(app).toMatchObject({ createdHow: "i-applied", status: "screening", appliedOn: "2026-10-11", submission: { packageId: t.pkg.id } });
+    expect(app.timeline[0]).toMatchObject({ kind: "submission", cause: "you", text: "Package attached: marked as submitted", detail: "Greenhouse, marked in the extension" });
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "submitted" } });
+
+    // Marked again, it is the same Application.
+    const again = await t.fill.markSubmitted({ packageId: t.pkg.id }, { portalUrl: null, via: "app" });
+    expect(again).toMatchObject({ marked: true, alreadyMarked: true, application: { id: byHand.application.id } });
+  });
+
+  it("undo of an attached package keeps the Application added by hand and takes the package off it", async () => {
+    const t = await submitting();
+    const byHand = await t.tracker.addByHand({ job: { jobId: t.jobId }, appliedOn: "2026-10-11", status: "applied", how: "i-applied" });
+    if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+    if (!r.marked) throw new Error(r.reason);
+
+    expect(await t.fill.undoMarkSubmitted(r.application.id)).toEqual({ packageId: t.pkg.id });
+
+    expect(await t.tracker.get(byHand.application.id)).toMatchObject({ status: "applied", createdHow: "i-applied", submission: null });
+    expect((await t.tracker.list()).total).toBe(1);
+    expect(t.preparation.packageForApply({ packageId: t.pkg.id })).toMatchObject({ package: { state: "approved", submitted: null } });
+  });
+
+  it("names a new Application's first Event \"Submitted → Applied\", with where and how", async () => {
+    const t = await submitting();
+
+    const r = await t.fill.markSubmitted({ sessionId: t.sessionId }, { portalUrl: confirmation, via: "extension" });
+    const other = await submitting();
+    const fromApp = await other.fill.markSubmitted({ packageId: other.pkg.id }, { portalUrl: null, via: "app" });
+
+    if (!r.marked) throw new Error(r.reason);
+    expect((await t.tracker.get(r.application.id))!.timeline).toEqual([
+      expect.objectContaining({ kind: "created", cause: "you", to: "applied", text: "Submitted → Applied", detail: "Greenhouse, marked in the extension" }),
+    ]);
+    if (!fromApp.marked) throw new Error(fromApp.reason);
+    expect((await other.tracker.get(fromApp.application.id))!.timeline[0]).toMatchObject({ text: "Submitted → Applied", detail: "Marked on the Job page" });
   });
 });
 

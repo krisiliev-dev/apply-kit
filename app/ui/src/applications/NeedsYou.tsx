@@ -6,8 +6,9 @@
 // ("1 of 6", Next draft, focus to the new draft's heading); nothing is ever sent in bulk. Kind lines
 // are sentence case in the source and set in capitals by CSS (TA-12). Thank-you notes (due within 24
 // hours of an interview's start) and interviews in the next 7 days, each with its prep sheet and
-// .ics, sit in the same queue (#33).
-import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, OfferToAnswer, UpcomingInterview } from "@apply-kit/core";
+// .ics, sit in the same queue (#33). A confirmation email for an approved package never marked
+// submitted asks "Mark Applied, dated …?" (#35): nothing is added until the user says so.
+import type { FollowUpDraft, NeedsYou, NeedsYouEntry, NeedsYouGroup, OfferToAnswer, PackageConfirmation, UpcomingInterview } from "@apply-kit/core";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { FollowUpWriter, type FollowUpAction } from "./FollowUpWriter.tsx";
 import { interviewIcsUrl } from "../api.ts";
@@ -59,6 +60,39 @@ function OfferItem({ item }: { item: OfferToAnswer }) {
       </div>
       <div className="acts"><a className="btn primary sm" href={page}>Open offer<span className="sr-only">: {a.company}</span></a></div>
     </li>
+  );
+}
+
+export type PackageAnswer = (item: PackageConfirmation, answer: "mark-applied" | "not-this") => void;
+
+/** "Mark Applied, dated …?": a confirmation about an approved package with no Application. Never added until answered. */
+export function PackageConfirmationItems({ items, onAnswer }: { items: PackageConfirmation[]; onAnswer: PackageAnswer }) {
+  return (
+    <>
+      {items.map((item) => {
+        const { email: e, package: p } = item;
+        return (
+          <li className="needs" key={e.id} id={`ny-pkg-${p.id}`}>
+            <div className="stack" style={{ gap: "var(--s-1)" }}>
+              <span className="kind">Confirmation · not marked submitted</span>
+              <span className="what"><span lang={langOf(p.job.title)}>{p.job.title}</span> · {p.job.company}</span>
+              <span className="why">
+                "<span lang={langOf(e.subject)}>{e.subject}</span>" from {e.from.replace(/\s*<[^>]*>$/, "")}, {eventTime(e.receivedAt)}.
+                {" "}Your package for this job was approved but never marked submitted. Mark it Applied, dated {weekDay(item.appliedOn)}? Nothing is added until you do.
+              </span>
+            </div>
+            <div className="acts">
+              <button className="btn primary sm" type="button" onClick={() => onAnswer(item, "mark-applied")}>
+                Mark Applied · {weekDay(item.appliedOn)}<span className="sr-only">: {p.job.company}</span>
+              </button>
+              <button className="btn sm" type="button" onClick={() => onAnswer(item, "not-this")}>
+                Not this package<span className="sr-only">: {p.job.company}</span>
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </>
   );
 }
 
@@ -138,8 +172,10 @@ function GroupItem({ group, entries, snoozeDays, onReview, onSnoozeAll }: {
   );
 }
 
-export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAll, emails }: {
+export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAll, onPackage, emails }: {
   needs: NeedsYou;
+  /** Answers "Mark Applied, dated …?". */
+  onPackage: PackageAnswer;
   onWrite: (e: NeedsYouEntry, opener: HTMLElement) => void;
   onSnooze: (e: NeedsYouEntry) => void;
   /** Steps through a group's drafts one by one, from the first. */
@@ -153,11 +189,12 @@ export function NeedsYouSection({ needs, onWrite, onSnooze, onReview, onSnoozeAl
     <section className="stack" style={{ gap: "var(--s-4)" }} aria-labelledby="ny-h">
       <div className="sec-head">
         <h2 id="ny-h" tabIndex={-1}>Needs you · {needs.count}</h2>
-        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch + needs.interviews.length + needs.offers.length > 1 && <span className="meta">Most urgent first</span>}
+        {needs.groups.length > 0 ? <span className="meta">Same kinds grouped</span> : needs.items.length + needs.emailsToMatch + needs.packageConfirmations.length + needs.interviews.length + needs.offers.length > 1 && <span className="meta">Most urgent first</span>}
       </div>
-      {needs.items.length || needs.interviews.length || needs.offers.length || (emails && needs.emailsToMatch) ? (
+      {needs.items.length || needs.interviews.length || needs.offers.length || needs.packageConfirmations.length || (emails && needs.emailsToMatch) ? (
         <ul className="needs-queue">
           {emails}
+          <PackageConfirmationItems items={needs.packageConfirmations} onAnswer={onPackage} />
           {needs.offers.map((o) => <OfferItem key={o.application.id} item={o} />)}
           {needs.items.map((e, i) => {
             const group = needs.groups.find((g) => g.kind === e.followUp.kind);
