@@ -23,9 +23,14 @@ export interface FixtureOptions {
   uploads?: "change" | "drop-only" | "reject";
   /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields. */
   cvParser?: { delayMs: number; values: Record<string, string> };
+  /**
+   * A field that clears itself `afterMs` after a value is typed into it (a portal reformatting the
+   * number as it's typed), the first `times` times (default: every time).
+   */
+  clears?: { id: string; afterMs: number; times?: number };
 }
 
-export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser }: FixtureOptions = {}): FixturePage {
+export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, clears }: FixtureOptions = {}): FixturePage {
   const window = new Window({ url, settings: { disableJavaScriptEvaluation: true, navigation: { disableMainFrameNavigation: true } } });
   const document = window.document as unknown as Document;
   document.body.innerHTML = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
@@ -35,6 +40,8 @@ export function openFixture(name: string, url: string, { controlled = false, upl
   }
   for (const f of Array.from(document.querySelectorAll("form"))) f.addEventListener("submit", (e) => { e.preventDefault(); presses.push("submitted the form"); });
 
+  /** The page's own writes to a controlled input's state (React setting it, not typing). */
+  const setState = new WeakMap<Element, (v: string) => void>();
   if (controlled) {
     // React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value.
     for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=file]), textarea"))) {
@@ -42,7 +49,18 @@ export function openFixture(name: string, url: string, { controlled = false, upl
       let state = native.get!.call(el) as string;
       Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
       el.addEventListener("input", () => { state = native.get!.call(el) as string; });
+      setState.set(el, (v) => { native.set!.call(el, v); state = v; });
     }
+  }
+  if (clears) {
+    const el = document.getElementById(clears.id) as HTMLInputElement;
+    const native = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!;
+    let left = clears.times ?? Infinity;
+    el.addEventListener("input", () => {
+      if (left <= 0 || native.get!.call(el) === "") return;
+      left--;
+      setTimeout(() => (setState.get(el) ?? ((v: string) => native.set!.call(el, v)))(""), clears.afterMs);
+    });
   }
   for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[type=file]"))) {
     const box = input.closest(".field, .file-upload")!;

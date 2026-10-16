@@ -94,3 +94,11 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .filechip { display: flex; gap: var(--s-3); align-items: center; padding: var(--s-3) var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); font-size: var(--fs-small); min-width: 0 }
 .filechip .ico { width: var(--s-5); height: var(--s-5); color: var(--ink-3) }
 .filechip > span:last-child { min-width: 0; overflow-wrap: anywhere }
+
+/* A value that didn't stick (hi-fi "Error · field didn't stick"): the field named, then its value to copy in the field's format. */
+.need .stack-tight { display: grid; gap: var(--s-3) }
+.copyrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--s-1) var(--s-3); align-items: center }
+.copyrow .kv { min-width: 0 }
+.copyrow .k { font-size: var(--fs-caption); color: var(--ink-3); overflow-wrap: anywhere }
+.copyrow .v { font-size: var(--fs-small); overflow-wrap: anywhere; min-width: 0 }
+.need .row { flex-wrap: wrap }

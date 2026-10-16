@@ -83,7 +83,7 @@ describe("filling a Greenhouse page", () => {
     page.field("preferred_name").value = "Mimi";
     expect(page.field("preferred_name").value).toBe("");
 
-    const outcomes = await createGreenhouseFiller().fill(page.document, [
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [
       fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com"), fill("phone", "+359 88 000 0175"),
       { fieldId: "question_31002", kind: "needs-you", reason: "Your profile has no GitHub link", basis: null },
       { fieldId: "gdpr_consent", kind: "skip", reason: "Consent boxes are yours to tick" },
@@ -103,7 +103,7 @@ describe("filling a Greenhouse page", () => {
 
   it("draws marks as an outline and badge that can't be clicked and aren't read out", async () => {
     const page = classic();
-    await createGreenhouseFiller().fill(page.document, [fill("first_name", "Mira")]);
+    await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [fill("first_name", "Mira")]);
 
     const m = page.document.querySelector<HTMLElement>("[data-apply-kit-mark]")!;
     expect(m.getAttribute("aria-hidden")).toBe("true");
@@ -114,7 +114,7 @@ describe("filling a Greenhouse page", () => {
 
   it("keeps a field that already has a value, and replaces it only when asked", async () => {
     const page = classic();
-    const filler = createGreenhouseFiller();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
 
     const [phone] = await filler.fill(page.document, [fill("phone", "+359 88 000 0175")]);
 
@@ -129,7 +129,7 @@ describe("filling a Greenhouse page", () => {
 
   it("filling twice fills only what's still empty, and keeps what Kris changed", async () => {
     const page = classic();
-    const filler = createGreenhouseFiller();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
     await filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova")]);
     page.field("last_name").value = "Petrova-Ivanova";
 
@@ -143,14 +143,14 @@ describe("filling a Greenhouse page", () => {
   it("picks a dropdown's option by its text", async () => {
     const page = classic();
     const id = "job_application_answers_attributes_3_answer_selected_options_attributes_3_question_option_id";
-    const [o] = await createGreenhouseFiller().fill(page.document, [{ fieldId: id, kind: "fill", value: "Company website", source: "answer-bank", basis: null }]);
+    const [o] = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [{ fieldId: id, kind: "fill", value: "Company website", source: "answer-bank", basis: null }]);
     expect(o).toEqual({ fieldId: id, outcome: "filled", source: "answer-bank" });
     expect((page.document.getElementById(id) as HTMLSelectElement).value).toBe("102");
   });
 
   it("undo restores every value it changed and removes its marks", async () => {
     const page = newBoard();
-    const filler = createGreenhouseFiller();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
     await filler.fill(page.document, [fill("first_name", "Mira"), fill("email", "mira.petrova@example.com"), { fieldId: "question_31002", kind: "needs-you", reason: "", basis: null }]);
 
     expect(filler.undo(page.document)).toBe(2);
@@ -208,7 +208,7 @@ describe("attaching the package's files", () => {
     const filling = createGreenhouseFiller({ settleMs: 1500 }).fill(page.document, [
       fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("phone", "+359 88 000 0175"), attach("resume", "cv"),
     ], [cv]);
-    await vi.advanceTimersByTimeAsync(1500);
+    await vi.advanceTimersByTimeAsync(3000);
     const outcomes = await filling;
     await vi.advanceTimersByTimeAsync(5000);
 
@@ -245,10 +245,67 @@ describe("attaching the package's files", () => {
   });
 });
 
+describe("a value that doesn't stick", () => {
+  // The phone number as the field wants it: its country code has a dropdown of its own.
+  const answers = [fill("phone_code", "+359"), fill("phone", "88 000 0175")];
+  const phonePage = (times?: number) =>
+    openFixture("greenhouse-phone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { controlled: true, clears: { id: "phone", afterMs: 200, times } });
+  const typed = (el: HTMLElement) => { let n = 0; el.addEventListener("change", () => n++); return () => n; };
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("reads every filled value back once after the settle wait: one the page cleared didn't stick", async () => {
+    vi.useFakeTimers();
+    const page = phonePage();
+
+    const filling = createGreenhouseFiller({ settleMs: 1000 }).fill(page.document, answers);
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await filling).toEqual([{ fieldId: "phone_code", outcome: "filled", source: "profile" }, { fieldId: "phone", outcome: "didnt-stick", source: null }]);
+    expect(page.field("phone").value).toBe("");
+    expect(marks(page.document)).toEqual(["phone_code:filled", "phone:didnt-stick"]);
+  });
+
+  it("Try once more puts the value in once and reports again: filled when it stays", async () => {
+    vi.useFakeTimers();
+    const page = phonePage(1);
+    const filler = createGreenhouseFiller({ settleMs: 1000 });
+    const filling = filler.fill(page.document, answers);
+    await vi.advanceTimersByTimeAsync(1000);
+    await filling;
+
+    const retry = filler.retry(page.document, "phone", "88 000 0175");
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(await retry).toBe("filled");
+    expect(page.field("phone").value).toBe("88 000 0175");
+    expect(marks(page.document)).toEqual(["phone_code:filled", "phone:filled"]);
+  });
+
+  it("Try once more never loops: one attempt, and didn't stick again when the page clears it again", async () => {
+    vi.useFakeTimers();
+    const page = phonePage();
+    const filler = createGreenhouseFiller({ settleMs: 1000 });
+    const filling = filler.fill(page.document, answers);
+    await vi.advanceTimersByTimeAsync(1000);
+    await filling;
+    const attempts = typed(page.field("phone"));
+
+    const retry = filler.retry(page.document, "phone", "88 000 0175");
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await retry).toBe("didnt-stick");
+    expect(attempts()).toBe(1);
+    expect(page.field("phone").value).toBe("");
+    expect(marks(page.document)).toEqual(["phone_code:filled", "phone:didnt-stick"]);
+    expect(page.presses).toEqual([]);
+  });
+});
+
 describe("what filling never does", () => {
   it("never presses Submit or ticks a consent box, even when told to fill one", async () => {
     for (const page of [classic(), newBoard()]) {
-      const filler = createGreenhouseFiller();
+      const filler = createGreenhouseFiller({ settleMs: 0 });
       const reading = filler.read(page.document);
       const consent = reading.fields.find((f) => f.consent)!;
 
@@ -318,7 +375,7 @@ describe("custom and demographic questions", () => {
 
   it("fills the questions it has answers for, skips the voluntary ones, marks what needs Kris, and leaves consent alone", async () => {
     const page = questions();
-    const filler = createGreenhouseFiller();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
     const bankFill = (fieldId: string, value: string): FieldAnswer => ({ fieldId, kind: "fill", value, source: "answer-bank", basis: null });
 
     const outcomes = await filler.fill(page.document, [

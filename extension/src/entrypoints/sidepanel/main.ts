@@ -15,9 +15,9 @@ import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
 import "./panel.css";
 import { contextCard, fillStateFor, openingView, type PanelView, type PortalsAccess } from "../../context.ts";
-import { differentJobLine, fieldRows, fileReport, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, submitPrompt, type FieldRow } from "../../fill-report.ts";
-import type { FileToAttach } from "../../fill/greenhouse.ts";
+import { differentJobLine, fieldRows, fileReport, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, stoppedMidFill, stuckFields, submitPrompt, type FieldRow, type StuckField } from "../../fill-report.ts";
 import { runFiller } from "../../fill/in-page.ts";
+import { runFill } from "../../fill/run.ts";
 import { grabPage } from "../../grab.ts";
 import { portalOrigins, portals, recognisePortal } from "../../portal.ts";
 import { actionLabel, captureButtonLabel, itemStatus, previewHeading, resultSummary } from "../../report.ts";
@@ -107,12 +107,17 @@ async function start() {
   if (retryTimer) clearTimeout(retryTimer);
   busy = false;
   connection = await client.connect();
-  if (connection.state === "not-running") return notRunning(connection);
+  if (connection.state === "not-running") return notRunning(connection, midFill?.line, midFill?.tabId);
+  midFill = null;
   if (connection.state === "unpaired") return unpaired(connection);
   return ready();
 }
 
-function notRunning(c: Connection, during?: string) {
+/** Set when the app stopped answering mid-fill, so the retry keeps saying so (and keeps Undo) until the app is back. */
+let midFill: { tabId: number; line: string } | null = null;
+
+/** `undoTab`: the app stopped mid-fill on this tab; what's filled stays filled and Undo this page still works. */
+function notRunning(c: Connection, during?: string, undoTab?: number) {
   connection = c;
   const time = new Date().toLocaleTimeString("en-GB");
   show({
@@ -125,6 +130,7 @@ function notRunning(c: Connection, during?: string) {
       h("ol", { class: "steps" }, h("li", {}, h("div", {}, "Start apply-kit, or check it's still running.")), h("li", {}, h("div", {}, "Press Retry. Your place on this page is kept."))),
       h("p", { class: "meta", role: "status" }, `Retrying every ${retryMs / 1000} s · last try ${time} · ${c.serviceUrl}`),
       h("p", { class: "meta" }, during ?? "This page hasn't been touched. Packages aren't kept in the browser, so there's nothing to fill or capture into until the app is back."),
+      undoTab != null && button("Undo this page", () => void undoPage(undoTab), "btn ghost sm undo"),
     ],
     foot: [button("Retry", () => void start(), "btn primary")],
   });
@@ -452,33 +458,28 @@ async function fillThisPage(packageId?: string) {
     showMatch({ tab, page, card, match: s, keys, access });
     announce(what);
   };
-  const reading = await inPage<PageReading>(tabId, "read");
-  if (!reading) return stopped("Chrome didn't let apply-kit read this page. Click the apply-kit icon in the toolbar on it, then Fill this page.");
-  if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  if (submitPrompt({ known: true, pageKind: reading.pageKind }) === "ask") {
+  const run = await runFill({
+    client: client.fill, sessionId: session.id, stopRequested: () => stopRequested,
+    page: {
+      read: () => inPage<PageReading>(tabId, "read"),
+      fill: (answers, files) => inPage<FieldOutcome[]>(tabId, "fill", [answers, files]),
+    },
+  });
+  const portal = portals.find((p) => p.name === page.portal)!.label;
+  if (run.state === "stopped") return stopped(run.message);
+  if (run.state === "no-answer") return fillProblem(run.problem, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
+  if (run.state === "confirmation") {
     busy = false;
-    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal: portals.find((p) => p.name === page.portal)!.label });
+    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal });
   }
-  const answers = await client.fill.answer(session.id, reading);
-  if (!answers.ok) return fillProblem(answers, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
-  if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  // The package's files for this page's file fields only, held here just long enough to attach them.
-  // One the app can't give is reported as not attached, with the file one click away.
-  const files: FileToAttach[] = [];
-  const paths = new Map<PackageFileKind, string | null>();
-  for (const a of answers.value) {
-    if (a.kind !== "file") continue;
-    const file = await client.fill.file(session.id, a.which);
-    if (!file.ok) continue;
-    files.push({ which: file.value.which, fileName: file.value.fileName, type: file.value.type, base64: file.value.base64 });
-    paths.set(a.which, file.value.path);
+  if (run.state === "stopped-mid-fill") {
+    // What's filled stays filled; Undo this page still works (the previous values live in the page).
+    busy = false;
+    if (run.problem.state === "unpaired") return unpaired(connection!, "apply-kit no longer knows this extension. Pair it again.");
+    midFill = { tabId, line: stoppedMidFill(run.outcomes) };
+    return notRunning(connection!, midFill.line, tabId);
   }
-  if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  const outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value, files]);
-  files.length = 0;
-  if (!outcomes) return stopped("Chrome didn't let apply-kit fill this page. Nothing was filled.");
-  const recorded = await client.fill.record(session.id, reading, outcomes);
-  filled({ tabId, ctx, reading, answers: answers.value, outcomes, at: recorded.ok ? recorded.value.filledAt : new Date().toISOString(), portal: portals.find((p) => p.name === page.portal)!.label, pkg: s.package, sessionId: session.id, paths });
+  filled({ tabId, ctx, reading: run.reading, answers: run.answers, outcomes: run.outcomes, at: run.filledAt, portal, pkg: s.package, sessionId: session.id, paths: run.paths, retried: new Set() });
 }
 
 const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: icons.x, closed: icons.dash } as const;
@@ -487,6 +488,8 @@ const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: 
 function filled(f: {
   tabId: number; ctx: HTMLElement; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; at: string; portal: string;
   pkg: PackageInBrief; sessionId: string; paths: Map<PackageFileKind, string | null>;
+  /** Fields Try once more was used on: it's offered once per field, never in a loop. */
+  retried: ReadonlySet<string>;
 }, announceIt = true) {
   const rows = fieldRows(f.reading, f.answers, f.outcomes);
   const counts = countOutcomes(f.outcomes);
@@ -525,6 +528,28 @@ function filled(f: {
     r.value.startsWith("Suggested: ") && h("p", { class: "suggest" }, r.value),
     h("div", { class: "row" }, button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
   )));
+  // A value that didn't stick: the field named, the value ready to paste in the field's format, Try once more (once).
+  const copy = async (value: string, what: string) => {
+    const ok = await navigator.clipboard.writeText(value).then(() => true, () => false);
+    announce(ok ? `${what} copied.` : `Couldn't copy ${what}.`);
+  };
+  const tryOnceMore = async (x: StuckField) => {
+    const outcome = await inPage<FieldOutcome["outcome"]>(f.tabId, "retry", [x.fieldId, x.value]);
+    const source = f.answers.find((a) => a.fieldId === x.fieldId);
+    const outcomes = f.outcomes.map((o) => (o.fieldId === x.fieldId ? { ...o, outcome: outcome ?? "didnt-stick", source: outcome === "filled" && source?.kind === "fill" ? source.source : null } : o));
+    announce(outcome === "filled" ? `${x.label} is filled now.` : outcome === null ? "Chrome didn't let apply-kit fill this page." : `${x.label} didn't stick again. Paste it in yourself.`);
+    filled({ ...f, outcomes, retried: new Set([...f.retried, x.fieldId]) }, false);
+    document.getElementById(outcome === "filled" ? "fill-btn" : `stuck-${x.fieldId}`)?.focus();
+  };
+  const stuck = stuckFields(f.reading, f.answers, f.outcomes, f.retried, f.portal).map((x) => h("div", { class: "need", id: `stuck-${x.fieldId}`, tabindex: "-1" }, h("div", {},
+    h("div", { class: "stack-tight", role: "alert" }, h("p", { class: "q" }, x.heading), h("p", { class: "basis" }, x.text)),
+    h("div", { class: "copyrow" },
+      h("div", { class: "kv" }, h("div", { class: "k" }, x.copyLabel), h("div", { class: "v" }, x.value)),
+      button("Copy", () => void copy(x.value, x.label), "btn sm", { "aria-label": `Copy ${x.label}` })),
+    h("div", { class: "row" },
+      x.tryOnceMore && button("Try once more", () => void tryOnceMore(x), "btn ghost sm", { "aria-label": `Try ${x.label} once more` }),
+      button("Show on page", () => void showOnPage({ fieldId: x.fieldId, label: x.label } as FieldRow), "btn ghost sm", { "aria-label": `Show ${x.label} on page` })),
+  )));
   const list = h("ul", { class: "flist" }, ...rows.map((r) => h("li", {},
     button("", () => void showOnPage(r), "frow"),
     r.offer && r.outcome === "kept" && button(`Replace with ${r.offer}`, () => void replace(r), "btn ghost sm replace"),
@@ -558,6 +583,7 @@ function filled(f: {
         h("p", { class: "meta" }, f.reading.stepCount ? `Page ${f.reading.stepCount.current} of ${f.reading.stepCount.total}, as ${f.portal} shows it. Filled ${time}.` : `Filled ${time}.`),
       ),
       ...failedBlocks,
+      ...stuck,
       ...attachedChips,
       files.letter && h("p", { class: "meta" }, files.letter),
       ...needs,
@@ -576,10 +602,11 @@ function filled(f: {
   if (!announceIt) return;
   announce(fillAnnouncement(counts));
   const first = focusAfterFill(f.outcomes);
-  (first ? document.getElementById(`need-${first}`) : document.getElementById("fill-btn"))?.focus();
+  (first ? document.getElementById(`need-${first}`) : document.querySelector<HTMLElement>("[id^=stuck-]") ?? document.getElementById("fill-btn"))?.focus();
 }
 
 async function undoPage(tabId: number) {
+  midFill = null;
   const restored = await inPage<number>(tabId, "undo");
   announce(restored === null ? "Chrome didn't let apply-kit undo on this page." : `Undone: ${restored === 1 ? "1 field is" : `${restored} fields are`} back to how ${restored === 1 ? "it was" : "they were"}, and the marks are gone.`);
   busy = false;

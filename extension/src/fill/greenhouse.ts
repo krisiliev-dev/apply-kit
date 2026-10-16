@@ -11,9 +11,16 @@ export interface Filler {
   /**
    * Attaches the package's files first (`files`: the bytes for the page's file answers), lets the page
    * settle (the portal may read the CV and fill fields itself), then fills the answers' values into
-   * fields still empty; keeps non-empty ones; marks each field it reports. Outcomes in the answers' order.
+   * fields still empty; keeps non-empty ones; after one more settle reads every value it filled back
+   * once (a value the page cleared or changed didn't stick); marks each field it reports. Outcomes in
+   * the answers' order.
    */
   fill(doc: Document, answers: FieldAnswer[], files?: FileToAttach[]): Promise<FieldOutcome[]>;
+  /**
+   * "Try once more" on a field whose value didn't stick: puts the value in once, lets the page settle,
+   * reads it back once. Never loops; the panel offers it once per field.
+   */
+  retry(doc: Document, fieldId: string, value: string): Promise<FieldOutcome["outcome"]>;
   /** "Replace" on a kept field: puts apply-kit's value in (Undo restores the portal's). */
   replace(doc: Document, fieldId: string, value: string): FieldOutcome["outcome"];
   /** Restores every value apply-kit changed on this page and removes its marks. Returns how many fields were restored. */
@@ -185,6 +192,16 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
     return "filled";
   }
 
+  /** The single read-back after the settle wait: the value apply-kit put in is still there, or it didn't stick. */
+  function verify(doc: Document, id: string): FieldOutcome["outcome"] {
+    const found = find(doc, id);
+    const put = filled.get(id);
+    if (found && put !== undefined && valueOf(found.el).trim() === put.trim()) return "filled";
+    filled.delete(id);
+    if (found) mark(found.el, "didnt-stick", id);
+    return "didnt-stick";
+  }
+
   return {
     read(doc) {
       const fields = controls(doc).map(readField);
@@ -238,6 +255,7 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
         }
       }
 
+      const toVerify: string[] = [];
       for (const a of answers) {
         if (a.kind === "file") continue;
         const found = find(doc, a.fieldId);
@@ -259,8 +277,21 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
         }
         const outcome = put(doc, a.fieldId, a.value);
         report(a.fieldId, outcome, outcome === "filled" ? a.source : null);
+        if (outcome === "filled") toVerify.push(a.fieldId);
+      }
+      // Verify once: some portals reformat or clear a value just after it's typed.
+      if (toVerify.length) {
+        await settle();
+        for (const id of toVerify) if (verify(doc, id) === "didnt-stick") report(id, "didnt-stick");
       }
       return answers.map((a) => outcomes.get(a.fieldId)!);
+    },
+
+    async retry(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      if (put(doc, fieldId, value) !== "filled") return "didnt-stick";
+      await settle();
+      return verify(doc, fieldId);
     },
 
     replace(doc, fieldId, value) {
