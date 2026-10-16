@@ -3,11 +3,9 @@
 // of an email goes out: sender, subject, date and its text (trimmed); never attachments. A draft gets
 // the Application, the posting's requirements, the Master profile pieces that bear on them and short
 // voice excerpts (PRODUCT.md "Voice"); never the follow-up's id or any contact address.
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { generateText, Output } from "ai";
 import { draftOutputSchema, emailClassificationSchema, prepSheetDraftSchema, type ClassifyInput, type DraftInput, type PrepSheetInput, type TrackAssistant } from "@apply-kit/core";
-import { rethrowBilledFailure } from "../openrouter.ts";
-import { DEFAULT_MODEL, DEFAULT_PROVIDERS, providerRouting } from "./openrouter.ts";
+import { openRouterModel, rethrowBilledFailure } from "../openrouter.ts";
 
 /** Prices the estimate assumes (the routing's max price per million tokens), and output limits. */
 const PRICE = { prompt: 0.5, completion: 2 };
@@ -66,10 +64,7 @@ export interface TrackAssistantOptions {
 }
 
 export function createOpenRouterTrackAssistant(options: TrackAssistantOptions): TrackAssistant {
-  const modelId = options.model || DEFAULT_MODEL;
-  const routing = providerRouting(options.providers?.length ? options.providers : DEFAULT_PROVIDERS);
-  const openrouter = createOpenRouter({ apiKey: options.apiKey, fetch: options.fetch });
-  const model = openrouter(modelId, { provider: routing, usage: { include: true } });
+  const { model, modelId } = openRouterModel(options);
 
   const promptFor = (input: ClassifyInput) =>
     `From: ${input.from}\nDate: ${input.receivedAt}\nSubject: ${input.subject}\n\n${input.text}`;

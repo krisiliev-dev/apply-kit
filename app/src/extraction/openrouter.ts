@@ -7,9 +7,7 @@ import { billedUsd, rethrowBilledFailure, openRouterModel, tokensIn, usdFor, typ
 
 export { CHINA_HOSTED_PROVIDERS, DEFAULT_MODEL, DEFAULT_PROVIDERS, providerRouting } from "../openrouter.ts";
 
-const MAX_OUTPUT_TOKENS = 4_000;
-/** Output tokens a read typically needs, for the estimate (well above the usual ~1,000). */
-const EXPECTED_OUTPUT_TOKENS = 2_500;
+const MAX_OUTPUT_TOKENS = 6_000;
 const TIMEOUT_MS = 60_000;
 
 export type OpenRouterExtractorOptions = OpenRouterOptions;
@@ -39,7 +37,7 @@ export function createOpenRouterExtractor(options: OpenRouterExtractorOptions): 
   return {
     estimateCostUsd(input) {
       // Instructions plus the JSON schema add roughly 3,000 characters to every request.
-      return usdFor(tokensIn(instructions.length + promptFor(input).length + 3_000), EXPECTED_OUTPUT_TOKENS);
+      return usdFor(tokensIn(instructions.length + promptFor(input).length + 3_000), MAX_OUTPUT_TOKENS);
     },
 
     async extract(input) {
@@ -50,13 +48,12 @@ export function createOpenRouterExtractor(options: OpenRouterExtractorOptions): 
           prompt: promptFor(input),
           output: Output.object({ schema: postingFactsSchema, name: "posting_facts" }),
           temperature: 0,
-          // Reasoning can consume the output allowance before the facts JSON is complete.
-          providerOptions: { openrouter: { reasoning: { enabled: false, effort: "none" } } },
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           maxRetries: 1,
           timeout: TIMEOUT_MS,
         });
         const facts = { ...result.output, language: postingLanguageCode(result.output.language) };
+        if (!/^[a-z]{2}$/.test(facts.language)) throw Object.assign(new Error("The posting language code was invalid; retry reading this job."), { costUsd: billedUsd(result, MAX_OUTPUT_TOKENS) });
         return { facts, costUsd: billedUsd(result, MAX_OUTPUT_TOKENS), model: result.response.modelId || modelId };
       } catch (err) {
         rethrowBilledFailure(err, MAX_OUTPUT_TOKENS);

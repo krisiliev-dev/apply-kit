@@ -90,6 +90,19 @@ describe("OpenRouter extractor", () => {
     expect(JSON.stringify(api.requests[0]!.body)).toContain("ISO 639-1");
   });
 
+  it("rejects an invalid language code instead of choosing an English package", async () => {
+    const extractor = createOpenRouterExtractor({ apiKey: "test-key", fetch: fakeOpenRouter(JSON.stringify({ ...facts, language: ":" })).fetch });
+    await expect(extractor.extract(input)).rejects.toMatchObject({ message: expect.stringContaining("language code"), costUsd: 0.00042 });
+  });
+
+  it("reserves the full output allowance, including long postings", async () => {
+    const api = fakeOpenRouter();
+    const extractor = createOpenRouterExtractor({ apiKey: "test-key", fetch: api.fetch });
+    await extractor.extract(input);
+    expect(Number(api.requests[0]!.body.max_tokens)).toBeGreaterThanOrEqual(6000);
+    expect(extractor.estimateCostUsd(input)).toBeGreaterThanOrEqual(Number(api.requests[0]!.body.max_tokens) * 2 / 1_000_000);
+  });
+
   it("keeps billed usage when structured output is rejected", async () => {
     const extractor = createOpenRouterExtractor({ apiKey: "test-key", fetch: fakeOpenRouter("truncated {").fetch });
     await expect(extractor.extract(input)).rejects.toMatchObject({ costUsd: expect.any(Number) });

@@ -7,8 +7,6 @@ import { coachTurnSchema, draftedAnswerSchema, writtenLetterSchema, draftedPiece
 import { billedUsd, rethrowBilledFailure, openRouterModel, tokensIn, usdFor, type OpenRouterOptions } from "../openrouter.ts";
 
 const MAX_OUTPUT_TOKENS = 8_000;
-/** Output tokens a task typically needs at most, for the estimate. */
-const EXPECTED_OUTPUT_TOKENS = 4_000;
 const TIMEOUT_MS = 90_000;
 /** Instructions plus the JSON schema add roughly this many characters to every request. */
 const SCHEMA_CHARS = 3_000;
@@ -130,7 +128,7 @@ export function createOpenRouterWriter(options: OpenRouterWriterOptions): Writer
   return {
     estimateCostUsd(request) {
       const { instructions, prompt } = promptOf(request);
-      return usdFor(tokensIn(instructions.length + prompt.length + SCHEMA_CHARS), EXPECTED_OUTPUT_TOKENS, options.maxPrice);
+      return usdFor(tokensIn(instructions.length + prompt.length + SCHEMA_CHARS), MAX_OUTPUT_TOKENS, options.maxPrice);
     },
     draftPieces: (input) => write({ task: "draft-pieces", input }, draftedPiecesSchema, "drafted_pieces"),
     learnVoice: (input) => write({ task: "learn-voice", input }, learnedVoiceSchema, "learned_voice", input.excerpts),

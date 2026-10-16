@@ -39,6 +39,7 @@ describe("OpenRouter writer", () => {
     expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(body.model).toBe("deepseek/deepseek-v4.1-flash");
     expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: true, require_parameters: true, ignore: CHINA_HOSTED_PROVIDERS });
+    expect(body.reasoning).toMatchObject({ enabled: false, effort: "none" });
     expect((body.provider as { only: string[] }).only).not.toContain("deepseek");
     expect(body.response_format).toMatchObject({ type: "json_schema" });
     expect(JSON.stringify(body.messages)).toContain("Cut false positives by about a third.");
@@ -61,6 +62,13 @@ describe("OpenRouter writer", () => {
     expect(api.requests).toHaveLength(0);
     expect(estimate).toBeGreaterThan(0.00042);
     expect(estimate).toBeLessThan(0.05);
+  });
+
+  it("reserves enough for the full output allowance at the routing ceiling", async () => {
+    const api = fakeOpenRouter();
+    const writer = createOpenRouterWriter({ apiKey: "test-key", fetch: api.fetch });
+    await writer.draftPieces(cv);
+    expect(writer.estimateCostUsd({ task: "draft-pieces", input: cv })).toBeGreaterThanOrEqual(Number(api.requests[0]!.body.max_tokens) * 2 / 1_000_000);
   });
 
   it("takes a higher price ceiling for a stronger model (the tailoring evaluation's comparison), sent and estimated at that price", async () => {

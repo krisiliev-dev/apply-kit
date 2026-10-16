@@ -36,6 +36,7 @@ describe("OpenRouter Track assistant", () => {
     expect(result).toEqual({ classification, costUsd: 0.00012, model: "deepseek/deepseek-v4.1-flash" });
     const body = api.requests[0]!;
     expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: true, ignore: CHINA_HOSTED_PROVIDERS });
+    expect(body.reasoning).toMatchObject({ enabled: false, effort: "none" });
     const sent = JSON.stringify(body.messages);
     expect(sent).toContain("Your application for Security Engineer");
     expect(sent).not.toContain("rej-1@northwind-labs.example");

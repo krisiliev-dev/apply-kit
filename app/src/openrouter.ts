@@ -61,7 +61,8 @@ export function openRouterModel(options: OpenRouterOptions): { modelId: string; 
   const modelId = options.model || DEFAULT_MODEL;
   const routing = providerRouting(options.providers?.length ? options.providers : DEFAULT_PROVIDERS, options.maxPrice);
   const openrouter = createOpenRouter({ apiKey: options.apiKey, fetch: options.fetch });
-  return { modelId, model: openrouter(modelId, { provider: routing, usage: { include: true } }) };
+  // Reasoning must not crowd the structured JSON out of short responses or delay package writing.
+  return { modelId, model: openrouter(modelId, { provider: routing, usage: { include: true }, reasoning: { enabled: false, effort: "none" } }) };
 }
 
 /** Tokens in this many characters, counted low on purpose (Cyrillic tokenises densely) so estimates stay high. */
