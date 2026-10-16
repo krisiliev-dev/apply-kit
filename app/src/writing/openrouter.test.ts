@@ -38,7 +38,7 @@ describe("OpenRouter writer", () => {
     const { url, body } = api.requests[0]!;
     expect(url).toBe("https://openrouter.ai/api/v1/chat/completions");
     expect(body.model).toBe("deepseek/deepseek-v4.1-flash");
-    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: false, require_parameters: true, ignore: CHINA_HOSTED_PROVIDERS });
+    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: true, require_parameters: true, ignore: CHINA_HOSTED_PROVIDERS });
     expect((body.provider as { only: string[] }).only).not.toContain("deepseek");
     expect(body.response_format).toMatchObject({ type: "json_schema" });
     expect(JSON.stringify(body.messages)).toContain("Cut false positives by about a third.");

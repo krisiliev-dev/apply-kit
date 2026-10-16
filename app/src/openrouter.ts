@@ -50,7 +50,7 @@ export function providerRouting(providers: string[] = DEFAULT_PROVIDERS, maxPric
     only,
     ignore: CHINA_HOSTED_PROVIDERS,
     data_collection: "deny" as const,
-    allow_fallbacks: false,
+    allow_fallbacks: true,
     require_parameters: true,
     max_price: maxPrice,
   };

@@ -35,7 +35,7 @@ describe("OpenRouter Track assistant", () => {
 
     expect(result).toEqual({ classification, costUsd: 0.00012, model: "deepseek/deepseek-v4.1-flash" });
     const body = api.requests[0]!;
-    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: false, ignore: CHINA_HOSTED_PROVIDERS });
+    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: true, ignore: CHINA_HOSTED_PROVIDERS });
     const sent = JSON.stringify(body.messages);
     expect(sent).toContain("Your application for Security Engineer");
     expect(sent).not.toContain("rej-1@northwind-labs.example");
@@ -101,7 +101,7 @@ describe("OpenRouter Track assistant: drafts", () => {
     expect(result).toEqual({ draft: { body: "A short nudge." }, costUsd: 0.00012, model: "deepseek/deepseek-v4.1-flash" });
     expect(assistant.estimateDraftUsd(draftInput)).toBeGreaterThan(0);
     const body = api.requests[0]!;
-    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: false, ignore: CHINA_HOSTED_PROVIDERS });
+    expect(body.provider).toMatchObject({ data_collection: "deny", allow_fallbacks: true, ignore: CHINA_HOSTED_PROVIDERS });
     const sent = JSON.stringify(body.messages);
     for (const part of ["Threat modelling for payment features", "40 tracked fixes", "I keep things short and plain.", "Opens with the company's problem", "as per my previous email", "70-110 words"]) {
       expect(sent).toContain(part);

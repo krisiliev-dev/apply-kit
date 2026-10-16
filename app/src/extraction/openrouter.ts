@@ -50,6 +50,8 @@ export function createOpenRouterExtractor(options: OpenRouterExtractorOptions): 
           prompt: promptFor(input),
           output: Output.object({ schema: postingFactsSchema, name: "posting_facts" }),
           temperature: 0,
+          // Reasoning can consume the output allowance before the facts JSON is complete.
+          providerOptions: { openrouter: { reasoning: { enabled: false, effort: "none" } } },
           maxOutputTokens: MAX_OUTPUT_TOKENS,
           maxRetries: 1,
           timeout: TIMEOUT_MS,

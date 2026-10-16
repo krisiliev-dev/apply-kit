@@ -46,11 +46,12 @@ describe("OpenRouter extractor", () => {
     expect(headers.get("authorization")).toBe("Bearer test-key");
     expect(body.model).toBe("deepseek/deepseek-v4.1-flash");
     const provider = body.provider as Record<string, unknown>;
-    expect(provider).toMatchObject({ data_collection: "deny", allow_fallbacks: false, require_parameters: true });
+    expect(provider).toMatchObject({ data_collection: "deny", allow_fallbacks: true, require_parameters: true });
     expect(provider.ignore).toEqual(CHINA_HOSTED_PROVIDERS);
     expect(provider.ignore).toEqual(expect.arrayContaining(["deepseek", "baidu", "alibaba", "siliconflow", "streamlake"]));
     expect(provider.only).toEqual(["deepinfra", "together", "fireworks", "coreweave", "baseten", "parasail", "crusoe", "digitalocean", "modal"]);
     expect(body.response_format).toMatchObject({ type: "json_schema" });
+    expect(body.reasoning).toMatchObject({ enabled: false, effort: "none" });
   });
 
   it("drops China-hosted providers from a configured provider list", async () => {
