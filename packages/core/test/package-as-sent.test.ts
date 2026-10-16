@@ -192,3 +192,31 @@ describe("a confirmation for an approved package with no Application", () => {
     expect((await t.tracker.get(applicationId))!.timeline[0]).toMatchObject({ kind: "email", text: "Confirmation, filed" });
   });
 });
+
+describe("picking a CV version for an Application added by hand", () => {
+  it("offers the CV versions of the Packages sent, and counts the Application under the one picked", async () => {
+    const t = await setup();
+    const { pkg } = await t.submitted();
+    const label = pkg.approved!.cv.label;
+    const byHand = await t.tracker.addByHand({ job: { company: "Vireo Systems", title: "SOC Analyst" }, appliedOn: "2026-10-12", status: "applied" });
+    if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+
+    expect(await t.tracker.cvVersions()).toEqual([label]);
+    const r = await t.tracker.pickCvVersion(byHand.application.id, label);
+
+    expect(r.event).toMatchObject({ kind: "cv", cause: "you", text: `CV version picked: ${label}` });
+    expect(await t.tracker.get(byHand.application.id)).toMatchObject({ cvVersion: label, cv: null, package: null });
+    await t.clock.advance(14 * 24 * 60 * 60_000);
+    expect((await t.tracker.stats()).working.cvVersion).toEqual([expect.objectContaining({ name: label, sent: 2 })]);
+  });
+
+  it("refuses a version that isn't one of them, and an Application with its Package as sent", async () => {
+    const t = await setup();
+    const { pkg, applicationId } = await t.submitted();
+    const byHand = await t.tracker.addByHand({ job: { company: "Vireo Systems", title: "SOC Analyst" }, appliedOn: "2026-10-12", status: "applied" });
+    if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+
+    await expect(t.tracker.pickCvVersion(byHand.application.id, "Made-up v9")).rejects.toMatchObject({ problem: "invalid" });
+    await expect(t.tracker.pickCvVersion(applicationId, pkg.approved!.cv.label)).rejects.toMatchObject({ problem: "invalid" });
+  });
+});

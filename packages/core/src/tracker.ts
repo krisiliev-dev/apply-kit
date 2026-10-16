@@ -729,6 +729,13 @@ export interface Tracker {
    * version. A new one replaces the old. Throws a TrackerError when refused.
    */
   attachCv(applicationId: string, cv: AttachCvInput): Promise<{ cv: AttachedCv; event: ApplicationEvent }>;
+  /** The CV versions sent so far (the Packages' CV labels, and CVs attached by hand), to pick from. */
+  cvVersions(): Promise<string[]>;
+  /**
+   * "Pick a CV version" for an Application added by hand: it counts under that version in What's
+   * working, without a file. An Event by you. Throws a TrackerError when refused.
+   */
+  pickCvVersion(applicationId: string, label: string): Promise<{ event: ApplicationEvent }>;
   /** The attached CV file, or null. */
   cvFile(applicationId: string): Promise<{ fileName: string; bytes: Uint8Array } | null>;
   /** A file of the Package as sent (the CV PDF, or the letter), exactly as approved; null without one. */
@@ -1298,6 +1305,20 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       db.exec("ROLLBACK");
       throw err;
     }
+  }
+
+  async function cvVersions() {
+    return db.prepare("SELECT DISTINCT cv_version FROM application WHERE removed_at IS NULL AND cv_version IS NOT NULL ORDER BY cv_version").all()
+      .map((r) => String(r.cv_version));
+  }
+
+  async function pickCvVersion(applicationId: string, label: string) {
+    const r = row(applicationId);
+    if (!r) throw new TrackerError("not-found", "There's no such Application.");
+    if (r.package_id) throw new TrackerError("invalid", "This Application has its Package as sent; its CV version is that one.", applicationId);
+    if (!(await cvVersions()).includes(label)) throw new TrackerError("invalid", "Pick one of the CV versions you've sent.", applicationId);
+    db.prepare("UPDATE application SET cv_version = ? WHERE id = ?").run(label, applicationId);
+    return { event: addEvent({ applicationId, kind: "cv", cause: "you", from: null, to: null, text: `CV version picked: ${label}`, undoes: null }) };
   }
 
   async function cvFile(applicationId: string) {
@@ -2935,6 +2956,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     recordSubmission,
     answerPackageConfirmation,
     packageFile,
+    cvVersions,
+    pickCvVersion,
     undoSubmission,
     list,
     get: detail,
