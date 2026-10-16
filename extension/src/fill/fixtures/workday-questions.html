@@ -1,0 +1,30 @@
+<!-- Synthetic Workday application page (myworkdayjobs.com): step 3, Application Questions. Modelled on
+     docs/research/implementation/portals.md (data-automation-id names as Workday uses them). Made-up
+     company (Kestrel Payments) and job; no real person's data. The test setup (fixtures/workday.ts)
+     simulates Workday's widgets: list buttons, typeaheads with delayed suggestions, Add and Delete,
+     and its CV reading. Every navigation button notes a press, which fails the test. -->
+<div data-automation-id="applyFlowPage">
+  <header><span data-automation-id="headerCompanyName">Kestrel Payments</span><h1 data-automation-id="jobPostingHeader">Security Engineer</h1></header>
+  <main>
+    <div data-automation-id="progressBar"><ol aria-label="Application progress">
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 1 of 6</label><div>My Information</div></li>
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 2 of 6</label><div>My Experience</div></li>
+      <li data-automation-id="progressBarActiveStep"><label class="sr-only">current step 3 of 6</label><div>Application Questions</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 4 of 6</label><div>Voluntary Disclosures</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 5 of 6</label><div>Self Identify</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 6 of 6</label><div>Review</div></li>
+    </ol></div>
+    <h2 data-automation-id="pageHeaderTitle">Application Questions</h2>
+    <div data-automation-id="primaryQuestionnairePage">
+      <div data-automation-id="formField-question-rightToWork"><label for="question-rightToWork" id="question-rightToWork-label">Do you have the right to work in Bulgaria without sponsorship?<abbr title="required">*</abbr></label><button type="button" id="question-rightToWork" aria-haspopup="listbox" aria-labelledby="question-rightToWork-label" aria-required="true" value="" data-fixture-options="Select One|Yes|No">Select One</button></div>
+      <div data-automation-id="formField-question-noticePeriod"><label for="question-noticePeriod" id="question-noticePeriod-label">What is your notice period?<abbr title="required">*</abbr></label><button type="button" id="question-noticePeriod" aria-haspopup="listbox" aria-labelledby="question-noticePeriod-label" aria-required="true" value="" data-fixture-options="Select One|Immediately|Less than 1 month|1 month|2–3 months|More than 3 months">Select One</button></div>
+      <div data-automation-id="formField-question-relocate"><label for="question-relocate" id="question-relocate-label">Are you willing to relocate to Sofia?</label><button type="button" id="question-relocate" aria-haspopup="listbox" aria-labelledby="question-relocate-label" value="" data-fixture-options="Select One|Yes|No">Select One</button></div>
+      <div data-automation-id="formField-question-detectionRule"><label for="question-detectionRule" id="question-detectionRule-label">Describe a detection rule you wrote that reduced false positives.<abbr title="required">*</abbr></label><textarea id="question-detectionRule" aria-required="true" maxlength="1000"></textarea></div>
+      <div data-automation-id="formField-question-salary"><label for="question-salary" id="question-salary-label">Expected gross monthly salary (EUR)<abbr title="required">*</abbr></label><input type="text" id="question-salary" aria-required="true"></div>
+    </div>
+  </main>
+  <div data-automation-id="pageFooter">
+    <button type="button" data-automation-id="pageFooterBackButton">Back</button>
+    <button type="button" data-automation-id="pageFooterNextButton">Save and Continue</button>
+  </div>
+</div>

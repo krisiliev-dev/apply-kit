@@ -2,7 +2,7 @@
 // new job board, and the embedded form) into its fields in the portal's order, fills the answers it's
 // given through page actions, and undoes what it changed. It keeps only the previous values and which
 // fields it filled, in the page's isolated world; nothing else. It never presses a button.
-import type { FieldAnswer, FieldKind, FieldOutcome, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
+import type { EntrySection, FieldAnswer, FieldKind, FieldOutcome, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
 import { recognisePortal } from "../portal.ts";
 import { attachFile, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark, type FileBytes } from "./page-actions.ts";
 
@@ -20,6 +20,10 @@ export interface Filler {
   undo(doc: Document): number;
   /** Show on page. False if the field is gone. */
   show(doc: Document, fieldId: string): boolean;
+  /** Kris's choice for a needs-you choice (a typeahead with two plausible matches): picks that option. */
+  pick?(doc: Document, fieldId: string, option: string): Promise<FieldOutcome["outcome"]>;
+  /** "Remove the N duplicates": deletes those entries of a repeating section with the portal's own Delete. Returns how many went. */
+  removeEntries?(doc: Document, section: EntrySection, indexes: number[]): Promise<number>;
 }
 
 /** A package file for a file answer, as the panel fetched it from apply-kit. */

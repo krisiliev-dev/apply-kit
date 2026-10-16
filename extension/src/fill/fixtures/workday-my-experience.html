@@ -1,0 +1,62 @@
+<!-- Synthetic Workday application page (myworkdayjobs.com): step 2, My Experience (repeating sections, skills, the CV). Modelled on
+     docs/research/implementation/portals.md (data-automation-id names as Workday uses them). Made-up
+     company (Kestrel Payments) and job; no real person's data. The test setup (fixtures/workday.ts)
+     simulates Workday's widgets: list buttons, typeaheads with delayed suggestions, Add and Delete,
+     and its CV reading. Every navigation button notes a press, which fails the test. -->
+<div data-automation-id="applyFlowPage">
+  <header><span data-automation-id="headerCompanyName">Kestrel Payments</span><h1 data-automation-id="jobPostingHeader">Security Engineer</h1></header>
+  <main>
+    <div data-automation-id="progressBar"><ol aria-label="Application progress">
+      <li data-automation-id="progressBarCompletedStep"><label class="sr-only">completed step 1 of 6</label><div>My Information</div></li>
+      <li data-automation-id="progressBarActiveStep"><label class="sr-only">current step 2 of 6</label><div>My Experience</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 3 of 6</label><div>Application Questions</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 4 of 6</label><div>Voluntary Disclosures</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 5 of 6</label><div>Self Identify</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 6 of 6</label><div>Review</div></li>
+    </ol></div>
+    <h2 data-automation-id="pageHeaderTitle">My Experience</h2>
+    <div data-automation-id="myExperiencePage">
+    <div role="group" data-automation-id="workExperienceSection" aria-labelledby="workExperience-section">
+      <h3 id="workExperience-section">Work Experience</h3>
+      <button type="button" data-automation-id="add-button" aria-label="Add Work Experience">Add</button>
+    </div>
+    <div role="group" data-automation-id="educationSection" aria-labelledby="education-section">
+      <h3 id="education-section">Education</h3>
+      <button type="button" data-automation-id="add-button" aria-label="Add Education">Add</button>
+    </div>
+    <div role="group" data-automation-id="languageSection" aria-labelledby="language-section"><h3 id="language-section">Languages</h3><button type="button" data-automation-id="add-button" aria-label="Add Languages">Add</button></div>
+    <div role="group" data-automation-id="skillsSection" aria-labelledby="skills-section"><h3 id="skills-section">Skills</h3>
+      <div data-automation-id="formField-skills--skills"><label for="skills--skills" id="skills--skills-label">Type to Add Skills</label><div data-automation-id="multiselectInputContainer"><ul data-automation-id="selectedItemList" aria-label="Items selected"></ul><input type="text" id="skills--skills" data-uxi-widget-type="selectinput" role="combobox" aria-autocomplete="list" aria-expanded="false" placeholder="Search" data-fixture-multi="" data-fixture-options="Wazuh|Wazuh Administration|Splunk|SIEM|Incident Response|Kubernetes|Python|Detection Engineering"></div></div>
+    </div>
+    <div data-automation-id="resumeSection"><h3>Resume/CV</h3>
+      <div data-automation-id="formField-resume"><label id="resume-label">Upload a file (5MB max)<abbr title="required">*</abbr></label><div data-automation-id="file-upload-drop-zone" class="file-upload"><input type="file" data-automation-id="file-upload-input-ref" id="resume" aria-labelledby="resume-label" aria-required="true"><span class="filename"></span><button type="button" data-automation-id="select-files">Select files</button></div></div>
+    </div>
+    <div role="group" data-automation-id="websiteSection" aria-labelledby="websites-section"><h3 id="websites-section">Websites</h3><button type="button" data-automation-id="add-button" aria-label="Add Websites">Add</button></div>
+      <div data-automation-id="formField-linkedInAccount"><label for="linkedInAccount" id="linkedInAccount-label">LinkedIn Profile</label><input type="url" id="linkedInAccount"></div>
+    </div>
+    <template data-fixture-entry="workExperience">
+      <div data-automation-id="workExperience-N" role="group" aria-labelledby="workExperience-N-panel"><h4 id="workExperience-N-panel">Work Experience N</h4><button type="button" data-automation-id="panel-set-delete-button" aria-label="Delete Work Experience N">Delete</button>
+      <div data-automation-id="formField-workExperience-N--jobTitle"><label for="workExperience-N--jobTitle" id="workExperience-N--jobTitle-label">Job Title<abbr title="required">*</abbr></label><input type="text" id="workExperience-N--jobTitle" aria-required="true"></div>
+      <div data-automation-id="formField-workExperience-N--companyName"><label for="workExperience-N--companyName" id="workExperience-N--companyName-label">Company<abbr title="required">*</abbr></label><input type="text" id="workExperience-N--companyName" aria-required="true"></div>
+      <div data-automation-id="formField-workExperience-N--location"><label for="workExperience-N--location" id="workExperience-N--location-label">Location</label><input type="text" id="workExperience-N--location"></div>
+      <div data-automation-id="formField-workExperience-N--currentlyWorkHere"><input type="checkbox" id="workExperience-N--currentlyWorkHere"><label for="workExperience-N--currentlyWorkHere">I currently work here</label></div>
+      <div data-automation-id="formField-workExperience-N--startDate"><label id="workExperience-N--startDate-label">From<abbr title="required">*</abbr></label><div data-automation-id="dateInputWrapper" role="group" aria-labelledby="workExperience-N--startDate-label"><input type="text" data-automation-id="dateSectionMonth-input" id="workExperience-N--startDate-month" aria-label="Month" role="spinbutton" aria-required="true" placeholder="MM"><input type="text" data-automation-id="dateSectionYear-input" id="workExperience-N--startDate-year" aria-label="Year" role="spinbutton" aria-required="true" placeholder="YYYY"></div></div>
+      <div data-automation-id="formField-workExperience-N--endDate"><label id="workExperience-N--endDate-label">To<abbr title="required">*</abbr></label><div data-automation-id="dateInputWrapper" role="group" aria-labelledby="workExperience-N--endDate-label"><input type="text" data-automation-id="dateSectionMonth-input" id="workExperience-N--endDate-month" aria-label="Month" role="spinbutton" aria-required="true" placeholder="MM"><input type="text" data-automation-id="dateSectionYear-input" id="workExperience-N--endDate-year" aria-label="Year" role="spinbutton" aria-required="true" placeholder="YYYY"></div></div>
+      <div data-automation-id="formField-workExperience-N--roleDescription"><label for="workExperience-N--roleDescription" id="workExperience-N--roleDescription-label">Role Description</label><textarea id="workExperience-N--roleDescription"></textarea></div>
+      </div>
+    </template>
+    <template data-fixture-entry="education">
+      <div data-automation-id="education-N" role="group" aria-labelledby="education-N-panel"><h4 id="education-N-panel">Education N</h4><button type="button" data-automation-id="panel-set-delete-button" aria-label="Delete Education N">Delete</button>
+      <div data-automation-id="formField-education-N--schoolName"><label for="education-N--schoolName" id="education-N--schoolName-label">School or University<abbr title="required">*</abbr></label><input type="text" id="education-N--schoolName" aria-required="true"></div>
+      <div data-automation-id="formField-education-N--degree"><label for="education-N--degree" id="education-N--degree-label">Degree<abbr title="required">*</abbr></label><button type="button" id="education-N--degree" aria-haspopup="listbox" aria-labelledby="education-N--degree-label" aria-required="true" value="" data-fixture-options="Select One|High School Diploma|Bachelor's Degree|Master's Degree|Doctorate">Select One</button></div>
+      <div data-automation-id="formField-education-N--fieldOfStudy"><label for="education-N--fieldOfStudy" id="education-N--fieldOfStudy-label">Field of Study</label><div data-automation-id="multiselectInputContainer"><ul data-automation-id="selectedItemList" aria-label="Items selected"></ul><input type="text" id="education-N--fieldOfStudy" data-uxi-widget-type="selectinput" role="combobox" aria-autocomplete="list" aria-expanded="false" placeholder="Search" data-fixture-options="Computer Science|Computer Engineering|Information Security"></div></div>
+      <div data-automation-id="formField-education-N--firstYearAttended"><label id="education-N--firstYearAttended-label">From</label><div data-automation-id="dateInputWrapper" role="group" aria-labelledby="education-N--firstYearAttended-label"><input type="text" data-automation-id="dateSectionYear-input" id="education-N--firstYearAttended-year" aria-label="Year" role="spinbutton" placeholder="YYYY"></div></div>
+      <div data-automation-id="formField-education-N--lastYearAttended"><label id="education-N--lastYearAttended-label">To (Actual or Expected)</label><div data-automation-id="dateInputWrapper" role="group" aria-labelledby="education-N--lastYearAttended-label"><input type="text" data-automation-id="dateSectionYear-input" id="education-N--lastYearAttended-year" aria-label="Year" role="spinbutton" placeholder="YYYY"></div></div>
+      </div>
+    </template>
+  </main>
+  <div data-automation-id="pageFooter">
+    <button type="button" data-automation-id="pageFooterBackButton">Back</button>
+    <button type="button" data-automation-id="pageFooterNextButton">Save and Continue</button>
+  </div>
+</div>

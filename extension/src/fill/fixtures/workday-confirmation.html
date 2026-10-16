@@ -1,0 +1,13 @@
+<!-- Synthetic Workday application page (myworkdayjobs.com): after Submit: the application submitted dialog. Modelled on
+     docs/research/implementation/portals.md (data-automation-id names as Workday uses them). Made-up
+     company (Kestrel Payments) and job; no real person's data. The test setup (fixtures/workday.ts)
+     simulates Workday's widgets: list buttons, typeaheads with delayed suggestions, Add and Delete,
+     and its CV reading. Every navigation button notes a press, which fails the test. -->
+<div data-automation-id="applyFlowPage">
+  <header><span data-automation-id="headerCompanyName">Kestrel Payments</span><h1 data-automation-id="jobPostingHeader">Security Engineer</h1></header>
+  <div role="dialog" aria-labelledby="done-title" data-automation-id="applicationSubmittedDialog">
+    <h2 id="done-title">Application Submitted</h2>
+    <p>Congratulations! Your application has been submitted. You can review its status from your candidate home.</p>
+    <button type="button" data-automation-id="closeButton" aria-label="Close">Close</button>
+  </div>
+</div>

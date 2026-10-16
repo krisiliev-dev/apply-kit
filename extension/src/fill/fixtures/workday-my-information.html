@@ -1,0 +1,38 @@
+<!-- Synthetic Workday application page (myworkdayjobs.com): step 1, My Information. Modelled on
+     docs/research/implementation/portals.md (data-automation-id names as Workday uses them). Made-up
+     company (Kestrel Payments) and job; no real person's data. The test setup (fixtures/workday.ts)
+     simulates Workday's widgets: list buttons, typeaheads with delayed suggestions, Add and Delete,
+     and its CV reading. Every navigation button notes a press, which fails the test. -->
+<div data-automation-id="applyFlowPage">
+  <header><span data-automation-id="headerCompanyName">Kestrel Payments</span><h1 data-automation-id="jobPostingHeader">Security Engineer</h1></header>
+  <main>
+    <div data-automation-id="progressBar"><ol aria-label="Application progress">
+      <li data-automation-id="progressBarActiveStep"><label class="sr-only">current step 1 of 6</label><div>My Information</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 2 of 6</label><div>My Experience</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 3 of 6</label><div>Application Questions</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 4 of 6</label><div>Voluntary Disclosures</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 5 of 6</label><div>Self Identify</div></li>
+      <li data-automation-id="progressBarInactiveStep"><label class="sr-only">step 6 of 6</label><div>Review</div></li>
+    </ol></div>
+    <h2 data-automation-id="pageHeaderTitle">My Information</h2>
+    <div data-automation-id="myInformationPage">
+      <div data-automation-id="formField-country--country"><label for="country--country" id="country--country-label">Country<abbr title="required">*</abbr></label><button type="button" id="country--country" aria-haspopup="listbox" aria-labelledby="country--country-label" aria-required="true" value="" data-fixture-options="Select One|Austria|Bulgaria|Croatia|Germany|Romania">Select One</button></div>
+      <div data-automation-id="formField-legalName--firstName"><label for="legalName--firstName" id="legalName--firstName-label">Given Name(s)<abbr title="required">*</abbr></label><input type="text" id="legalName--firstName" aria-required="true"></div>
+      <div data-automation-id="formField-legalName--lastName"><label for="legalName--lastName" id="legalName--lastName-label">Family Name<abbr title="required">*</abbr></label><input type="text" id="legalName--lastName" aria-required="true"></div>
+      <div data-automation-id="formField-address--addressLine1"><label for="address--addressLine1" id="address--addressLine1-label">Address Line 1</label><input type="text" id="address--addressLine1"></div>
+      <div data-automation-id="formField-address--city"><label for="address--city" id="address--city-label">City<abbr title="required">*</abbr></label><div data-automation-id="multiselectInputContainer"><ul data-automation-id="selectedItemList" aria-label="Items selected"></ul><input type="text" id="address--city" data-uxi-widget-type="selectinput" role="combobox" aria-autocomplete="list" aria-expanded="false" placeholder="Search" aria-required="true" data-fixture-options="Sofia, Sofia City, Bulgaria|Sofia, Sofia Province, Bulgaria|Plovdiv, Plovdiv, Bulgaria|Varna, Varna, Bulgaria"></div></div>
+      <div data-automation-id="formField-address--postalCode"><label for="address--postalCode" id="address--postalCode-label">Postal Code</label><input type="text" id="address--postalCode"></div>
+      <div data-automation-id="formField-source--source"><label for="source--source" id="source--source-label">How Did You Hear About Us?<abbr title="required">*</abbr></label><div data-automation-id="multiselectInputContainer"><ul data-automation-id="selectedItemList" aria-label="Items selected"></ul><input type="text" id="source--source" data-uxi-widget-type="selectinput" role="combobox" aria-autocomplete="list" aria-expanded="false" placeholder="Search" aria-required="true" data-fixture-options="LinkedIn|Company Website|Employee Referral|Job Board"></div></div>
+      <div data-automation-id="formField-candidateIsPreviousWorker"><fieldset><legend><label>Have you previously worked for Kestrel Payments?<abbr title="required">*</abbr></label></legend><div><input type="radio" id="candidateIsPreviousWorker-0" name="candidateIsPreviousWorker" value="yes" aria-required="true"><label for="candidateIsPreviousWorker-0">Yes</label></div><div><input type="radio" id="candidateIsPreviousWorker-1" name="candidateIsPreviousWorker" value="no" aria-required="true"><label for="candidateIsPreviousWorker-1">No</label></div></fieldset></div>
+      <div data-automation-id="formField-emailAddress"><label for="emailAddress" id="emailAddress-label">Email Address<abbr title="required">*</abbr></label><input type="email" id="emailAddress" aria-required="true"></div>
+      <div data-automation-id="formField-phoneNumber--phoneType"><label for="phoneNumber--phoneType" id="phoneNumber--phoneType-label">Phone Device Type<abbr title="required">*</abbr></label><button type="button" id="phoneNumber--phoneType" aria-haspopup="listbox" aria-labelledby="phoneNumber--phoneType-label" aria-required="true" value="" data-fixture-options="Select One|Mobile|Landline|Telephone">Select One</button></div>
+      <div data-automation-id="formField-phoneNumber--countryPhoneCode"><label for="phoneNumber--countryPhoneCode" id="phoneNumber--countryPhoneCode-label">Country Phone Code<abbr title="required">*</abbr></label><div data-automation-id="multiselectInputContainer"><ul data-automation-id="selectedItemList" aria-label="Items selected"></ul><input type="text" id="phoneNumber--countryPhoneCode" data-uxi-widget-type="selectinput" role="combobox" aria-autocomplete="list" aria-expanded="false" placeholder="Search" aria-required="true" data-fixture-options="Bulgaria (+359)|Bahrain (+973)|Belgium (+32)|Croatia (+385)"></div></div>
+      <div data-automation-id="formField-phoneNumber--phoneNumber"><label for="phoneNumber--phoneNumber" id="phoneNumber--phoneNumber-label">Phone Number<abbr title="required">*</abbr></label><input type="tel" id="phoneNumber--phoneNumber" aria-required="true"></div>
+      <div data-automation-id="formField-phoneNumber--extension"><label for="phoneNumber--extension" id="phoneNumber--extension-label">Phone Extension</label><input type="text" id="phoneNumber--extension"></div>
+    </div>
+  </main>
+  <div data-automation-id="pageFooter">
+    <button type="button" data-automation-id="pageFooterBackButton">Back</button>
+    <button type="button" data-automation-id="pageFooterNextButton">Save and Continue</button>
+  </div>
+</div>

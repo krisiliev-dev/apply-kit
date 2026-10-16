@@ -23,26 +23,41 @@ export interface FixtureOptions {
   uploads?: "change" | "drop-only" | "reject";
   /** The portal reads the CV once it's attached and, after `delayMs`, writes what it read into these fields. */
   cvParser?: { delayMs: number; values: Record<string, string> };
+  /** Controls a filler may press (a portal's own list buttons, Add and Delete): not noted as presses. Navigation always is. */
+  widgets?: string;
 }
 
-export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser }: FixtureOptions = {}): FixturePage {
+/** React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value. */
+export function controlInput(el: HTMLInputElement | HTMLTextAreaElement): void {
+  const native = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!;
+  let state = native.get!.call(el) as string;
+  Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
+  el.addEventListener("input", () => { state = native.get!.call(el) as string; });
+  portalWrites.set(el, (v) => { native.set!.call(el, v); state = v; });
+}
+
+const portalWrites = new WeakMap<Element, (v: string) => void>();
+
+/** The portal itself writing a value (its CV reading, clearing a typeahead after a pick): its own state, no events. */
+export function portalWrite(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const write = portalWrites.get(el);
+  if (write) write(value);
+  else el.value = value;
+}
+
+export function openFixture(name: string, url: string, { controlled = false, uploads = "change", cvParser, widgets }: FixtureOptions = {}): FixturePage {
   const window = new Window({ url, settings: { disableJavaScriptEvaluation: true, navigation: { disableMainFrameNavigation: true } } });
   const document = window.document as unknown as Document;
   document.body.innerHTML = readFileSync(new URL(`./${name}`, import.meta.url), "utf8");
   const presses: string[] = [];
   for (const b of Array.from(document.querySelectorAll("button, input[type=submit], input[type=button], a"))) {
+    if (widgets && b.matches(widgets)) continue;
     b.addEventListener("click", () => presses.push(`pressed ${b.textContent?.trim() || b.getAttribute("value")}`));
   }
   for (const f of Array.from(document.querySelectorAll("form"))) f.addEventListener("submit", (e) => { e.preventDefault(); presses.push("submitted the form"); });
 
   if (controlled) {
-    // React keeps the value in its own state: a direct write is ignored; an input event makes it read the DOM value.
-    for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=file]), textarea"))) {
-      const native = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!;
-      let state = native.get!.call(el) as string;
-      Object.defineProperty(el, "value", { configurable: true, get: () => state, set: () => {} });
-      el.addEventListener("input", () => { state = native.get!.call(el) as string; });
-    }
+    for (const el of Array.from(document.querySelectorAll<HTMLInputElement>("input:not([type=checkbox]):not([type=file]), textarea"))) controlInput(el);
   }
   for (const input of Array.from(document.querySelectorAll<HTMLInputElement>("input[type=file]"))) {
     const box = input.closest(".field, .file-upload")!;
