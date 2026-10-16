@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField } from "@apply-kit/core";
-import { differentJobLine, fieldRows, fillAnnouncement, focusAfterFill, matchWhy, packageLines, sourceWords } from "./fill-report.ts";
+import { differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, focusAfterFill, matchWhy, packageLines, sourceWords } from "./fill-report.ts";
 
 const field = (id: string, label: string, value = ""): ReadField => ({ id, label, kind: "text", required: true, value, options: [], maxLength: null, consent: false, password: false, hint: null });
 const reading: PageReading = {
@@ -73,5 +73,40 @@ describe("what the Fill view says", () => {
   it("says a different job got nothing from the old package", () => {
     expect(differentJobLine({ packageId: "p1", job: { title: "Security Engineer", company: "Kestrel Payments" }, jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" } }, { title: "Cloud Security Analyst", jobId: "4420" }))
       .toBe("The tab moved from Security Engineer (4410) to Cloud Security Analyst (4420). Nothing was filled from the Security Engineer package.");
+  });
+
+  it("names a file's size in KB, or MB from a megabyte", () => {
+    expect([fileSize(151_552), fileSize(300), fileSize(1_258_291)]).toEqual(["148 KB", "1 KB", "1.2 MB"]);
+  });
+
+  describe("the package's files on the page", () => {
+    const cvName = "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf";
+    const fileReading: PageReading = { ...reading, fields: [field("fn", "First Name"), { ...field("resume", "Resume/CV"), kind: "file" }, { ...field("letter", "Cover Letter"), kind: "textarea" }] };
+    const cvAnswer: FieldAnswer = { fieldId: "resume", kind: "file", which: "cv", fileName: cvName, size: 151_552, source: "package", basis: "Your package's CV, v3" };
+    const fn: FieldAnswer = { fieldId: "fn", kind: "fill", value: "Mira", source: "profile", basis: null };
+    const letterText: FieldAnswer = { fieldId: "letter", kind: "fill", value: "Dear Kestrel Payments team,", source: "package", basis: "Your package's letter, v3" };
+
+    it("shows the attached CV as a chip: name, size, angle, version, approval date, ATS check", () => {
+      const r = fileReport(brief, [fn, cvAnswer], [{ fieldId: "fn", outcome: "filled", source: "profile" }, { fieldId: "resume", outcome: "filled", source: "package" }], "Greenhouse");
+      expect(r).toEqual({
+        attached: [{ which: "cv", fieldId: "resume", fileName: cvName, line: `CV attached: ${cvName} · 148 KB`, meta: "Security angle · v3 · approved 12 Oct · ATS check passed" }],
+        failed: [], letter: "This page has no cover letter field, so your letter wasn't used.",
+      });
+      expect(fieldRows(fileReading, [cvAnswer], [{ fieldId: "resume", outcome: "filled", source: "package" }]).map((x) => [x.label, x.value, x.chip.word, x.why])).toEqual([["Resume/CV", cvName, "Package", "Your package's CV, v3"]]);
+    });
+
+    it("says the CV didn't attach and how to attach it yourself", () => {
+      const r = fileReport(brief, [cvAnswer, letterText], [{ fieldId: "resume", outcome: "didnt-stick", source: null }, { fieldId: "letter", outcome: "filled", source: "package" }], "Greenhouse");
+      expect(r).toEqual({
+        attached: [],
+        failed: [{ which: "cv", fieldId: "resume", fileName: cvName, size: "148 KB", chip: "CV not attached", heading: "Your CV didn't attach.", text: "Greenhouse's upload box didn't accept the file from apply-kit. Attach it yourself: it's ready in your Packages folder." }],
+        letter: null,
+      });
+      expect(fieldRows(fileReading, [cvAnswer], [{ fieldId: "resume", outcome: "didnt-stick", source: null }]).map((x) => [x.value, x.chip.word, x.why])).toEqual([["Not attached", "Didn't attach", "Attach it yourself from your Packages folder."]]);
+    });
+
+    it("says nothing about the letter when the package has none", () => {
+      expect(fileReport({ ...brief, letter: false }, [fn], [{ fieldId: "fn", outcome: "filled", source: "profile" }], "Greenhouse").letter).toBeNull();
+    });
   });
 });

@@ -126,6 +126,20 @@ describe("the extension talking to apply-kit", () => {
     expect(writes).toEqual([]);
   });
 
+  it("fetches a package file and asks apply-kit to show it in Finder, naming only the session and which file", async () => {
+    const calls: [string, unknown][] = [];
+    const service = fakeService((r) => {
+      calls.push([new URL(r.url).pathname, r.body]);
+      if (r.url.endsWith("/api/ext/fill/file")) return json({ which: "cv", fileName: "Mira_Petrova_CV.pdf", size: 9, path: "/x/Mira_Petrova_CV.pdf", type: "application/pdf", base64: "JVBERi1mYWtl" });
+      return json({ revealed: "/x/Mira_Petrova_CV.pdf" });
+    });
+    const client = createClient({ fetch: service, store: memoryStore({ token: "t" }).store });
+
+    expect(await client.fill.file("s-1", "cv")).toMatchObject({ ok: true, value: { fileName: "Mira_Petrova_CV.pdf", base64: "JVBERi1mYWtl" } });
+    expect(await client.fill.reveal("s-1", "cv")).toEqual({ ok: true, value: { revealed: "/x/Mira_Petrova_CV.pdf" } });
+    expect(calls).toEqual([["/api/ext/fill/file", { sessionId: "s-1", which: "cv" }], ["/api/ext/fill/reveal", { sessionId: "s-1", which: "cv" }]]);
+  });
+
   it("says when the app stopped answering in the middle of a fill", async () => {
     const client = createClient({ fetch: fakeService(() => undefined), store: memoryStore({ token: "t0k3n" }).store });
     expect(await client.fill.match({ portal: "greenhouse", host: "x", jobRef: null }, null)).toEqual({ ok: false, state: "not-running" });

@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, PageReading, RecordedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, PackageFileKind, PageReading, RecordedPage } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -32,6 +32,20 @@ export interface FillClient {
   start(page: FillPage, options: { sessionId?: string | null; packageId?: string }): Promise<Answer<FillStart>>;
   answer(sessionId: string, reading: PageReading): Promise<Answer<FieldAnswer[]>>;
   record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedPage>>;
+  /** The package's CV or letter as base64, held in the panel's memory only while it's attached. */
+  file(sessionId: string, which: PackageFileKind): Promise<Answer<PackageFileBytes>>;
+  /** "Show in Finder": apply-kit reveals the session's file in the Packages folder. */
+  reveal(sessionId: string, which: PackageFileKind): Promise<Answer<{ revealed: string }>>;
+}
+
+/** A package file as the service sends it; `path` is its copy in the Packages folder, or null. */
+export interface PackageFileBytes {
+  which: PackageFileKind;
+  fileName: string;
+  size: number;
+  path: string | null;
+  type: string;
+  base64: string;
 }
 
 export interface Client {
@@ -106,6 +120,8 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       start: (page, options) => post("/api/ext/fill/start", { page, ...options }),
       answer: (sessionId, reading) => post("/api/ext/fill/answer", { sessionId, reading }),
       record: (sessionId, reading, outcomes) => post("/api/ext/fill/record", { sessionId, reading, outcomes }),
+      file: (sessionId, which) => post("/api/ext/fill/file", { sessionId, which }),
+      reveal: (sessionId, which) => post("/api/ext/fill/reveal", { sessionId, which }),
     },
 
     async connect() {
