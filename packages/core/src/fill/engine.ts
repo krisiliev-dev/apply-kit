@@ -13,7 +13,8 @@ import { minMatchConfidence, type Answer } from "../preparation/answers.ts";
 import { isSalaryQuestion } from "../preparation/screening.ts";
 import { contactValue } from "./contact.ts";
 import { answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, similarity } from "./questions.ts";
-import { countOutcomes, type FieldAnswer, type FieldOutcome, type PackageFileKind, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
+import { countOutcomes, type FieldAnswer, type FieldOutcome, type FieldReport, type FieldReportInput, type PackageFileKind, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
+import { fieldStructure, whereReported } from "./field-report.ts";
 
 export interface FillDeps {
   db: SqlDatabase;
@@ -125,10 +126,16 @@ export interface FillEngine {
   markSubmitted(target: { sessionId: string } | { packageId: string }, how: { portalUrl: string | null; via: SubmittedVia }): Promise<MarkResult>;
   /** Undo after marking: the Application goes and the package is approved again. Refused (FillError) once the Application has a later Event. */
   undoMarkSubmitted(applicationId: string): Promise<{ packageId: string }>;
+  /** "Report this field": keeps the field's structure, the portal, host and path (never the query) and step label. Never a value. */
+  reportField(report: FieldReportInput): FieldReport;
+  /** The saved field reports, newest first. */
+  fieldReports(): FieldReport[];
+  /** Deletes one; false if there's no such report. */
+  deleteFieldReport(id: string): boolean;
 }
 
 export class FillError extends Error {
-  constructor(readonly problem: "no-session" | "session-ended" | "not-found" | "not-undoable", message: string) {
+  constructor(readonly problem: "no-session" | "session-ended" | "not-found" | "not-undoable" | "bad-report", message: string) {
     super(message);
   }
 }
@@ -394,6 +401,32 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
       if (s && !s.endedAt) endSession(s.id, "submitted");
       const now = marked?.marked ? marked.package : pkg;
       return { marked: true, alreadyMarked: recorded.alreadyRecorded, application: recorded.application, package: brief(now) };
+    },
+
+    reportField({ portal, address, stepLabel, field }) {
+      const where = whereReported(address);
+      const structure = fieldStructure(field);
+      if (!where || !structure) throw new FillError("bad-report", "Send the page's address and the field's structure.");
+      const report: FieldReport = {
+        id: randomUUID(), portal: String(portal).slice(0, 40), ...where,
+        stepLabel: typeof stepLabel === "string" && stepLabel.trim() ? stepLabel.trim().slice(0, 200) : null,
+        field: structure, createdAt: clock.now().toISOString(),
+      };
+      db.prepare("INSERT INTO field_report (id, portal, host, path, step_label, field, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(report.id, report.portal, report.host, report.path, report.stepLabel, JSON.stringify(report.field), report.createdAt);
+      return report;
+    },
+
+    fieldReports() {
+      return db.prepare("SELECT * FROM field_report ORDER BY created_at DESC, rowid DESC").all().map((r) => ({
+        id: String(r.id), portal: String(r.portal), host: String(r.host), path: String(r.path),
+        stepLabel: r.step_label == null ? null : String(r.step_label), field: JSON.parse(String(r.field)) as FieldReport["field"], createdAt: String(r.created_at),
+      }));
+    },
+
+    deleteFieldReport(id) {
+      const result = db.prepare("DELETE FROM field_report WHERE id = ?").run(id) as { changes?: number | bigint } | undefined;
+      return Number(result?.changes ?? 0) > 0;
     },
 
     async undoMarkSubmitted(applicationId) {

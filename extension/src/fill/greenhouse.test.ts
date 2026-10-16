@@ -302,6 +302,45 @@ describe("a value that doesn't stick", () => {
   });
 });
 
+describe("describing a field for a field report", () => {
+  // Mira Petrova's (made-up) values, typed into every field the fixtures have.
+  const persona = ["Mira", "Petrova", "mira.petrova@example.com", "+359 88 000 0175", "88 000 0175", "Plovdiv", "https://www.linkedin.com/in/mira-petrova-example", "https://mira-petrova.example.com", "I like detection engineering"];
+
+  it("gives the field's structure (tag, type, role, attributes, label chain, options), never a value", async () => {
+    const page = openFixture("greenhouse-phone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { controlled: true });
+    const filler = createGreenhouseFiller({ settleMs: 0 });
+    await filler.fill(page.document, [fill("phone_code", "+359"), fill("phone", "88 000 0175")]);
+
+    expect(filler.describe(page.document, "phone")).toEqual({
+      tag: "input", type: "tel", role: null, kind: "tel",
+      attributes: { id: "phone", class: "input", type: "tel", "aria-required": "true", autocomplete: "tel-national", placeholder: "e.g. 87 123 4567", "data-qa": "phone-input" },
+      labelChain: [{ from: "label[for]", text: "Phone Number" }, { from: "placeholder", text: "e.g. 87 123 4567" }],
+      options: [],
+    });
+    expect(filler.describe(page.document, "phone_code")).toMatchObject({ tag: "select", kind: "select", options: ["+43", "+359", "+49"] });
+    expect(filler.describe(page.document, "nope")).toBeNull();
+  });
+
+  it("holds none of the values filled into the page, whatever the field", async () => {
+    for (const page of [
+      openFixture("greenhouse-classic.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029"),
+      openFixture("greenhouse-new.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { controlled: true }),
+      openFixture("greenhouse-questions.html", "https://boards.greenhouse.io/vireohealth/jobs/4471077"),
+    ]) {
+      const filler = createGreenhouseFiller({ settleMs: 0 });
+      const fields = filler.read(page.document).fields;
+      // Every text field gets one of Mira's values; the page's own pre-filled value is a value too.
+      await filler.fill(page.document, fields.filter((f) => !["select", "radio", "checkbox", "file"].includes(f.kind)).map((f, i) => fill(f.id, persona[i % persona.length]!)));
+      const values = [...persona, "+359 000 0000"];
+
+      const described = JSON.stringify(fields.map((f) => filler.describe(page.document, f.id)));
+
+      for (const v of values) expect(described, v).not.toContain(v);
+      expect(described).not.toContain("\"value\"");
+    }
+  });
+});
+
 describe("what filling never does", () => {
   it("never presses Submit or ticks a consent box, even when told to fill one", async () => {
     for (const page of [classic(), newBoard()]) {

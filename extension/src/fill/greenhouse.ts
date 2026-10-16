@@ -2,7 +2,8 @@
 // new job board, and the embedded form) into its fields in the portal's order, fills the answers it's
 // given through page actions, and undoes what it changed. It keeps only the previous values and which
 // fields it filled, in the page's isolated world; nothing else. It never presses a button.
-import type { FieldAnswer, FieldKind, FieldOutcome, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
+import type { FieldAnswer, FieldKind, FieldOutcome, FieldStructure, PackageFileKind, PageReading, ReadField } from "@apply-kit/core";
+import { describingAttribute } from "@apply-kit/core/field-report";
 import { recognisePortal } from "../portal.ts";
 import { attachFile, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark, type FileBytes } from "./page-actions.ts";
 
@@ -27,6 +28,8 @@ export interface Filler {
   undo(doc: Document): number;
   /** Show on page. False if the field is gone. */
   show(doc: Document, fieldId: string): boolean;
+  /** "Report this field": the field's structure, never its value (nor anything that contains it). Null if the field is gone. */
+  describe(doc: Document, fieldId: string): FieldStructure | null;
 }
 
 /** A package file for a file answer, as the panel fetched it from apply-kit. */
@@ -140,6 +143,26 @@ function readField(el: Control, index: number): ReadField {
     password: (el.getAttribute("type") ?? "").toLowerCase() === "password",
     hint: hint && hint !== "on" && hint !== "off" ? hint : null,
   };
+}
+
+/** Every place a field's label can come from, in the order the filler looks. */
+function labelChain(el: Control): { from: string; text: string }[] {
+  const doc = el.ownerDocument;
+  const chain: { from: string; text: string }[] = [];
+  const add = (from: string, text: string | null | undefined) => { const t = clean(text); if (t) chain.push({ from, text: t }); };
+  const byIds = (ids: string | null) => (ids ? ids.split(/\s+/).map((id) => doc.getElementById(id)?.textContent ?? "").join(" ") : "");
+  if (isRadio(el)) {
+    const group = el.closest("fieldset, [role=radiogroup]");
+    add("legend", group?.querySelector("legend")?.textContent);
+    add("group aria-labelledby", byIds(group?.getAttribute("aria-labelledby") ?? null));
+    add("group aria-label", group?.getAttribute("aria-label"));
+  }
+  if (el.id) add("label[for]", Array.from(doc.querySelectorAll("label")).find((l) => l.getAttribute("for") === el.id)?.textContent);
+  add("aria-labelledby", byIds(el.getAttribute("aria-labelledby")));
+  add("wrapping label", el.closest("label")?.textContent);
+  add("aria-label", el.getAttribute("aria-label"));
+  add("placeholder", el.getAttribute("placeholder"));
+  return chain;
 }
 
 /** The upload box around a file input: where the portal shows the chosen file's name and takes a dropped file. */
@@ -314,6 +337,26 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
       filled.clear();
       removeMarks(doc);
       return restored;
+    },
+
+    describe(doc, fieldId) {
+      const found = find(doc, fieldId);
+      if (!found) return null;
+      const { el, field } = found;
+      // A free-text value can turn up in a portal's own text (a label echoing it): anything containing it is left out.
+      const value = ["select", "radio", "checkbox"].includes(field.kind) ? "" : field.value.trim();
+      const holds = (text: string) => value.length > 1 && text.toLowerCase().includes(value.toLowerCase());
+      const attributes: Record<string, string> = {};
+      for (const a of Array.from(el.attributes)) if (describingAttribute.test(a.name) && !holds(a.value)) attributes[a.name] = a.value;
+      return {
+        tag: el.tagName.toLowerCase(),
+        type: el.getAttribute("type"),
+        role: el.getAttribute("role"),
+        kind: field.kind,
+        attributes,
+        labelChain: labelChain(el).filter((l) => !holds(l.text)),
+        options: field.options.filter((o) => !holds(o)),
+      };
     },
 
     show(doc, fieldId) {
