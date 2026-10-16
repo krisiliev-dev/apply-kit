@@ -126,6 +126,28 @@ describe("the extension talking to apply-kit", () => {
     expect(writes).toEqual([]);
   });
 
+  it("marks the tab's session submitted and undoes it, and passes on a mark that created nothing with its reason", async () => {
+    const sent: [string, unknown][] = [];
+    const refused = { marked: false, reason: "You already have an open Application for Security Engineer at Kestrel Payments.", application: { id: "a0" } };
+    const service = fakeService((r) => {
+      sent.push([new URL(r.url).pathname, r.body]);
+      if (r.url.endsWith("/api/ext/fill/submitted")) return (r.body as { sessionId: string }).sessionId === "s-1" ? json({ marked: true, alreadyMarked: false }) : json(refused, 422);
+      if (r.url.endsWith("/api/ext/fill/submitted/undo")) return json({ problem: "not-undoable", error: "Something has happened to this Application since you marked it." }, 409);
+      return undefined;
+    });
+    const client = createClient({ fetch: service, store: memoryStore({ token: "t0k3n" }).store });
+    const confirmation = "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation";
+
+    expect(await client.fill.markSubmitted("s-1", confirmation)).toEqual({ ok: true, value: { marked: true, alreadyMarked: false } });
+    expect(await client.fill.markSubmitted("s-2", confirmation)).toEqual({ ok: true, value: refused });
+    expect(await client.fill.undoMarkSubmitted("a1")).toEqual({ ok: false, state: "error", problem: "not-undoable", error: "Something has happened to this Application since you marked it." });
+    expect(sent).toEqual([
+      ["/api/ext/fill/submitted", { sessionId: "s-1", portalUrl: confirmation }],
+      ["/api/ext/fill/submitted", { sessionId: "s-2", portalUrl: confirmation }],
+      ["/api/ext/fill/submitted/undo", { applicationId: "a1" }],
+    ]);
+  });
+
   it("says when the app stopped answering in the middle of a fill", async () => {
     const client = createClient({ fetch: fakeService(() => undefined), store: memoryStore({ token: "t0k3n" }).store });
     expect(await client.fill.match({ portal: "greenhouse", host: "x", jobRef: null }, null)).toEqual({ ok: false, state: "not-running" });

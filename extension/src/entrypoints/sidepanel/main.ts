@@ -9,13 +9,13 @@
 // fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
 // it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, PageReading } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PageReading } from "@apply-kit/core";
 import { countOutcomes } from "@apply-kit/core/fill";
 import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
 import "./panel.css";
 import { contextCard, fillStateFor, openingView, type PanelView, type PortalsAccess } from "../../context.ts";
-import { differentJobLine, fieldRows, fillAnnouncement, focusAfterFill, matchWhy, packageLines, type FieldRow } from "../../fill-report.ts";
+import { differentJobLine, fieldRows, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, submitPrompt, type FieldRow } from "../../fill-report.ts";
 import { runFiller } from "../../fill/in-page.ts";
 import { grabPage } from "../../grab.ts";
 import { portalOrigins, portals, recognisePortal } from "../../portal.ts";
@@ -78,7 +78,10 @@ function show({ connected, body: b, foot: f }: { connected: boolean | null; body
   conn.className = connected ? "conn" : "conn off";
   conn.replaceChildren(h("i", {}), connected ? "Connected" : "Not connected");
   modes.hidden = connected !== true;
-  body.replaceChildren(...b.filter((c): c is Node | string => !!c));
+  // Undo after marking stays in the panel until it closes: a reminder on every other Fill view.
+  const reminder = connected && lastMarked && !onMarkedScreen && fillTab.getAttribute("aria-pressed") === "true" ? markedReminder(lastMarked) : null;
+  onMarkedScreen = false;
+  body.replaceChildren(...[reminder, ...b].filter((c): c is Node | string => !!c));
   foot.replaceChildren(...f.filter((c): c is Node | string => !!c));
 }
 function announce(message: string) {
@@ -219,10 +222,14 @@ async function fill(tab: Awaited<ReturnType<typeof currentTab>>) {
 
   const card = contextCard(page, { address: address!, title: tab?.title });
   if (state === "not-portal") {
+    // A form apply-kit doesn't know has no confirmation page to detect: "I've submitted this" sits in
+    // the footer, for the package this tab is filling.
+    const tabSession = tab?.id != null ? await sessions.get(tab.id) : null;
+    const offer = tabSession && submitPrompt({ known: false, pageKind: null }) === "footer";
     return show({
       connected: true,
       body: [ctxCard(card.where, card.job, card.why, false), h("p", {}, "Filling works on Workday, Greenhouse, Lever, SmartRecruiters, Workable and Ashby. On other forms it fills nothing unless you ask.")],
-      foot: [button("Capture this job", () => choose("capture"), "btn primary"), fillBoundary()],
+      foot: [button("Capture this job", () => choose("capture"), "btn primary"), offer && button("I've submitted this", () => void markSubmitted(tab!.id!, tabSession, address ?? null), "btn"), fillBoundary()],
     });
   }
 
@@ -446,6 +453,10 @@ async function fillThisPage(packageId?: string) {
   const reading = await inPage<PageReading>(tabId, "read");
   if (!reading) return stopped("Chrome didn't let apply-kit read this page. Click the apply-kit icon in the toolbar on it, then Fill this page.");
   if (stopRequested) return stopped("Stopped. Nothing was filled.");
+  if (submitPrompt({ known: true, pageKind: reading.pageKind }) === "ask") {
+    busy = false;
+    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal: portals.find((p) => p.name === page.portal)!.label });
+  }
   const answers = await client.fill.answer(session.id, reading);
   if (!answers.ok) return fillProblem(answers, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
   if (stopRequested) return stopped("Stopped. Nothing was filled.");
@@ -526,6 +537,97 @@ function filled(f: { tabId: number; ctx: HTMLElement; reading: PageReading; answ
 async function undoPage(tabId: number) {
   const restored = await inPage<number>(tabId, "undo");
   announce(restored === null ? "Chrome didn't let apply-kit undo on this page." : `Undone: ${restored === 1 ? "1 field is" : `${restored} fields are`} back to how ${restored === 1 ? "it was" : "they were"}, and the marks are gone.`);
+  busy = false;
+  void ready();
+}
+
+// ---------- Did you submit? and Mark as submitted ----------
+
+/** The last mark in this panel, so Undo stays until the panel closes. */
+let lastMarked: Extract<MarkResult, { marked: true }> | null = null;
+/** Set while the Marked state itself shows (it has its own Undo). */
+let onMarkedScreen = false;
+
+const applicationLink = (id: string, label = "Open the Application", cls = "btn primary") =>
+  h("a", { class: cls, href: `${connection!.serviceUrl}/applications/${encodeURIComponent(id)}`, target: "_blank", rel: "noopener" }, label);
+
+/** The portal's confirmation page: a hint, not proof. Nothing is created until Kris clicks Mark as submitted. */
+function didYouSubmit(d: { tabId: number; ctx: HTMLElement; sessionId: string; portalUrl: string | null; portal: string }) {
+  show({
+    connected: true,
+    body: [
+      d.ctx,
+      h("div", { class: "lead-h" }, h("h2", {}, "Did you submit?"), h("p", { class: "muted" }, `${d.portal} is showing its confirmation page, which usually means yes.`)),
+      h("p", { class: "meta" }, "Marking creates the Application with this package linked, so apply-kit can match the company's emails to it."),
+    ],
+    foot: [
+      button("Mark as submitted", () => void markSubmitted(d.tabId, d.sessionId, d.portalUrl), "btn primary", { id: "mark-btn" }),
+      button("Not yet", () => { announce("Not marked. Click Fill this page on the confirmation page when you're ready."); void ready(); }, "btn ghost"),
+    ],
+  });
+  announce("Did you submit? The portal is showing its confirmation page.");
+  document.getElementById("mark-btn")?.focus();
+}
+
+async function markSubmitted(tabId: number, sessionId: string, portalUrl: string | null) {
+  busy = true;
+  const r = await client.fill.markSubmitted(sessionId, portalUrl);
+  if (!r.ok) return fillProblem(r, "Nothing was marked: apply-kit stopped answering.");
+  const m = r.value;
+  if (!m.marked) {
+    busy = false;
+    return show({
+      connected: true,
+      body: [h("div", { class: "banner warning", role: "alert" }, h("div", { class: "text" }, h("b", {}, "Nothing was created. "), m.reason))],
+      foot: [m.application ? applicationLink(m.application.id) : button("Back", () => void ready(), "btn primary"), m.application && button("Back", () => void ready(), "btn ghost")],
+    });
+  }
+  // The fill session for this tab ends here; the next portal in this tab starts fresh.
+  await sessions.clear(tabId);
+  if (!m.alreadyMarked) lastMarked = m;
+  showMarked(m);
+}
+
+/** "Marked as submitted": the Application created (or the one already there), with Undo until the panel closes. */
+function showMarked(m: Extract<MarkResult, { marked: true }>) {
+  const banner = markedBanner(m);
+  onMarkedScreen = true;
+  show({
+    connected: true,
+    body: [
+      h("div", { class: "banner success", role: "status" }, h("div", { class: "text" }, h("b", {}, banner.lead), ` ${banner.rest}`)),
+      h("dl", { class: "pkg" }, ...markedLines(m.application, m.package).flatMap((l) => [
+        h("dt", {}, l.term),
+        h("dd", {}, l.term === "Status" ? h("span", { class: `status ${m.application.status}` }, h("i", {}), l.detail) : l.detail),
+      ])),
+      h("p", { class: "meta" }, "Track takes it from here: replies to the job address move its status, and a follow-up comes due if nothing arrives."),
+    ],
+    foot: [applicationLink(m.application.id), !m.alreadyMarked && button("Undo", () => void undoMarked(m), "btn ghost", { "aria-label": "Undo mark as submitted" })],
+  });
+  busy = false;
+  announce(`${banner.lead} ${banner.rest}`);
+  // The button pressed is gone: focus moves to the state's primary action.
+  foot.querySelector<HTMLElement>(".btn.primary")?.focus();
+}
+
+/** The reminder on the Fill view after marking: Undo stays until the panel closes. */
+function markedReminder(m: Extract<MarkResult, { marked: true }>) {
+  return h("div", { class: "banner success" }, h("div", { class: "text" }, h("b", {}, "Marked as submitted. "), `${m.application.title} at ${m.application.company}.`),
+    button("Undo", () => void undoMarked(m), "btn ghost sm", { "aria-label": "Undo mark as submitted" }));
+}
+
+async function undoMarked(m: Extract<MarkResult, { marked: true }>) {
+  const r = await client.fill.undoMarkSubmitted(m.application.id);
+  if (!r.ok && r.state !== "error") return fillProblem(r, "Nothing was undone: apply-kit stopped answering.");
+  lastMarked = null;
+  if (!r.ok) {
+    return show({
+      connected: true,
+      body: [h("div", { class: "banner error", role: "alert" }, h("div", { class: "text" }, r.error))],
+      foot: [applicationLink(m.application.id), button("Back", () => void ready(), "btn ghost")],
+    });
+  }
+  announce("Undone: the Application is removed and the package is waiting to be submitted again.");
   busy = false;
   void ready();
 }

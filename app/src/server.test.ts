@@ -36,7 +36,7 @@ function service(uiDir = "/nonexistent/") {
   const pairing = createPairing({ db, clock });
   const tracker = createTracker({ db, clock, discovery: engine });
   const scheduler = { status: () => ({}), checkNow: async () => ({}) } as unknown as Scheduler;
-  const fill = createFillEngine({ db, clock, prepare: preparation });
+  const fill = createFillEngine({ db, clock, prepare: preparation, track: tracker });
   const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir, port });
   const json = (body: unknown, headers: Record<string, string> = {}) => ({
     method: "POST", headers: { "content-type": "application/json", ...headers }, body: JSON.stringify(body),
@@ -400,6 +400,36 @@ describe("the extension's fill endpoints", () => {
     expect(await unknown.json()).toMatchObject({ problem: "no-session" });
     const record = await s.request("/api/ext/fill/record", s.json({ sessionId: "s1", reading, outcomes: [] }, auth));
     expect(record.status).toBe(409);
+  });
+
+  it("mark as submitted and its undo need the token, a session and an Application", async () => {
+    const s = service();
+    for (const path of ["/api/ext/fill/submitted", "/api/ext/fill/submitted/undo"]) {
+      expect((await s.request(path, s.json({ sessionId: "s1" }))).status, path).toBe(401);
+    }
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+
+    expect((await s.request("/api/ext/fill/submitted", s.json({ portalUrl: "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation" }, auth))).status).toBe(400);
+    const unknown = await s.request("/api/ext/fill/submitted", s.json({ sessionId: "s1", portalUrl: null }, auth));
+    expect(unknown.status).toBe(409);
+    expect(await unknown.json()).toMatchObject({ problem: "no-session" });
+    const undo = await s.request("/api/ext/fill/submitted/undo", s.json({ applicationId: "a1" }, auth));
+    expect(undo.status).toBe(409);
+    expect(await undo.json()).toMatchObject({ problem: "not-found" });
+  });
+});
+
+describe("Mark as submitted on the Job page", () => {
+  it("refuses a package that isn't approved, saying why, and an Application it didn't make", async () => {
+    const s = service();
+
+    const mark = await s.request("/api/packages/p1/submitted", s.json({}));
+    const undo = await s.request("/api/applications/a1/submitted/undo", s.json({}));
+
+    expect(mark.status).toBe(422);
+    expect(await mark.json()).toEqual({ marked: false, reason: "There's no such package.", application: null });
+    expect(undo.status).toBe(409);
+    expect(await undo.json()).toMatchObject({ problem: "not-found" });
   });
 });
 

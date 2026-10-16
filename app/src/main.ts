@@ -125,8 +125,8 @@ tracker = createTracker({
 });
 
 // Apply: the fill engine matches portal pages to approved packages and answers fields, reading
-// Prepare through PrepareForApply.
-const fill = createFillEngine({ db, clock, prepare: preparation });
+// Prepare through PrepareForApply; "Mark as submitted" creates the Application through the tracker.
+const fill = createFillEngine({ db, clock, prepare: preparation, track: tracker });
 
 const app = createServer({ engine, preparation, fill, tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 

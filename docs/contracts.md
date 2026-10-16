@@ -19,7 +19,7 @@ Prepare (spec #51) is the only owner of the master profile, the answer bank, the
 | The answer bank: find, add (with job and portal as source), record a use, record a portal edit | `findAnswer`, `saveAnswer`, `recordAnswerUse`, `recordPortalEdit` |
 | The answer bank's entries (their kind, to check a close wording suits the field; their questions, to name a near match as "a different question") | `listAnswers()` (added in #40) |
 | Draft a needs-you answer (honesty-checked, within the cap and the form's limit) | `draftAnswer(packageId, { question, maxChars?, maxWords?, language? })` |
-| Mark as submitted / Undo | `markPackageSubmitted(id, { via, portalUrl })`, `undoPackageSubmitted(id)`: called by Track's record submission (#35), or by Apply directly until #35 lands |
+| Mark as submitted / Undo | `markPackageSubmitted(id, { via, portalUrl })`, `undoPackageSubmitted(id)`: called by the fill engine's `markSubmitted` / `undoMarkSubmitted` (#41) right after Track's `recordSubmission` / `undoSubmission` (Track #35 may move the call into record submission) |
 
 ## `PrepareForTrack` (#35)
 
@@ -34,3 +34,7 @@ Prepare (spec #51) is the only owner of the master profile, the answer bank, the
 | Voice for follow-up drafts, and Kris's edits as evidence | `voiceContext({ language, purpose: "follow-up" })` (rules and excerpts sent with each draft), `recordVoiceEdit(edit)` (once per follow-up, when what Kris marked sent differs from the draft) |
 
 The tracker's `profile` and `voice` ports are made from the preparation engine with `trackPortsFrom(preparation)` (`packages/core/src/track-prepare.ts`); the service wires them in `app/src/main.ts`.
+
+## What Apply hands to Track (#41)
+
+"Mark as submitted" (the panel on a portal's confirmation page, "I've submitted this" on an unknown form, or the Job page) goes through the fill engine's `markSubmitted({ sessionId } | { packageId }, { portalUrl, via })`, which calls the tracker's **record submission**, `recordSubmission({ jobId, job, angle, packageId, portal, portalUrl, submittedAt, via })`. #41 added it in its minimal form: it creates the Application in Applied (`createdHow: "submission"`, its `submission` kept: package, portal, portal URL, when, how), once per package (asked again, it returns the first, `alreadyRecorded`), and creates nothing when the Job already has an open Application made another way (`already-open`). `undoSubmission(applicationId)` takes it off the list, refused once the Application has any later Event. Track #35 extends record submission: attaching to a hand-added Application for the same Job instead of refusing, the "Submitted → Applied" Event and the package snapshot.
