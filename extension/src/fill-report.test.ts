@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField, SubmittedApplication } from "@apply-kit/core";
-import { differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, sourceWords, submitPrompt } from "./fill-report.ts";
+import { differentJobLine, duplicatesReport, earlierPages, fieldRows, fileReport, fileSize, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, pageSummary, reviewChecks, sourceWords, startScreen, stepLine, submitPrompt, type PageSummary } from "./fill-report.ts";
 
 const field = (id: string, label: string, value = ""): ReadField => ({ id, label, kind: "text", required: true, value, options: [], maxLength: null, consent: false, password: false, hint: null });
 const reading: PageReading = {
@@ -172,5 +172,81 @@ describe("question rows", () => {
       ["Describe a detection rule", "Not filled", "Needs you", "apply-kit has no answer for this yet", "max 1,000 characters"],
       ["Gender", "Not filled", "Skipped · your rule", "Your rule leaves voluntary questions blank", null],
     ]);
+  });
+});
+
+describe("what the Fill view says on Workday", () => {
+  const wd = (fields: ReadField[], stepLabel = "My Experience"): PageReading => ({ pageKind: "form", jobRef: { portal: "workday", board: "kestrelpayments", jobId: "R-10482" }, stepLabel, stepCount: { current: 2, total: 6 }, fields });
+  const section = { ...field("workExperience", "Work Experience", "3"), kind: "repeating" as const, required: false, entry: { section: "work" as const, index: 0 } };
+  const dupes = [{ index: 3, words: "Junior Security Analyst, Orbital Bank, from 2023" }, { index: 4, words: "SOC Intern, Varna Telecom, from 2022" }];
+  const entries = (add: number, duplicates = dupes): FieldAnswer => ({ fieldId: "workExperience", kind: "entries", section: "work", add, duplicates, source: "cv-version", basis: "2 roles on the CV in your package" });
+
+  it("reports Workday's duplicates in words, with Remove and Keep, and nothing removed yet", () => {
+    expect(duplicatesReport([entries(0)])).toEqual({
+      section: "work", fieldId: "workExperience", indexes: [3, 4],
+      question: "Workday added 2 job entries after reading your CV",
+      basis: "\"Junior Security Analyst, Orbital Bank, from 2023\" and \"SOC Intern, Varna Telecom, from 2022\" repeat roles on your CV. Nothing was removed.",
+      remove: "Remove the 2 duplicates", keep: "Keep them", show: "Work Experience 3",
+    });
+    expect(duplicatesReport([entries(0, [dupes[0]!])])).toMatchObject({ question: "Workday added 1 job entry after reading your CV", remove: "Remove the duplicate" });
+    expect(duplicatesReport([entries(0, [])])).toBeNull();
+  });
+
+  it("lists a section as its entries, and a list apply-kit couldn't press as a choice for Kris", () => {
+    const rows = fieldRows(wd([section, { ...field("country", "Country"), kind: "select" }, { ...field("city", "City"), kind: "typeahead" }]), [
+      entries(1, []), { fieldId: "country", kind: "fill", value: "Bulgaria", source: "profile", basis: null }, { fieldId: "city", kind: "fill", value: "Sofia", source: "profile", basis: null },
+    ], [
+      { fieldId: "workExperience", outcome: "needs-you", source: null }, { fieldId: "country", outcome: "needs-you", source: null },
+      { fieldId: "city", outcome: "needs-you", source: null, choices: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] },
+    ]);
+    expect(rows.map((r) => [r.label, r.value, r.chip.word, r.why, r.choices])).toEqual([
+      ["Work Experience", "Add 1 more entry", "Needs you", "Add it with Workday's Add button; apply-kit can't press it. 2 roles on the CV in your package", null],
+      ["Country", "Choose: Bulgaria", "Needs you", "apply-kit can't open Workday's lists yet. Choose it on the page", null],
+      ["City", "Suggested: Sofia, Sofia City, Bulgaria", "Needs you", "Workday offers more than one match for \"Sofia\"", ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"]],
+    ]);
+    const done = fieldRows(wd([section]), [entries(0, [])], [{ fieldId: "workExperience", outcome: "filled", source: "cv-version" }]);
+    expect(done.map((r) => [r.value, r.chip.word, r.why])).toEqual([["3 entries", "CV version", "2 roles on the CV in your package"]]);
+  });
+
+  it("says where Kris is: the step and count Workday prints, or only 'this page'", () => {
+    expect(stepLine(wd([]), "Workday", "14:04")).toBe("Page 2 of 6, as Workday shows it. Filled 14:04.");
+    expect(stepLine({ ...wd([]), stepCount: null }, "Workday", "14:04")).toBe("Filled 14:04.");
+  });
+
+  const pages: PageSummary[] = [
+    { step: "My Information", filled: 6, chosen: ["City"], cv: null, duplicatesRemoved: 0, didntStick: ["Phone Number"], byRule: 0 },
+    { step: "My Experience", filled: 9, chosen: [], cv: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", duplicatesRemoved: 2, didntStick: [], byRule: 0 },
+    { step: "Voluntary Disclosures", filled: 0, chosen: [], cv: null, duplicatesRemoved: 0, didntStick: [], byRule: 3 },
+  ];
+
+  it("summarises the earlier pages, one line each", () => {
+    expect(earlierPages(pages)).toEqual({
+      heading: "Earlier pages · 16 filled",
+      lines: ["My Information · 7 filled (1 you chose: City), 1 to paste yourself", "My Experience · 9 filled, CV attached, 2 Workday duplicates removed", "Voluntary Disclosures · 3 left blank by your rule"],
+    });
+    expect(earlierPages([])).toBeNull();
+  });
+
+  it("lists what's worth a look on the review page", () => {
+    expect(reviewChecks(pages)).toEqual([
+      { tone: "ok", text: "CV attached: Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf" },
+      { tone: "ok", text: "16 fields filled across 3 pages" },
+      { tone: "nb", text: "1 value to paste yourself: Phone Number" },
+      { tone: "nb", text: "2 Workday duplicates removed on My Experience" },
+      { tone: "dim", text: "3 voluntary questions left blank, by your rule" },
+    ]);
+    expect(reviewChecks([])).toEqual([{ tone: "dim", text: "No pages filled in this panel yet" }]);
+  });
+
+  it("summarises a page as it's left", () => {
+    expect(pageSummary(wd([section, { ...field("resume", "Resume/CV"), kind: "file" }, field("x", "Gender")]), [
+      entries(0), { fieldId: "resume", kind: "file", which: "cv", fileName: "cv.pdf", size: 1, source: "package", basis: "" }, { fieldId: "x", kind: "skip", reason: "", byRule: true },
+    ], [{ fieldId: "workExperience", outcome: "filled", source: "cv-version" }, { fieldId: "resume", outcome: "filled", source: "package" }, { fieldId: "x", outcome: "skipped", source: null }], { chosen: [], duplicatesRemoved: 2 })).toEqual({
+      step: "My Experience", filled: 2, chosen: [], cv: "cv.pdf", duplicatesRemoved: 2, didntStick: [], byRule: 1,
+    });
+  });
+
+  it("on Workday's start screen, says to choose Apply Manually, in words", () => {
+    expect(startScreen("Workday")).toEqual({ heading: "Choose Apply Manually on Workday", text: "apply-kit fills the form you get after it, page by page. Autofill with Resume makes Workday read your CV and add entries of its own to check. apply-kit never presses these choices." });
   });
 });
