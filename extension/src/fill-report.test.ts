@@ -25,7 +25,7 @@ const outcomes: FieldOutcome[] = [
 const brief: PackageInBrief = {
   id: "p1", version: 3, approvedAt: "2026-10-12T07:30:00Z", job: { title: "Security Engineer", company: "Kestrel Payments" },
   jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" }, language: "en",
-  cv: { fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", label: "Security · Kestrel Payments", angle: "security", ats: { passed: 10, total: 10, accepted: [] } },
+  cv: { fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", size: 151_552, label: "Security · Kestrel Payments", angle: "security", ats: { passed: 10, total: 10, accepted: [] } },
   answers: 6, letter: true,
 };
 

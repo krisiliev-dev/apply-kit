@@ -62,6 +62,68 @@ export function setValue(el: Element, value: string, label = ""): boolean {
   return true;
 }
 
+// ---------- files: the package's CV or letter, attached as choosing it would ----------
+
+/** A package file as the panel passes it into the page: its name, type and bytes (base64). */
+export interface FileBytes {
+  fileName: string;
+  type: string;
+  base64: string;
+}
+
+function isFileInput(el: Element): el is HTMLInputElement {
+  return el.tagName.toLowerCase() === "input" && (el.getAttribute("type") ?? "").toLowerCase() === "file";
+}
+
+/** The page's own constructors (the page's window, not the panel's). */
+type PageWindow = Window & { DataTransfer: typeof DataTransfer; File: typeof File; Event: typeof Event };
+
+function dataTransfer(win: PageWindow, files: FileBytes[]): DataTransfer {
+  const dt = new win.DataTransfer();
+  for (const f of files) {
+    const bin = win.atob(f.base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    dt.items.add(new win.File([bytes], f.fileName, { type: f.type }));
+  }
+  return dt;
+}
+
+/**
+ * Attaches a file to a file input: `change` puts it in the input's files and announces it, as choosing
+ * it in the file picker would; `drop` drops it on the upload box (`dropOn`), for boxes that only take a
+ * dropped file. False if refused or impossible. Nothing is clicked.
+ */
+export function attachFile(el: Element, file: FileBytes, how: "change" | "drop", dropOn: Element | null = null, label = ""): boolean {
+  if (refusal(el, label) || !isFileInput(el)) return false;
+  const win = el.ownerDocument.defaultView! as PageWindow;
+  const dt = dataTransfer(win, [file]);
+  if (how === "change") {
+    el.files = dt.files;
+    announceChange(el);
+    return true;
+  }
+  const target = dropOn ?? el.parentElement;
+  if (!target || refusal(target) === "a link" || refusal(target) === "a button" || refusal(target) === "a form") return false;
+  const Drag = (win as unknown as { DragEvent?: typeof DragEvent }).DragEvent;
+  for (const type of ["dragenter", "dragover", "drop"]) {
+    const init = { bubbles: true, cancelable: true, dataTransfer: dt };
+    const ev: Event = Drag ? new Drag(type, init) : new win.Event(type, init);
+    // A DOM without drag events (a test page) makes plain events: give them the file too.
+    if ((ev as DragEvent).dataTransfer !== dt) Object.defineProperty(ev, "dataTransfer", { value: dt });
+    target.dispatchEvent(ev);
+  }
+  return true;
+}
+
+/** Undo for a file field: empties the input and announces it. */
+export function clearFile(el: Element, label = ""): boolean {
+  if (refusal(el, label) || !isFileInput(el)) return false;
+  el.files = dataTransfer(el.ownerDocument.defaultView! as PageWindow, []).files;
+  announceChange(el);
+  return true;
+}
+
 // ---------- marks: an outline and a badge over the field, never part of the portal's page ----------
 
 /** apply-kit's mark colours, the light-theme values of the design tokens (--met, --bloom, --partly, --gap). Portal pages are the company's, so the panel's tokens don't reach them. */

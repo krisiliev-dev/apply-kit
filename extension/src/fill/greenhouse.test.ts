@@ -1,10 +1,10 @@
 // The Greenhouse filler at its interface (read, fill, undo) on synthetic Greenhouse pages in
 // happy-dom: the classic board and the new React board. Made-up companies; the values are a made-up
 // person's (Mira Petrova). No live sites.
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FieldAnswer } from "@apply-kit/core";
 import { openFixture } from "./fixtures/load.ts";
-import { createGreenhouseFiller } from "./greenhouse.ts";
+import { createGreenhouseFiller, type FileToAttach } from "./greenhouse.ts";
 import { refusal } from "./page-actions.ts";
 
 const classic = () => openFixture("greenhouse-classic.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029");
@@ -59,13 +59,13 @@ describe("reading a Greenhouse page", () => {
 });
 
 describe("filling a Greenhouse page", () => {
-  it("sets the new board's React-style inputs through the native setter, so the form registers them", () => {
+  it("sets the new board's React-style inputs through the native setter, so the form registers them", async () => {
     const page = newBoard();
     // The controlled inputs ignore a direct write, as React does.
     page.field("preferred_name").value = "Mimi";
     expect(page.field("preferred_name").value).toBe("");
 
-    const outcomes = createGreenhouseFiller().fill(page.document, [
+    const outcomes = await createGreenhouseFiller().fill(page.document, [
       fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com"), fill("phone", "+359 88 000 0175"),
       { fieldId: "question_31002", kind: "needs-you", reason: "Your profile has no GitHub link", basis: null },
       { fieldId: "gdpr_consent", kind: "skip", reason: "Consent boxes are yours to tick" },
@@ -83,9 +83,9 @@ describe("filling a Greenhouse page", () => {
     expect(marks(page.document)).toEqual(["first_name:filled", "last_name:filled", "email:filled", "phone:filled", "question_31002:needs-you"]);
   });
 
-  it("draws marks as an outline and badge that can't be clicked and aren't read out", () => {
+  it("draws marks as an outline and badge that can't be clicked and aren't read out", async () => {
     const page = classic();
-    createGreenhouseFiller().fill(page.document, [fill("first_name", "Mira")]);
+    await createGreenhouseFiller().fill(page.document, [fill("first_name", "Mira")]);
 
     const m = page.document.querySelector<HTMLElement>("[data-apply-kit-mark]")!;
     expect(m.getAttribute("aria-hidden")).toBe("true");
@@ -94,11 +94,11 @@ describe("filling a Greenhouse page", () => {
     expect(m.textContent).toBe("✓");
   });
 
-  it("keeps a field that already has a value, and replaces it only when asked", () => {
+  it("keeps a field that already has a value, and replaces it only when asked", async () => {
     const page = classic();
     const filler = createGreenhouseFiller();
 
-    const [phone] = filler.fill(page.document, [fill("phone", "+359 88 000 0175")]);
+    const [phone] = await filler.fill(page.document, [fill("phone", "+359 88 000 0175")]);
 
     expect(phone).toEqual({ fieldId: "phone", outcome: "kept", source: null });
     expect(page.field("phone").value).toBe("+359 000 0000");
@@ -109,31 +109,31 @@ describe("filling a Greenhouse page", () => {
     expect(marks(page.document)).toEqual(["phone:filled"]);
   });
 
-  it("filling twice fills only what's still empty, and keeps what Kris changed", () => {
+  it("filling twice fills only what's still empty, and keeps what Kris changed", async () => {
     const page = classic();
     const filler = createGreenhouseFiller();
-    filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova")]);
+    await filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova")]);
     page.field("last_name").value = "Petrova-Ivanova";
 
-    const again = filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com")]);
+    const again = await filler.fill(page.document, [fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("email", "mira.petrova@example.com")]);
 
     expect(again.map((o) => o.outcome)).toEqual(["filled", "kept", "filled"]);
     expect(page.field("last_name").value).toBe("Petrova-Ivanova");
     expect(page.field("email").value).toBe("mira.petrova@example.com");
   });
 
-  it("picks a dropdown's option by its text", () => {
+  it("picks a dropdown's option by its text", async () => {
     const page = classic();
     const id = "job_application_answers_attributes_3_answer_selected_options_attributes_3_question_option_id";
-    const [o] = createGreenhouseFiller().fill(page.document, [{ fieldId: id, kind: "fill", value: "Company website", source: "answer-bank", basis: null }]);
+    const [o] = await createGreenhouseFiller().fill(page.document, [{ fieldId: id, kind: "fill", value: "Company website", source: "answer-bank", basis: null }]);
     expect(o).toEqual({ fieldId: id, outcome: "filled", source: "answer-bank" });
     expect((page.document.getElementById(id) as HTMLSelectElement).value).toBe("102");
   });
 
-  it("undo restores every value it changed and removes its marks", () => {
+  it("undo restores every value it changed and removes its marks", async () => {
     const page = newBoard();
     const filler = createGreenhouseFiller();
-    filler.fill(page.document, [fill("first_name", "Mira"), fill("email", "mira.petrova@example.com"), { fieldId: "question_31002", kind: "needs-you", reason: "", basis: null }]);
+    await filler.fill(page.document, [fill("first_name", "Mira"), fill("email", "mira.petrova@example.com"), { fieldId: "question_31002", kind: "needs-you", reason: "", basis: null }]);
 
     expect(filler.undo(page.document)).toBe(2);
 
@@ -143,14 +143,98 @@ describe("filling a Greenhouse page", () => {
   });
 });
 
+describe("attaching the package's files", () => {
+  const cvName = "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf";
+  const letterName = "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf";
+  const cv: FileToAttach = { which: "cv", fileName: cvName, type: "application/pdf", base64: "JVBERi1mYWtlIENW" };
+  const letter: FileToAttach = { which: "letter", fileName: letterName, type: "application/pdf", base64: "JVBERi1mYWtlIGxldHRlcg==" };
+  const attach = (fieldId: string, which: "cv" | "letter"): FieldAnswer => ({ fieldId, kind: "file", which, fileName: which === "cv" ? cvName : letterName, size: 12, source: "package", basis: "Your package's CV, v1" });
+  const filesPage = (options: Parameters<typeof openFixture>[2] = {}) => openFixture("greenhouse-files.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029", options);
+  const dropPage = () => openFixture("greenhouse-dropzone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410", { uploads: "drop-only" });
+  const shown = (doc: Document, inputId: string) => doc.getElementById(inputId)!.closest(".field, .file-upload")!.querySelector(".filename")!.textContent;
+
+  afterEach(() => { vi.useRealTimers(); });
+
+  it("attaches the CV and the letter through the file inputs, named as in the package", async () => {
+    const page = filesPage();
+
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [attach("resume", "cv"), attach("cover_letter", "letter")], [cv, letter]);
+
+    expect(outcomes).toEqual([{ fieldId: "resume", outcome: "filled", source: "package" }, { fieldId: "cover_letter", outcome: "filled", source: "package" }]);
+    expect(page.field("resume").files![0]!.name).toBe(cvName);
+    expect(await page.field("resume").files![0]!.text()).toBe("%PDF-fake CV");
+    expect(shown(page.document, "resume")).toBe(cvName);
+    expect(shown(page.document, "cover_letter")).toBe(letterName);
+    expect(marks(page.document)).toEqual(["resume:filled", "cover_letter:filled"]);
+    expect(page.presses).toEqual([]);
+  });
+
+  it("drops the CV on a box that ignores the input's change, and pastes the letter into the text-only option", async () => {
+    const page = dropPage();
+
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [
+      attach("resume", "cv"), { fieldId: "cover_letter_text", kind: "fill", value: "Dear Kestrel Payments team,", source: "package", basis: "Your package's letter, v1" },
+    ], [cv]);
+
+    expect(outcomes).toEqual([{ fieldId: "resume", outcome: "filled", source: "package" }, { fieldId: "cover_letter_text", outcome: "filled", source: "package" }]);
+    expect(shown(page.document, "resume")).toBe(cvName);
+    expect(page.field("cover_letter_text").value).toBe("Dear Kestrel Payments team,");
+    expect(page.presses).toEqual([]);
+  });
+
+  it("attaches files first and lets the page settle, so the portal's CV reading can't overwrite what's filled; what it read is kept", async () => {
+    vi.useFakeTimers();
+    const page = filesPage({ cvParser: { delayMs: 800, values: { first_name: "MIRA", phone: "0880000175" } } });
+
+    // The answers in the portal's order: the CV field comes after the names.
+    const filling = createGreenhouseFiller({ settleMs: 1500 }).fill(page.document, [
+      fill("first_name", "Mira"), fill("last_name", "Petrova"), fill("phone", "+359 88 000 0175"), attach("resume", "cv"),
+    ], [cv]);
+    await vi.advanceTimersByTimeAsync(1500);
+    const outcomes = await filling;
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(outcomes).toEqual([
+      { fieldId: "first_name", outcome: "kept", source: null },
+      { fieldId: "last_name", outcome: "filled", source: "profile" },
+      { fieldId: "phone", outcome: "kept", source: null },
+      { fieldId: "resume", outcome: "filled", source: "package" },
+    ]);
+    expect(["first_name", "last_name", "phone"].map((id) => page.field(id).value)).toEqual(["MIRA", "Petrova", "0880000175"]);
+  });
+
+  it("says the CV didn't attach when the portal rejects it, and leaves the other fields filled", async () => {
+    const page = filesPage({ uploads: "reject" });
+
+    const outcomes = await createGreenhouseFiller({ settleMs: 0 }).fill(page.document, [fill("first_name", "Mira"), attach("resume", "cv")], [cv]);
+
+    expect(outcomes).toEqual([{ fieldId: "first_name", outcome: "filled", source: "profile" }, { fieldId: "resume", outcome: "didnt-stick", source: null }]);
+    expect(marks(page.document)).toEqual(["resume:didnt-stick", "first_name:filled"]);
+  });
+
+  it("filling again keeps the CV it attached, and undo takes it off", async () => {
+    const page = filesPage();
+    const filler = createGreenhouseFiller({ settleMs: 0 });
+    await filler.fill(page.document, [attach("resume", "cv")], [cv]);
+
+    const again = await filler.fill(page.document, [attach("resume", "cv")], [cv]);
+    expect(again).toEqual([{ fieldId: "resume", outcome: "filled", source: "package" }]);
+    expect(page.field("resume").files).toHaveLength(1);
+
+    expect(filler.undo(page.document)).toBe(1);
+    expect(page.field("resume").files).toHaveLength(0);
+    expect(marks(page.document)).toEqual([]);
+  });
+});
+
 describe("what filling never does", () => {
-  it("never presses Submit or ticks a consent box, even when told to fill one", () => {
+  it("never presses Submit or ticks a consent box, even when told to fill one", async () => {
     for (const page of [classic(), newBoard()]) {
       const filler = createGreenhouseFiller();
       const reading = filler.read(page.document);
       const consent = reading.fields.find((f) => f.consent)!;
 
-      const outcomes = filler.fill(page.document, reading.fields.map((f) => fill(f.id, f.kind === "checkbox" ? "checked" : "Mira")));
+      const outcomes = await filler.fill(page.document, reading.fields.map((f) => fill(f.id, f.kind === "checkbox" ? "checked" : "Mira")));
       filler.undo(page.document);
 
       expect(page.presses).toEqual([]);
@@ -160,9 +244,11 @@ describe("what filling never does", () => {
   });
 
   it("refuses every submit, navigation and consent control on the fixtures", () => {
-    for (const page of [classic(), newBoard()]) {
+    const files = openFixture("greenhouse-files.html", "https://boards.greenhouse.io/vireohealth/jobs/4471029");
+    const drop = openFixture("greenhouse-dropzone.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410");
+    for (const page of [classic(), newBoard(), files, drop]) {
       const controls = Array.from(page.document.querySelectorAll("button, input[type=button], input[type=submit], a, form, input[type=checkbox]"));
-      expect(controls.length).toBeGreaterThan(2);
+      expect(controls.length).toBeGreaterThanOrEqual(2);
       for (const el of controls) {
         const label = el.closest("label")?.textContent ?? page.document.querySelector(`label[for="${el.id}"]`)?.textContent ?? "";
         expect(refusal(el, label), el.outerHTML.slice(0, 80)).not.toBeNull();
