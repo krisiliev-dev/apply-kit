@@ -17,6 +17,7 @@ Prepare (spec #51) is the only owner of the master profile, the answer bank, the
 | The package for a Job, or "your package isn't approved yet" | `packageForApply({ jobId })` / `({ packageId })` / `({ jobRef })` (the page's portal job reference against any posting of the package's Job; added in #38 for the draft-package state) |
 | The CV or letter to attach, exactly as approved (bytes, name, SHA-256, Packages-folder copy for "Show in Finder") | `packageFile(id, "cv" \| "letter")` |
 | The answer bank: find, add (with job and portal as source), record a use, record a portal edit | `findAnswer`, `saveAnswer`, `recordAnswerUse`, `recordPortalEdit` |
+| The answer bank's entries (their kind, to check a close wording suits the field; their questions, to name a near match as "a different question") | `listAnswers()` (added in #40) |
 | Draft a needs-you answer (honesty-checked, within the cap and the form's limit) | `draftAnswer(packageId, { question, maxChars?, maxWords?, language? })` |
 | Mark as submitted / Undo | `markPackageSubmitted(id, { via, portalUrl })`, `undoPackageSubmitted(id)`: called by the fill engine's `markSubmitted` / `undoMarkSubmitted` (#41) right after Track's `recordSubmission` / `undoSubmission` (Track #35 may move the call into record submission) |
 

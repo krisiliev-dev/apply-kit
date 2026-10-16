@@ -479,8 +479,9 @@ function filled(f: { tabId: number; ctx: HTMLElement; reading: PageReading; answ
   };
   const chip = (tone: string, icon: string, text: string) => h("span", { class: `chip ${tone}` }, svg(icon), text);
   const needs = rows.filter((r) => r.outcome === "needs-you").map((r) => h("div", { class: "need", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
-    h("p", { class: "q" }, r.label),
+    h("p", { class: "q" }, r.label, r.limit && h("span", { class: "meta" }, ` (${r.limit})`)),
     r.why && h("p", { class: "basis" }, r.why),
+    r.value.startsWith("Suggested: ") && h("p", { class: "suggest" }, r.value),
     h("div", { class: "row" }, button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
   )));
   const list = h("ul", { class: "flist" }, ...rows.map((r) => h("li", {},

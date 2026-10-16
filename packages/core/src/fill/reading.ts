@@ -46,7 +46,8 @@ export type FillSource = "profile" | "answer-bank" | "package" | "cv-version" | 
 export type FieldAnswer =
   | { fieldId: string; kind: "fill"; value: string; source: FillSource; basis: string | null }
   | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string }
-  | { fieldId: string; kind: "skip"; reason: string };
+  /** `byRule`: left blank by Kris's answer-bank rule ("Skipped · your rule"). */
+  | { fieldId: string; kind: "skip"; reason: string; byRule?: true };
 
 export type Outcome = "filled" | "kept" | "didnt-stick" | "skipped" | "needs-you";
 
