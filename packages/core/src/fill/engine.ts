@@ -315,7 +315,7 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
         if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
         if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
         if (f.kind === "file") return fileAnswer(f, pkg);
-        if (letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) {
+        if ((letterLabel.test(f.label) && (f.kind === "textarea" || f.kind === "text")) || (letterBox.test(f.label) && f.kind === "textarea")) {
           if (letterAsFile) return { fieldId, kind: "skip", reason: "Your letter is attached as a file" };
           if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
         }
@@ -410,6 +410,8 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
 }
 
 const letterLabel = /\bcover(ing)? ?letter\b|\bmotivation(al)? letter\b|мотивационно писмо/iu;
+/** Lever's "Additional information" box, where the cover letter goes (a text area only: a one-line field is a different question). */
+const letterBox = /^additional information$/iu;
 const cvLabel = /\b(resume|résumé|cv|curriculum)\b|автобиография/iu;
 
 /** A file field: the package's CV or letter, or Kris's when the package has no such file. */

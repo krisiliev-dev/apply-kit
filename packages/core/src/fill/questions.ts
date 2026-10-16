@@ -46,8 +46,8 @@ export const answerKindWords = (k: AnswerKind) => kindWords[k];
 export function kindFits(kind: AnswerKind, field: FieldKind): boolean {
   const fits: Record<AnswerKind, FieldKind[]> = {
     text: ["text", "textarea", "email", "tel", "url", "select", "radio", "typeahead"],
-    "yes-no": ["select", "radio", "typeahead", "checkbox", "text"],
-    choice: ["select", "radio", "typeahead", "text"],
+    "yes-no": ["select", "radio", "typeahead", "checkbox", "text", "yes-no"],
+    choice: ["select", "radio", "typeahead", "text", "yes-no"],
     number: ["number", "text", "select", "radio", "typeahead"],
     date: ["date", "text", "select", "radio"],
     rule: ["text", "number", "select", "radio", "typeahead", "textarea"],
