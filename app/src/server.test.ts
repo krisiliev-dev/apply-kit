@@ -390,6 +390,23 @@ describe("the extension's fill endpoints", () => {
     expect(await start.json()).toEqual({ kind: "no-package", job: null });
   });
 
+  it("match a form apply-kit doesn't know (no job reference), and give its copy list only with the token and a session", async () => {
+    const s = service();
+    expect((await s.request("/api/ext/fill/copy-list", s.json({ sessionId: "s1", reading }))).status).toBe(401);
+    const auth = { authorization: `Bearer ${await paired(s)}` };
+    const company = { portal: "unknown", host: "careers.ostravabank.example", jobRef: null };
+
+    const match = await s.request("/api/ext/fill/match", s.json({ page: company, sessionId: null }, auth));
+    expect(match.status).toBe(200);
+    expect(await match.json()).toEqual({ kind: "no-package", job: null });
+    expect((await s.request("/api/ext/fill/match", s.json({ page: { ...company, jobRef: greenhouse.jobRef, portal: "unknown!" } }, auth))).status).toBe(400);
+
+    expect((await s.request("/api/ext/fill/copy-list", s.json({ sessionId: "s1" }, auth))).status).toBe(400);
+    const unknown = await s.request("/api/ext/fill/copy-list", s.json({ sessionId: "s1", reading }, auth));
+    expect(unknown.status).toBe(409);
+    expect(await unknown.json()).toMatchObject({ problem: "no-session" });
+  });
+
   it("refuse a malformed page or reading, and an unknown session", async () => {
     const s = service();
     const auth = { authorization: `Bearer ${await paired(s)}` };

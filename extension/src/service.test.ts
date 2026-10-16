@@ -140,6 +140,18 @@ describe("the extension talking to apply-kit", () => {
     expect(calls).toEqual([["/api/ext/fill/file", { sessionId: "s-1", which: "cv" }], ["/api/ext/fill/reveal", { sessionId: "s-1", which: "cv" }]]);
   });
 
+  it("asks for the copy list of a form apply-kit doesn't know, keeping nothing of it", async () => {
+    const calls: [string, unknown][] = [];
+    const list = { rows: [{ fieldId: "phone", label: "Телефон", meaning: "phone", kind: "value", value: "+359 88 000 0175" }], unmapped: 2 };
+    const service = fakeService((r) => { calls.push([new URL(r.url).pathname, r.body]); return json(list); });
+    const { store, writes } = memoryStore({ token: "t" });
+    const reading = { pageKind: "form" as const, jobRef: null, stepLabel: null, stepCount: null, fields: [] };
+
+    expect(await createClient({ fetch: service, store }).fill.copyList("s-1", reading)).toEqual({ ok: true, value: list });
+    expect(calls).toEqual([["/api/ext/fill/copy-list", { sessionId: "s-1", reading }]]);
+    expect(writes).toEqual([]);
+  });
+
   it("sends a field report: the field's structure and the page's address, nothing kept in the browser", async () => {
     const calls: [string, unknown][] = [];
     const service = fakeService((r) => { calls.push([new URL(r.url).pathname, r.body]); return json({ id: "r1" }); });
