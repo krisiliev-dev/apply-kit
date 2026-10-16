@@ -68,9 +68,10 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
     }
     switch (o.outcome) {
       case "filled":
-        return [{ ...row, value: a.kind === "fill" ? a.value : f.value, chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
+        // A typeahead's picks (skills) are one per line: shown as a list.
+        return [{ ...row, value: (a.kind === "fill" ? a.value : f.value).split("\n").join(", "), chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
       case "kept":
-        return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" ? a.value : null }];
+        return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" && a.value.trim() !== f.value.trim() ? a.value : null }];
       case "needs-you":
         return [{
           ...row, value: a.kind === "needs-you" && a.suggestion ? `Suggested: ${a.suggestion}` : "Not filled", chip: { tone: "ask", word: "Needs you" },

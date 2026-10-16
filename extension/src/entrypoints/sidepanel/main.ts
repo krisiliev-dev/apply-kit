@@ -636,7 +636,7 @@ function filled(f: Filled, announceIt = true) {
     announce(n > 0 ? `Removed ${n === 1 ? "the duplicate" : `${n} duplicates`} with Workday's Delete.` : "Nothing was removed: apply-kit can't press Workday's Delete yet. Delete them on the page.");
     filled({ ...f, extras: { ...f.extras, duplicatesRemoved: f.extras.duplicatesRemoved + n, duplicatesSettled: n > 0 } }, false);
   };
-  const dupesItem = dupes && h("div", { class: "ask" }, h("div", {},
+  const dupesItem = dupes && h("div", { class: "need" }, h("div", {},
     h("p", { class: "q" }, dupes.question),
     h("p", { class: "basis" }, dupes.basis),
     h("div", { class: "row" },
