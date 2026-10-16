@@ -51,7 +51,8 @@ export type FieldAnswer =
   /** Attach the package's frozen CV or letter: the extension fetches its bytes (`packageFile`) and attaches them first. */
   | { fieldId: string; kind: "file"; which: PackageFileKind; fileName: string; size: number; source: "package"; basis: string }
   | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string }
-  | { fieldId: string; kind: "skip"; reason: string };
+  /** `byRule`: left blank by Kris's answer-bank rule ("Skipped · your rule"). */
+  | { fieldId: string; kind: "skip"; reason: string; byRule?: true };
 
 export type Outcome = "filled" | "kept" | "didnt-stick" | "skipped" | "needs-you";
 

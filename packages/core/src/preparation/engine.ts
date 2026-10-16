@@ -464,7 +464,7 @@ export type PrepareForTrack = Pick<PreparationEngine,
  */
 export type PrepareForApply = Pick<PreparationEngine,
   | "profileForApply" | "packageForApply" | "approvedPackages" | "packageFile"
-  | "findAnswer" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit" | "draftAnswer" | "markPackageSubmitted" | "undoPackageSubmitted"
+  | "findAnswer" | "listAnswers" | "saveAnswer" | "recordAnswerUse" | "recordPortalEdit" | "draftAnswer" | "markPackageSubmitted" | "undoPackageSubmitted"
 >;
 
 /** The voice as drafting features use it (the cover letter here, Track's follow-ups): read the context, record edits. */

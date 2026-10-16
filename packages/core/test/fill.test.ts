@@ -170,7 +170,7 @@ describe("answering a page's contact fields from the master profile", () => {
     const answers = t.fill.answer(t.sessionId, reading([
       field("pw", "Password", { kind: "text", password: true }),
       field("gdpr", "I agree to the privacy policy", { kind: "checkbox", consent: true }),
-      field("why", "Why do you want to work at Kestrel Payments?", { kind: "textarea" }),
+      field("why", "What would you change in your last team?", { kind: "textarea" }),
       field("pronouns", "Pronouns", { required: false }),
     ]));
 
@@ -310,5 +310,188 @@ describe("recording a page", () => {
     expect(recorded).toEqual(expected);
     expect(t.fill.pages(t.sessionId)).toEqual([expected]);
     expect(JSON.stringify(t.fill.pages(t.sessionId))).not.toMatch(/Mira|old@example|mira\.petrova/);
+  });
+});
+
+/** Adds an answer to Mira's bank through Prepare's interface. */
+function bank(t: Awaited<ReturnType<typeof filling>>, input: Parameters<typeof t.preparation.saveAnswer>[0]) {
+  const r = t.preparation.saveAnswer(input);
+  if (!r.saved) throw new Error(r.problems[0]!.message);
+  return r.answer;
+}
+const yesNo = ["Yes", "No"];
+const sponsorship = { question: "Do you require visa sponsorship?", wordings: ["Will you now or in the future require sponsorship?"], versions: { en: "No", bg: "Не" }, category: "standard", kind: "yes-no" } as const;
+
+describe("answering questions from the answer bank", () => {
+  it("fills an exact or alias match without asking", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+    bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?", "Готови ли сте да се преместите?"], versions: { en: "No", bg: "Не" }, category: "standard", kind: "yes-no" });
+
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("q1", "Do you require visa sponsorship?", { kind: "select", options: yesNo }),
+      field("q2", "Are you willing to relocate?", { kind: "radio", options: yesNo }),
+    ]));
+
+    expect(answers).toEqual([
+      { fieldId: "q1", kind: "fill", value: "No", source: "answer-bank", basis: null },
+      { fieldId: "q2", kind: "fill", value: "No", source: "answer-bank", basis: null },
+    ]);
+  });
+
+  it("fills a close wording above the bar, and names the entry it matched", async () => {
+    const t = await filling();
+    bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?"], versions: { en: "No" }, category: "standard", kind: "yes-no" });
+
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "select", options: yesNo })]));
+
+    expect(a).toEqual({ fieldId: "q", kind: "fill", value: "No", source: "answer-bank", basis: 'Close wording of "Willing to relocate" in your answer bank' });
+  });
+
+  it("refuses a near match to a different question, and names it", async () => {
+    const t = await filling();
+    bank(t, { question: "Do you hold any security certifications?", versions: { en: "CompTIA Security+" }, category: "screening" });
+
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Do you hold a security clearance?", { kind: "radio", options: yesNo })]));
+
+    expect(a).toEqual({
+      fieldId: "q", kind: "needs-you", reason: "apply-kit has no answer for this yet",
+      basis: 'The closest answer bank entry ("Do you hold any security certifications?") is a different question, so it wasn\'t used',
+    });
+  });
+
+  it("refuses a close wording whose answer is the wrong kind for the field", async () => {
+    const t = await filling();
+    bank(t, { question: "Willing to relocate", wordings: ["Are you willing to relocate?"], versions: { en: "No" }, category: "standard", kind: "yes-no" });
+
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Are you willing to relocate to Sofia?", { kind: "textarea" })]));
+
+    expect(a).toEqual({
+      fieldId: "q", kind: "needs-you", reason: "The closest answer is a yes/no answer, and this field asks for text",
+      basis: 'Close wording of "Willing to relocate" in your answer bank', suggestion: "No",
+    });
+  });
+
+  it("records each use of an answer-bank entry through Prepare, once per session", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+    const r = reading([field("q1", "Will you now or in the future require sponsorship?", { kind: "select", options: yesNo }), field("first_name", "First Name")]);
+    const outcomes = [{ fieldId: "q1", outcome: "filled" as const, source: "answer-bank" as const }, { fieldId: "first_name", outcome: "filled" as const, source: "profile" as const }];
+    const used = () => t.preparation.listAnswers({ search: "visa sponsorship" }).answers[0]!;
+    expect(used().useCount).toBe(0);
+
+    t.fill.recordPage(t.sessionId, r, outcomes);
+    t.fill.recordPage(t.sessionId, r, outcomes);
+
+    expect(used()).toMatchObject({ useCount: 1, lastUsedAt: "2026-10-12T07:30:00.000Z" });
+  });
+});
+
+describe("turning an answer into the field's format", () => {
+  it("maps yes/no between English and Bulgarian, and to options worded as sentences", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("q1", "Do you require visa sponsorship?", { kind: "select", options: ["Да", "Не"] }),
+      field("q2", "Will you now or in the future require sponsorship?", { kind: "radio", options: ["Yes, I will", "No, I won't"] }),
+    ]));
+
+    expect(answers.map((a) => a.kind === "fill" && a.value)).toEqual(["Не", "No, I won't"]);
+
+    bank(t, { question: "Нуждаете ли се от спонсорство за виза?", versions: { bg: "Не" }, category: "standard", kind: "yes-no" });
+    const [bg] = t.fill.answer(t.sessionId, reading([field("q2", "Нуждаете ли се от спонсорство за виза?", { kind: "radio", options: ["Yes, I will", "No, I won't"] })]));
+    expect(bg).toMatchObject({ kind: "needs-you", reason: "Your answer bank has this only in Bulgarian" });
+  });
+
+  it("puts '1 month' in the notice-period option that holds it", async () => {
+    const t = await filling();
+    const [a, b] = t.fill.answer(t.sessionId, reading([
+      field("q1", "Notice period", { kind: "select", options: ["Immediately", "Less than 2 weeks", "2–4 weeks", "1–2 months", "More than 2 months"] }),
+      field("q2", "Notice period", { kind: "select", options: ["Up to 1 month", "1 month or more"] }),
+    ]));
+
+    expect(a).toEqual({ fieldId: "q1", kind: "fill", value: "1–2 months", source: "package", basis: "Approved screening answer in this package" });
+    // Two options hold it: all or nothing, so Kris picks.
+    expect(b).toEqual({ fieldId: "q2", kind: "needs-you", reason: 'None of the options matches "1 month"', basis: "Approved screening answer in this package", suggestion: "1 month" });
+  });
+
+  it("puts a number in the range that holds it", async () => {
+    const t = await filling();
+    bank(t, { question: "Years of experience with SIEM tools", versions: { en: "4" }, category: "screening", kind: "number" });
+    const [a] = t.fill.answer(t.sessionId, reading([field("q", "Years of experience with SIEM tools", { kind: "select", options: ["0-2", "3-5", "6+"] })]));
+    expect(a).toMatchObject({ kind: "fill", value: "3-5" });
+  });
+
+  it("works out a relative start date from today", async () => {
+    const t = await filling();
+    bank(t, { question: "Earliest start date", wordings: ["When can you start?"], versions: { en: "Two weeks from offer" }, category: "standard", kind: "date" });
+
+    const [date, text] = t.fill.answer(t.sessionId, reading([field("d", "Earliest start date", { kind: "date" }), field("t", "When can you start?")]));
+
+    expect(date).toEqual({ fieldId: "d", kind: "fill", value: "2026-10-26", source: "answer-bank", basis: '"Two weeks from offer", counted from today' });
+    expect(text).toEqual({ fieldId: "t", kind: "fill", value: "Two weeks from offer", source: "answer-bank", basis: null });
+  });
+});
+
+describe("Kris's rules and the package's answers", () => {
+  it("suggests salary from the rule, with the floor, and never fills it", async () => {
+    const t = await filling();
+    const [a] = t.fill.answer(t.sessionId, reading([field("s", "Expected gross monthly salary", { kind: "number" })]));
+    expect(a).toEqual({
+      fieldId: "s", kind: "needs-you", reason: "Your answer bank says: ask each time",
+      basis: 'Your rule: "Upper half of the posting\'s stated range, never under €2,000 a month". The posting\'s range isn\'t known here, so this is your floor.',
+      suggestion: "2000",
+    });
+  });
+
+  it("suggests the salary Kris approved in the package for this job, still without filling it", async () => {
+    const t = await filling();
+    const [a] = t.fill.answer(t.sessionId, reading([field("s", "What are your salary expectations? (gross monthly, EUR)")]));
+    expect(a).toEqual({
+      fieldId: "s", kind: "needs-you", reason: "Your answer bank says: ask each time",
+      basis: "You chose 3400 for this job when you approved the package.", suggestion: "3400",
+    });
+  });
+
+  it("leaves voluntary diversity questions blank by rule, and says 'prefer not to say' only where the portal requires an answer", async () => {
+    const t = await filling();
+    const decline = ["Male", "Female", "Decline To Self Identify"];
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("g", "Gender", { kind: "select", options: decline, required: false }),
+      field("h", "Are you Hispanic/Latino?", { kind: "select", options: ["Yes", "No", "Decline To Self Identify"], required: false }),
+      field("v", "Veteran Status", { kind: "select", options: ["I am not a protected veteran", "I don't wish to answer"], required: true }),
+      field("d", "Disability Status", { kind: "select", options: ["Yes", "No"], required: true }),
+    ]));
+
+    expect(answers).toEqual([
+      { fieldId: "g", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "h", kind: "skip", reason: "Your rule leaves voluntary questions blank", byRule: true },
+      { fieldId: "v", kind: "fill", value: "I don't wish to answer", source: "answer-bank", basis: "This portal requires an answer, so your rule's \"Prefer not to say\"" },
+      { fieldId: "d", kind: "needs-you", reason: "This portal requires an answer, and none of its options is \"Prefer not to say\"", basis: "Your rule leaves voluntary questions blank" },
+    ]);
+  });
+
+  it("uses the package's approved screening answers for their own questions, ahead of the answer bank", async () => {
+    const t = await filling();
+    const notice = t.preparation.listAnswers({ search: "Notice period" }).answers[0]!;
+    t.preparation.saveAnswer({ id: notice.id, question: notice.question, wordings: notice.wordings.map((w) => w.text), versions: { en: "2 months" }, category: "standard" });
+
+    const answers = t.fill.answer(t.sessionId, reading([
+      field("n", "What is your notice period?"),
+      field("n2", "Notice period"),
+      field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 1000 }),
+    ]));
+
+    expect(answers[0]).toEqual({ fieldId: "n", kind: "fill", value: "1 month", source: "package", basis: "Approved screening answer in this package" });
+    // The same question in other words is still the package's.
+    expect(answers[1]).toMatchObject({ fieldId: "n2", kind: "fill", value: "1 month", source: "package" });
+    expect(answers[2]).toMatchObject({ fieldId: "i", kind: "fill", source: "package", value: expect.stringMatching(/^At Northwind Bank I ran the response/) });
+  });
+
+  it("respects a field's character limit", async () => {
+    const t = await filling();
+    const [a] = t.fill.answer(t.sessionId, reading([field("i", "Describe a security incident you handled.", { kind: "textarea", maxLength: 100 })]));
+    expect(a).toMatchObject({ fieldId: "i", kind: "needs-you", reason: "Your answer is 178 characters; this field takes 100", basis: "Approved screening answer in this package" });
   });
 });

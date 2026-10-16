@@ -81,6 +81,8 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .need > div { display: grid; gap: var(--s-3); min-width: 0 }
 .need .q { font-weight: 600; font-size: var(--fs-small); overflow-wrap: anywhere }
 .basis { font-size: var(--fs-caption); color: var(--ink-2); overflow-wrap: anywhere; border-left: 2px solid var(--rule); padding-left: var(--s-3) }
+.need .suggest { font-size: var(--fs-small); color: var(--ink); overflow-wrap: anywhere }
+.need .q .meta { font-weight: 400 }
 .sp .undo { justify-self: start }
 .sp fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: var(--s-2); min-width: 0 }
 .sp legend { padding: 0; font-weight: 600; font-size: var(--fs-small); margin-bottom: var(--s-2) }
