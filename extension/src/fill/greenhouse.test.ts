@@ -264,3 +264,45 @@ describe("custom and demographic questions", () => {
     expect([page.field("relocate_no").checked, page.field(ids.office).checked, page.field(ids.notice).value]).toEqual([false, false, ""]);
   });
 });
+
+describe("needs-you items Kris answers", () => {
+  const questions = () => openFixture("greenhouse-questions.html", "https://boards.greenhouse.io/vireohealth/jobs/4471077");
+  const detection = "job_application_answers_attributes_4_text_value";
+  const relocate = "job_application[answers_attributes][2][boolean_value]";
+  const needsYou = (fieldId: string): FieldAnswer => ({ fieldId, kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null });
+  const draft = "At Northwind Bank I rewrote our brute-force alert to group failed logins by source.";
+
+  it("fills only that one field from the panel, and marks it Kris's on the next fill", () => {
+    const page = questions();
+    const filler = createGreenhouseFiller();
+    filler.fill(page.document, [needsYou(detection), needsYou(relocate), needsYou("first_name")]);
+
+    expect(filler.fillOne(page.document, detection, draft)).toBe("filled");
+    expect(filler.fillOne(page.document, relocate, "No")).toBe("filled");
+
+    expect(page.field(detection).value).toBe(draft);
+    expect(page.field("relocate_no").checked).toBe(true);
+    expect(page.field("first_name").value).toBe("");
+    expect(marks(page.document)).toEqual(["first_name:needs-you", `${detection}:filled`, `${relocate}:filled`]);
+    const again = filler.fill(page.document, [needsYou(detection), needsYou(relocate), needsYou("first_name")]);
+    expect(again).toEqual([
+      { fieldId: detection, outcome: "filled", source: "you" },
+      { fieldId: relocate, outcome: "filled", source: "you" },
+      { fieldId: "first_name", outcome: "needs-you", source: null },
+    ]);
+    expect(page.presses).toEqual([]);
+  });
+
+  it("keeps an answer Kris typed on the page into a needs-you field, as his", () => {
+    const page = questions();
+    const filler = createGreenhouseFiller();
+    filler.fill(page.document, [needsYou(detection)]);
+    page.field(detection).value = "Typed on the page by Mira.";
+
+    const [o] = filler.fill(page.document, [needsYou(detection)]);
+
+    expect(o).toEqual({ fieldId: detection, outcome: "kept", source: null });
+    expect(page.field(detection).value).toBe("Typed on the page by Mira.");
+    expect(marks(page.document)).toEqual([`${detection}:kept`]);
+  });
+});

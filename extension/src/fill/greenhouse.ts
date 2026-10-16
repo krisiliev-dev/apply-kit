@@ -12,6 +12,8 @@ export interface Filler {
   fill(doc: Document, answers: FieldAnswer[]): FieldOutcome[];
   /** "Replace" on a kept field: puts apply-kit's value in (Undo restores the portal's). */
   replace(doc: Document, fieldId: string, value: string): FieldOutcome["outcome"];
+  /** "Fill …" on a needs-you item: puts Kris's answer from the panel in that one field; later fills report it as his ("You"). */
+  fillOne(doc: Document, fieldId: string, value: string): FieldOutcome["outcome"];
   /** Restores every value apply-kit changed on this page and removes its marks. Returns how many fields were restored. */
   undo(doc: Document): number;
   /** Show on page. False if the field is gone. */
@@ -131,6 +133,8 @@ export function createGreenhouseFiller(): Filler {
   const previous = new Map<string, string>();
   /** Field id → the value apply-kit put in. */
   const filled = new Map<string, string>();
+  /** Fields Kris answered from the panel. */
+  const yours = new Set<string>();
 
   const find = (doc: Document, id: string) => {
     const all = controls(doc);
@@ -185,6 +189,13 @@ export function createGreenhouseFiller(): Filler {
         const found = find(doc, a.fieldId);
         if (!found || a.kind === "skip") return { fieldId: a.fieldId, outcome: "skipped", source: null };
         if (a.kind === "needs-you") {
+          const current = found.field.value;
+          // Answered: from the panel (Kris's), or typed on the page (kept, so apply-kit can offer it to the bank).
+          if (current.trim() !== "" && yours.has(a.fieldId) && filled.get(a.fieldId) === current) return { fieldId: a.fieldId, outcome: "filled", source: "you" };
+          if (current.trim() !== "") {
+            mark(found.el, "kept", a.fieldId);
+            return { fieldId: a.fieldId, outcome: "kept", source: null };
+          }
           mark(found.el, "needs-you", a.fieldId);
           return { fieldId: a.fieldId, outcome: "needs-you", source: null };
         }
@@ -206,6 +217,13 @@ export function createGreenhouseFiller(): Filler {
       return put(doc, fieldId, value);
     },
 
+    fillOne(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      const outcome = put(doc, fieldId, value);
+      if (outcome === "filled") yours.add(fieldId);
+      return outcome;
+    },
+
     undo(doc) {
       let restored = 0;
       for (const [id, before] of previous) {
@@ -214,6 +232,7 @@ export function createGreenhouseFiller(): Filler {
       }
       previous.clear();
       filled.clear();
+      yours.clear();
       removeMarks(doc);
       return restored;
     },
