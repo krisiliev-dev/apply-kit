@@ -58,6 +58,24 @@ describe("reading a Greenhouse page", () => {
   });
 });
 
+describe("reading Greenhouse's confirmation page", () => {
+  it("reads the page after Submit as a confirmation of the job, with no fields, pressing nothing", () => {
+    const page = openFixture("greenhouse-confirmation.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation");
+
+    const r = createGreenhouseFiller().read(page.document);
+
+    expect(r).toEqual({ pageKind: "confirmation", jobRef: { portal: "greenhouse", board: "kestrel", jobId: "4410" }, stepLabel: null, stepCount: null, fields: [] });
+    expect(page.presses).toEqual([]);
+  });
+
+  it("doesn't take a form that thanks you in its intro for a confirmation", () => {
+    const page = openFixture("greenhouse-new.html", "https://job-boards.greenhouse.io/kestrel/jobs/4410");
+    page.document.querySelector(".required-fields")!.textContent = "Thank you for applying to Kestrel Payments! * indicates a required field";
+
+    expect(createGreenhouseFiller().read(page.document).pageKind).toBe("form");
+  });
+});
+
 describe("filling a Greenhouse page", () => {
   it("sets the new board's React-style inputs through the native setter, so the form registers them", () => {
     const page = newBoard();

@@ -1,7 +1,7 @@
 // What the Fill view says, as pure functions (like report.ts for Capture): why the page matched a
 // package, the package in words, the field rows in the portal's order with their source in words,
 // the end-of-fill announcement, and where focus goes after a fill.
-import type { FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageInBrief, PageJobReference, PageReading } from "@apply-kit/core";
+import type { FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageInBrief, PageJobReference, PageKind, PageReading, SubmittedApplication } from "@apply-kit/core";
 
 const sources: Record<FillSource, string> = { profile: "Profile", "answer-bank": "Answer bank", package: "Package", "cv-version": "CV version", you: "You" };
 
@@ -74,10 +74,12 @@ export function matchWhy(match: Extract<FillStart, { kind: "matched" }>, pageRef
 const angleWords = { developer: "Developer", security: "Security", design: "Design" } as const;
 
 /** The package in words, so the right CV is confirmed before anything is attached: [term, detail, note]. */
+const atsWords = (ats: PackageInBrief["cv"]["ats"]) => ats.passed === ats.total
+  ? ats.accepted.length ? `ATS check passed, ${ats.accepted.length} accepted knowingly` : "ATS check passed"
+  : `${ats.passed} of ${ats.total} ATS checks pass`;
+
 export function packageLines(p: PackageInBrief): { term: string; detail: string; note: string | null }[] {
-  const ats = p.cv.ats.passed === p.cv.ats.total
-    ? p.cv.ats.accepted.length ? `ATS check passed, ${p.cv.ats.accepted.length} accepted knowingly` : "ATS check passed"
-    : `${p.cv.ats.passed} of ${p.cv.ats.total} ATS checks pass`;
+  const ats = atsWords(p.cv.ats);
   return [
     { term: "CV", detail: p.cv.fileName, note: `${angleWords[p.cv.angle]} angle · v${p.version} · ${ats}` },
     { term: "Answers", detail: `${p.answers === 1 ? "1 approved screening answer" : `${p.answers} approved screening answers`}, plus your answer bank`, note: null },
@@ -91,4 +93,41 @@ export function differentJobLine(previous: Extract<FillStart, { kind: "different
   const from = previous.jobRef ? `${was} (${previous.jobRef.jobId})` : was;
   const to = now.jobId ? `${now.title} (${now.jobId})` : now.title;
   return `The tab moved from ${from} to ${to}. Nothing was filled from the ${was} package.`;
+}
+
+/**
+ * Where marking as submitted is offered: "ask" ("Did you submit?") on a portal's confirmation page;
+ * "footer" ("I've submitted this") on a form apply-kit doesn't know, where there's no confirmation to
+ * detect; nowhere else, and never on a review page, where it would come before Submit.
+ */
+export function submitPrompt(page: { known: boolean; pageKind: PageKind | null }): "ask" | "footer" | null {
+  if (page.pageKind === "review") return null;
+  if (page.known) return page.pageKind === "confirmation" ? "ask" : null;
+  return "footer";
+}
+
+const portalNames: Record<string, string> = { workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", smartrecruiters: "SmartRecruiters", workable: "Workable", ashby: "Ashby" };
+const sofia = (iso: string, parts: Intl.DateTimeFormatOptions) => new Date(iso).toLocaleString("en-GB", { timeZone: "Europe/Sofia", ...parts });
+const dayWords = (iso: string) => sofia(iso, { day: "numeric", month: "short" });
+
+/** The banner after Mark as submitted: created now, or already marked on an earlier day. */
+export function markedBanner(r: { alreadyMarked: boolean; application: SubmittedApplication }): { lead: string; rest: string } {
+  const what = `${r.application.title} at ${r.application.company}`;
+  return r.alreadyMarked
+    ? { lead: `Already marked as submitted on ${dayWords(r.application.submission.submittedAt)}.`, rest: `${what} has its Application; nothing new was created.` }
+    : { lead: "Application created.", rest: `${what} is now tracked.` };
+}
+
+/** The Application as marked, in key-values: status, when and how, the package, the portal's host. */
+export function markedLines(a: SubmittedApplication, p: PackageInBrief): { term: string; detail: string }[] {
+  const s = a.submission;
+  const when = `${dayWords(s.submittedAt)}, ${sofia(s.submittedAt, { hour: "2-digit", minute: "2-digit", hour12: false })}`;
+  const how = s.via === "app" ? "marked in apply-kit" : `via ${s.portal ? (portalNames[s.portal] ?? s.portal) : "the portal"}`;
+  const lines = [
+    { term: "Status", detail: a.status.charAt(0).toUpperCase() + a.status.slice(1) },
+    { term: "Submitted", detail: `${when}, ${how}` },
+    { term: "Package", detail: `CV v${p.version} · ${p.answers === 1 ? "1 answer" : `${p.answers} answers`} · ${atsWords(p.cv.ats)}` },
+  ];
+  if (s.portalUrl) lines.push({ term: "Portal", detail: new URL(s.portalUrl).hostname });
+  return lines;
 }
