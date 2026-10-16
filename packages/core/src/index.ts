@@ -154,7 +154,7 @@ export type { TrackStats, WeekCount, WorkingRow } from "./track-stats.ts";
 export { draftOutputSchema, emailKinds, emailClassificationSchema, highConfidence } from "./track-mail.ts";
 export type { EmailKind, EmailClassification, ClassifyInput, TrackAssistant } from "./track-mail.ts";
 export type {
-  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
+  EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, PackageConfirmation, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";
 export { createFillEngine, FillError } from "./fill/engine.ts";
 export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageInBrief, SessionEnd, MarkResult, SubmittedApplication } from "./fill/engine.ts";
