@@ -83,6 +83,8 @@ export interface VoiceSend {
 
 /** What a draft asks for: its language, and what it's for (recorded with the excerpts, e.g. "cover-letter"). */
 export interface VoiceContextRequest {
+  /** Inspect excerpts to estimate a call without claiming they were sent. */
+  record?: boolean;
   language: VoiceLanguage;
   purpose: string;
 }
@@ -415,7 +417,7 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
    * Rules for the language, and excerpts from its readable samples (cover letters first): the opening
    * sentences of each, sharing the word limit between them.
    */
-  function context({ language, purpose }: VoiceContextRequest): VoiceContext {
+  function context({ language, purpose, record = true }: VoiceContextRequest): VoiceContext {
     const rules = db.prepare("SELECT id, text FROM voice_rule WHERE removed_at IS NULL AND (language IS NULL OR language = ?) ORDER BY created_at, rowid").all(language)
       .map((r) => ({ id: String(r.id), text: String(r.text) }));
     const samples = db.prepare(
@@ -439,7 +441,7 @@ export function createVoiceStore(deps: PreparationDeps): VoiceStore {
       left -= n;
       if (left <= 0) break;
     }
-    return { id: recordSend(purpose, language, excerpts), rules, excerpts };
+    return { id: record ? recordSend(purpose, language, excerpts) : "", rules, excerpts };
   }
 
   /** Takes a rule out of use; it doesn't come back unless writing newer than this shows it again. */

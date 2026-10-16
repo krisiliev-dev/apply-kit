@@ -58,7 +58,7 @@ function setup(options: TestPreparationOptions = {}) {
   const ai = fakeAssistant();
   const tracker = createTracker({
     db, clock: t.clock, discovery: t.discovery, assistant: ai.assistant, aiMonthlyCapUsd: 10,
-    ...trackPortsFrom(t.preparation),
+    ...trackPortsFrom(t.preparation), ...{ budget: t.budget },
   });
   /** Applies to Kestrel's Security Engineer job (read first), 7 days ago; returns its due nudge's id. */
   const applyToKestrel = async () => {
@@ -163,5 +163,25 @@ describe("a follow-up draft in Kris's voice, from Prepare", () => {
     await t.tracker.markFollowUpSent(followUpId);
 
     expect(t.preparation.voice().edits.total).toBe(0);
+  });
+});
+
+
+describe("Track shares reservations with Prepare and Discover", () => {
+  it("refuses a draft while another task holds the remaining budget, without recording voice sent", async () => {
+    const t = setup();
+    const { followUpId } = await t.applyToKestrel();
+    let release!: () => void;
+    const held = t.budget.call({ task: "tailor-cv", estimateUsd: 9 }, async () => {
+      await new Promise<void>((resolve) => { release = resolve; });
+      return { costUsd: 0 };
+    });
+    t.ai.assistant.estimateDraftUsd = () => 2;
+    try {
+      const followUp = await t.tracker.followUp(followUpId);
+      expect(followUp?.noDraft?.reason).toBe("budget-out");
+      expect(t.ai.inputs).toHaveLength(0);
+      expect(t.preparation.voiceSends()).toHaveLength(0);
+    } finally { release(); await held; }
   });
 });

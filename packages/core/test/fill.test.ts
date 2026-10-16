@@ -2,7 +2,7 @@
 // Prepare's engine seeded through its own interface (Mira Petrova, made up). The extension reads the
 // page and fills it; the engine decides which package a page belongs to and what goes in each field.
 import { describe, expect, it } from "vitest";
-import { createFillEngine, createTracker, fieldReportFixture, type FieldStructure, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
+import { createFillEngine, createTracker, trackPortsFrom, fieldReportFixture, type FieldStructure, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
 import { fixtureFetch, memoryDb } from "./harness.ts";
 import { memoryPackageFolder } from "./preparation-harness.ts";
 import { approved, kestrelJob, mira, started } from "./package-fixtures.ts";
@@ -15,7 +15,7 @@ const kestrelBoard = "https://boards-api.greenhouse.io/v1/boards/kestrel/jobs?co
 function setup(draftAnswer?: NonNullable<Parameters<typeof mira>[0]>["draftAnswer"]) {
   const db = memoryDb();
   const t = mira({ db, draftAnswer, fetch: fixtureFetch({ [questions("4410")]: "greenhouse-kestrel-4410-questions.json", [questions("4420")]: "greenhouse-kestrel-4410-questions.json", [kestrelBoard]: "greenhouse-kestrel.json" }) });
-  const tracker = createTracker({ db, clock: t.clock, discovery: t.discovery });
+  const tracker = createTracker({ db, clock: t.clock, discovery: t.discovery, ...trackPortsFrom(t.preparation) });
   const fill = createFillEngine({ db, clock: t.clock, prepare: t.preparation, track: tracker });
   return { ...t, fill, tracker };
 }

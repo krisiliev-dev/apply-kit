@@ -119,7 +119,7 @@ tracker = createTracker({
   assistant: config.ai.openRouterApiKey
     ? createOpenRouterTrackAssistant({ apiKey: config.ai.openRouterApiKey, model: config.ai.model, providers: config.ai.providers })
     : undefined,
-  aiMonthlyCapUsd: config.ai.monthlyCapUsd,
+  aiMonthlyCapUsd: config.ai.monthlyCapUsd, budget,
   // Mail from the job mailbox's own address, or from the addresses you send from, is never an
   // employer's; a copy of yours BCC'd there marks the follow-up it answers as sent.
   ownAddresses: [...(mailSettings ? [mailSettings.address] : []), ...config.myAddresses],

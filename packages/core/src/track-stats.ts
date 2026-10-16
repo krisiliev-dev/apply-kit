@@ -1,3 +1,5 @@
+import { addDays } from "./follow-ups.ts";
+export { addDays } from "./follow-ups.ts";
 // Track's Stats (spec #24, "Stats rules"), computed from the tracker's own tables. Weeks run Monday to
 // Sunday in Sofia time and Applications count by date applied, which is already the user's day in
 // Sofia (YYYY-MM-DD), so week arithmetic is plain calendar arithmetic on those days.
@@ -170,13 +172,6 @@ function median(values: number[]): number {
 }
 
 const asUtc = (day: string) => new Date(`${day}T00:00:00Z`);
-const dayOf = (d: Date) => d.toISOString().slice(0, 10);
-
-export function addDays(day: string, n: number): string {
-  const d = asUtc(day);
-  d.setUTCDate(d.getUTCDate() + n);
-  return dayOf(d);
-}
 
 /** The Monday of the week a day falls in. */
 function mondayOf(day: string): string {

@@ -214,6 +214,65 @@ describe("a confirmation for an approved package with no Application", () => {
   });
 });
 
+describe("undoing the submission from the Application's timeline", () => {
+  const eventOf = async (t: Awaited<ReturnType<typeof setup>>, applicationId: string, kind: string) =>
+    (await t.tracker.events(applicationId)).find((e) => e.kind === kind && !e.undoneAt)!;
+
+  it("undoing \"Submitted → Applied\" takes the Application off and makes the package approved again", async () => {
+    const t = await setup();
+    const { pkg, applicationId } = await t.submitted();
+
+    await t.tracker.undoEvent((await eventOf(t, applicationId, "created")).id);
+
+    expect(await t.tracker.get(applicationId)).toBeNull();
+    expect(t.preparation.packageSnapshot(pkg.id)).toMatchObject({ state: "approved", submitted: null });
+  });
+
+  it("refuses it once something else has happened to the Application, keeping the note", async () => {
+    const t = await setup();
+    const { pkg, applicationId } = await t.submitted();
+    await t.tracker.addNote(applicationId, "Recruiter is Alex Doe");
+
+    await expect(t.tracker.undoEvent((await eventOf(t, applicationId, "created")).id)).rejects.toMatchObject({ problem: "not-undoable" });
+
+    expect((await t.tracker.get(applicationId))!.timeline[0]).toMatchObject({ kind: "note", text: "Recruiter is Alex Doe" });
+    expect(t.preparation.packageSnapshot(pkg.id)).toMatchObject({ state: "submitted" });
+  });
+
+  it("undoing \"Package attached\" keeps the Application added by hand and makes the package approved again", async () => {
+    const t = await setup();
+    const byHand = await t.tracker.addByHand({ job: { jobId: t.jobId }, appliedOn: "2026-10-11", status: "applied", how: "i-applied" });
+    if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+    const { pkg } = await t.submitted();
+
+    await t.tracker.undoEvent((await eventOf(t, byHand.application.id, "submission")).id);
+
+    expect(await t.tracker.get(byHand.application.id)).toMatchObject({ createdHow: "i-applied", submission: null, package: null });
+    expect(t.preparation.packageSnapshot(pkg.id)).toMatchObject({ state: "approved", submitted: null });
+  });
+
+  it("won't undo adding an Application with a package attached, which would leave the package marked submitted", async () => {
+    const t = await setup();
+    const byHand = await t.tracker.addByHand({ job: { jobId: t.jobId }, appliedOn: "2026-10-11", status: "applied", how: "i-applied" });
+    if (byHand.outcome !== "added") throw new Error(byHand.outcome);
+    const { pkg } = await t.submitted();
+
+    await expect(t.tracker.undoEvent((await eventOf(t, byHand.application.id, "created")).id)).rejects.toMatchObject({ problem: "not-undoable" });
+
+    expect(await t.tracker.get(byHand.application.id)).toMatchObject({ package: { id: pkg.id } });
+  });
+
+  it("Apply's Undo makes the package approved again, once", async () => {
+    const t = await setup();
+    const { pkg, applicationId } = await t.submitted();
+
+    expect(await t.fill.undoMarkSubmitted(applicationId)).toEqual({ packageId: pkg.id });
+
+    expect(await t.tracker.get(applicationId)).toBeNull();
+    expect(t.preparation.packageSnapshot(pkg.id)).toMatchObject({ state: "approved", submitted: null });
+  });
+});
+
 describe("picking a CV version for an Application added by hand", () => {
   it("offers the CV versions of the Packages sent, and counts the Application under the one picked", async () => {
     const t = await setup();
