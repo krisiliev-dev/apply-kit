@@ -2,7 +2,7 @@
 // package, the package in words, the field rows in the portal's order with their source in words,
 // the end-of-fill announcement, and where focus goes after a fill.
 import type {
-  FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageInBrief, PageJobReference, PageKind, PageReading, PendingAnswer, ReadField, SaveOffer, SubmittedApplication,
+  FieldAnswer, FieldOutcome, FillSource, FillStart, OutcomeCounts, PackageFileKind, PackageInBrief, PageJobReference, PageKind, PageReading, PendingAnswer, ReadField, SaveOffer, SubmittedApplication,
 } from "@apply-kit/core";
 
 const sources: Record<FillSource, string> = { profile: "Profile", "answer-bank": "Answer bank", package: "Package", "cv-version": "CV version", you: "You" };
@@ -46,6 +46,11 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
     const o = outcome.get(f.id);
     if (!a || !o) return [];
     const row = { fieldId: f.id, label: f.label, outcome: o.outcome, offer: null, limit: null };
+    if (a.kind === "file") {
+      if (o.outcome === "filled") return [{ ...row, value: a.fileName, chip: { tone: "met", word: sourceWords("package") }, why: a.basis }];
+      if (o.outcome === "didnt-stick") return [{ ...row, value: "Not attached", chip: { tone: "gap", word: "Didn't attach" }, why: "Attach it yourself from your Packages folder." }];
+      if (o.outcome === "kept") return [{ ...row, value: "Another file", chip: { tone: "partly", word: "Kept" }, why: "The field already had a file, so apply-kit left it." }];
+    }
     switch (o.outcome) {
       case "filled":
         return [{ ...row, value: a.kind === "fill" ? a.value : f.value, chip: { tone: "met", word: sourceWords(o.source ?? "profile") }, why: a.kind === "fill" ? a.basis : null }];
@@ -175,6 +180,53 @@ export function differentJobLine(previous: Extract<FillStart, { kind: "different
   const from = previous.jobRef ? `${was} (${previous.jobRef.jobId})` : was;
   const to = now.jobId ? `${now.title} (${now.jobId})` : now.title;
   return `The tab moved from ${from} to ${to}. Nothing was filled from the ${was} package.`;
+}
+
+/** A file's size as the panel shows it: "148 KB", "1.2 MB". */
+export function fileSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+const fileWord = { cv: "CV", letter: "cover letter" } as const;
+
+export interface FileReport {
+  /** The file chips: "CV attached:" "<name> · 148 KB", with the version line under it for the CV. */
+  attached: { which: PackageFileKind; fieldId: string; fileName: string; label: string; line: string; meta: string | null }[];
+  /** Files the portal didn't take: the warning, and the file one click away. */
+  failed: { which: PackageFileKind; fieldId: string; fileName: string; size: string; chip: string; heading: string; text: string }[];
+  /** Said when the package has a letter and this page had nowhere to put it. */
+  letter: string | null;
+}
+
+/** What happened to the package's files on this page, in words (hi-fi "CV attached" and "CV didn't attach"). */
+export function fileReport(p: PackageInBrief, answers: FieldAnswer[], outcomes: FieldOutcome[], portal: string): FileReport {
+  const outcome = new Map(outcomes.map((o) => [o.fieldId, o.outcome]));
+  const files = answers.filter((a): a is Extract<FieldAnswer, { kind: "file" }> => a.kind === "file");
+  const approved = new Date(p.approvedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const cvNote = packageLines(p)[0]!.note;
+  const report: FileReport = { attached: [], failed: [], letter: null };
+  for (const a of files) {
+    const o = outcome.get(a.fieldId);
+    const word = fileWord[a.which];
+    if (o === "filled") {
+      report.attached.push({
+        which: a.which, fieldId: a.fieldId, fileName: a.fileName,
+        label: `${a.which === "cv" ? "CV" : "Cover letter"} attached:`, line: `${a.fileName} · ${fileSize(a.size)}`,
+        meta: a.which === "cv" && cvNote ? cvNote.replace(/ · (ATS|\d)/, ` · approved ${approved} · $1`) : null,
+      });
+    } else if (o === "didnt-stick") {
+      report.failed.push({
+        which: a.which, fieldId: a.fieldId, fileName: a.fileName, size: fileSize(a.size),
+        chip: `${a.which === "cv" ? "CV" : "Letter"} not attached`, heading: `Your ${word} didn't attach.`,
+        text: `${portal}'s upload box didn't accept the file from apply-kit. Attach it yourself: it's ready in your Packages folder.`,
+      });
+    }
+  }
+  // The engine answers a letter text box with the letter, basis "Your package's letter…".
+  const letterUsed = files.some((a) => a.which === "letter") || answers.some((a) => a.kind === "fill" && a.source === "package" && /^Your package's letter/.test(a.basis ?? ""));
+  if (p.letter && !letterUsed) report.letter = "This page has no cover letter field, so your letter wasn't used.";
+  return report;
 }
 
 /**

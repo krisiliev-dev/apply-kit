@@ -4,6 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { createFillEngine, createTracker, type FillPage, type PageReading, type ReadField } from "../src/index.ts";
 import { fixtureFetch, memoryDb } from "./harness.ts";
+import { memoryPackageFolder } from "./preparation-harness.ts";
 import { approved, kestrelJob, mira, started } from "./package-fixtures.ts";
 import type { FakeWriter } from "./preparation-harness.ts";
 
@@ -40,7 +41,7 @@ describe("matching the page to a package", () => {
 
     expect(r).toMatchObject({
       kind: "matched", why: "job-id", continued: false,
-      package: { id: pkg.id, version: 1, job: { title: "Security Engineer", company: "Kestrel Payments" }, cv: { fileName: pkg.approved!.cv.file.fileName, ats: { passed: 10, total: 10 } }, letter: true },
+      package: { id: pkg.id, version: 1, job: { title: "Security Engineer", company: "Kestrel Payments" }, cv: { fileName: pkg.approved!.cv.file.fileName, size: pkg.approved!.cv.file.size, ats: { passed: 10, total: 10 } }, letter: true },
       session: { packageId: pkg.id, portal: "greenhouse", host: "job-boards.greenhouse.io", startedAt: "2026-10-12T07:30:00.000Z", endedAt: null },
     });
   });
@@ -176,7 +177,6 @@ describe("answering a page's contact fields from the master profile", () => {
       field("gdpr", "I agree to the privacy policy", { kind: "checkbox", consent: true }),
       field("why", "Have you ever held a government security clearance?", { kind: "radio", options: ["Yes", "No"] }),
       field("pronouns", "Pronouns", { required: false }),
-      field("resume", "Resume/CV", { kind: "file" }),
     ]));
 
     expect(answers).toEqual([
@@ -184,7 +184,6 @@ describe("answering a page's contact fields from the master profile", () => {
       { fieldId: "gdpr", kind: "skip", reason: "Consent boxes are yours to tick" },
       { fieldId: "why", kind: "needs-you", reason: "apply-kit has no answer for this yet", basis: null, save: { ticked: true, note: null } },
       { fieldId: "pronouns", kind: "skip", reason: "Optional, and apply-kit has no answer for it yet" },
-      { fieldId: "resume", kind: "needs-you", reason: "Attach the CV yourself for now", basis: `Your package's CV: ${t.pkg.approved!.cv.file.fileName}` },
     ]);
   });
 
@@ -198,6 +197,98 @@ describe("answering a page's contact fields from the master profile", () => {
       { fieldId: "c1", kind: "fill", value: "bulgaria", source: "profile", basis: null },
       { fieldId: "c2", kind: "needs-you", reason: "None of the options matches your profile", basis: null, suggestion: "Bulgaria" },
     ]);
+  });
+});
+
+describe("answering a page's file fields from the package", () => {
+  it("attaches the package's CV to the CV field, named as in the package", async () => {
+    const t = await filling();
+    const cv = t.pkg.approved!.cv.file;
+
+    const answers = await t.fill.answer(t.sessionId, reading([field("resume", "Resume/CV", { kind: "file" })]));
+
+    expect(answers).toEqual([
+      { fieldId: "resume", kind: "file", which: "cv", fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", size: cv.size, source: "package", basis: "Your package's CV, v1" },
+    ]);
+  });
+
+  it("attaches the letter where the page has a file field for it, and pastes its text where there's only text", async () => {
+    const t = await filling();
+    const letter = t.pkg.approved!.letter!;
+
+    const asFile = await t.fill.answer(t.sessionId, reading([field("cover_letter", "Cover Letter", { kind: "file", required: false })]));
+    const asText = await t.fill.answer(t.sessionId, reading([field("cover_letter_text", "Cover Letter", { kind: "textarea", required: false })]));
+
+    expect(asFile).toEqual([
+      { fieldId: "cover_letter", kind: "file", which: "letter", fileName: "Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf", size: letter.file.size, source: "package", basis: "Your package's letter, v1" },
+    ]);
+    expect(asText).toEqual([{ fieldId: "cover_letter_text", kind: "fill", value: letter.text, source: "package", basis: "Your package's letter, v1" }]);
+  });
+
+  it("uses one letter per page: with a file field for it, the text option is left empty", async () => {
+    const t = await filling();
+
+    const answers = await t.fill.answer(t.sessionId, reading([
+      field("cover_letter", "Cover Letter", { kind: "file", required: false }), field("cover_letter_text", "Cover Letter", { kind: "textarea", required: false }),
+    ]));
+
+    expect(answers.map((a) => a.kind)).toEqual(["file", "skip"]);
+    expect(answers[1]).toEqual({ fieldId: "cover_letter_text", kind: "skip", reason: "Your letter is attached as a file" });
+  });
+});
+
+describe("the package's files for attaching", () => {
+  it("gives the frozen CV's bytes, name and size, and its copy in the Packages folder", async () => {
+    const t = await filling();
+    const frozen = (await t.preparation.packageFile(t.pkg.id, "cv"))!;
+
+    const cv = await t.fill.packageFile(t.sessionId, "cv");
+
+    expect(cv).toEqual({ which: "cv", fileName: "Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", size: frozen.size, path: "Packages/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf", bytes: frozen.bytes });
+    expect((await t.fill.packageFile(t.sessionId, "letter"))!.fileName).toBe("Mira_Petrova_Cover_Letter_Kestrel_Payments_Security_Engineer.pdf");
+  });
+
+  it("writes the file to the Packages folder on first use when approval couldn't copy it there", async () => {
+    const db = memoryDb();
+    const folder = memoryPackageFolder();
+    // At approval the Packages folder wasn't there (a disconnected drive): the frozen file counts, without a copy.
+    const offline = { ...folder, freeze: async (...a: Parameters<typeof folder.freeze>) => ({ ...(await folder.freeze(...a)), copy: null }) };
+    const t = mira({ db, packages: offline, fetch: fixtureFetch({ [questions("4410")]: "greenhouse-kestrel-4410-questions.json" }) });
+    const fill = createFillEngine({ db, clock: t.clock, prepare: t.preparation, track: createTracker({ db, clock: t.clock, discovery: t.discovery }), packages: folder });
+    await approved(t);
+    const r = await fill.startFill(page("4410"));
+    if (r.kind !== "matched") throw new Error(r.kind);
+
+    const cv = await fill.packageFile(r.session!.id, "cv");
+
+    expect(cv!.path).toBe("Packages/Mira_Petrova_CV_Kestrel_Payments_Security_Engineer.pdf");
+  });
+});
+
+describe("a Bulgarian package", () => {
+  it("attaches the Bulgarian CV", async () => {
+    const t = setup();
+    // Kestrel's job with the package in Bulgarian.
+    const draft = await started(t, kestrelJob({ packageLanguage: "bg" }));
+    for (const step of ["target", "cv", "letter"] as const) expect(t.preparation.approveStep(draft.id, step)).toMatchObject({ approved: true });
+    t.preparation.setScreeningAnswer(draft.id, "question_31003", "3400");
+    // The form's own options are in English: Kris chooses one.
+    t.preparation.setScreeningAnswer(draft.id, draft.answers!.questions.find((q) => q.question.startsWith("Do you have the right"))!.id, "Yes");
+    const a = t.preparation.approveStep(draft.id, "answers");
+    if (!a.approved) throw new Error(a.reason);
+    const pkg = await t.preparation.approvePackage(draft.id);
+    if (!pkg.approved) throw new Error(pkg.reason);
+    const r = await t.fill.startFill(page("4410"));
+    if (r.kind !== "matched") throw new Error(r.kind);
+
+    const [answer] = await t.fill.answer(r.session!.id, reading([field("resume", "Resume/CV", { kind: "file" })]));
+    const file = await t.fill.packageFile(r.session!.id, "cv");
+
+    expect(r.package.language).toBe("bg");
+    expect(answer).toMatchObject({ kind: "file", which: "cv", fileName: pkg.package.approved!.cv.file.fileName, basis: "Your package's CV in Bulgarian, v1" });
+    expect(file!.bytes).toEqual((await t.preparation.packageFile(draft.id, "cv"))!.bytes);
+    // The template-like stand-in PDF reads back as text: the Bulgarian CV's section titles.
+    expect(new TextDecoder().decode(file!.bytes)).toContain("Професионален опит");
   });
 });
 

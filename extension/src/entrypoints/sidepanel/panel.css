@@ -98,3 +98,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font-family: va
 .need legend.q { margin-bottom: var(--s-2) }
 .cnt { font-size: var(--fs-caption); color: var(--ink-3); justify-self: end; font-variant-numeric: tabular-nums }
 .stack > .btn { justify-self: start }
+/* The package's file on the page (hi-fi "CV attached", "CV didn't attach"): icon, name · size, version line. */
+.filechip { display: flex; gap: var(--s-3); align-items: center; padding: var(--s-3) var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-control); font-size: var(--fs-small); min-width: 0 }
+.filechip .ico { width: var(--s-5); height: var(--s-5); color: var(--ink-3) }
+.filechip > span:last-child { min-width: 0; overflow-wrap: anywhere }

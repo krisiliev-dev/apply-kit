@@ -1,0 +1,20 @@
+<!-- Synthetic Greenhouse classic board application form with its file fields (boards.greenhouse.io):
+     "Resume/CV" and "Cover Letter", each a hidden file input behind Attach / Enter manually, the chosen
+     file's name shown beside it. Modelled on docs/research/implementation/portals.md. Made-up company
+     and job; no real person's data. The test setup simulates the upload box and the portal's CV reading. -->
+<div id="app_body">
+  <div id="header"><h1 class="app-title">Platform Security Engineer</h1><span class="company-name">at Vireo Health</span></div>
+  <div id="application">
+    <form id="application_form" action="/vireohealth/jobs/4471029" method="post" enctype="multipart/form-data">
+      <div id="main_fields">
+        <div class="field"><label for="first_name">First Name <span class="asterisk">*</span></label><input type="text" id="first_name" name="job_application[first_name]" maxlength="255" autocomplete="given-name" aria-required="true"></div>
+        <div class="field"><label for="last_name">Last Name <span class="asterisk">*</span></label><input type="text" id="last_name" name="job_application[last_name]" maxlength="255" autocomplete="family-name" aria-required="true"></div>
+        <div class="field"><label for="email">Email <span class="asterisk">*</span></label><input type="text" id="email" name="job_application[email]" maxlength="255" autocomplete="email" aria-required="true"></div>
+        <div class="field"><label for="phone">Phone <span class="asterisk">*</span></label><input type="text" id="phone" name="job_application[phone]" maxlength="255" autocomplete="tel" aria-required="true"></div>
+        <div class="field" id="resume_fieldset"><label>Resume/CV <span class="asterisk">*</span></label><div class="drop-zone"><button type="button" class="attach-or-paste" data-source="attach">Attach</button><button type="button" data-source="paste">or enter manually</button><span class="filename"></span></div><input type="file" id="resume" name="job_application[resume]" aria-label="Resume/CV" aria-required="true" style="display:none"></div>
+        <div class="field" id="cover_letter_fieldset"><label>Cover Letter</label><div class="drop-zone"><button type="button" class="attach-or-paste" data-source="attach">Attach</button><button type="button" data-source="paste">or enter manually</button><span class="filename"></span></div><input type="file" id="cover_letter" name="job_application[cover_letter]" aria-label="Cover Letter" style="display:none"></div>
+      </div>
+      <div id="submit_buttons"><input type="button" id="submit_app" value="Submit Application"></div>
+    </form>
+  </div>
+</div>

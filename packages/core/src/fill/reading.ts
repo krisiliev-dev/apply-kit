@@ -40,6 +40,9 @@ export interface PageReading {
   fields: ReadField[];
 }
 
+/** Which of the package's files a file field gets. */
+export type PackageFileKind = "cv" | "letter";
+
 /** Where a filled value came from, as the panel names it. */
 export type FillSource = "profile" | "answer-bank" | "package" | "cv-version" | "you";
 
@@ -56,6 +59,8 @@ export interface SaveOffer {
 /** The engine's answer for one field: a value to fill, something for Kris, or a field to leave alone. */
 export type FieldAnswer =
   | { fieldId: string; kind: "fill"; value: string; source: FillSource; basis: string | null }
+  /** Attach the package's frozen CV or letter: the extension fetches its bytes (`packageFile`) and attaches them first. */
+  | { fieldId: string; kind: "file"; which: PackageFileKind; fileName: string; size: number; source: "package"; basis: string }
   /** `draft`: a new free-text question drafted from the master profile (`basis` cites the pieces); `save`: see SaveOffer. */
   | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string; draft?: string; save?: SaveOffer }
   /** `byRule`: left blank by Kris's answer-bank rule ("Skipped · your rule"). */

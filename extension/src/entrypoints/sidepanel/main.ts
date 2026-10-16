@@ -9,16 +9,17 @@
 // fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
 // it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
-import type { AnswerKind, CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PageReading, PendingAnswer } from "@apply-kit/core";
+import type { AnswerKind, CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PackageFileKind, PackageInBrief, PageReading, PendingAnswer } from "@apply-kit/core";
 import { countOutcomes } from "@apply-kit/core/fill";
 import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
 import "./panel.css";
 import { contextCard, fillStateFor, openingView, type PanelView, type PortalsAccess } from "../../context.ts";
 import {
-  characterCount, differentJobLine, fieldRows, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, saveTypedLabel, submitPrompt, typedAnswerLine,
+  characterCount, differentJobLine, fieldRows, fileReport, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, saveTypedLabel, submitPrompt, typedAnswerLine,
   type AnswerControl, type FieldRow, type NeedsYouItem,
 } from "../../fill-report.ts";
+import type { FileToAttach } from "../../fill/greenhouse.ts";
 import { runFiller } from "../../fill/in-page.ts";
 import { grabPage } from "../../grab.ts";
 import { portalOrigins, portals, recognisePortal } from "../../portal.ts";
@@ -57,6 +58,7 @@ const icons = {
   ask: '<svg viewBox="0 0 12 12"><path d="M4.3 4.4a1.8 1.8 0 1 1 2.5 1.7c-.5.2-.8.6-.8 1.1v.4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="9.8" r=".9" fill="currentColor"/></svg>',
   x: '<svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
   partly: '<svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M6 1.8a4.2 4.2 0 0 1 0 8.4z" fill="currentColor"/></svg>',
+  file: '<svg viewBox="0 0 18 18"><path d="M4 2h7l4 4v10H4z" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M11 2v4h4" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>',
   dash: '<svg viewBox="0 0 12 12"><path d="M3 6h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>',
 };
 
@@ -464,11 +466,24 @@ async function fillThisPage(packageId?: string) {
   const answers = await client.fill.answer(session.id, reading);
   if (!answers.ok) return fillProblem(answers, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
   if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  const outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value]);
+  // The package's files for this page's file fields only, held here just long enough to attach them.
+  // One the app can't give is reported as not attached, with the file one click away.
+  const files: FileToAttach[] = [];
+  const paths = new Map<PackageFileKind, string | null>();
+  for (const a of answers.value) {
+    if (a.kind !== "file") continue;
+    const file = await client.fill.file(session.id, a.which);
+    if (!file.ok) continue;
+    files.push({ which: file.value.which, fileName: file.value.fileName, type: file.value.type, base64: file.value.base64 });
+    paths.set(a.which, file.value.path);
+  }
+  if (stopRequested) return stopped("Stopped. Nothing was filled.");
+  const outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value, files]);
+  files.length = 0;
   if (!outcomes) return stopped("Chrome didn't let apply-kit fill this page. Nothing was filled.");
   const recorded = await client.fill.record(session.id, reading, outcomes);
   filled({
-    tabId, sessionId: session.id, ctx, reading, answers: answers.value, outcomes, edits: new Map(), saveTicks: new Map(),
+    tabId, sessionId: session.id, ctx, reading, answers: answers.value, outcomes, edits: new Map(), saveTicks: new Map(), pkg: s.package, paths,
     typed: recorded.ok ? recorded.value.typedAnswers : [], at: recorded.ok ? recorded.value.filledAt : new Date().toISOString(), portal: portals.find((p) => p.name === page.portal)!.label,
   });
 }
@@ -478,6 +493,8 @@ interface FilledPage {
   tabId: number;
   sessionId: string;
   ctx: HTMLElement;
+  pkg: PackageInBrief;
+  paths: Map<PackageFileKind, string | null>;
   reading: PageReading;
   answers: FieldAnswer[];
   outcomes: FieldOutcome[];
@@ -589,6 +606,29 @@ const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: 
 function filled(f: FilledPage, announceIt = true) {
   const rows = fieldRows(f.reading, f.answers, f.outcomes);
   const counts = countOutcomes(f.outcomes);
+  const files = fileReport(f.pkg, f.answers, f.outcomes, f.portal);
+  const fileChip = (line: Node | string, meta: string | null) => h("div", { class: "filechip" }, svg(icons.file), h("span", {}, line, meta && h("span", { class: "meta block" }, meta)));
+  const attachedChips = files.attached.map((a) => fileChip(h("span", {}, h("b", {}, a.label), ` ${a.line}`), a.meta));
+  // A file the portal didn't take: what happened, then the file one click away (Finder, or its path).
+  const failedBlocks = files.failed.flatMap((x) => {
+    const path = f.paths.get(x.which) ?? null;
+    const reveal = async () => {
+      const r = await client.fill.reveal(f.sessionId, x.which);
+      announce(r.ok ? `Showing ${x.fileName} in Finder.` : r.state === "error" ? r.error : "apply-kit isn't answering, so Finder can't show the file.");
+    };
+    const copy = async () => {
+      const ok = path ? await navigator.clipboard.writeText(path).then(() => true, () => false) : false;
+      announce(ok ? "File path copied." : "Couldn't copy the file path.");
+    };
+    return [
+      h("div", { class: "banner warning", role: "alert" }, h("div", { class: "text" }, h("b", {}, x.heading), ` ${x.text}`)),
+      fileChip(`${x.fileName} · ${x.size}`, path ? "In your Packages folder" : "Not in your Packages folder: open the package in apply-kit to download it."),
+      h("div", { class: "row" },
+        button("Show in Finder", () => void reveal(), "btn sm", { "aria-label": `Show ${x.fileName} in Finder` }),
+        path ? button("Copy file path", () => void copy(), "btn ghost sm") : ""),
+      h("p", { class: "meta" }, `Then drag it onto the ${x.which === "cv" ? "CV" : "cover letter"} box, or click Attach there and pick it. Click Fill this page again afterwards: ${f.portal} may change fields while reading it.`),
+    ];
+  });
   const showOnPage = async (row: FieldRow) => {
     const ok = await inPage<boolean>(f.tabId, "show", [row.fieldId]);
     announce(ok ? `Showing ${row.label} on the page.${toldF6 ? "" : " Press F6 to move to the page."}` : `${row.label} isn't on this page any more.`);
@@ -654,10 +694,14 @@ function filled(f: FilledPage, announceIt = true) {
           chip("met", icons.check, `${counts.filled} filled`),
           counts.needsYou > 0 && chip("ask", icons.ask, `${counts.needsYou} ${counts.needsYou === 1 ? "needs" : "need"} you`),
           counts.kept > 0 && chip("partly", icons.partly, `${counts.kept} kept`),
-          counts.didntStick > 0 && chip("gap", icons.x, `${counts.didntStick} didn't stick`),
+          ...files.failed.map((x) => chip("gap", icons.x, x.chip)),
+          counts.didntStick - files.failed.length > 0 && chip("gap", icons.x, `${counts.didntStick - files.failed.length} didn't stick`),
         ),
         h("p", { class: "meta" }, f.reading.stepCount ? `Page ${f.reading.stepCount.current} of ${f.reading.stepCount.total}, as ${f.portal} shows it. Filled ${time}.` : `Filled ${time}.`),
       ),
+      ...failedBlocks,
+      ...attachedChips,
+      files.letter && h("p", { class: "meta" }, files.letter),
       ...needs,
       list,
       typed,
