@@ -1,0 +1,43 @@
+<!-- Synthetic SmartRecruiters OneClick application (jobs.smartrecruiters.com/oneclick-ui/company/{Company}/publication/{uuid}):
+     one long page of spl-* web components whose real controls sit in shadow roots. Each <template data-shadow>
+     becomes its host's shadow root in the test setup (smartrecruiters.ts): "open" ones apply-kit can read,
+     the "closed" one (the phone field) it can't. Modelled on docs/research/implementation/portals.md.
+     Made-up company and job; no real person's data. -->
+<main class="oc-application">
+  <header class="oc-header"><h1 class="job-title">Application Security Engineer</h1><p class="company">Nordlicht Bank · Sofia, Bulgaria</p></header>
+  <div class="oc-apply-with"><button type="button" class="apply-with-linkedin">Apply with LinkedIn</button><button type="button" class="apply-with-indeed">Apply with Indeed</button></div>
+  <form id="oc-form" class="oc-form" novalidate>
+    <section class="oc-section" aria-labelledby="personal-h">
+      <h2 id="personal-h">Personal information</h2>
+      <spl-input id="first-name" required><template data-shadow="open"><div class="field"><label for="first-name-input">First name</label><input id="first-name-input" type="text" required autocomplete="given-name" maxlength="100"></div></template></spl-input>
+      <spl-input id="last-name" required><template data-shadow="open"><div class="field"><label for="last-name-input">Last name</label><input id="last-name-input" type="text" required autocomplete="family-name" maxlength="100"></div></template></spl-input>
+      <spl-input id="email" required><template data-shadow="open"><div class="field"><label for="email-input">Email</label><input id="email-input" type="email" required autocomplete="email"></div></template></spl-input>
+      <spl-input id="confirm-email" required><template data-shadow="open"><div class="field"><label for="confirm-email-input">Confirm your email</label><input id="confirm-email-input" type="email" required></div></template></spl-input>
+      <spl-autocomplete id="location"><template data-shadow="open"><div class="field"><label id="location-label">Location</label><input id="location-input" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-labelledby="location-label"></div></template></spl-autocomplete>
+      <spl-phone-field id="phone-number" label="Phone number" required><template data-shadow="closed"><div class="field"><label for="phone-number-input">Phone number</label><input id="phone-number-input" type="tel" required></div></template></spl-phone-field>
+      <spl-input id="linkedin"><template data-shadow="open"><div class="field"><label for="linkedin-input">LinkedIn profile</label><input id="linkedin-input" type="url"></div></template></spl-input>
+    </section>
+    <section class="oc-section" aria-labelledby="resume-h">
+      <h2 id="resume-h">Resume</h2>
+      <spl-dropzone id="resume"><template data-shadow="open"><div class="dropzone"><span id="resume-label" class="label">Upload CV</span><span class="hint">PDF or Word, up to 10 MB</span><span class="filename"></span><input id="resume-input" type="file" aria-labelledby="resume-label" required accept=".pdf,.doc,.docx" hidden></div></template></spl-dropzone>
+    </section>
+    <section class="oc-section entries" data-section="Experience" aria-labelledby="experience-h">
+      <h2 id="experience-h">Experience</h2>
+      <div class="entry">
+        <spl-input id="experience-0-title" required><template data-shadow="open"><div class="field"><label for="experience-0-title-input">Title</label><input id="experience-0-title-input" type="text" required></div></template></spl-input>
+        <spl-input id="experience-0-company" required><template data-shadow="open"><div class="field"><label for="experience-0-company-input">Company</label><input id="experience-0-company-input" type="text" required></div></template></spl-input>
+      </div>
+      <button type="button" class="add-entry">Add</button>
+    </section>
+    <section class="oc-section entries" data-section="Education" aria-labelledby="education-h">
+      <h2 id="education-h">Education</h2>
+      <button type="button" class="add-entry">Add</button>
+    </section>
+    <section class="oc-section" aria-labelledby="message-h">
+      <h2 id="message-h">Your message to the hiring manager</h2>
+      <spl-textarea id="hiring-manager-message"><template data-shadow="open"><div class="field"><label for="hiring-manager-message-input">Your message to the hiring manager</label><textarea id="hiring-manager-message-input" maxlength="5000"></textarea></div></template></spl-textarea>
+    </section>
+    <spl-checkbox id="privacy-consent" required><template data-shadow="open"><label class="checkbox"><input id="privacy-consent-input" type="checkbox" required>I agree to Nordlicht Bank's Privacy Policy</label></template></spl-checkbox>
+    <div class="oc-actions"><button type="submit" class="next">Next</button></div>
+  </form>
+</main>
