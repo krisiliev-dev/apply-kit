@@ -404,8 +404,8 @@ export interface Submission {
   portalUrl: string | null;
   /** When Kris marked it submitted (ISO). */
   submittedAt: string;
-  /** Marked in the extension's panel, or on the Job page in the app. */
-  via: "extension" | "app";
+  /** Marked in the extension's panel, on the Job page in the app, or from its confirmation email (Needs you's "Mark Applied"). */
+  via: "extension" | "app" | "email";
 }
 
 /** What "Mark as submitted" hands Track: the package's Job and how it was sent. */
@@ -541,6 +541,19 @@ export interface OfferToAnswer {
   other: string | null;
 }
 
+/**
+ * "Mark Applied, dated …?" in Needs you: a confirmation email about an approved package that was never
+ * marked submitted (applied by phone, say). Never an Application until the user says so.
+ */
+export interface PackageConfirmation {
+  email: EmailSummary;
+  package: { id: string; job: { title: string; company: string }; language: "en" | "bg" };
+  /** The day the email arrived: the date applied that marking it gives. */
+  appliedOn: string;
+  /** Why it seems to be about this package, in plain words. */
+  signals: string[];
+}
+
 /** Something only coming up: one quiet "Coming up" line. */
 export interface ComingUp {
   applicationId: string;
@@ -579,6 +592,8 @@ export interface NeedsYou {
   offers: OfferToAnswer[];
   /** Emails waiting as "Email to match" (listed by emailsToMatch). */
   emailsToMatch: number;
+  /** Confirmation emails for an approved package with no Application: "Mark Applied, dated …?", newest first. */
+  packageConfirmations: PackageConfirmation[];
   /** Kinds with 3 or more due (or done today): shown grouped, their items stepped through one by one. */
   groups: NeedsYouGroup[];
   /** Due in the next 3 days, soonest first. */
@@ -771,6 +786,12 @@ export interface Tracker {
    * about an application. The answer is remembered for the sender. Throws a TrackerError when refused.
    */
   answerEmail(emailId: string, answer: EmailAnswer): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }>;
+  /**
+   * Answers "Mark Applied, dated …?": "mark-applied" records the package's submission dated the email
+   * (and marks the package submitted in Prepare), filing the email on the Application; "not-this"
+   * leaves the email to match by hand. Throws a TrackerError when refused.
+   */
+  answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this"): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }>;
   /** "Looks right" on the moved-by-email banner: the banner goes; the email stays on the timeline. */
   confirmEmailMove(eventId: string): Promise<void>;
   /** The job mailbox's state, for Applications' banners. */
@@ -1009,7 +1030,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const packageId = str(r.package_id);
     const submittedAt = str(r.submitted_at);
     return packageId && submittedAt
-      ? { packageId, portal: str(r.portal), portalUrl: str(r.portal_url), submittedAt, via: r.submitted_via === "app" ? "app" : "extension" }
+      ? { packageId, portal: str(r.portal), portalUrl: str(r.portal_url), submittedAt, via: r.submitted_via === "app" || r.submitted_via === "email" ? r.submitted_via : "extension" }
       : null;
   }
 
@@ -1354,7 +1375,10 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const standing = all.filter((e) => !e.undoneAt && e.kind !== "undo");
     const posting = await postingOf(app);
     const submission = submissionOf(row(applicationId)!);
-    const submittedHow = submission ? (submission.via === "app" ? "Marked on the Job page" : `${submission.portal ? portalLabel(submission.portal) : "The portal"}, marked in the extension`) : null;
+    const submittedHow = !submission ? null
+      : submission.via === "app" ? "Marked on the Job page"
+        : submission.via === "email" ? "Marked Applied from its confirmation email"
+          : `${submission.portal ? portalLabel(submission.portal) : "The portal"}, marked in the extension`;
     const timeline: TimelineEntry[] = [...all].reverse().map((e) => ({
       id: e.id, at: e.at, kind: e.kind, cause: e.cause, from: e.from, to: e.to, text: e.text, undoneAt: e.undoneAt,
       detail: (e.kind === "submission" && !e.undoneAt) || (e.kind === "created" && app.createdHow === "submission") ? submittedHow : null,
@@ -1867,6 +1891,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     items.sort((a, b) => a.followUp.dueOn.localeCompare(b.followUp.dueOn) || a.followUp.anchorOn.localeCompare(b.followUp.anchorOn) || a.application.company.localeCompare(b.application.company));
     comingUp.sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.company.localeCompare(b.company));
     const emails = Number(db.prepare("SELECT COUNT(*) AS n FROM email_match WHERE state = 'to-match'").get()?.n ?? 0);
+    const packageConfirmations = packageConfirmationList();
     const groups: NeedsYouGroup[] = [];
     for (const kind of [...new Set(items.map((i) => i.followUp.kind))]) {
       const same = items.filter((i) => i.followUp.kind === kind);
@@ -1891,7 +1916,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
       };
     }).sort((a, b) => a.since.localeCompare(b.since));
     return {
-      count: items.filter((i) => !i.done).length + emails + interviews.length + offers.length, items, groups, interviews, offers, emailsToMatch: emails, comingUp,
+      count: items.filter((i) => !i.done).length + emails + packageConfirmations.length + interviews.length + offers.length,
+      items, groups, interviews, offers, emailsToMatch: emails, packageConfirmations, comingUp,
       snoozeDays: followUpSettings().snoozeDays,
     };
   }
@@ -2448,7 +2474,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     return happyPath.indexOf(to) > happyPath.indexOf(from);
   }
 
-  function decide(emailId: string, d: { state: "matched" | "to-match" | "not-application" | "left"; applicationId?: string | null; signals?: string[]; candidates?: { applicationId: string; signals: string[] }[]; reason?: string | null; how?: "auto" | "you" | null }) {
+  function decide(emailId: string, d: { state: "matched" | "to-match" | "not-application" | "left" | "package"; applicationId?: string | null; signals?: string[]; candidates?: { applicationId: string; signals: string[] }[]; reason?: string | null; how?: "auto" | "you" | null }) {
     db.prepare(
       `INSERT INTO email_match (email_id, state, application_id, signals, candidates, reason, how, decided_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (email_id) DO UPDATE SET state = excluded.state, application_id = excluded.application_id, signals = excluded.signals,
@@ -2549,6 +2575,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
     const candidates = signalsFor(m, c);
     const match = uniqueMatch(candidates);
+    // A confirmation about no Application, for an approved package never marked submitted: asked, never added.
+    const forgotten = c?.kind === "confirmation" && !match ? packageFor(m, c) : null;
+    if (forgotten) {
+      decide(m.id, { state: "package", signals: forgotten.signals, reason: forgotten.packageId });
+      return "toMatch";
+    }
     const target = targetOf(c?.kind, c?.stage);
     const strongMatch = !!match?.signals.some((s) => strongGroups.includes(s.group));
     const texts = (x: { signals: Signal[] }) => x.signals.map((s) => s.text);
@@ -2583,6 +2615,87 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (!target) return match ? file(false) : wait();
     if (!match || c.confidence < highConfidence) return wait();
     return file(true);
+  }
+
+  const sameCompany = (a: string | null | undefined, b: string) => !!a && normaliseCompany(a) === normaliseCompany(b);
+
+  /**
+   * The one approved package not marked submitted that a confirmation is about: tied to its company
+   * (the sender's domain is the company's or the target posting's, a job system writing for it, or
+   * the company named), the job title deciding between several. Null when none, or not just one.
+   */
+  function packageFor(m: MailMessage, c: EmailClassification): { packageId: string; signals: string[] } | null {
+    if (!packages) return null;
+    const domain = domainOf(senderOf(m).address);
+    const base = baseDomain(domain);
+    const text = `${m.subject}\n${quoteOf(m, 4000)}`;
+    const found = packages.approvedWithoutApplication().flatMap((p) => {
+      const company = p.job.company;
+      const host = hostOf(p.targetPosting.url);
+      const tie = host && !isBoardDomain(host) && !isBoardDomain(domain) && baseDomain(host) === base ? `The sender's domain is the target posting's (${base}).`
+        : isAtsDomain(domain) && (namesCompany(company, text) || sameCompany(c.company, company)) ? `A job system (${base}) writing for ${company}.`
+          : !isAtsDomain(domain) && !isSharedProvider(domain) && companyDomainMatches(company, domain) ? `The sender's domain (${base}) is ${company}'s.`
+            : sameCompany(c.company, company) ? `It names the company: ${company}.` : null;
+      if (!tie) return [];
+      const titled = namesTitle(p.job.title, text) || (!!c.jobTitle && namesTitle(p.job.title, c.jobTitle) && namesTitle(c.jobTitle, p.job.title));
+      return [{ packageId: p.id, signals: titled ? [tie, `It names the job: "${p.job.title}".`] : [tie] }];
+    });
+    const pick = found.length > 1 ? found.filter((x) => x.signals.length > 1) : found;
+    return pick.length === 1 ? pick[0]! : null;
+  }
+
+  /** Needs you's "Mark Applied, dated …?" questions still open (their package still approved and not submitted). */
+  function packageConfirmationList(): PackageConfirmation[] {
+    if (!packages) return [];
+    const rows = db.prepare(
+      "SELECT d.email_id, d.reason, d.signals FROM email_match d JOIN mail_message m ON m.id = d.email_id WHERE d.state = 'package' ORDER BY m.received_at DESC, m.id",
+    ).all();
+    return rows.flatMap((r) => {
+      const p = packages.packageSnapshot(String(r.reason));
+      const email = emailSummary(String(r.email_id));
+      if (!p || p.state !== "approved" || !email) return [];
+      return [{
+        email, package: { id: p.id, job: { title: p.job.title, company: p.job.company }, language: p.language },
+        appliedOn: sofiaDay(new Date(email.receivedAt)), signals: JSON.parse(String(r.signals)) as string[],
+      }];
+    });
+  }
+
+  async function answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this") {
+    if (answer !== "mark-applied" && answer !== "not-this") throw new TrackerError("invalid", "Choose Mark Applied, or Not this package.");
+    const d = db.prepare("SELECT state, reason FROM email_match WHERE email_id = ?").get(emailId);
+    const r = db.prepare("SELECT * FROM mail_message WHERE id = ?").get(emailId);
+    if (!d || !r || d.state !== "package" || !packages) throw new TrackerError("not-found", "There's no such question about a package.");
+    const m = storedMessage(r);
+    const p = packages.packageSnapshot(String(d.reason));
+    if (answer === "not-this") {
+      const cls = db.prepare("SELECT * FROM email_classification WHERE email_id = ?").get(emailId);
+      const c = cls?.kind ? { kind: cls.kind, company: str(cls.company), jobTitle: str(cls.job_title) } as EmailClassification : null;
+      const candidates = signalsFor(m, c);
+      decide(emailId, {
+        state: "to-match", reason: `You said it isn't about your ${p?.job.company ?? "approved"} package, so nothing has changed.`,
+        candidates: candidates.slice(0, 4).map((x) => ({ applicationId: x.applicationId, signals: x.signals.map((s) => s.text) })),
+      });
+      return { application: null, event: null };
+    }
+    if (!p || p.state !== "approved") throw new TrackerError("unchanged", "That package was marked submitted already.");
+    const submittedAt = m.receivedAt.toISOString();
+    const recorded = await recordSubmission({
+      jobId: p.jobId, job: p.job, angle: p.angle, packageId: p.id, portal: p.targetPosting.jobRef?.portal ?? null, portalUrl: null, submittedAt, via: "email",
+    });
+    if (recorded.outcome === "already-open") throw new TrackerError("already-open", recorded.message, recorded.application.id);
+    const applicationId = recorded.application.id;
+    packages.markPackageSubmitted(p.id, { via: "app", portalUrl: null, at: submittedAt });
+    db.exec("BEGIN");
+    try {
+      const { event } = fileEmail(applicationId, m, "confirmation", null, false, "you");
+      decide(emailId, { state: "matched", applicationId, signals: ["You marked its package Applied."], how: "you" });
+      db.exec("COMMIT");
+      return { application: summary(applicationId), event };
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
   }
 
   let running: Promise<unknown> = Promise.resolve();
@@ -2820,6 +2933,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     jobMarkers,
     addByHand,
     recordSubmission,
+    answerPackageConfirmation,
     packageFile,
     undoSubmission,
     list,

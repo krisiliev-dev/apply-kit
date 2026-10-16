@@ -3,8 +3,8 @@
 // Payments' recorded Greenhouse board, Apply's fill engine marking the package submitted. Made-up
 // people and companies only.
 import { describe, expect, it } from "vitest";
-import { createFillEngine, createTracker, trackPortsFrom, type PackageJob } from "../src/index.ts";
-import { fixtureFetch, memoryDb } from "./harness.ts";
+import { createFillEngine, createTracker, trackPortsFrom, type MailMessage, type PackageJob, type Tracker } from "../src/index.ts";
+import { fixtureFetch, mailMessage, memoryDb } from "./harness.ts";
 import { approved, kestrelJob, mira, started } from "./package-fixtures.ts";
 
 const kestrelBoard = "https://boards-api.greenhouse.io/v1/boards/kestrel/jobs?content=true";
@@ -12,8 +12,15 @@ const kestrelQuestions = "https://boards-api.greenhouse.io/v1/boards/kestrel/job
 
 async function setup() {
   const db = memoryDb();
-  const t = mira({ db, fetch: fixtureFetch({ [kestrelQuestions]: "greenhouse-kestrel-4410-questions.json", [kestrelBoard]: "greenhouse-kestrel.json" }) });
+  // The job mailbox: every email delivered so far; each check reads it once and Track matches what's new.
+  const inbox: MailMessage[] = [];
+  let track: Tracker | null = null;
+  const t = mira({
+    db, fetch: fixtureFetch({ [kestrelQuestions]: "greenhouse-kestrel-4410-questions.json", [kestrelBoard]: "greenhouse-kestrel.json" }),
+    mailReader: { fetchSince: async () => [...inbox] }, onMailStored: (emails) => track!.processMail(emails),
+  });
   const tracker = createTracker({ db, clock: t.clock, discovery: t.discovery, ...trackPortsFrom(t.preparation) });
+  track = tracker;
   const fill = createFillEngine({ db, clock: t.clock, prepare: t.preparation, track: tracker });
   await t.discovery.addSource({ kind: "greenhouse", config: "kestrel" });
   await t.discovery.checkAll();
@@ -25,7 +32,13 @@ async function setup() {
     if (!r.marked) throw new Error(r.reason);
     return { pkg, applicationId: r.application.id };
   };
-  return { ...t, tracker, fill, jobId, submitted };
+  /** Delivers an email to the job mailbox and runs a check at the time given. */
+  const receive = async (at: string, m: MailMessage) => {
+    inbox.push(m);
+    t.clock.set(at);
+    await t.discovery.checkAll();
+  };
+  return { ...t, tracker, fill, jobId, submitted, receive };
 }
 
 /** A Bulgarian package approved: the form's own options are in English, so Kris chose one. */
@@ -101,5 +114,81 @@ describe("the Package as sent", () => {
     const { working } = await t.tracker.stats();
 
     expect(working.cvVersion).toEqual([expect.objectContaining({ name: pkg.approved!.cv.label, sent: 1, replied: 0 })]);
+  });
+});
+
+/** Greenhouse's confirmation for Kestrel's Security Engineer job (synthetic). */
+const kestrelConfirmation = mailMessage({
+  id: "<conf-4410.kestrel@us.greenhouse-mail.io>",
+  from: "Kestrel Payments <no-reply@us.greenhouse-mail.io>",
+  to: ["sample.jobs@example.com"],
+  subject: "Thank you for applying to Kestrel Payments",
+  receivedAt: "2026-10-13T18:20:00Z",
+  text: "Hi Mira,\n\nThank you for your interest in Kestrel Payments! We received your application for the Security Engineer role and will be in touch.\n\nKestrel Payments Recruiting",
+});
+
+describe("a confirmation for an approved package with no Application", () => {
+  /** Mira approved Kestrel's package, then applied by phone and forgot to mark it submitted. */
+  async function forgotten() {
+    const t = await setup();
+    const pkg = await approved(t, kestrelJob({ id: t.jobId }));
+    await t.receive("2026-10-14T07:00:00Z", kestrelConfirmation);
+    return { ...t, pkg };
+  }
+
+  it("asks under Needs you to mark it Applied, dated the day of the email, and never adds an Application by itself", async () => {
+    const t = await forgotten();
+
+    const needs = await t.tracker.needsYou();
+
+    expect(needs.packageConfirmations).toEqual([{
+      email: expect.objectContaining({ id: kestrelConfirmation.id, subject: "Thank you for applying to Kestrel Payments" }),
+      package: { id: t.pkg.id, job: { title: "Security Engineer", company: "Kestrel Payments" }, language: "en" },
+      appliedOn: "2026-10-13",
+      signals: expect.arrayContaining([expect.stringContaining("Kestrel Payments")]),
+    }]);
+    expect(needs.count).toBe(1);
+    expect((await t.tracker.list()).total).toBe(0);
+    expect(await t.tracker.emailsToMatch()).toEqual([]);
+    expect(t.preparation.packageSnapshot(t.pkg.id)).toMatchObject({ state: "approved", submitted: null });
+  });
+
+  it("\"Mark Applied\" records the submission dated the email, and files the email on the Application", async () => {
+    const t = await forgotten();
+
+    const r = await t.tracker.answerPackageConfirmation(kestrelConfirmation.id, "mark-applied");
+
+    const app = (await t.tracker.get(r.application!.id))!;
+    expect(app).toMatchObject({
+      jobId: t.jobId, status: "applied", appliedOn: "2026-10-13", createdHow: "submission",
+      submission: { packageId: t.pkg.id, submittedAt: "2026-10-13T18:20:00.000Z", via: "email" }, package: { id: t.pkg.id },
+    });
+    expect(app.timeline.map((e) => [e.kind, e.text, e.detail])).toEqual([
+      ["email", "Confirmation, filed", null],
+      ["created", "Submitted → Applied", "Marked Applied from its confirmation email"],
+    ]);
+    expect(t.preparation.packageSnapshot(t.pkg.id)).toMatchObject({ state: "submitted", submitted: { at: "2026-10-13T18:20:00.000Z" } });
+    expect((await t.tracker.needsYou()).packageConfirmations).toEqual([]);
+  });
+
+  it("\"Not this package\" adds nothing and leaves the email to match by hand", async () => {
+    const t = await forgotten();
+
+    await t.tracker.answerPackageConfirmation(kestrelConfirmation.id, "not-this");
+
+    expect((await t.tracker.needsYou()).packageConfirmations).toEqual([]);
+    expect((await t.tracker.list()).total).toBe(0);
+    expect(await t.tracker.emailsToMatch()).toEqual([expect.objectContaining({ email: expect.objectContaining({ id: kestrelConfirmation.id }) })]);
+    expect(t.preparation.packageSnapshot(t.pkg.id)).toMatchObject({ state: "approved" });
+  });
+
+  it("files the confirmation on the Application, without asking, once the package was marked submitted", async () => {
+    const t = await setup();
+    const { applicationId } = await t.submitted();
+
+    await t.receive("2026-10-14T07:00:00Z", kestrelConfirmation);
+
+    expect((await t.tracker.needsYou()).packageConfirmations).toEqual([]);
+    expect((await t.tracker.get(applicationId))!.timeline[0]).toMatchObject({ kind: "email", text: "Confirmation, filed" });
   });
 });
