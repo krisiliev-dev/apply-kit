@@ -4,7 +4,7 @@
 import type { ProfileForApply } from "../preparation/contracts.ts";
 import type { ReadField } from "./reading.ts";
 
-type ContactKey = "givenName" | "familyName" | "fullName" | "email" | "phone" | "countryCode" | "location" | "city" | "country" | "linkedin" | "github" | "portfolio";
+export type ContactKey = "givenName" | "familyName" | "fullName" | "email" | "phone" | "countryCode" | "location" | "city" | "country" | "linkedin" | "github" | "portfolio";
 
 /** Lower case, accents and punctuation gone, "(optional)" and "*" dropped, spaces collapsed. Unicode-safe for Cyrillic. */
 export function normaliseLabel(label: string): string {
@@ -14,7 +14,7 @@ export function normaliseLabel(label: string): string {
 }
 
 const byLabel: [ContactKey, RegExp][] = [
-  ["countryCode", /^(phone |mobile )?country code$|^dial(ling)? code$/u],
+  ["countryCode", /^(phone |mobile )?country code$|^country phone code$|^dial(ling)? code$/u],
   ["givenName", /^(legal |your )?(first|given) name$|^first$|^име$/u],
   ["familyName", /^(legal |your )?(last|family) name$|^surname$|^last$|^фамилия$/u],
   ["fullName", /^(full |your |legal )?name$|^име и фамилия$|^имена$/u],
@@ -40,6 +40,8 @@ const missingName: Record<ContactKey, string> = {
 };
 
 export interface ContactValue {
+  /** Which contact detail the field asks for. */
+  key: ContactKey;
   /** Null when the profile has nothing for it. */
   value: string | null;
   basis: string | null;
@@ -59,5 +61,5 @@ export function contactValue(field: ReadField, profile: ProfileForApply): Contac
     location: [c.city, c.country].filter(Boolean).join(", "), city: c.city, country: c.country,
     linkedin: c.linkedin, github: c.github, portfolio: c.portfolio,
   }[key] || null;
-  return { value, basis: key === "email" ? "Your job address" : null, missing: `Your profile has no ${missingName[key]}` };
+  return { key, value, basis: key === "email" ? "Your job address" : null, missing: `Your profile has no ${missingName[key]}` };
 }

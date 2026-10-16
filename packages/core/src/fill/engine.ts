@@ -11,7 +11,8 @@ import type { PackageFolder } from "../preparation/ports.ts";
 import { migrate } from "../schema.ts";
 import { minMatchConfidence, type Answer } from "../preparation/answers.ts";
 import { isSalaryQuestion } from "../preparation/screening.ts";
-import { contactValue } from "./contact.ts";
+import { contactValue, normaliseLabel } from "./contact.ts";
+import { planSection, type SectionPlan } from "./entries.ts";
 import { answerKindWords, diversityTopic, fieldKindWords, kindFits, kindOfText, mapToField, nearMissFloor, similarity } from "./questions.ts";
 import { countOutcomes, type FieldAnswer, type FieldOutcome, type PackageFileKind, type PageReading, type ReadField, type RecordedPage } from "./reading.ts";
 
@@ -310,8 +311,21 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
       const pkg = approvedById(s.packageId);
       // One letter per page: as a file where the page takes one, its text only where there's no file field for it.
       const letterAsFile = !!pkg?.letter && reading.fields.some((f) => f.kind === "file" && letterLabel.test(f.label));
+      // Repeating sections (Workday) fill from the CV in the package: its roles and education, as sent.
+      const plans: SectionPlan[] = [];
+      if (reading.fields.some((f) => f.entry)) {
+        const roles = pkg?.cv.roles ?? profile.roles;
+        const education = (pkg?.cv.education ?? profile.education).map((e) => ({ ...e, field: profile.education.find((p) => p.organisation === e.organisation && p.title === e.title)?.field ?? null }));
+        plans.push(planSection("work", reading.fields, roles), planSection("education", reading.fields, education));
+      }
+      // Where the page asks for the phone's country code on its own, the number goes in without it.
+      const splitPhone = reading.fields.some((f) => contactValue(f, profile)?.key === "countryCode");
       return reading.fields.map((f): FieldAnswer => {
         const fieldId = f.id;
+        if (f.entry) {
+          const planned = plans.map((p) => (f.kind === "repeating" && p.section?.fieldId === fieldId ? p.section : p.fields.get(fieldId))).find(Boolean);
+          if (planned) return planned;
+        }
         if (f.password) return { fieldId, kind: "skip", reason: "Passwords are yours: Chrome's password manager fills them" };
         if (f.consent) return { fieldId, kind: "skip", reason: "Consent boxes are yours to tick" };
         if (f.kind === "file") return fileAnswer(f, pkg);
@@ -321,12 +335,17 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
         }
         const contact = contactValue(f, profile);
         if (contact?.value) {
-          if (f.options.length === 0) return { fieldId, kind: "fill", value: contact.value, source: "profile", basis: contact.basis };
+          const value = splitPhone && contact.key === "phone" && profile.contact.phone ? profile.contact.phone.national : contact.value;
+          if (f.options.length === 0) return { fieldId, kind: "fill", value, source: "profile", basis: contact.basis };
           const option = f.options.find((o) => o.trim().toLowerCase() === contact.value!.toLowerCase());
           if (option) return { fieldId, kind: "fill", value: option, source: "profile", basis: contact.basis };
           return { fieldId, kind: "needs-you", reason: "None of the options matches your profile", basis: contact.basis, suggestion: contact.value };
         }
         if (contact) return f.required ? { fieldId, kind: "needs-you", reason: contact.missing, basis: null } : { fieldId, kind: "skip", reason: contact.missing };
+        if (skillsLabel.test(normaliseLabel(f.label)) && (f.kind === "typeahead" || f.kind === "textarea")) {
+          const skills = pkg?.cv.skills ?? profile.skills;
+          if (skills.length) return { fieldId, kind: "fill", value: skills.join("\n"), source: "cv-version", basis: f.kind === "typeahead" ? "The skills on the CV in your package, one at a time" : "The skills on the CV in your package" };
+        }
         const packaged = fromPackage(f, pkg);
         if (packaged) return packaged;
         const banked = fromBank(f, pkg?.language ?? "en");
@@ -409,6 +428,7 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
   };
 }
 
+const skillsLabel = /^(type to add )?skills$|^умения$/u;
 const letterLabel = /\bcover(ing)? ?letter\b|\bmotivation(al)? letter\b|мотивационно писмо/iu;
 const cvLabel = /\b(resume|résumé|cv|curriculum)\b|автобиография/iu;
 

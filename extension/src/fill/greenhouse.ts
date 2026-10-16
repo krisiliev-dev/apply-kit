@@ -241,7 +241,8 @@ export function createGreenhouseFiller({ settleMs = 1500 }: { settleMs?: number 
       for (const a of answers) {
         if (a.kind === "file") continue;
         const found = find(doc, a.fieldId);
-        if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
+        // Greenhouse has no repeating sections to add entries to.
+        if (!found || a.kind === "skip" || a.kind === "entries") { report(a.fieldId, "skipped"); continue; }
         if (a.kind === "needs-you") {
           mark(found.el, "needs-you", a.fieldId);
           report(a.fieldId, "needs-you");

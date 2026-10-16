@@ -4,9 +4,14 @@
 // Browser-safe: types and pure helpers only.
 import type { PageJobReference } from "../preparation/contracts.ts";
 
-export type PageKind = "form" | "account" | "sign-in" | "review" | "confirmation" | "posting" | "other";
+/** `start`: the portal's "how do you want to apply?" screen (Workday's Autofill with Resume / Apply Manually). */
+export type PageKind = "form" | "account" | "sign-in" | "review" | "confirmation" | "posting" | "start" | "other";
 
-export type FieldKind = "text" | "email" | "tel" | "url" | "textarea" | "number" | "date" | "select" | "typeahead" | "radio" | "checkbox" | "file";
+/** `repeating`: a section of entries the portal adds with its own Add control (Workday's Work Experience); its value is how many entries it has. */
+export type FieldKind = "text" | "email" | "tel" | "url" | "textarea" | "number" | "date" | "select" | "typeahead" | "radio" | "checkbox" | "file" | "repeating";
+
+/** The repeating sections apply-kit fills from the CV: work history and education. */
+export type EntrySection = "work" | "education";
 
 /** One field on the page, in the portal's order. Its current value is read, but never stored. */
 export interface ReadField {
@@ -24,8 +29,10 @@ export interface ReadField {
   consent: boolean;
   /** A password: never touched. */
   password: boolean;
-  /** The field's autocomplete token ("given-name", "email"), when the portal gives one. */
+  /** The field's autocomplete token ("given-name", "email"), when the portal gives one; "month-year" or "year" for a portal's split date inputs. */
   hint: string | null;
+  /** A field inside a repeating section's entry (Work Experience 2 › Job Title), or the section itself (a `repeating` field, index 0). */
+  entry?: { section: EntrySection; index: number } | null;
 }
 
 export interface PageReading {
@@ -52,7 +59,20 @@ export type FieldAnswer =
   | { fieldId: string; kind: "file"; which: PackageFileKind; fileName: string; size: number; source: "package"; basis: string }
   | { fieldId: string; kind: "needs-you"; reason: string; basis: string | null; suggestion?: string }
   /** `byRule`: left blank by Kris's answer-bank rule ("Skipped · your rule"). */
-  | { fieldId: string; kind: "skip"; reason: string; byRule?: true };
+  | { fieldId: string; kind: "skip"; reason: string; byRule?: true }
+  /**
+   * A repeating section: add this many entries with the portal's own Add control (never more than the
+   * CV has), and the entries the portal added itself that repeat a CV entry, reported, removed only on Kris's click.
+   */
+  | { fieldId: string; kind: "entries"; section: EntrySection; add: number; duplicates: DuplicateEntry[]; source: "cv-version"; basis: string };
+
+/** An entry the portal added (Workday reading the CV) that repeats one of the CV's entries. */
+export interface DuplicateEntry {
+  /** Its position in the section, from 1, as the portal numbers it ("Work Experience 4"). */
+  index: number;
+  /** "Junior Security Analyst, Orbital Bank, 2023–2025". */
+  words: string;
+}
 
 export type Outcome = "filled" | "kept" | "didnt-stick" | "skipped" | "needs-you";
 
@@ -61,6 +81,8 @@ export interface FieldOutcome {
   fieldId: string;
   outcome: Outcome;
   source: FillSource | null;
+  /** A typeahead or list with more than one plausible match: the options for Kris to choose between. */
+  choices?: string[];
 }
 
 export interface OutcomeCounts {
