@@ -2,7 +2,7 @@
 // Status / angle / date filters, paging inside a group and counts that follow the filters, over 214
 // seeded Applications; and the "Since your last visit" line. Fake clock (Mon 12 Oct 2026, 10:30 in
 // Sofia), in-memory database, made-up companies only.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTracker, type EmailClassification, type Status, type TrackAssistant, type Tracker as AnyTracker } from "../src/index.ts";
 import { createTestEngine, fakeClock, fakeMailbox, loadFixture, mailMessage } from "./harness.ts";
 
@@ -257,4 +257,23 @@ describe("Since your last visit", () => {
 
     expect((await tracker.visit()).changes).toEqual([]);
   });
+});
+
+
+it("reuses searchable mail between keystrokes and refreshes after a contact changes", async () => {
+  const { tracker, deps } = tracked();
+  const added = await tracker.addByHand({ job: { company: "Amber Labs", title: "Engineer" }, appliedOn: "2026-10-01", status: "applied" });
+  if (added.outcome !== "added") throw new Error("not added");
+  const prepare = deps.db.prepare.bind(deps.db);
+  let mailReads = 0;
+  vi.spyOn(deps.db, "prepare").mockImplementation((sql) => {
+    if (sql.includes("m.text, m.html")) mailReads++;
+    return prepare(sql);
+  });
+  await tracker.list({ search: "am" });
+  await tracker.list({ search: "amber" });
+  expect(mailReads).toBe(1);
+  await tracker.addContact(added.application.id, "recruiter@birch.example");
+  expect((await tracker.list({ search: "birch.example" })).matching).toBe(1);
+  expect(mailReads).toBe(2);
 });

@@ -787,3 +787,12 @@ describe("the Applications routes", () => {
     expect(await stats.json()).toMatchObject({ total: 1, weeks: expect.any(Array), responseRate: { excluded: 1, rate: null } });
   });
 });
+
+
+describe("cross-origin form posts cannot change Track", () => {
+  it.each(["/api/applications/visit", "/api/applications/missing/accept", "/api/applications/missing/decline"])("refuses a non-JSON request to %s", async (path) => {
+    const s = service();
+    const response = await s.request(path, { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: "" });
+    expect(response.status).toBe(415);
+  });
+});
