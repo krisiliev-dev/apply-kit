@@ -838,6 +838,7 @@ const migrations: string[] = [
      CHECK(piece_id != into_id)
    );
    CREATE INDEX profile_merge_source_into ON profile_merge_source(into_id);`,
+  `CREATE TABLE career_separation (pair TEXT PRIMARY KEY);`,
 ];
 
 export function migrate(db: SqlDatabase): void {

@@ -166,3 +166,5 @@ export type {
 } from "./fill/reading.ts";
 
 export type { ProfileConsolidator, ConsolidationSuggestion, ConsolidationGroup, ConsolidationPreview } from "./preparation/consolidation.ts";
+
+export type { CareerTimeline, CareerPeriod, CareerResolution } from "./preparation/career.ts";

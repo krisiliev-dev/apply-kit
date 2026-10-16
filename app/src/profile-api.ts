@@ -2,7 +2,7 @@
 // optional photo, the section counts behind the nav badge, and the one-click export. Angles (#58). Mutations need a
 // JSON body, like the rest of the service, so a web page can't send one without a CORS preflight.
 import type { Context, Hono } from "hono";
-import { angles, numberSources, pieceKinds, type Angle, type NumberSource, type PieceEntry, type PieceInput, type PieceKind, type PreparationEngine } from "@apply-kit/core";
+import { angles, numberSources, pieceKinds, type CareerResolution, type Angle, type NumberSource, type PieceEntry, type PieceInput, type PieceKind, type PreparationEngine } from "@apply-kit/core";
 
 type Body = Record<string, unknown>;
 
@@ -11,6 +11,23 @@ const MAX_PHOTO_BASE64 = 7 * 1024 * 1024;
 
 export function mountProfileApi(app: Hono, preparation: PreparationEngine): void {
   app.get("/api/profile/summary", (c) => c.json(preparation.profileSummary()));
+
+  app.get("/api/profile/career", c=>c.json(preparation.careerTimeline()));
+  app.post("/api/profile/career/:action", async c=> {
+    const body=await jsonBody(c);
+    if (!body) return c.json({error:"Send a JSON body"},415);
+    const action=c.req.param("action");
+    if (!["reconcile","separate","reset"].includes(action)) return c.json({error:"Unknown career review action"},404);
+    if (typeof body.fingerprint!=="string") return c.json({error:"Reload the timeline before deciding"},400);
+    if (action!=="reset" && (!Array.isArray(body.ids) || body.ids.length<2 || body.ids.length>300 || body.ids.some(id=>typeof id!=="string"))) return c.json({error:"Choose at least two period IDs"},400);
+    if (action==="reconcile" && (!body.resolution || typeof body.resolution!=="object")) return c.json({error:"Choose the resolved career details"},400);
+    try {
+      if (action==="reconcile") return c.json(preparation.reconcileCareerPeriods(body.ids as string[],body.resolution as CareerResolution,body.fingerprint));
+      if (action==="separate") preparation.separateCareerPeriods(body.ids as string[],body.fingerprint);
+      else preparation.resetCareerSeparations(body.fingerprint);
+      return c.json(preparation.careerTimeline());
+    } catch (err) { return c.json({error:err instanceof Error?err.message:"Couldn't save the career review"},409); }
+  });
 
   app.get("/api/profile/consolidations/latest", (c) => c.json(preparation.latestConsolidation()));
   app.post("/api/profile/consolidations", async (c) => {

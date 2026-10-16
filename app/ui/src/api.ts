@@ -1,5 +1,5 @@
 import type {
-  ConsolidationPreview, LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice, FieldReport,
+  CareerTimeline, CareerResolution, ConsolidationPreview, LearnedAdjustment, RuleChange, SearchSettings, CoverageHistory, CoverageInput, CoverageResult, PairedDevice, FieldReport,
   AddLinkResult, PastedPosting, CheckResult, CompanyDetection, Decision, NewSource, RemovalPreview, SourceInfo, FactAnswer, FeedResult, FeedSort, FeedView, HealthReport, JobDetail, PassInput, SchedulerStatus, SourceCheck,
   ImportInputProblem, ImportMerge, ImportStatus, UnreadableAction,
   WatchlistSeed, AngleView, SaveAngleInput, SaveAngleResult, Contact, ContactDetails, DeletedPiece, PieceInput, PieceList, PieceQuery, ProfilePiece, ProfileSummary, SaveContactResult, SavePieceResult,
@@ -834,4 +834,18 @@ export async function applyProfileConsolidation(id: string, groups: string[]): P
 }
 export async function undoProfileConsolidation(id: string): Promise<ConsolidationPreview> {
   return json(await postJson(`/api/profile/consolidations/${encodeURIComponent(id)}/undo`, {}));
+}
+
+
+export async function fetchCareerTimeline(signal?: AbortSignal): Promise<CareerTimeline> {
+  return json(await fetch("/api/profile/career", {signal}));
+}
+export async function reconcileCareer(ids: string[], resolution: CareerResolution, fingerprint: string): Promise<ConsolidationPreview> {
+  return json(await postJson("/api/profile/career/reconcile", {ids,resolution,fingerprint}));
+}
+export async function separateCareer(ids: string[], fingerprint: string): Promise<CareerTimeline> {
+  return json(await postJson("/api/profile/career/separate", {ids,fingerprint}));
+}
+export async function resetCareerSeparations(fingerprint: string): Promise<CareerTimeline> {
+  return json(await postJson("/api/profile/career/reset", {fingerprint}));
 }

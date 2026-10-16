@@ -942,3 +942,17 @@ describe("profile consolidation API guards", () => {
     expect(s.preparation.listPieces().total).toBe(0);
   });
 });
+
+describe("career review API", () => {
+  it("exposes the timeline and rejects malformed or stale decisions", async () => {
+    const s=service();
+    const initial=await s.request("/api/profile/career");
+    expect(initial.status).toBe(200);
+    const review=await initial.json() as {fingerprint:string;periods:unknown[]};
+    expect(review.periods).toEqual([]);
+    expect((await s.request("/api/profile/career/separate",{method:"POST",body:"{}"})).status).toBe(415);
+    expect((await s.request("/api/profile/career/separate",s.json({ids:[1,2],fingerprint:review.fingerprint}))).status).toBe(400);
+    expect((await s.request("/api/profile/career/reconcile",s.json({ids:["x","y"],fingerprint:review.fingerprint,resolution:null}))).status).toBe(400);
+    expect((await s.request("/api/profile/career/separate",s.json({ids:["x","y"],fingerprint:"stale"}))).status).toBe(409);
+  });
+});

@@ -407,15 +407,19 @@ export function createImportStore(deps: PreparationDeps, profile: ProfileStore):
       const entry = p.kind === "role" || p.kind === "education" ? p.entry : null;
       const draft = { kind: p.kind, text: p.text.trim(), entry };
       const belongsTo = !entry && p.role !== null ? (ids.get(p.role) ?? null) : null;
+      // Reviewed source versions are aliases of their canonical piece, including resolved old dates.
+      const alias = profile.everything().find(existing => profile.sourceVersions(existing.id).some(original =>
+        original.kind === draft.kind && original.text.trim().toLowerCase() === draft.text.toLowerCase()
+        && JSON.stringify(original.entry)?.toLowerCase() === JSON.stringify(entry)?.toLowerCase()));
       // Another source says it differently: the drafted piece already there waits for Kris to pick the true version.
-      const rival = profile.all().find((existing) => existing.status !== "confirmed" && disagrees(draft, existing));
+      const rival = !alias && profile.all().find((existing) => existing.status !== "confirmed" && disagrees(draft, existing));
       if (rival) {
         ids.set(i, rival.id);
         profile.dispute(rival.id, { from: item.name, quote: p.quote, text: draft.text, entry });
         continue;
       }
       // A discarded piece stays discarded when another file repeats it.
-      const twin = profile.everything().find((existing) => isNearDuplicate(draft, existing));
+      const twin = alias ?? profile.everything().find((existing) => isNearDuplicate(draft, existing));
       if (twin) {
         ids.set(i, twin.id);
         merged++;

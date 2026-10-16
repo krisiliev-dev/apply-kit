@@ -164,3 +164,13 @@ Only made-up people belong in the repository's set: it refuses a profile not mar
 In **Profile** or setup’s **Check drafts**, choose **Find duplicates with AI**. This compares the saved pieces across your CVs and other imports using your configured provider and monthly AI budget. Analysis leaves your profile unchanged and shows the proposed count reduction.
 
 Compare the original versions and sources, then choose **Merge selected**. Conflicting numbers, distinct employment periods, source disputes and incompatible confirmed decisions stay separate. Merging retains the displayed wording and every source; it never confirms pieces automatically. **Undo consolidation** restores the originals until another analysis, profile edit or import. Merged originals remain stored locally.
+
+### Review your career timeline
+
+**Profile** and setup’s **Check drafts** now start with work and education periods. Employer wording and overlapping dates suggest groups locally; this uses no AI credits and does not change any pieces.
+
+Expand a period and choose **Compare these versions**, or select entries from different periods and choose **Compare selected**. Differences in classification, title, employer, city and dates are highlighted. Select only entries that describe the same period, choose **Same period — resolve details**, then select or enter the correct values. Conflicts have no default answer. **Keep selected separate** saves the distinction, including for later AI proposals; reset these decisions from the timeline if needed.
+
+Combining periods creates a new unconfirmed entry, moves their facts underneath it, preserves descriptions and original versions, and combines identical unflagged facts with all source citations. Different claims and incompatible classifications stay separate. Original entries remain inspectable in **Original imported versions**. Verified Bulgarian titles remain with their original versions and can be verified again for the combined title. Use **Undo latest merge** before any further profile change, import or analysis to restore the originals.
+
+Review facts inside each resolved period, individually or with **Confirm unflagged facts in this period**. Disputes and scanned-text flags retain their existing review controls. The AI comparison for differently worded achievements and skills remains available in a collapsed panel.

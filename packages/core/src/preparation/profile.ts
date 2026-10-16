@@ -198,6 +198,7 @@ export interface ProfileStore {
   unconfirm(id: string): ProfilePiece | null;
   /** Every piece, discarded ones too (import merges a repeat into a discarded piece, so it stays discarded). */
   everything(): ProfilePiece[];
+  sourceVersions(id: string): ProfilePiece[];
   /** These pieces grouped by role, as the list groups them (a discarded role still heads its pieces). */
   grouped(pieces: ProfilePiece[]): PieceGroup[];
   /** Kris checked the piece: it becomes confirmed, once it passes every check a confirmed piece must. */
@@ -431,7 +432,9 @@ export function createProfileStore({ db, clock }: { db: SqlDatabase; clock: Cloc
   const discarded = () => db.prepare("SELECT * FROM profile_piece WHERE discarded_at IS NOT NULL AND id NOT IN (SELECT piece_id FROM profile_merge_source) ORDER BY rowid").all().map(rowToPiece);
   const everything = () => db.prepare("SELECT * FROM profile_piece WHERE id NOT IN (SELECT piece_id FROM profile_merge_source) ORDER BY rowid").all().map(rowToPiece);
 
-  return { save, revise, reinstate: write, confirm, get, all, list, remove, summary, dispute, resolveDispute, discard, restore, discarded, unconfirm, everything, grouped };
+  const sourceVersions = (id: string) => db.prepare("SELECT p.* FROM profile_merge_source m JOIN profile_piece p ON p.id = m.piece_id WHERE m.into_id = ? ORDER BY p.rowid").all(id).map(rowToPiece);
+
+  return { sourceVersions, save, revise, reinstate: write, confirm, get, all, list, remove, summary, dispute, resolveDispute, discard, restore, discarded, unconfirm, everything, grouped };
 }
 
 /** What every piece needs before it can be saved: its text, or a role's or education's facts. */

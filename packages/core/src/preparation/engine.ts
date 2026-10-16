@@ -1,6 +1,7 @@
 // The preparation engine: Prepare's deep module, beside the discovery engine and sharing its
 // database, clock, settings and AI budget. It will own the master profile, angles, answer bank,
 // voice, imports, the coach interview and packages (spec #51); each ticket adds its operations here.
+import type { CareerTimeline, CareerResolution } from "./career.ts";
 import { createConsolidationStore, type ConsolidationPreview } from "./consolidation.ts";
 import { createHash } from "node:crypto";
 import { migrate } from "../schema.ts";
@@ -71,6 +72,10 @@ export interface DocumentDraft {
 }
 
 export interface PreparationEngine {
+  careerTimeline(): CareerTimeline;
+  separateCareerPeriods(ids: string[], fingerprint: string): void;
+  resetCareerSeparations(fingerprint: string): void;
+  reconcileCareerPeriods(ids: string[], resolution: CareerResolution, fingerprint: string): ConsolidationPreview;
   previewConsolidation(): Promise<ConsolidationPreview>;
   latestConsolidation(): ConsolidationPreview | null;
   applyConsolidation(id: string, groups: string[]): ConsolidationPreview;
@@ -675,6 +680,10 @@ export function createPreparationEngine(deps: PreparationDeps): PreparationEngin
     angles: () => angles.list(),
     saveAngle: (input) => angles.save(input),
     closestAngle: (posting) => angles.closest(posting),
+    careerTimeline: () => consolidation.timeline(),
+    separateCareerPeriods: (ids, stamp) => touched(consolidation.separate(ids,stamp)),
+    resetCareerSeparations: stamp => touched(consolidation.resetSeparations(stamp)),
+    reconcileCareerPeriods: (ids,resolution,stamp) => touched(consolidation.reconcile(ids,resolution,stamp)),
     previewConsolidation: () => consolidation.preview(),
     latestConsolidation: () => consolidation.latest(),
     applyConsolidation: (id, groups) => touched(consolidation.apply(id, groups)),

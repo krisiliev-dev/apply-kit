@@ -11,6 +11,7 @@ import { SearchSettingsPage } from "../settings/SearchSettingsPage.tsx";
 import { AnglesPage } from "./AnglesPage.tsx";
 import { AnswerBank } from "./AnswerBank.tsx";
 import { AnswerEditor } from "./AnswerEditor.tsx";
+import { CareerTimeline } from "./CareerTimeline.tsx";
 import { ConsolidationPanel } from "./ConsolidationPanel.tsx";
 import { ContactPanel } from "./ContactPanel.tsx";
 import { LearnedPieces } from "./LearnedPieces.tsx";
@@ -217,7 +218,7 @@ function MasterProfile({ go, announce, flash, clearFlash, onChanged, learned }: 
         </div>
       )}
       {contactPanel}
-      <ConsolidationPanel onChanged={changed} />
+      <details className="panel"><summary>Find duplicate achievements and skills with AI</summary><ConsolidationPanel key={version} onChanged={changed} /></details>
       <section className="panel" aria-labelledby="pieces-h">
         <div className="sec-head">
           <h2 className="grow" id="pieces-h">Master profile <span className="meta">· {list.total} {list.total === 1 ? "piece" : "pieces"} · {list.confirmed} confirmed</span></h2>
@@ -243,7 +244,7 @@ function MasterProfile({ go, announce, flash, clearFlash, onChanged, learned }: 
           </select>
         </div>
 
-        {list.groups.length === 0 ? (
+        {!filtering ? <CareerTimeline version={version} onChanged={changed}/> : list.groups.length === 0 ? (
           <div className="row">
             <span className="meta grow">No pieces match.</span>
             <button className="btn sm" type="button" onClick={clear}>Clear search and filters</button>
