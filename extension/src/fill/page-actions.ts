@@ -62,6 +62,18 @@ export function setValue(el: Element, value: string, label = ""): boolean {
   return true;
 }
 
+/** Ticks or unticks a checkbox, or selects or clears a radio button, as a person would. False if refused (consent boxes are Kris's). */
+export function setChecked(el: Element, checked: boolean, label = ""): boolean {
+  if (refusal(el, label)) return false;
+  const type = (el.getAttribute("type") ?? "").toLowerCase();
+  if (type !== "checkbox" && type !== "radio") return false;
+  const set = nativeSetter(el, "checked");
+  if (!set) return false;
+  set.call(el, checked);
+  announceChange(el);
+  return true;
+}
+
 // ---------- marks: an outline and a badge over the field, never part of the portal's page ----------
 
 /** apply-kit's mark colours, the light-theme values of the design tokens (--met, --bloom, --partly, --gap). Portal pages are the company's, so the panel's tokens don't reach them. */
