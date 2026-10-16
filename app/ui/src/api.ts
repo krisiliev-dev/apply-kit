@@ -8,7 +8,7 @@ import type {
   Answer, AnswerChange, AnswerInput, AnswerList, AnswerQuery, SaveAnswerResult, VoiceView,
   ApproveResult, ChangeResult, DocumentLanguage, FeedJob, PackageChip, PackageStep, PackageView, PrepareStatus, StartPackageResult,
   FlagChoice, LearnedPiece, AtsFix,
-  AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, ApplicationContact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
+  MarkResult, AddApplicationInput, AddApplicationResult, ApplicationDetail, ApplicationEvent, ApplicationList, AttachedCv, ApplicationContact, ApplicationSummary, GroupKey, JobChoice, JobMarker, Status, TrackStats,
   EmailAnswer, EmailToMatch, TrackMailbox, StatusFilter, SinceLastVisit,
   FollowUp, FollowUpDraft, FollowUpSettings, NeedsYou, Interview, InterviewInput, PrepSheet,
   Withdrawal, Withdrawals, OfferDetails, OfferView, RejectionReason, RejectionView,
@@ -612,6 +612,20 @@ export async function addApplication(input: AddApplicationInput): Promise<AddApp
 
 export async function setApplicationStatus(id: string, status: Status): Promise<{ application: ApplicationSummary; event: ApplicationEvent; cancelled: FollowUp | null }> {
   return json(await postJson(`/api/applications/${encodeURIComponent(id)}/status`, { status }));
+}
+
+/**
+ * The Job page's "Mark as submitted" (an application sent outside the extension): the same fill-engine
+ * call the panel makes. A mark that created nothing resolves with its reason.
+ */
+export async function markPackageSubmitted(packageId: string): Promise<MarkResult> {
+  const res = await postJson(`/api/packages/${encodeURIComponent(packageId)}/submitted`);
+  return res.status === 422 ? ((await res.json()) as MarkResult) : json(res);
+}
+
+/** Undo after marking: the Application goes and the package is approved again. Rejects with the reason when refused. */
+export async function undoMarkSubmitted(applicationId: string): Promise<{ packageId: string }> {
+  return json(await postJson(`/api/applications/${encodeURIComponent(applicationId)}/submitted/undo`));
 }
 
 export async function undoApplicationEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }> {

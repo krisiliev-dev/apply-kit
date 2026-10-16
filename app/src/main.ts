@@ -128,9 +128,9 @@ tracker = createTracker({
 });
 
 // Apply: the fill engine matches portal pages to approved packages and answers fields, reading
-// Prepare through PrepareForApply. A package file approval couldn't copy to the Packages folder is
-// copied on first use, so "Show in Finder" has it there.
-const fill = createFillEngine({ db, clock, prepare: preparation, packages: packageFolder });
+// Prepare through PrepareForApply; "Mark as submitted" creates the Application through the tracker. A
+// package file approval couldn't copy to the Packages folder is copied on first use, so "Show in Finder" has it there.
+const fill = createFillEngine({ db, clock, prepare: preparation, track: tracker, packages: packageFolder });
 
 const app = createServer({ engine, preparation, fill, revealer: createFinderRevealer(config.packagesDir), tracker, scheduler, pairing, uiDir: config.uiDir, port: config.port });
 

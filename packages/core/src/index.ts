@@ -139,7 +139,7 @@ export type {
   Tracker, TrackerDeps, ApplicationMarker, JobMarker, Status, EventCause, CreatedHow, ApplicationEvent, ApplicationSummary, AddApplicationInput, AddField,
   AddApplicationResult, GroupKey, ApplicationGroup, ApplicationList, ListQuery, StatusFilter, JobChoice, ApplicationDetail, StatusStep, NextStep, TimelineEntry, Contact as ApplicationContact, TargetPosting, AttachedCv, AttachCvInput,
   NextUp, NeedsYou, NeedsYouEntry, NeedsYouGroup, ComingUp, FollowUpDraft, FollowUpEventKind, NoDraft, UpcomingInterview,
-  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView,
+  Withdrawal, Withdrawals, OfferToAnswer, OfferDetails, OfferView, RejectionReason, RejectionView, Submission, SubmissionInput, SubmissionResult,
 } from "./tracker.ts";
 export { bannedPhrases, defaultFollowUpSettings, draftWords } from "./follow-ups.ts";
 export { trackPortsFrom } from "./track-prepare.ts";
@@ -157,6 +157,6 @@ export type {
   EmailSummary, MatchedEmail, MovedByEmail, EmailCandidate, EmailToMatch, EmailAnswer, TrackMailbox, MailProcessed, EmailChange, SinceLastVisit,
 } from "./tracker.ts";
 export { createFillEngine, FillError } from "./fill/engine.ts";
-export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageFileForFill, PackageInBrief, SessionEnd } from "./fill/engine.ts";
+export type { FillEngine, FillDeps, FillPage, FillSession, FillStart, FillMatch, FillOptions, PackageFileForFill, PackageInBrief, SessionEnd, MarkResult, SubmittedApplication } from "./fill/engine.ts";
 export { countOutcomes } from "./fill/reading.ts";
 export type { PageReading, PageKind, ReadField, FieldKind, FieldAnswer, FieldOutcome, Outcome, OutcomeCounts, FillSource, PackageFileKind, RecordedPage } from "./fill/reading.ts";

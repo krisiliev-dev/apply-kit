@@ -1,7 +1,7 @@
 // The extension's only connection: the apply-kit service on this laptop (ARCHITECTURE.md). It keeps
 // two things in browser.storage.local, the service's address and the token from pairing, and
 // nothing else: no pages, no jobs, no profile. Pages go straight to the service and are forgotten.
-import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, PackageFileKind, PageReading, RecordedPage } from "@apply-kit/core";
+import type { CaptureReport, CapturedPage, FieldAnswer, FieldOutcome, FillPage, FillStart, MarkResult, PackageFileKind, PageReading, RecordedPage } from "@apply-kit/core";
 
 /** The service's address unless Kris changes it (PORT in the app's settings). */
 export const defaultServiceUrl = "http://127.0.0.1:4310";
@@ -32,6 +32,10 @@ export interface FillClient {
   start(page: FillPage, options: { sessionId?: string | null; packageId?: string }): Promise<Answer<FillStart>>;
   answer(sessionId: string, reading: PageReading): Promise<Answer<FieldAnswer[]>>;
   record(sessionId: string, reading: PageReading, outcomes: FieldOutcome[]): Promise<Answer<RecordedPage>>;
+  /** Kris's "Mark as submitted": the Application is created (or was already); a mark that created nothing says why. */
+  markSubmitted(sessionId: string, portalUrl: string | null): Promise<Answer<MarkResult>>;
+  /** Undo after marking (kept in the panel until it closes). */
+  undoMarkSubmitted(applicationId: string): Promise<Answer<{ packageId: string }>>;
   /** The package's CV or letter as base64, held in the panel's memory only while it's attached. */
   file(sessionId: string, which: PackageFileKind): Promise<Answer<PackageFileBytes>>;
   /** "Show in Finder": apply-kit reveals the session's file in the Packages folder. */
@@ -97,7 +101,8 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
     return { ok: true, report: (await res.json()) as CaptureReport };
   }
 
-  async function post<T>(path: string, body: unknown): Promise<Answer<T>> {
+  /** `answers`: refusals that still carry the value (a mark that created nothing answers 422 with its reason). */
+  async function post<T>(path: string, body: unknown, answers: number[] = []): Promise<Answer<T>> {
     const { token } = await settings();
     if (!token) return { ok: false, state: "unpaired" };
     const res = await call(path, { method: "POST", body });
@@ -106,7 +111,7 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       await store.remove(["token"]);
       return { ok: false, state: "unpaired" };
     }
-    if (!res.ok) {
+    if (!res.ok && !answers.includes(res.status)) {
       const b = (await res.json().catch(() => null)) as { error?: unknown; problem?: unknown } | null;
       const error = typeof b?.error === "string" ? b.error : `apply-kit answered ${res.status}.`;
       return typeof b?.problem === "string" ? { ok: false, state: "error", problem: b.problem, error } : { ok: false, state: "error", error };
@@ -122,6 +127,8 @@ export function createClient({ fetch, store }: { fetch: typeof globalThis.fetch;
       record: (sessionId, reading, outcomes) => post("/api/ext/fill/record", { sessionId, reading, outcomes }),
       file: (sessionId, which) => post("/api/ext/fill/file", { sessionId, which }),
       reveal: (sessionId, which) => post("/api/ext/fill/reveal", { sessionId, which }),
+      markSubmitted: (sessionId, portalUrl) => post("/api/ext/fill/submitted", { sessionId, portalUrl }, [422]),
+      undoMarkSubmitted: (applicationId) => post("/api/ext/fill/submitted/undo", { applicationId }),
     },
 
     async connect() {

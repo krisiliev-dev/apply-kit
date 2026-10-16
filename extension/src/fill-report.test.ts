@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField } from "@apply-kit/core";
-import { differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, focusAfterFill, matchWhy, packageLines, sourceWords } from "./fill-report.ts";
+import type { FieldAnswer, FieldOutcome, PackageInBrief, PageReading, ReadField, SubmittedApplication } from "@apply-kit/core";
+import { differentJobLine, fieldRows, fileReport, fileSize, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, sourceWords, submitPrompt } from "./fill-report.ts";
 
 const field = (id: string, label: string, value = ""): ReadField => ({ id, label, kind: "text", required: true, value, options: [], maxLength: null, consent: false, password: false, hint: null });
 const reading: PageReading = {
@@ -108,6 +108,41 @@ describe("what the Fill view says", () => {
     it("says nothing about the letter when the package has none", () => {
       expect(fileReport({ ...brief, letter: false }, [fn], [{ fieldId: "fn", outcome: "filled", source: "profile" }], "Greenhouse").letter).toBeNull();
     });
+  });
+});
+
+describe("what the panel says about submitting", () => {
+  const application = {
+    id: "a1", jobId: "j1", title: "Security Engineer", company: "Kestrel Payments", status: "applied", appliedOn: "2026-10-13", createdHow: "submission",
+    submission: { packageId: "p1", portal: "greenhouse", portalUrl: "https://job-boards.greenhouse.io/kestrel/jobs/4410/confirmation", submittedAt: "2026-10-13T11:20:00.000Z", via: "extension" },
+  } as SubmittedApplication;
+
+  it("asks \"Did you submit?\" only on a confirmation page, offers \"I've submitted this\" on unknown forms, and never on a review page", () => {
+    expect(submitPrompt({ known: true, pageKind: "confirmation" })).toBe("ask");
+    expect(submitPrompt({ known: false, pageKind: null })).toBe("footer");
+    expect(submitPrompt({ known: false, pageKind: "form" })).toBe("footer");
+    for (const pageKind of ["review", "form", "account", "sign-in", "other"] as const) expect(submitPrompt({ known: true, pageKind }), pageKind).toBeNull();
+    expect(submitPrompt({ known: false, pageKind: "review" })).toBeNull();
+  });
+
+  it("says the Application was created, or when it was marked already", () => {
+    expect(markedBanner({ alreadyMarked: false, application })).toEqual({ lead: "Application created.", rest: "Security Engineer at Kestrel Payments is now tracked." });
+    expect(markedBanner({ alreadyMarked: true, application })).toEqual({ lead: "Already marked as submitted on 13 Oct.", rest: "Security Engineer at Kestrel Payments has its Application; nothing new was created." });
+  });
+
+  it("lists the Application's status, when and where it was submitted, the package and the portal, in Sofia time", () => {
+    expect(markedLines(application, brief)).toEqual([
+      { term: "Status", detail: "Applied" },
+      { term: "Submitted", detail: "13 Oct, 14:20, via Greenhouse" },
+      { term: "Package", detail: "CV v3 · 6 answers · ATS check passed" },
+      { term: "Portal", detail: "job-boards.greenhouse.io" },
+    ]);
+    const fromApp = { ...application, submission: { ...application.submission, portalUrl: null, via: "app" as const } };
+    expect(markedLines(fromApp, { ...brief, answers: 1, cv: { ...brief.cv, ats: { passed: 9, total: 10, accepted: [] } } })).toEqual([
+      { term: "Status", detail: "Applied" },
+      { term: "Submitted", detail: "13 Oct, 14:20, marked in apply-kit" },
+      { term: "Package", detail: "CV v3 · 1 answer · 9 of 10 ATS checks pass" },
+    ]);
   });
 });
 

@@ -339,6 +339,8 @@ export interface ApplicationDetail extends ApplicationSummary {
   cv: AttachedCv | null;
   /** Null when added by hand without a link. */
   posting: TargetPosting | null;
+  /** How it was sent, when it was made by marking a package submitted; else null. */
+  submission: Submission | null;
   /** Oldest first. */
   contacts: Contact[];
   steps: StatusStep[];
@@ -388,6 +390,33 @@ export type AddApplicationResult =
   /** The Job already has an open Application: nothing was added; open this one. */
   | { outcome: "already-open"; application: ApplicationSummary; message: string }
   | { outcome: "invalid"; field: AddField; message: string };
+
+/** How a package was sent, as the Application keeps it: from the package marked submitted. */
+export interface Submission {
+  packageId: string;
+  /** The portal it was sent through ("greenhouse"), or null when it went elsewhere. */
+  portal: string | null;
+  /** The portal page Kris marked it on (the confirmation page), or null when marked in the app. */
+  portalUrl: string | null;
+  /** When Kris marked it submitted (ISO). */
+  submittedAt: string;
+  /** Marked in the extension's panel, or on the Job page in the app. */
+  via: "extension" | "app";
+}
+
+/** What "Mark as submitted" hands Track: the package's Job and how it was sent. */
+export interface SubmissionInput extends Submission {
+  jobId: string;
+  /** The package's job, as approved. */
+  job: { title: string; company: string };
+  angle: Angle | null;
+}
+
+export type SubmissionResult =
+  /** `alreadyRecorded`: the package already had its Application; this is it, unchanged. */
+  | { outcome: "recorded"; alreadyRecorded: boolean; application: ApplicationSummary & { submission: Submission } }
+  /** The Job already has an open Application made another way: nothing was added (Track #35 attaches the package to it). */
+  | { outcome: "already-open"; application: ApplicationSummary; message: string };
 
 export type GroupKey = "accepted" | "offer" | "interviewing" | "screening" | "applied" | "closed";
 
@@ -658,6 +687,18 @@ export interface Tracker {
    * and the reversal is recorded. Throws a TrackerError when refused.
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
+  /**
+   * Record submission (Apply's "Mark as submitted"; Track #35 extends it): creates the Application in
+   * Applied for the package's Job, with the package, portal, portal address, when and how. Once per
+   * package: asked again, it returns the Application it made. A Job with an open Application made
+   * another way gets nothing new ("already-open").
+   */
+  recordSubmission(input: SubmissionInput): Promise<SubmissionResult>;
+  /**
+   * Undoes record submission (Apply's Undo): the Application is taken off the list. Refused (a
+   * TrackerError) once anything has happened to it since. Returns the package it was made from.
+   */
+  undoSubmission(applicationId: string): Promise<{ packageId: string; event: ApplicationEvent }>;
   /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
   addNote(applicationId: string, text: string): Promise<{ event: ApplicationEvent }>;
   /** Adds an address or domain whose mail belongs here. Throws a TrackerError when refused. */
@@ -951,6 +992,60 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     }
   }
 
+  function submissionOf(r: Row): Submission | null {
+    const packageId = str(r.package_id);
+    const submittedAt = str(r.submitted_at);
+    return packageId && submittedAt
+      ? { packageId, portal: str(r.portal), portalUrl: str(r.portal_url), submittedAt, via: r.submitted_via === "app" ? "app" : "extension" }
+      : null;
+  }
+
+  async function recordSubmission(input: SubmissionInput): Promise<SubmissionResult> {
+    const recorded = (r: Row, alreadyRecorded: boolean) =>
+      ({ outcome: "recorded" as const, alreadyRecorded, application: { ...summaryOf(r), submission: submissionOf(r)! } });
+    const existing = db.prepare("SELECT * FROM application WHERE package_id = ? AND submitted_at IS NOT NULL AND removed_at IS NULL ORDER BY rowid LIMIT 1").get(input.packageId);
+    if (existing) return recorded(existing, true);
+    const open = openOnJob(input.jobId);
+    if (open) return alreadyOpen(open);
+
+    const job = await discovery.getJob(input.jobId);
+    const target = job?.postings.find((p) => p.isTarget) ?? job?.postings[0];
+    const portal = input.portal ? portalLabel(input.portal) : null;
+    const source = target?.source.label ?? portal ?? "Added by hand";
+    const id = randomUUID();
+    db.exec("BEGIN");
+    try {
+      db.prepare(
+        `INSERT INTO application (id, job_id, company, title, status, applied_on, created_how, created_at, posting_url, angle, source, package_id, portal, portal_url, submitted_at, submitted_via)
+         VALUES (?, ?, ?, ?, 'applied', ?, 'submission', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).run(
+        id, job?.id ?? input.jobId, job?.company ?? input.job.company, job?.title ?? input.job.title, sofiaDay(new Date(input.submittedAt)), now(),
+        job?.url ?? null, input.angle ?? job?.fit.angle ?? null, source, input.packageId, input.portal, input.portalUrl, input.submittedAt, input.via,
+      );
+      const text = input.via === "app" ? "Marked as submitted on the Job page" : `Marked as submitted${portal ? ` on ${portal}` : ""}`;
+      addEvent({ applicationId: id, kind: "created", cause: "you", from: null, to: "applied", text, undoes: null });
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+    return recorded(row(id)!, false);
+  }
+
+  async function undoSubmission(applicationId: string) {
+    const r = row(applicationId);
+    const submission = r ? submissionOf(r) : null;
+    if (!r || !submission) throw new TrackerError("not-found", "There's no Application made by marking a package submitted with that id.");
+    const all = allEvents(applicationId);
+    const created = all.find((e) => e.kind === "created")!;
+    const later = all.filter((e) => e.id !== created.id);
+    if (later.length > 0) {
+      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
+    }
+    const { event } = await undoEvent(created.id);
+    return { packageId: submission.packageId, event };
+  }
+
   /** Each Application's searchable text: job, company, contacts and the text of the emails matched to it, lower-cased. */
   function searchTexts(): Map<string, string> {
     const out = new Map<string, string>();
@@ -1240,7 +1335,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const setter = standing.filter((e) => e.kind === "created" || e.kind === "status" || (e.kind === "email" && !!e.to)).at(-1);
     const followUp = currentFollowUp(row(applicationId)!);
     return {
-      ...app, statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
+      ...app, submission: submissionOf(row(applicationId)!), statusSince: setter?.at ?? app.lastEvent.at, cvVersion: str(row(applicationId)?.cv_version), cv: cvOf(applicationId), posting, contacts: contactsOf(applicationId), steps: stepsOf(app, standing),
       nextStep: nextStepOf(app, standing, followUp, thankYous, interviews), followUp, interviews, thankYous, timeline,
       movedByEmail: movedByEmailOf(setter, app.status),
       closedReason: isClosed(app.status) ? (setter?.reason ?? null) : null,
@@ -2671,6 +2766,8 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     mailbox: async () => mailbox(),
     jobMarkers,
     addByHand,
+    recordSubmission,
+    undoSubmission,
     list,
     get: detail,
     events: async (id) => allEvents(id),
@@ -2689,6 +2786,12 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 }
 
 /** The calendar day in Sofia (YYYY-MM-DD). */
+const portalLabels: Record<string, string> = {
+  workday: "Workday", greenhouse: "Greenhouse", lever: "Lever", smartrecruiters: "SmartRecruiters", workable: "Workable", ashby: "Ashby",
+};
+/** A portal's name as Kris reads it ("SmartRecruiters"). */
+const portalLabel = (portal: string) => portalLabels[portal] ?? portal;
+
 function sofiaDay(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Sofia", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
