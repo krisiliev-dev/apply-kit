@@ -171,6 +171,27 @@ describe("a confirmation for an approved package with no Application", () => {
     expect((await t.tracker.needsYou()).packageConfirmations).toEqual([]);
   });
 
+  it("undo of \"Mark Applied\" takes the Application off, makes the package approved again and asks again", async () => {
+    const t = await forgotten();
+    const r = await t.tracker.answerPackageConfirmation(kestrelConfirmation.id, "mark-applied");
+
+    await t.tracker.undoPackageConfirmation(kestrelConfirmation.id);
+
+    expect(await t.tracker.get(r.application!.id)).toBeNull();
+    expect((await t.tracker.list()).total).toBe(0);
+    expect(t.preparation.packageSnapshot(t.pkg.id)).toMatchObject({ state: "approved", submitted: null });
+    expect((await t.tracker.needsYou()).packageConfirmations).toEqual([expect.objectContaining({ package: expect.objectContaining({ id: t.pkg.id }) })]);
+  });
+
+  it("refuses that undo once something else has happened to the Application", async () => {
+    const t = await forgotten();
+    const r = await t.tracker.answerPackageConfirmation(kestrelConfirmation.id, "mark-applied");
+    await t.tracker.addNote(r.application!.id, "Recruiter is Alex Doe");
+
+    await expect(t.tracker.undoPackageConfirmation(kestrelConfirmation.id)).rejects.toMatchObject({ problem: "not-undoable" });
+    expect(await t.tracker.get(r.application!.id)).toMatchObject({ status: "applied" });
+  });
+
   it("\"Not this package\" adds nothing and leaves the email to match by hand", async () => {
     const t = await forgotten();
 

@@ -549,6 +549,10 @@ export function createServer({ engine, preparation, fill, tracker, scheduler, pa
     if (!body) return c.json({ error: "Send a JSON body with Content-Type: application/json" }, 415);
     return trackerCall(c, () => tracker.answerPackageConfirmation(c.req.param("id"), body.answer as "mark-applied" | "not-this"));
   });
+  app.post("/api/applications/emails/:id/package/undo", async (c) => {
+    if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
+    return trackerCall(c, async () => { await tracker.undoPackageConfirmation(c.req.param("id")); return { ok: true }; });
+  });
 
   // One follow-up: its outline and text (GET), the text as typed (PUT { text }), and what the user did:
   // sent from their own mail, skipped, or snoozed. Each of those is an Event, undone like any other.

@@ -799,6 +799,11 @@ export interface Tracker {
    * leaves the email to match by hand. Throws a TrackerError when refused.
    */
   answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this"): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent | null }>;
+  /**
+   * Undoes "Mark Applied" (the toast's Undo): the Application is taken off, the package is approved
+   * again and the question comes back. Refused (a TrackerError) once anything else happened to it.
+   */
+  undoPackageConfirmation(emailId: string): Promise<void>;
   /** "Looks right" on the moved-by-email banner: the banner goes; the email stays on the timeline. */
   confirmEmailMove(eventId: string): Promise<void>;
   /** The job mailbox's state, for Applications' banners. */
@@ -2684,7 +2689,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
 
   async function answerPackageConfirmation(emailId: string, answer: "mark-applied" | "not-this") {
     if (answer !== "mark-applied" && answer !== "not-this") throw new TrackerError("invalid", "Choose Mark Applied, or Not this package.");
-    const d = db.prepare("SELECT state, reason FROM email_match WHERE email_id = ?").get(emailId);
+    const d = db.prepare("SELECT state, reason, signals FROM email_match WHERE email_id = ?").get(emailId);
     const r = db.prepare("SELECT * FROM mail_message WHERE id = ?").get(emailId);
     if (!d || !r || d.state !== "package" || !packages) throw new TrackerError("not-found", "There's no such question about a package.");
     const m = storedMessage(r);
@@ -2710,13 +2715,41 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     db.exec("BEGIN");
     try {
       const { event } = fileEmail(applicationId, m, "confirmation", null, false, "you");
-      decide(emailId, { state: "matched", applicationId, signals: ["You marked its package Applied."], how: "you" });
+      decide(emailId, { state: "matched", applicationId, signals: JSON.parse(String(d.signals)) as string[], reason: p.id, how: "you" });
       db.exec("COMMIT");
       return { application: summary(applicationId), event };
     } catch (err) {
       db.exec("ROLLBACK");
       throw err;
     }
+  }
+
+  async function undoPackageConfirmation(emailId: string) {
+    const d = db.prepare("SELECT state, application_id, reason, signals FROM email_match WHERE email_id = ?").get(emailId);
+    const r = d?.state === "matched" && d.application_id ? row(String(d.application_id)) : undefined;
+    const submission = r ? submissionOf(r) : null;
+    if (!r || !submission || submission.via !== "email" || r.created_how !== "submission" || !packages) {
+      throw new TrackerError("not-found", "There's no Mark Applied to undo for that email.");
+    }
+    const applicationId = String(r.id);
+    const all = allEvents(applicationId);
+    const later = all.filter((e) => e.kind !== "created" && !(e.kind === "email" && e.emailId === emailId));
+    if (later.length) {
+      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
+    }
+    db.exec("BEGIN");
+    try {
+      const created = all.find((e) => e.kind === "created")!;
+      db.prepare("UPDATE application_event SET undone_at = ? WHERE application_id = ? AND undone_at IS NULL").run(now(), applicationId);
+      db.prepare("UPDATE application SET removed_at = ? WHERE id = ?").run(now(), applicationId);
+      addEvent({ applicationId, kind: "undo", cause: "you", from: null, to: null, text: "Mark Applied undone: removed", undoes: created.id });
+      decide(emailId, { state: "package", signals: JSON.parse(String(d!.signals)) as string[], reason: String(d!.reason) });
+      db.exec("COMMIT");
+    } catch (err) {
+      db.exec("ROLLBACK");
+      throw err;
+    }
+    packages.undoPackageSubmitted(submission.packageId);
   }
 
   let running: Promise<unknown> = Promise.resolve();
@@ -2955,6 +2988,7 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     addByHand,
     recordSubmission,
     answerPackageConfirmation,
+    undoPackageConfirmation,
     packageFile,
     cvVersions,
     pickCvVersion,
