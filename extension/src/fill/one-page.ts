@@ -203,6 +203,8 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
   const attached = new Set<string>();
   /** Field id → the value apply-kit put in. */
   const filled = new Map<string, string>();
+  /** Fields Kris answered from the panel. */
+  const yours = new Set<string>();
   const settle = () => (settleMs > 0 ? new Promise<void>((done) => setTimeout(done, settleMs)) : Promise.resolve());
 
   const find = (doc: Document, id: string) => {
@@ -312,6 +314,16 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
         const found = find(doc, a.fieldId);
         if (!found || a.kind === "skip") { report(a.fieldId, "skipped"); continue; }
         // A closed component can't be read or filled: Kris types (or pastes) apply-kit's value.
+        if (a.kind === "needs-you" && !found.item.closed) {
+          const current = found.field.value;
+          // Answered: from the panel (Kris's), or typed on the page (kept, so apply-kit can offer it to the bank).
+          if (current.trim() !== "" && yours.has(a.fieldId) && filled.get(a.fieldId) === current) { report(a.fieldId, "filled", "you"); continue; }
+          if (current.trim() !== "") {
+            mark(found.el, "kept", a.fieldId);
+            report(a.fieldId, "kept");
+            continue;
+          }
+        }
         if (a.kind === "needs-you" || found.item.closed) {
           mark(found.el, "needs-you", a.fieldId);
           report(a.fieldId, "needs-you");
@@ -351,6 +363,13 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
       return put(doc, fieldId, value);
     },
 
+    fillOne(doc, fieldId, value) {
+      unmark(doc, fieldId);
+      const outcome = put(doc, fieldId, value);
+      if (outcome === "filled") yours.add(fieldId);
+      return outcome;
+    },
+
     undo(doc) {
       let restored = 0;
       for (const id of attached) {
@@ -364,6 +383,7 @@ export function createOnePageFiller(shape: PageShape, { settleMs = 1500 }: { set
       }
       previous.clear();
       filled.clear();
+      yours.clear();
       removeMarks(doc);
       return restored;
     },

@@ -35,3 +35,46 @@ describe("reading a SmartRecruiters OneClick page", () => {
     expect(r.fields.at(-1)!.consent).toBe(true);
   });
 });
+
+describe("filling a SmartRecruiters OneClick page", () => {
+  it("sets the inner inputs so each component registers the value, and the confirm-email field gets the same job address", async () => {
+    const page = oneClick();
+    // The components ignore a direct write to their inner input, as SmartRecruiters' do.
+    page.inner("first-name").value = "Mimi";
+    expect(page.registered("first-name")).toBe("");
+
+    const outcomes = await createSmartRecruitersFiller({ settleMs: 0 }).fill(page.document, [
+      fill("first-name-input", "Mira"), fill("last-name-input", "Petrova"),
+      { fieldId: "email-input", kind: "fill", value: "mira.petrova@example.com", source: "profile", basis: "Your job address" },
+      { fieldId: "confirm-email-input", kind: "fill", value: "mira.petrova@example.com", source: "profile", basis: "Your job address" },
+      fill("location-input", "Sofia, Bulgaria"),
+      { fieldId: "privacy-consent-input", kind: "skip", reason: "Consent boxes are yours to tick" },
+    ]);
+
+    expect(outcomes.map((o) => o.outcome)).toEqual(["filled", "filled", "filled", "filled", "filled", "skipped"]);
+    expect(["first-name", "last-name", "email", "confirm-email", "location"].map(page.registered)).toEqual(["Mira", "Petrova", "mira.petrova@example.com", "mira.petrova@example.com", "Sofia, Bulgaria"]);
+    expect(page.inner("privacy-consent").checked).toBe(false);
+    expect(marks(page.document)).toEqual(["first-name-input:filled", "last-name-input:filled", "email-input:filled", "confirm-email-input:filled", "location-input:filled"]);
+    expect(page.presses).toEqual([]);
+  });
+
+  it("lists a field in a closed shadow root as needs-you, marked on its component, and never guesses into it", async () => {
+    const page = oneClick();
+
+    const [phone] = await createSmartRecruitersFiller({ settleMs: 0 }).fill(page.document, [fill("phone-number", "+359 88 000 0175")]);
+
+    expect(phone).toEqual({ fieldId: "phone-number", outcome: "needs-you", source: null });
+    expect(page.inner("phone-number").value).toBe("");
+    expect(marks(page.document)).toEqual(["phone-number:needs-you"]);
+  });
+
+  it("undo restores what it changed inside the shadow roots", async () => {
+    const page = oneClick();
+    const filler = createSmartRecruitersFiller({ settleMs: 0 });
+    await filler.fill(page.document, [fill("first-name-input", "Mira"), fill("linkedin-input", "https://www.linkedin.com/in/mira-petrova-example")]);
+
+    expect(filler.undo(page.document)).toBe(2);
+    expect([page.registered("first-name"), page.registered("linkedin")]).toEqual(["", ""]);
+    expect(marks(page.document)).toEqual([]);
+  });
+});
