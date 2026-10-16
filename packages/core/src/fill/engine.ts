@@ -18,7 +18,7 @@ export interface FillDeps {
   db: SqlDatabase;
   clock: Clock;
   prepare: Pick<PrepareForApply,
-    "approvedPackages" | "packageForApply" | "profileForApply" | "findAnswer" | "listAnswers" | "recordAnswerUse" | "markPackageSubmitted" | "undoPackageSubmitted">;
+    "approvedPackages" | "packageForApply" | "profileForApply" | "findAnswer" | "listAnswers" | "recordAnswerUse" | "markPackageSubmitted">;
   /** Track: "Mark as submitted" creates the Application through its record submission. */
   track: Pick<Tracker, "recordSubmission" | "undoSubmission">;
 }
@@ -369,8 +369,8 @@ export function createFillEngine({ db, clock, prepare, track }: FillDeps): FillE
 
     async undoMarkSubmitted(applicationId) {
       try {
+        // The tracker makes the package approved again in Prepare (as for an undo from the timeline).
         const { packageId } = await track.undoSubmission(applicationId);
-        prepare.undoPackageSubmitted(packageId);
         return { packageId };
       } catch (err) {
         if (err instanceof TrackerError) throw new FillError(err.problem === "not-found" ? "not-found" : "not-undoable", err.message);

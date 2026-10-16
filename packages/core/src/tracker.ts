@@ -702,8 +702,9 @@ export interface Tracker {
   }>;
   /**
    * Undoes an Event: a Status change goes back to the Status before (only while nothing has moved it
-   * since); undoing an Application's creation takes it off the list. The Event is kept, marked undone,
-   * and the reversal is recorded. Throws a TrackerError when refused.
+   * since); undoing an Application's creation takes it off the list. Undoing a package marked submitted
+   * ("Submitted → Applied", "Package attached") is undoSubmission. The Event is kept, marked undone, and
+   * the reversal is recorded. Throws a TrackerError when refused.
    */
   undoEvent(eventId: string): Promise<{ application: ApplicationSummary | null; event: ApplicationEvent }>;
   /**
@@ -717,7 +718,7 @@ export interface Tracker {
   /**
    * Undoes record submission (Apply's Undo): the Application is taken off the list (or, when the package
    * was attached to one made another way, the package is taken off it). Refused (a TrackerError) once
-   * anything has happened to it since. Returns the package.
+   * anything has happened to it since. The package is approved again in Prepare. Returns the package.
    */
   undoSubmission(applicationId: string): Promise<{ packageId: string; event: ApplicationEvent }>;
   /** Adds a note: an Event by you on the timeline (undoable). Throws a TrackerError when refused. */
@@ -1113,14 +1114,25 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     const submission = r ? submissionOf(r) : null;
     if (!r || !submission) throw new TrackerError("not-found", "There's no Application made by marking a package submitted with that id.");
     const all = allEvents(applicationId);
-    const attached = r.created_how !== "submission";
-    const created = attached ? all.filter((e) => e.kind === "submission" && !e.undoneAt).at(-1)! : all.find((e) => e.kind === "created")!;
-    const later = all.slice(all.findIndex((e) => e.id === created.id) + 1);
-    if (later.length > 0) {
-      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, applicationId);
-    }
-    const { event } = await undoEvent(created.id);
+    const marked = r.created_how !== "submission" ? all.filter((e) => e.kind === "submission" && !e.undoneAt).at(-1)! : all.find((e) => e.kind === "created")!;
+    const { event } = undoMarkedSubmitted(marked, submission);
     return { packageId: submission.packageId, event };
+  }
+
+  /**
+   * The one way marking a package submitted is undone, whether from Apply's Undo or the Event's Undo on
+   * the timeline: refused once anything has happened to the Application since; the package is approved
+   * again in Prepare.
+   */
+  function undoMarkedSubmitted(marked: ApplicationEvent, submission: Submission) {
+    const all = allEvents(marked.applicationId);
+    const later = all.slice(all.findIndex((e) => e.id === marked.id) + 1);
+    if (later.length > 0) {
+      throw new TrackerError("not-undoable", `Something has happened to this Application since you marked it (${later.at(-1)!.text}), so marking it can't be undone here. Open the Application to change it.`, marked.applicationId);
+    }
+    const done = reverse(marked);
+    packages?.undoPackageSubmitted(submission.packageId);
+    return done;
   }
 
   /** Each Application's searchable text: job, company, contacts and the text of the emails matched to it, lower-cased. */
@@ -1214,9 +1226,20 @@ export function createTracker({ db, clock, discovery, assistant, aiMonthlyCapUsd
     if (ev.kind === "cv") throw new TrackerError("not-undoable", "Attach another CV to replace this one.", ev.applicationId);
     const app = db.prepare("SELECT * FROM application WHERE id = ?").get(ev.applicationId)!;
     if (app.removed_at) throw new TrackerError("not-found", "That Application was removed.", ev.applicationId);
+    const submission = submissionOf(app);
+    if (submission && (ev.kind === "submission" || (ev.kind === "created" && app.created_how === "submission"))) return undoMarkedSubmitted(ev, submission);
+    if (submission && ev.kind === "created") {
+      throw new TrackerError("not-undoable", "A package is marked submitted on this Application. Undo \"Package attached\" first.", ev.applicationId);
+    }
     if (ev.kind !== "note" && movedSince(ev, String(app.status))) {
       throw new TrackerError("changed-since", "Its Status has changed since, so this can't be undone. Set the Status you want instead.", ev.applicationId);
     }
+    return reverse(ev);
+  }
+
+  /** Reverses an Event that may be undone: kept, marked undone, with the reversal recorded. */
+  function reverse(ev: ApplicationEvent): { application: ApplicationSummary | null; event: ApplicationEvent } {
+    const eventId = ev.id;
     db.exec("BEGIN");
     try {
       db.prepare("UPDATE application_event SET undone_at = ? WHERE id = ?").run(now(), eventId);
