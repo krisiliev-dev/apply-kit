@@ -672,6 +672,39 @@ describe("Kris's rules and the package's answers", () => {
   });
 });
 
+describe("Lever and Ashby pages (#43)", () => {
+  it("gives Lever's one full-name field the profile's full name, and its Additional information box the letter", async () => {
+    const t = await filling();
+    const letter = t.pkg.approved!.letter!;
+
+    const answers = await t.fill.answer(t.sessionId, reading([
+      field("name", "Full name"), field("location", "Current location", { kind: "typeahead", required: false }),
+      field("comments", "Additional information", { kind: "textarea", required: false }),
+    ]));
+
+    expect(answers).toEqual([
+      { fieldId: "name", kind: "fill", value: "Mira Petrova", source: "profile", basis: null },
+      { fieldId: "location", kind: "fill", value: "Sofia, Bulgaria", source: "profile", basis: null },
+      { fieldId: "comments", kind: "fill", value: letter.text, source: "package", basis: "Your package's letter, v1" },
+    ]);
+  });
+
+  it("doesn't take a one-line Additional information field for the letter", async () => {
+    const t = await filling();
+    const [a] = await t.fill.answer(t.sessionId, reading([field("extra", "Additional information", { required: false })]));
+    expect(a).toMatchObject({ kind: "skip" });
+  });
+
+  it("answers Ashby's yes/no buttons from the answer bank, as a choice between the two", async () => {
+    const t = await filling();
+    bank(t, sponsorship);
+
+    const [a] = await t.fill.answer(t.sessionId, reading([field("q-sponsor", "Will you now or in the future require sponsorship?", { kind: "yes-no", options: yesNo })]));
+
+    expect(a).toEqual({ fieldId: "q-sponsor", kind: "fill", value: "No", source: "answer-bank", basis: null });
+  });
+});
+
 /** The writer the test preparation drafts with (a fake: recorded outputs, never live AI). */
 const drafts = (t: { writer: unknown; pkgQuestions: Set<string> }) => (t.writer as FakeWriter).calls
   .filter((c) => c.task === "draft-answer" && !t.pkgQuestions.has((c.input as { question: string }).question));

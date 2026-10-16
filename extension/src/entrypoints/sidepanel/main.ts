@@ -5,7 +5,9 @@
 // once on a click, asks apply-kit what it would add, and only "Add" stores anything (in apply-kit,
 // never here). Fill recognises the portal and the job from the tab's address, asks apply-kit which
 // approved package fits, and only on "Fill this page" injects the filler into the tab, reads the page,
-// gets the answers from apply-kit and fills them (Greenhouse so far). The browser keeps only which
+// gets the answers from apply-kit and fills them (Greenhouse, Lever and Ashby so far; a portal's form
+// embedded in a company page is filled in its frame when Kris allowed the portals, or offered to open
+// on its own). The browser keeps only which
 // fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
 // it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
@@ -19,10 +21,11 @@ import {
   characterCount, differentJobLine, fieldRows, fileReport, fillAnnouncement, fillButtonLabel, focusAfterFill, markedBanner, markedLines, matchWhy, needsYouItems, packageLines, saveTypedLabel, stoppedMidFill, stuckFields, submitPrompt, typedAnswerLine,
   type AnswerControl, type FieldRow, type NeedsYouItem, type StuckField,
 } from "../../fill-report.ts";
-import { runFiller } from "../../fill/in-page.ts";
+import { filledPortals } from "../../fill/fillers.ts";
+import { frameAddress, frameSources, runFiller } from "../../fill/in-page.ts";
 import { runFill } from "../../fill/run.ts";
 import { grabPage } from "../../grab.ts";
-import { portalOrigins, portals, recognisePortal } from "../../portal.ts";
+import { embeddedForm, portalOrigins, portals, recognisePortal, type EmbeddedForm } from "../../portal.ts";
 import { actionLabel, captureButtonLabel, itemStatus, previewHeading, resultSummary } from "../../report.ts";
 import { createClient, defaultServiceUrl, type Answer, type Connection } from "../../service.ts";
 import { createTabSessions } from "../../sessions.ts";
@@ -240,7 +243,12 @@ async function fill(tab: Awaited<ReturnType<typeof currentTab>>) {
     return show({
       connected: true,
       body: [ctxCard(card.where, card.job, card.why, false), h("p", {}, "Filling works on Workday, Greenhouse, Lever, SmartRecruiters, Workable and Ashby. On other forms it fills nothing unless you ask.")],
-      foot: [button("Capture this job", () => choose("capture"), "btn primary"), offer && button("I've submitted this", () => void markSubmitted(tab!.id!, tabSession, address ?? null), "btn"), fillBoundary()],
+      foot: [
+        button("Capture this job", () => choose("capture"), "btn primary"),
+        button("Fill a form embedded here", () => void fillThisPage(), "btn", { "aria-describedby": "embed-note" }),
+        offer && button("I've submitted this", () => void markSubmitted(tab!.id!, tabSession, address ?? null), "btn"),
+        h("p", { id: "embed-note", class: "bound" }, "Looks for a Greenhouse, Lever or Ashby form inside this page, only when you click. Never presses Next or Submit."),
+      ],
     });
   }
 
@@ -390,11 +398,16 @@ let stopRequested = false;
 /** "Press F6 to move to the page" is said once, the first time Show on page is used. */
 let toldF6 = false;
 
-/** Injects the filler into the tab (on this click only) and runs one of its commands on the page. */
+/** Tab → the frame of the portal form embedded in its page, while the panel fills it (kept in memory only). */
+const embedFrames = new Map<number, number>();
+
+/** Injects the filler into the tab, or its embedded form's frame (on this click only), and runs one of its commands there. */
 async function inPage<T>(tabId: number, command: Parameters<typeof runFiller>[0], args: unknown[] = []): Promise<T | null> {
+  const frame = embedFrames.get(tabId);
+  const target = frame === undefined ? { tabId } : { tabId, frameIds: [frame] };
   try {
-    await browser.scripting.executeScript({ target: { tabId }, files: ["/filler.js"] });
-    const [res] = await browser.scripting.executeScript({ target: { tabId }, func: runFiller, args: [command, args] });
+    await browser.scripting.executeScript({ target, files: ["/filler.js"] });
+    const [res] = await browser.scripting.executeScript({ target, func: runFiller, args: [command, args] });
     return (res?.result as T | undefined) ?? null;
   } catch {
     return null;
@@ -408,18 +421,77 @@ function fillProblem(answer: Exclude<Answer<unknown>, { ok: true }>, during?: st
   return answer.state === "not-running" ? notRunning(connection!, during) : unpaired(connection!, "apply-kit no longer knows this extension. Pair it again.");
 }
 
+/** The portal form embedded in the tab's page (read from the page's frames, on Kris's click), or null. */
+async function findEmbed(tabId: number): Promise<EmbeddedForm | null> {
+  try {
+    const [res] = await browser.scripting.executeScript({ target: { tabId }, func: frameSources });
+    return embeddedForm((res?.result as string[] | undefined) ?? []);
+  } catch {
+    return null;
+  }
+}
+
+/** The frame Chrome lets apply-kit into that shows the embedded form (needs the portals permission). */
+async function embedFrame(tabId: number, embed: EmbeddedForm): Promise<number | null> {
+  try {
+    const results = await browser.scripting.executeScript({ target: { tabId, allFrames: true }, func: frameAddress });
+    const hit = results.find((r) => r.frameId !== 0 && recognisePortal(r.result as string).ref?.jobId === embed.ref.jobId);
+    return hit ? hit.frameId : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A portal's form inside a company page that apply-kit can't reach: open it on its own (a link, opened only by Kris's click). */
+function embedOffer(embed: EmbeddedForm, card: ReturnType<typeof contextCard>, access: PortalsAccess) {
+  const label = portals.find((p) => p.name === embed.portal)!.label;
+  busy = false;
+  show({
+    connected: true,
+    body: [
+      ctxCard(`${label} form inside ${card.where.replace(/^Not a portal apply-kit knows · /, "")}`, card.job, `Job ${embed.ref.jobId}, from the form's address. Nothing in the form has been read or filled.`, true),
+      h("p", {}, access === "granted"
+        ? `Chrome didn't let apply-kit into the ${label} form on this page. Open the form on its own and fill it there: it's the same application.`
+        : `This ${label} form sits inside the company's page, where apply-kit can fill it only with the portals permission. Open the form on its own and fill it there: it's the same application.`),
+    ],
+    foot: [
+      h("a", { class: "btn primary", href: embed.src, target: "_blank", rel: "noopener" }, "Open the form on its own"),
+      access !== "granted" && button("Allow the 6 portals", () => requestPortals(), "btn"),
+      h("p", { class: "bound" }, "The form opens in a new tab only when you click. apply-kit never presses Next or Submit."),
+    ],
+  });
+  announce(`This ${label} form is inside the company's page. Open the form on its own to fill it.`);
+}
+
 /** Fill this page: re-read the job, match it, then read, answer and fill the page. Nothing is pressed. */
 async function fillThisPage(packageId?: string) {
   const tab = await currentTab();
-  const page = recognisePortal(tab?.url);
-  const fp = tab?.url ? fillPageOf(tab.url, page) : null;
-  if (tab?.id == null || !fp) return;
+  if (tab?.id == null || !tab.url) return;
   const tabId = tab.id;
+  let page = recognisePortal(tab.url);
+  let address = tab.url;
+  const access = await portalsAccess();
+  embedFrames.delete(tabId);
+  // A company page: the form may be a portal's, in a frame (Greenhouse's ?gh_jid=, Ashby's ?ashby_jid=, or none).
+  if (page.portal === "unknown" || page.ref?.board === null) {
+    const embed = await findEmbed(tabId);
+    if (embed) {
+      const card = contextCard(page, { address: tab.url, title: tab.title });
+      const frame = access === "granted" ? await embedFrame(tabId, embed) : null;
+      if (frame === null) return embedOffer(embed, card, access);
+      embedFrames.set(tabId, frame);
+      page = recognisePortal(embed.src);
+      address = embed.src;
+    } else if (page.portal === "unknown") {
+      return announce("No Greenhouse, Lever or Ashby form on this page. Nothing was read or filled.");
+    }
+  }
+  const fp = fillPageOf(address, page);
+  if (!fp) return;
   busy = true;
   stopRequested = false;
   const keys = await shortcut();
-  const access = await portalsAccess();
-  const card = contextCard(page, { address: tab.url!, title: tab.title });
+  const card = contextCard(page, { address, title: tab.title });
 
   const started = await client.fill.start(fp, { sessionId: await sessions.get(tabId), packageId });
   if (!started.ok) return fillProblem(started, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
@@ -442,10 +514,10 @@ async function fillThisPage(packageId?: string) {
   await sessions.set(tabId, session.id);
   const ctx = ctxCard(`${portals.find((p) => p.name === page.portal)!.label} · ${s.package.job.company}`, s.package.job.title, matchWhy(s, page.ref), true);
 
-  if (page.portal !== "greenhouse") {
+  if (page.portal === "unknown" || !filledPortals.includes(page.portal)) {
     busy = false;
     showMatch({ tab, page, card, match: s, keys, access });
-    body.append(h("p", { class: "meta", role: "status" }, "apply-kit fills Greenhouse pages so far; this portal comes in a later update. This page hasn't been touched."));
+    body.append(h("p", { class: "meta", role: "status" }, "apply-kit fills Greenhouse, Lever and Ashby pages so far; this portal comes in a later update. This page hasn't been touched."));
     return;
   }
 
@@ -474,7 +546,7 @@ async function fillThisPage(packageId?: string) {
   if (run.state === "confirmation") {
     busy = false;
     const waiting = await client.fill.pending(session.id);
-    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal, typed: waiting.ok ? waiting.value : [] });
+    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: address, portal, typed: waiting.ok ? waiting.value : [] });
   }
   if (run.state === "stopped-mid-fill") {
     // What's filled stays filled; Undo this page still works (the previous values live in the page).
@@ -485,7 +557,7 @@ async function fillThisPage(packageId?: string) {
   }
   filled({
     tabId, sessionId: session.id, ctx, reading: run.reading, answers: run.answers, outcomes: run.outcomes, at: run.filledAt, portal, pkg: s.package, paths: run.paths,
-    retried: new Set(), page: { portal: page.portal, address: tab.url! }, edits: new Map(), saveTicks: new Map(), typed: run.typed,
+    retried: new Set(), page: { portal: page.portal, address }, edits: new Map(), saveTicks: new Map(), typed: run.typed,
   });
 }
 

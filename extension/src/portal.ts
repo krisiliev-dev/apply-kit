@@ -70,8 +70,13 @@ export function recognisePortal(address: string | undefined): PortalPage {
     return { portal: "workable", ref: job ? { portal: "workable", board: job[1]!, jobId: job[2]! } : null };
   }
 
-  // jobs.ashbyhq.com/{company}/{job uuid}[/application]; jobs.ashbyhq.com/{company}/embed is a board.
+  // jobs.ashbyhq.com/{company}/{job uuid}[/application]; jobs.ashbyhq.com/{company}/embed is a board,
+  // showing one job's application when it carries ?ashby_jid={job uuid}.
+  const ashbyJid = url.searchParams.get("ashby_jid") ?? "";
+  const ashbyJob = new RegExp(`^${uuid}$`, "i").test(ashbyJid) ? ashbyJid.toLowerCase() : null;
   if (host === "jobs.ashbyhq.com") {
+    const embed = /^\/([^/]+)\/embed\/?$/.exec(path);
+    if (embed && ashbyJob) return { portal: "ashby", ref: { portal: "ashby", board: embed[1]!, jobId: ashbyJob } };
     const job = new RegExp(`^/([^/]+)/(${uuid})(?:/|$)`, "i").exec(path);
     return { portal: "ashby", ref: job ? { portal: "ashby", board: job[1]!, jobId: job[2]!.toLowerCase() } : null };
   }
@@ -80,7 +85,26 @@ export function recognisePortal(address: string | undefined): PortalPage {
   const ghJid = url.searchParams.get("gh_jid");
   if (ghJid && /^\d+$/.test(ghJid)) return { portal: "greenhouse", ref: { portal: "greenhouse", board: null, jobId: ghJid } };
 
+  // A company's own careers page showing Ashby's embedded board on one job carries ?ashby_jid={job uuid}.
+  if (ashbyJob) return { portal: "ashby", ref: { portal: "ashby", board: null, jobId: ashbyJob } };
+
   return unknown;
+}
+
+/** A portal's job form embedded in a company page: the frame's address and the job it's for. */
+export interface EmbeddedForm {
+  src: string;
+  portal: PortalName;
+  ref: PortalJobRef;
+}
+
+/** The first of a page's frames (their `src`, in the page's order) that is a portal's form for one job, or null. */
+export function embeddedForm(frameSources: string[]): EmbeddedForm | null {
+  for (const src of frameSources) {
+    const page = recognisePortal(src);
+    if (page.portal !== "unknown" && page.ref) return { src, portal: page.portal, ref: page.ref };
+  }
+  return null;
 }
 
 /** The six portals in words, with the hosts Kris is asked to allow for them (optional host permissions). */

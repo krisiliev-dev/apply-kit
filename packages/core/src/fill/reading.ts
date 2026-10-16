@@ -7,7 +7,9 @@ import type { PageJobReference } from "../preparation/contracts.ts";
 
 export type PageKind = "form" | "account" | "sign-in" | "review" | "confirmation" | "posting" | "other";
 
-export type FieldKind = "text" | "email" | "tel" | "url" | "textarea" | "number" | "date" | "select" | "typeahead" | "radio" | "checkbox" | "file";
+export type FieldKind = "text" | "email" | "tel" | "url" | "textarea" | "number" | "date" | "select" | "typeahead" | "radio" | "checkbox" | "file"
+  /** Two buttons, Yes and No, that act as one choice (Ashby). */
+  | "yes-no";
 
 /** One field on the page, in the portal's order. Its current value is read, but never stored. */
 export interface ReadField {
@@ -73,6 +75,8 @@ export interface FieldOutcome {
   fieldId: string;
   outcome: Outcome;
   source: FillSource | null;
+  /** A typeahead's suggestions when more than one fits the answer: Kris picks (a needs-you outcome). */
+  choices?: string[];
 }
 
 export interface OutcomeCounts {

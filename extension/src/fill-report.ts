@@ -60,6 +60,12 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
         if (a.kind === "needs-you") return [{ ...row, value: f.value, chip: { tone: "met", word: sourceWords("you") }, why: "You answered this on the page." }];
         return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" ? a.value : null }];
       case "needs-you":
+        if (o.choices?.length && a.kind === "fill") {
+          return [{
+            ...row, value: o.choices.join(" or "), chip: { tone: "ask", word: "Needs you" },
+            why: `More than one place fits "${a.value}" (from your ${sourceWords(a.source).toLowerCase()}). Pick yours on the page; apply-kit doesn't choose between them.`,
+          }];
+        }
         return [{
           ...row, value: a.kind === "needs-you" && a.suggestion ? `Suggested: ${a.suggestion}` : "Not filled", chip: { tone: "ask", word: "Needs you" },
           why: a.kind === "needs-you" ? [a.reason, a.basis].filter(Boolean).join(". ") : null,
@@ -115,7 +121,15 @@ export function needsYouItems(reading: PageReading, answers: FieldAnswer[], outc
   const outcome = new Map(outcomes.map((o) => [o.fieldId, o]));
   return reading.fields.flatMap((f): NeedsYouItem[] => {
     const a = answer.get(f.id);
-    if (a?.kind !== "needs-you" || outcome.get(f.id)?.outcome !== "needs-you") return [];
+    const o = outcome.get(f.id);
+    // A typeahead where more than one suggestion fits apply-kit's value: Kris picks one of them.
+    if (a?.kind === "fill" && o?.outcome === "needs-you" && o.choices?.length) {
+      return [{
+        fieldId: f.id, question: f.label, limit: null, control: { kind: "choice", options: o.choices }, value: "",
+        basis: `More than one place fits "${a.value}" (from your ${sourceWords(a.source).toLowerCase()}). Pick yours; apply-kit doesn't choose between them.`, save: null,
+      }];
+    }
+    if (a?.kind !== "needs-you" || o?.outcome !== "needs-you") return [];
     return [{
       fieldId: f.id, question: f.label, limit: limitWords(f), control: controlFor(f), value: a.draft ?? a.suggestion ?? "",
       basis: [a.reason, a.basis].filter(Boolean).join(". "), save: a.save ?? null,

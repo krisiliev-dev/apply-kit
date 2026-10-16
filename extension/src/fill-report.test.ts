@@ -177,6 +177,23 @@ describe("question rows", () => {
   });
 });
 
+describe("a typeahead with two places that fit (#43)", () => {
+  it("names both places and asks Kris to pick one on the page, with apply-kit's value as the basis", () => {
+    const r: PageReading = { ...reading, fields: [{ ...field("loc", "Current location"), kind: "typeahead" }] };
+    const a: FieldAnswer[] = [{ fieldId: "loc", kind: "fill", value: "Sofia, Bulgaria", source: "profile", basis: null }];
+    const o: FieldOutcome[] = [{ fieldId: "loc", outcome: "needs-you", source: null, choices: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] }];
+
+    expect(fieldRows(r, a, o).map((x) => [x.value, x.chip.word, x.why])).toEqual([[
+      "Sofia, Sofia City, Bulgaria or Sofia, Sofia Province, Bulgaria", "Needs you",
+      "More than one place fits \"Sofia, Bulgaria\" (from your profile). Pick yours on the page; apply-kit doesn't choose between them.",
+    ]]);
+    expect(needsYouItems(r, a, o)).toEqual([{
+      fieldId: "loc", question: "Current location", limit: null, control: { kind: "choice", options: ["Sofia, Sofia City, Bulgaria", "Sofia, Sofia Province, Bulgaria"] }, value: "",
+      basis: "More than one place fits \"Sofia, Bulgaria\" (from your profile). Pick yours; apply-kit doesn't choose between them.", save: null,
+    }]);
+  });
+});
+
 describe("needs-you items", () => {
   const r: PageReading = { ...reading, fields: [
     { ...field("sal", "Expected gross monthly salary (EUR)"), kind: "number" },

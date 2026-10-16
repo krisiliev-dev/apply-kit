@@ -1,0 +1,48 @@
+<!-- Synthetic Ashby application page (jobs.ashbyhq.com/{company}/{job}/application): one page, no
+     account, no <form>. "Autofill from resume" at the top (never used), system fields with stable ids,
+     a location typeahead that takes only a picked suggestion, yes/no questions as two buttons,
+     tick boxes, a date picker, a long answer, a consent box and the voluntary demographic survey.
+     Modelled on docs/research/implementation/portals.md. Made-up company and job; no real person's data. -->
+<div class="ashby-job-posting-container">
+  <div class="ashby-job-posting-heading"><h1 class="ashby-job-posting-heading">Platform Engineer</h1><p>Sofia · Engineering · Full time</p></div>
+  <nav role="tablist" class="ashby-job-posting-tabs">
+    <a role="tab" href="https://jobs.ashbyhq.com/quillfeather/a2b4c6d8-1e3f-4a5b-8c7d-9e0f1a2b3c4d">Overview</a>
+    <a role="tab" aria-selected="true" href="https://jobs.ashbyhq.com/quillfeather/a2b4c6d8-1e3f-4a5b-8c7d-9e0f1a2b3c4d/application">Application</a>
+  </nav>
+  <div class="ashby-application-form-container">
+    <div class="ashby-application-form-autofill-pane">
+      <p class="ashby-application-form-autofill-title">Autofill from resume</p>
+      <p>Upload your resume here to autofill key application fields.</p>
+      <div class="ashby-application-form-autofill-upload"><button type="button" class="ashby-application-form-autofill-input-button">Upload file</button><input type="file" id="autofill-resume" aria-label="Autofill from resume" hidden><span class="filename"></span></div>
+    </div>
+    <div class="ashby-application-form-section-container">
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_name">Name<span class="_required">*</span></label><input id="_systemfield_name" name="_systemfield_name" type="text" required placeholder="Type here..."></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_email">Email<span class="_required">*</span></label><input id="_systemfield_email" name="_systemfield_email" type="email" required placeholder="hello@example.com..."></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_phone">Phone</label><input id="_systemfield_phone" name="_systemfield_phone" type="tel" placeholder="Type here..."></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_location">Location<span class="_required">*</span></label><input id="_systemfield_location" name="_systemfield_location" type="text" required role="combobox" aria-autocomplete="list" aria-controls="_systemfield_location-listbox" aria-expanded="false" autocomplete="off" placeholder="Start typing..."><div id="_systemfield_location-listbox" role="listbox"></div></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="_systemfield_resume">Resume<span class="_required">*</span></label><div class="ashby-file-upload"><button type="button" class="ashby-file-upload-button">Upload File</button><input id="_systemfield_resume" name="_systemfield_resume" type="file" required><span class="filename"></span></div></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="7c1e2f30-4a5b-4c6d-8e9f-0a1b2c3d4e5f">LinkedIn</label><input id="7c1e2f30-4a5b-4c6d-8e9f-0a1b2c3d4e5f" name="7c1e2f30-4a5b-4c6d-8e9f-0a1b2c3d4e5f" type="text" placeholder="Type here..."></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" id="q-eu-label">Are you authorized to work in the EU?<span class="_required">*</span></label><div class="_yesno" role="group" id="q-eu" aria-labelledby="q-eu-label"><button type="button" class="_option">Yes</button><button type="button" class="_option">No</button></div></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" id="q-sponsor-label">Will you now or in the future require visa sponsorship?<span class="_required">*</span></label><div class="_yesno" role="group" id="q-sponsor" aria-labelledby="q-sponsor-label"><button type="button" class="_option">Yes</button><button type="button" class="_option">No</button></div></div>
+      <div class="ashby-application-form-field-entry"><fieldset class="ashby-application-form-checkbox-group"><legend class="ashby-application-form-question-title">Which of these have you run in production?</legend>
+        <label><input type="checkbox" name="b2c3d4e5-tools" value="Kubernetes">Kubernetes</label>
+        <label><input type="checkbox" name="b2c3d4e5-tools" value="Terraform">Terraform</label>
+        <label><input type="checkbox" name="b2c3d4e5-tools" value="Kafka">Kafka</label>
+      </fieldset></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="d4e5f6a7-start">Earliest start date<span class="_required">*</span></label><div class="react-datepicker-wrapper"><div class="react-datepicker__input-container"><input id="d4e5f6a7-start" type="text" required autocomplete="off" placeholder="MM/DD/YYYY"></div></div></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-question-title" for="e5f6a7b8-why">Why Quillfeather Labs?<span class="_required">*</span></label><textarea id="e5f6a7b8-why" name="e5f6a7b8-why" required placeholder="Type here..."></textarea></div>
+      <div class="ashby-application-form-field-entry"><label class="ashby-application-form-consent"><input type="checkbox" id="consent-retain" name="consent-retain"><span>I consent to Quillfeather Labs keeping my application for 12 months.</span></label></div>
+    </div>
+    <div class="ashby-survey-form-container">
+      <h3>Voluntary demographic survey</h3>
+      <p>Answering is optional and won't affect your application.</p>
+      <fieldset role="radiogroup" aria-labelledby="survey-gender-label"><legend id="survey-gender-label">What is your gender identity?</legend>
+        <label><input type="radio" name="survey-gender" value="woman">Woman</label>
+        <label><input type="radio" name="survey-gender" value="man">Man</label>
+        <label><input type="radio" name="survey-gender" value="non-binary">Non-binary</label>
+        <label><input type="radio" name="survey-gender" value="decline">I prefer not to answer</label>
+      </fieldset>
+    </div>
+    <button type="submit" class="ashby-application-form-submit-button">Submit Application</button>
+  </div>
+</div>

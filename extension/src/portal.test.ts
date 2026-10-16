@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { recognisePortal } from "./portal.ts";
+import { embeddedForm, recognisePortal } from "./portal.ts";
 
 // Every URL pattern in docs/research/implementation/portals.md, with made-up companies and ids.
 describe("which portal and which job a page address is", () => {
@@ -66,6 +66,13 @@ describe("which portal and which job a page address is", () => {
     expect(recognisePortal("https://jobs.ashbyhq.com/vireo-health/embed?version=2")).toEqual({ portal: "ashby", ref: null });
   });
 
+  it("knows one job in Ashby's embed by its ashby_jid, in the frame and on the company page around it", () => {
+    const id = "a2b4c6d8-1e3f-4a5b-8c7d-9e0f1a2b3c4d";
+    expect(recognisePortal(`https://jobs.ashbyhq.com/quillfeather/embed?version=2&ashby_jid=${id}`)).toEqual({ portal: "ashby", ref: { portal: "ashby", board: "quillfeather", jobId: id } });
+    expect(recognisePortal(`https://quillfeather.example/careers?ashby_jid=${id.toUpperCase()}`)).toEqual({ portal: "ashby", ref: { portal: "ashby", board: null, jobId: id } });
+    expect(recognisePortal("https://quillfeather.example/careers?ashby_jid=not-a-job")).toEqual({ portal: "unknown", ref: null });
+  });
+
   it.each([
     "https://careers.ostravabank.example/bg/kandidatstvai/it-security-specialist",
     "https://www.linkedin.com/jobs/view/4100000009/",
@@ -77,5 +84,21 @@ describe("which portal and which job a page address is", () => {
     undefined,
   ])("anything else is not a portal apply-kit knows: %s", (url) => {
     expect(recognisePortal(url)).toEqual({ portal: "unknown", ref: null });
+  });
+});
+
+describe("a portal's form embedded in a company page", () => {
+  const leverForm = "https://jobs.lever.co/larkspur/3f6c2a1e-8b4d-4c7a-9e21-5d0b7a6c4f18/apply";
+
+  it("finds the portal's job form among the page's frames, by the frame's address", () => {
+    const found = embeddedForm(["https://maps.example/embed?q=Sofia", leverForm]);
+    expect(found).toEqual({ src: leverForm, portal: "lever", ref: { portal: "lever", board: "larkspur", jobId: "3f6c2a1e-8b4d-4c7a-9e21-5d0b7a6c4f18" } });
+  });
+
+  it("finds Greenhouse's and Ashby's embedded forms, and nothing on a page without one", () => {
+    expect(embeddedForm(["https://boards.greenhouse.io/embed/job_app?for=vireohealth&token=4471029"])?.ref).toEqual({ portal: "greenhouse", board: "vireohealth", jobId: "4471029" });
+    expect(embeddedForm(["https://jobs.ashbyhq.com/quillfeather/embed?version=2&ashby_jid=a2b4c6d8-1e3f-4a5b-8c7d-9e0f1a2b3c4d"])?.portal).toBe("ashby");
+    // A board without one job open isn't a form to fill.
+    expect(embeddedForm(["https://jobs.ashbyhq.com/quillfeather/embed?version=2", "https://maps.example/embed", "about:blank", ""])).toBeNull();
   });
 });
