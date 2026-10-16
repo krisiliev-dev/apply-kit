@@ -5,7 +5,7 @@
 // once on a click, asks apply-kit what it would add, and only "Add" stores anything (in apply-kit,
 // never here). Fill recognises the portal and the job from the tab's address, asks apply-kit which
 // approved package fits, and only on "Fill this page" injects the filler into the tab, reads the page,
-// gets the answers from apply-kit and fills them (Greenhouse so far). The browser keeps only which
+// gets the answers from apply-kit and fills them (Greenhouse and Workday so far, Workday page by page). The browser keeps only which
 // fill session each tab is in. The panel follows the tab Kris looks at only to update what it says;
 // it never reads or touches a page by itself.
 import { browser } from "wxt/browser";
@@ -15,7 +15,8 @@ import "../../../../app/ui/src/styles/tokens.css";
 import "../../../../app/ui/src/styles/components.css";
 import "./panel.css";
 import { contextCard, fillStateFor, openingView, type PanelView, type PortalsAccess } from "../../context.ts";
-import { differentJobLine, fieldRows, fileReport, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, submitPrompt, type FieldRow } from "../../fill-report.ts";
+import { differentJobLine, duplicatesReport, earlierPages, fieldRows, fileReport, fillAnnouncement, focusAfterFill, markedBanner, markedLines, matchWhy, packageLines, pageSummary, reviewChecks, startScreen, stepLine, submitPrompt, type FieldRow, type PageSummary } from "../../fill-report.ts";
+import { watchForNewPage } from "../../page-watch.ts";
 import type { FileToAttach } from "../../fill/greenhouse.ts";
 import { runFiller } from "../../fill/in-page.ts";
 import { grabPage } from "../../grab.ts";
@@ -284,7 +285,7 @@ function showMatch({ tab, page, card, match, keys, access, banner }: {
   if (match?.kind === "matched") {
     return show({
       connected: true,
-      body: [banner, ctxCard(`${label} · ${match.package.job.company}`, match.package.job.title, matchWhy(match, page.ref), true), packageList(match.package), loop, notNowNote],
+      body: [banner, newPagePrompt(tab.id), ctxCard(`${label} · ${match.package.job.company}`, match.package.job.title, matchWhy(match, page.ref), true), packageList(match.package), earlierDetails(tab.id), loop, notNowNote],
       foot: [fillPrimary(), fillBoundary()],
     });
   }
@@ -330,6 +331,21 @@ function showMatch({ tab, page, card, match, keys, access, banner }: {
     body: [banner, ctxCard(card.where, card.job, card.why, !!page.ref), loop, notNowNote],
     foot: [fillPrimary(), fillBoundary()],
   });
+}
+
+/** Per tab, the pages Kris filled and then moved past: panel memory only, gone when the panel closes. */
+const earlier = new Map<number, PageSummary[]>();
+/** Tabs whose filled page was left (the address or title changed): "New page? Click Fill this page". */
+const newPage = new Set<number>();
+let stopWatching: (() => void) | null = null;
+
+function earlierDetails(tabId: number | undefined) {
+  const e = earlierPages(tabId != null ? earlier.get(tabId) ?? [] : []);
+  return e && h("details", { class: "earlier" }, h("summary", {}, e.heading), h("ul", {}, ...e.lines.map((l) => h("li", {}, l))));
+}
+function newPagePrompt(tabId: number | undefined) {
+  return tabId != null && newPage.has(tabId) && h("div", { class: "banner info", role: "status" }, h("div", { class: "text" },
+    h("b", {}, "New page? Click Fill this page."), " The list for the page you left is under Earlier pages."));
 }
 
 function allowPortals() {
@@ -433,12 +449,15 @@ async function fillThisPage(packageId?: string) {
   await sessions.set(tabId, session.id);
   const ctx = ctxCard(`${portals.find((p) => p.name === page.portal)!.label} · ${s.package.job.company}`, s.package.job.title, matchWhy(s, page.ref), true);
 
-  if (page.portal !== "greenhouse") {
+  if (page.portal !== "greenhouse" && page.portal !== "workday") {
     busy = false;
     showMatch({ tab, page, card, match: s, keys, access });
-    body.append(h("p", { class: "meta", role: "status" }, "apply-kit fills Greenhouse pages so far; this portal comes in a later update. This page hasn't been touched."));
+    body.append(h("p", { class: "meta", role: "status" }, "apply-kit fills Greenhouse and Workday pages so far; this portal comes in a later update. This page hasn't been touched."));
     return;
   }
+  stopWatching?.();
+  newPage.delete(tabId);
+  const portal = portals.find((p) => p.name === page.portal)!.label;
 
   show({
     connected: true,
@@ -457,7 +476,11 @@ async function fillThisPage(packageId?: string) {
   if (stopRequested) return stopped("Stopped. Nothing was filled.");
   if (submitPrompt({ known: true, pageKind: reading.pageKind }) === "ask") {
     busy = false;
-    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal: portals.find((p) => p.name === page.portal)!.label });
+    return didYouSubmit({ tabId, ctx, sessionId: session.id, portalUrl: tab.url ?? null, portal });
+  }
+  if (reading.pageKind === "start") {
+    busy = false;
+    return startView(ctx, tabId, portal);
   }
   const answers = await client.fill.answer(session.id, reading);
   if (!answers.ok) return fillProblem(answers, "Nothing was filled: apply-kit stopped answering. This page hasn't been touched.");
@@ -474,20 +497,83 @@ async function fillThisPage(packageId?: string) {
     paths.set(a.which, file.value.path);
   }
   if (stopRequested) return stopped("Stopped. Nothing was filled.");
-  const outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value, files]);
+  let outcomes = await inPage<FieldOutcome[]>(tabId, "fill", [answers.value, files]);
+  if (!outcomes) { files.length = 0; return stopped("Chrome didn't let apply-kit fill this page. Nothing was filled."); }
+  // Workday changes the page as it's filled (its CV reading adds entries; Add adds empty ones): read
+  // it again and fill what's new, in the same click, until it stops changing (three passes at most).
+  let now = reading;
+  let given = answers.value;
+  for (let pass = 1; pass < 3 && !stopRequested; pass++) {
+    const again = await inPage<PageReading>(tabId, "read");
+    if (!again || again.fields.map((x) => `${x.id}:${x.kind === "repeating" ? x.value : ""}`).join("|") === now.fields.map((x) => `${x.id}:${x.kind === "repeating" ? x.value : ""}`).join("|")) break;
+    const more = await client.fill.answer(session.id, again);
+    if (!more.ok) break;
+    const next = await inPage<FieldOutcome[]>(tabId, "fill", [more.value, files]);
+    if (!next) break;
+    [now, given, outcomes] = [again, more.value, next];
+  }
   files.length = 0;
-  if (!outcomes) return stopped("Chrome didn't let apply-kit fill this page. Nothing was filled.");
-  const recorded = await client.fill.record(session.id, reading, outcomes);
-  filled({ tabId, ctx, reading, answers: answers.value, outcomes, at: recorded.ok ? recorded.value.filledAt : new Date().toISOString(), portal: portals.find((p) => p.name === page.portal)!.label, pkg: s.package, sessionId: session.id, paths });
+  const recorded = await client.fill.record(session.id, now, outcomes);
+  const f = { tabId, url: tab.url ?? "", title: tab.title, ctx, reading: now, answers: given, outcomes, at: recorded.ok ? recorded.value.filledAt : new Date().toISOString(), portal, pkg: s.package, sessionId: session.id, paths, extras: { chosen: [], duplicatesRemoved: 0, duplicatesSettled: false } };
+  watchPage(f);
+  if (now.pageKind === "review") return reviewView(ctx, tabId, portal);
+  filled(f);
+}
+
+type Filled = {
+  tabId: number; url: string; title: string | undefined; ctx: HTMLElement; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; at: string; portal: string;
+  pkg: PackageInBrief; sessionId: string; paths: Map<PackageFileKind, string | null>;
+  /** What Kris did on the list: options chosen, Workday's duplicates removed or kept. */
+  extras: { chosen: string[]; duplicatesRemoved: number; duplicatesSettled: boolean };
+};
+
+/** After a fill: when the tab's address or title changes, this page goes under Earlier pages. */
+let watched: Filled | null = null;
+function watchPage(f: Filled) {
+  watched = f;
+  stopWatching?.();
+  stopWatching = watchForNewPage(browser.tabs, { tabId: f.tabId, url: f.url, title: f.title }, () => {
+    const left = watched!;
+    earlier.set(left.tabId, [...(earlier.get(left.tabId) ?? []), pageSummary(left.reading, left.answers, left.outcomes, left.extras)]);
+    newPage.add(left.tabId);
+    stopWatching = null;
+  });
+}
+
+/** The portal's "how do you want to apply?" screen: what to choose, in words. Nothing is pressed. */
+function startView(ctx: HTMLElement, tabId: number, portal: string) {
+  const words = startScreen(portal);
+  show({
+    connected: true,
+    body: [ctx, h("div", { class: "lead-h" }, h("h2", {}, words.heading), h("p", { class: "muted" }, words.text)), earlierDetails(tabId)],
+    foot: [fillPrimary(), fillBoundary()],
+  });
+  announce(words.heading);
+}
+
+/** The review page (hi-fi "Review · you submit"): the reminder, Submit ringed on the page, and what's worth a look. */
+function reviewView(ctx: HTMLElement, tabId: number, portal: string) {
+  const tones = { ok: icons.check, nb: icons.partly, dim: icons.dash } as const;
+  show({
+    connected: true,
+    body: [
+      ctx,
+      h("div", { class: "remind", role: "status" }, h("b", {}, "Read the review page, then press Submit yourself."), h("span", {}, `apply-kit never submits. It's your name on it. ${portal}'s Submit is ringed on the page.`)),
+      h("div", { class: "stack" }, h("h3", {}, "Worth a look before you submit"),
+        h("ul", { class: "ticks" }, ...reviewChecks(earlier.get(tabId) ?? []).map((c) => h("li", { class: c.tone }, svg(tones[c.tone]), h("span", {}, c.text))))),
+      earlierDetails(tabId),
+    ],
+    foot: [fillPrimary(), h("p", { class: "bound" }, "After you press Submit, click Fill this page on the page that follows. On a confirmation page it asks whether you submitted instead of filling.")],
+  });
+  busy = false;
+  announce("Review: read the page, then press Submit yourself.");
 }
 
 const chipIcon = { met: icons.check, ask: icons.ask, partly: icons.partly, gap: icons.x, closed: icons.dash } as const;
 
 /** The Filled state: counts, what needs Kris first, then every field in the portal's order, Undo this page. */
-function filled(f: {
-  tabId: number; ctx: HTMLElement; reading: PageReading; answers: FieldAnswer[]; outcomes: FieldOutcome[]; at: string; portal: string;
-  pkg: PackageInBrief; sessionId: string; paths: Map<PackageFileKind, string | null>;
-}, announceIt = true) {
+function filled(f: Filled, announceIt = true) {
+  watched = f;
   const rows = fieldRows(f.reading, f.answers, f.outcomes);
   const counts = countOutcomes(f.outcomes);
   const files = fileReport(f.pkg, f.answers, f.outcomes, f.portal);
@@ -519,12 +605,45 @@ function filled(f: {
     toldF6 = true;
   };
   const chip = (tone: string, icon: string, text: string) => h("span", { class: `chip ${tone}` }, svg(icon), text);
+  // A choice between plausible matches (hi-fi "Filled · 1 to review", City): the first is suggested; Kris's pick is filled.
+  const pickChoice = async (r: FieldRow) => {
+    const option = body.querySelector<HTMLInputElement>(`input[name="choice-${CSS.escape(r.fieldId)}"]:checked`)?.value ?? r.choices![0]!;
+    const outcome = await inPage<FieldOutcome["outcome"]>(f.tabId, "pick", [r.fieldId, option]);
+    const outcomes = f.outcomes.map((o) => (o.fieldId === r.fieldId && outcome ? { fieldId: o.fieldId, outcome, source: outcome === "filled" ? "you" as const : null } : o));
+    announce(outcome === "filled" ? `Filled ${r.label}: ${option}.` : `${r.label} didn't take "${option}". Choose it on the page.`);
+    filled({ ...f, outcomes, extras: outcome === "filled" ? { ...f.extras, chosen: [...f.extras.chosen, r.label] } : f.extras }, false);
+  };
   const needs = rows.filter((r) => r.outcome === "needs-you").map((r) => h("div", { class: "need", id: `need-${r.fieldId}`, tabindex: "-1" }, h("div", {},
-    h("p", { class: "q" }, r.label, r.limit && h("span", { class: "meta" }, ` (${r.limit})`)),
-    r.why && h("p", { class: "basis" }, r.why),
-    r.value.startsWith("Suggested: ") && h("p", { class: "suggest" }, r.value),
-    h("div", { class: "row" }, button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
+    r.choices
+      ? h("fieldset", {}, h("legend", { class: "q" }, `${r.label}: ${r.why}`), h("div", { class: "pick" }, ...r.choices.map((c, i) => h("label", { class: "opt" },
+        h("input", { type: "radio", name: `choice-${r.fieldId}`, value: c, ...(i === 0 ? { checked: "" } : {}) }), h("span", {}, c)))))
+      : h("p", { class: "q" }, r.label, r.limit && h("span", { class: "meta" }, ` (${r.limit})`)),
+    !r.choices && r.why && h("p", { class: "basis" }, r.why),
+    !r.choices && r.value.startsWith("Suggested: ") && h("p", { class: "suggest" }, r.value),
+    h("div", { class: "row" },
+      r.choices && button(`Fill ${r.label}`, () => void pickChoice(r), "btn primary sm"),
+      button("Show on page", () => void showOnPage(r), "btn ghost sm", { "aria-label": `Show ${r.label} on page` })),
   )));
+  // Workday's duplicates (hi-fi "CV attached"): reported; removed only on Kris's click, with Workday's own Delete.
+  const dupes = f.extras.duplicatesSettled ? null : duplicatesReport(f.answers);
+  const settleDupes = async (remove: boolean) => {
+    if (!dupes) return;
+    if (!remove) {
+      announce("Kept Workday's entries. Nothing was removed.");
+      return filled({ ...f, extras: { ...f.extras, duplicatesSettled: true } }, false);
+    }
+    const n = (await inPage<number>(f.tabId, "removeEntries", [dupes.section, dupes.indexes])) ?? 0;
+    announce(n > 0 ? `Removed ${n === 1 ? "the duplicate" : `${n} duplicates`} with Workday's Delete.` : "Nothing was removed: apply-kit can't press Workday's Delete yet. Delete them on the page.");
+    filled({ ...f, extras: { ...f.extras, duplicatesRemoved: f.extras.duplicatesRemoved + n, duplicatesSettled: n > 0 } }, false);
+  };
+  const dupesItem = dupes && h("div", { class: "ask" }, h("div", {},
+    h("p", { class: "q" }, dupes.question),
+    h("p", { class: "basis" }, dupes.basis),
+    h("div", { class: "row" },
+      button(dupes.remove, () => void settleDupes(true), "btn primary sm"),
+      button(dupes.keep, () => void settleDupes(false), "btn ghost sm"),
+      button("Show on page", () => void showOnPage({ fieldId: dupes.fieldId, label: dupes.show } as FieldRow), "btn ghost sm", { "aria-label": `Show ${dupes.show} on page` })),
+  ));
   const list = h("ul", { class: "flist" }, ...rows.map((r) => h("li", {},
     button("", () => void showOnPage(r), "frow"),
     r.offer && r.outcome === "kept" && button(`Replace with ${r.offer}`, () => void replace(r), "btn ghost sm replace"),
@@ -555,12 +674,13 @@ function filled(f: {
           ...files.failed.map((x) => chip("gap", icons.x, x.chip)),
           counts.didntStick - files.failed.length > 0 && chip("gap", icons.x, `${counts.didntStick - files.failed.length} didn't stick`),
         ),
-        h("p", { class: "meta" }, f.reading.stepCount ? `Page ${f.reading.stepCount.current} of ${f.reading.stepCount.total}, as ${f.portal} shows it. Filled ${time}.` : `Filled ${time}.`),
+        h("p", { class: "meta" }, stepLine(f.reading, f.portal, time)),
       ),
       ...failedBlocks,
       ...attachedChips,
       files.letter && h("p", { class: "meta" }, files.letter),
       ...needs,
+      dupesItem,
       list,
       h("p", { class: "meta" }, "On the page: a tick marks each field apply-kit filled, a \"?\" each field that needs you, a half circle each value it kept. Select a row to see its field."),
       button("Undo this page", () => void undoPage(f.tabId), "btn ghost sm undo"),
@@ -568,6 +688,7 @@ function filled(f: {
         h("b", {}, `Next: check the page, then press ${f.portal}'s own button yourself.`),
         h("span", {}, "apply-kit never presses Next or Submit. The package stays with this tab until you mark it submitted or close the tab."),
       ),
+      earlierDetails(f.tabId),
     ],
     foot: [fillPrimary(), fillBoundary()],
   });
