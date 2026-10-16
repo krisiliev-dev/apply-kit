@@ -319,7 +319,7 @@ export function createFillEngine({ db, clock, prepare, track, packages }: FillDe
           if (letterAsFile) return { fieldId, kind: "skip", reason: "Your letter is attached as a file" };
           if (pkg?.letter) return { fieldId, kind: "fill", value: pkg.letter.text, source: "package", basis: `Your package's letter, v${pkg.version}` };
         }
-        const contact = contactValue(f, profile);
+        const contact = contactValue(f, profile, reading.fields);
         if (contact?.value) {
           if (f.options.length === 0) return { fieldId, kind: "fill", value: contact.value, source: "profile", basis: contact.basis };
           const option = f.options.find((o) => o.trim().toLowerCase() === contact.value!.toLowerCase());

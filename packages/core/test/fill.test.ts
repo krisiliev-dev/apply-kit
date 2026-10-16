@@ -161,6 +161,16 @@ describe("answering a page's contact fields from the master profile", () => {
     ]);
   });
 
+  it("gives the national number when the country code is a field of its own, and says so", async () => {
+    const t = await filling();
+    const answers = t.fill.answer(t.sessionId, reading([field("code", "Country Phone Code"), field("phone", "Phone Number")]));
+
+    expect(answers).toEqual([
+      { fieldId: "code", kind: "fill", value: "+359", source: "profile", basis: null },
+      { fieldId: "phone", kind: "fill", value: "88 000 0175", source: "profile", basis: "Without +359, which is in Country Phone Code" },
+    ]);
+  });
+
   it("matches by the field's autocomplete hint when the label is the portal's own wording", async () => {
     const t = await filling();
     const answers = t.fill.answer(t.sessionId, reading([field("a", "Vorname", { hint: "given-name" }), field("b", "Nachname", { hint: "family-name" })]));
