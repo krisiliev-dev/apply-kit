@@ -5,7 +5,7 @@
 // given through page actions (typing, ticking, choosing a yes/no button or a suggestion), verifies
 // each value once, and undoes what it changed. It keeps only how to put back what it changed and which
 // fields it filled, in the page's isolated world. It never presses a button.
-import type { FieldAnswer, FieldKind, FieldOutcome, PageKind, PageReading, ReadField } from "@apply-kit/core";
+import type { FieldKind, FieldOutcome, PageKind, ReadField } from "@apply-kit/core";
 import { recognisePortal } from "../portal.ts";
 import type { FileToAttach, Filler } from "./greenhouse.ts";
 import { attachFile, choiceRefusal, choose, clearFile, consentWords, mark, refusal, removeMarks, setChecked, setValue, showField, unmark } from "./page-actions.ts";

@@ -55,6 +55,12 @@ export function fieldRows(reading: PageReading, answers: FieldAnswer[], outcomes
       case "kept":
         return [{ ...row, value: f.value, chip: { tone: "partly", word: "Kept" }, why: "The field already had this value, so apply-kit left it.", offer: a.kind === "fill" ? a.value : null }];
       case "needs-you":
+        if (o.choices?.length && a.kind === "fill") {
+          return [{
+            ...row, value: o.choices.join(" or "), chip: { tone: "ask", word: "Needs you" },
+            why: `More than one place fits "${a.value}" (from your ${sourceWords(a.source).toLowerCase()}). Pick yours on the page; apply-kit doesn't choose between them.`,
+          }];
+        }
         return [{
           ...row, value: a.kind === "needs-you" && a.suggestion ? `Suggested: ${a.suggestion}` : "Not filled", chip: { tone: "ask", word: "Needs you" },
           why: a.kind === "needs-you" ? [a.reason, a.basis].filter(Boolean).join(". ") : null,
