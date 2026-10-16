@@ -113,8 +113,8 @@ export function fileSize(bytes: number): string {
 const fileWord = { cv: "CV", letter: "cover letter" } as const;
 
 export interface FileReport {
-  /** The file chips: "CV attached: <name> · 148 KB", with the version line under it for the CV. */
-  attached: { which: PackageFileKind; fieldId: string; fileName: string; line: string; meta: string | null }[];
+  /** The file chips: "CV attached:" "<name> · 148 KB", with the version line under it for the CV. */
+  attached: { which: PackageFileKind; fieldId: string; fileName: string; label: string; line: string; meta: string | null }[];
   /** Files the portal didn't take: the warning, and the file one click away. */
   failed: { which: PackageFileKind; fieldId: string; fileName: string; size: string; chip: string; heading: string; text: string }[];
   /** Said when the package has a letter and this page had nowhere to put it. */
@@ -134,7 +134,7 @@ export function fileReport(p: PackageInBrief, answers: FieldAnswer[], outcomes: 
     if (o === "filled") {
       report.attached.push({
         which: a.which, fieldId: a.fieldId, fileName: a.fileName,
-        line: `${a.which === "cv" ? "CV" : "Cover letter"} attached: ${a.fileName} · ${fileSize(a.size)}`,
+        label: `${a.which === "cv" ? "CV" : "Cover letter"} attached:`, line: `${a.fileName} · ${fileSize(a.size)}`,
         meta: a.which === "cv" && cvNote ? cvNote.replace(/ · (ATS|\d)/, ` · approved ${approved} · $1`) : null,
       });
     } else if (o === "didnt-stick") {

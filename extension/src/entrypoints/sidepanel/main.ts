@@ -481,7 +481,7 @@ function filled(f: {
   const counts = countOutcomes(f.outcomes);
   const files = fileReport(f.pkg, f.answers, f.outcomes, f.portal);
   const fileChip = (line: Node | string, meta: string | null) => h("div", { class: "filechip" }, svg(icons.file), h("span", {}, line, meta && h("span", { class: "meta block" }, meta)));
-  const attachedChips = files.attached.map((a) => fileChip(h("b", {}, a.line), a.meta));
+  const attachedChips = files.attached.map((a) => fileChip(h("span", {}, h("b", {}, a.label), ` ${a.line}`), a.meta));
   // A file the portal didn't take: what happened, then the file one click away (Finder, or its path).
   const failedBlocks = files.failed.flatMap((x) => {
     const path = f.paths.get(x.which) ?? null;
@@ -495,7 +495,7 @@ function filled(f: {
     };
     return [
       h("div", { class: "banner warning", role: "alert" }, h("div", { class: "text" }, h("b", {}, x.heading), ` ${x.text}`)),
-      fileChip(`${x.fileName} · ${x.size}`, path ? `Packages folder · ${path}` : "Not in your Packages folder: open the package in apply-kit to download it."),
+      fileChip(`${x.fileName} · ${x.size}`, path ? "In your Packages folder" : "Not in your Packages folder: open the package in apply-kit to download it."),
       h("div", { class: "row" },
         button("Show in Finder", () => void reveal(), "btn sm", { "aria-label": `Show ${x.fileName} in Finder` }),
         path ? button("Copy file path", () => void copy(), "btn ghost sm") : ""),

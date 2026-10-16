@@ -89,7 +89,7 @@ describe("what the Fill view says", () => {
     it("shows the attached CV as a chip: name, size, angle, version, approval date, ATS check", () => {
       const r = fileReport(brief, [fn, cvAnswer], [{ fieldId: "fn", outcome: "filled", source: "profile" }, { fieldId: "resume", outcome: "filled", source: "package" }], "Greenhouse");
       expect(r).toEqual({
-        attached: [{ which: "cv", fieldId: "resume", fileName: cvName, line: `CV attached: ${cvName} · 148 KB`, meta: "Security angle · v3 · approved 12 Oct · ATS check passed" }],
+        attached: [{ which: "cv", fieldId: "resume", fileName: cvName, label: "CV attached:", line: `${cvName} · 148 KB`, meta: "Security angle · v3 · approved 12 Oct · ATS check passed" }],
         failed: [], letter: "This page has no cover letter field, so your letter wasn't used.",
       });
       expect(fieldRows(fileReading, [cvAnswer], [{ fieldId: "resume", outcome: "filled", source: "package" }]).map((x) => [x.label, x.value, x.chip.word, x.why])).toEqual([["Resume/CV", cvName, "Package", "Your package's CV, v3"]]);
