@@ -56,7 +56,7 @@ describe("the shared monthly AI budget", () => {
 
     expect(drafted).toEqual({ refused: false, result: expect.objectContaining({ output: recordedDraftPieces }) });
     expect(extractor.calls).toEqual([]);
-    expect(read).toMatchObject({ read: 0, unscreened: 2 });
+    expect(read).toMatchObject({ read: 0, unscreened: 3 });
     expect((await t.discovery.queryFeed({ view: "new" })).budget).toEqual({ month: "2026-10", capUsd: 0.01, spentUsd: 0.008, reached: true });
   });
 });

@@ -232,7 +232,7 @@ describe("reading postings: the monthly AI budget", () => {
     const feed = await t.engine.queryFeed({ view: "new" });
 
     expect(extractor.calls).toHaveLength(0);
-    expect(feed.jobs.map((j) => j.reading)).toEqual(["unscreened", "unscreened", "failed"]);
+    expect(feed.jobs.map((j) => j.reading)).toEqual(["unscreened", "unscreened", "unscreened"]);
     expect(feed.budget).toMatchObject({ capUsd: 0, reached: true });
     expect((await t.engine.getJob(feed.jobs[0]!.id))!).toMatchObject({ reading: { state: "unscreened" }, budget: { capUsd: 0, reached: true } });
   });
@@ -241,12 +241,12 @@ describe("reading postings: the monthly AI budget", () => {
     const extractor = fakeExtractor({}, { costUsd: 0.01 });
     const t = await checked(kestrelEngine(extractor, { aiMonthlyCapUsd: 0.01 }));
     await t.engine.readPending();
-    expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "unscreened", "failed"]);
+    expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "unscreened", "unscreened"]);
 
     t.clock.set("2026-11-01T07:00:00Z");
     await t.engine.readPending();
 
-    expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "read", "failed"]);
+    expect((await t.engine.queryFeed({ view: "new" })).jobs.map((j) => j.reading)).toEqual(["read", "read", "unscreened"]);
   });
 });
 

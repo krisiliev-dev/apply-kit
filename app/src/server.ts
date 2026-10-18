@@ -210,7 +210,17 @@ export function createServer({ engine, preparation, fill, revealer, tracker, sch
   app.post("/api/jobs/:id/read", async (c) => {
     if (!jsonOnly(c.req.header("content-type"))) return c.json({ error: "Send Content-Type: application/json" }, 415);
     if (!(await engine.getJob(c.req.param("id")))) return c.json({ error: "No such job" }, 404);
-    return c.json(await engine.readJob(c.req.param("id")));
+    const body=await c.req.json().catch(()=>null) as {refresh?:unknown}|null;
+    if(body?.refresh!==undefined && typeof body.refresh!=="boolean")return c.json({error:"refresh must be true or false"},400);
+    return c.json(await engine.readJob(c.req.param("id"),body?.refresh===true));
+  });
+
+  app.post("/api/jobs/:id/text",async c=>{
+    if(!jsonOnly(c.req.header("content-type")))return c.json({error:"Send Content-Type: application/json"},415);
+    const body=await c.req.json().catch(()=>null) as {text?:unknown}|null;
+    if(typeof body?.text!=="string" || !body.text.trim() || body.text.length>100_000)return c.json({error:"Paste the posting text, up to 100,000 characters."},400);
+    if(!await engine.getJob(c.req.param("id")))return c.json({error:"No such job"},404);
+    return c.json(await engine.pasteJobText(c.req.param("id"),body.text));
   });
 
   // Kris's answer to a low-confidence fact: { "answer": "extracted" | "cautious" }.

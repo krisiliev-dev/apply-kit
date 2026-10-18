@@ -4,6 +4,8 @@
 // resolved through the alias table in locations.ts.
 
 export interface SearchSettings {
+  /** Prioritise junior/entry roles; missing on older saved settings means enabled. */
+  preferJunior?: boolean;
   /** Lowest acceptable gross monthly salary, in euros. Salaries are compared against it. */
   minMonthlySalaryEur: number;
   locations: {
@@ -61,6 +63,7 @@ export function parseSearchSettings(input: unknown): SearchSettings {
     throw new Error("The most years asked for must be a whole number, or empty to turn the rule off");
   }
   return {
+    ...(o.preferJunior!==undefined?{preferJunior:bool(o.preferJunior,"Junior role priority")}:{}),
     minMonthlySalaryEur: Math.round(min),
     locations: {
       cities: names(loc.cities, "Cities"),

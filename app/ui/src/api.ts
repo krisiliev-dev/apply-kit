@@ -106,8 +106,8 @@ export async function fetchJob(id: string, signal?: AbortSignal): Promise<Tracke
 }
 
 /** Asks the service to read the Job's posting now; resolves when the read has finished or failed. */
-export async function readJob(id: string): Promise<JobDetail> {
-  return json(await postJson(`${jobPath(id)}/read`));
+export async function readJob(id: string, refresh=false): Promise<JobDetail> {
+  return json(await postJson(`${jobPath(id)}/read`,{refresh}));
 }
 
 export async function confirmFact(id: string, key: string, answer: FactAnswer): Promise<JobDetail> {
@@ -848,4 +848,8 @@ export async function separateCareer(ids: string[], fingerprint: string): Promis
 }
 export async function resetCareerSeparations(fingerprint: string): Promise<CareerTimeline> {
   return json(await postJson("/api/profile/career/reset", {fingerprint}));
+}
+
+export async function pasteJobText(id:string,text:string):Promise<JobDetail> {
+ return json(await postJson(`/api/jobs/${encodeURIComponent(id)}/text`,{text}));
 }

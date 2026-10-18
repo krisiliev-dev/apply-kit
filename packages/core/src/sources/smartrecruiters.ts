@@ -3,6 +3,7 @@
 // `totalFound` is reached. Big companies list thousands worldwide, so a Source is usually one country,
 // and the country is part of the Source's identity. The list has no description (detail endpoint only).
 import type { FoundPosting, SourceAdapter } from "./adapter.ts";
+import { readJson } from "./shared.ts";
 import { cleanText, countryName, formatLocation, place, toIsoUtc, type Workplace } from "./normalise.ts";
 
 export interface SmartRecruitersConfig {
@@ -55,6 +56,11 @@ export const smartrecruiters: SourceAdapter<SmartRecruitersConfig> = {
 
   key: (c) => (c.country ? `${c.company}:${c.country}` : c.company),
   defaultName: (c) => (c.country ? `${c.company} (${countryName(c.country)})` : c.company),
+
+  async fetchDescription(config,posting,{fetch}) {
+    const body=await readJson<{jobAd?:{sections?:Record<string,{text?:unknown}>}}>(await fetch(`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(config.company)}/postings/${encodeURIComponent(posting.externalId)}`),"SmartRecruiters job detail");
+    return ["companyDescription","jobDescription","qualifications","additionalInformation"].map(key=>body.jobAd?.sections?.[key]?.text).filter((text):text is string=>typeof text==="string"&&!!text.trim()).join("\n")||null;
+  },
 
   async fetchPostings(config, { fetch }) {
     const found: SmartRecruitersPosting[] = [];

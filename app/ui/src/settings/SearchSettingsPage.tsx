@@ -10,6 +10,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "n
 const jobsWord = (n: number) => `${n} open ${n === 1 ? "job" : "jobs"}`;
 
 interface Draft {
+  preferJunior: boolean;
   minSalary: string;
   cities: string;
   remoteInEurope: boolean;
@@ -21,6 +22,7 @@ interface Draft {
 }
 
 const draftOf = (s: SearchSettings): Draft => ({
+  preferJunior: s.preferJunior??true,
   minSalary: String(s.minMonthlySalaryEur),
   cities: listText(s.locations.cities),
   remoteInEurope: s.locations.remoteInEurope,
@@ -94,6 +96,7 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
       return;
     }
     const settings: SearchSettings = {
+      preferJunior:draft.preferJunior,
       minMonthlySalaryEur: min,
       locations: { cities: listOf(draft.cities), remoteInEurope: draft.remoteInEurope, relocation: listOf(draft.relocation) },
       dealbreakers: {
@@ -178,6 +181,7 @@ export function SearchSettingsPage({ onHealth }: { onHealth: (h: HealthSummary) 
           </div>
         </fieldset>
 
+        <fieldset><legend>Ranking</legend><label className="check"><input type="checkbox" checked={draft.preferJunior} onChange={e=>set({preferJunior:e.target.checked})}/><span>Prioritise junior and entry-level roles<span className="help">Senior-level titles and unmet experience requirements rank lower. Among the rest, assessed requirement coverage comes first; unread jobs stay provisional.</span></span></label></fieldset>
         <fieldset>
           <legend>Dealbreakers</legend>
           <p className="meta">Only requirements a posting clearly states as required count. Preferred ones, and anything still waiting for you to confirm, never hide a job.</p>

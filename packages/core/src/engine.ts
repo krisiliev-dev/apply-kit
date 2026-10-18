@@ -1,3 +1,4 @@
+import { compareJobFit, seniorTitle } from "./fit/ranking.ts";
 import { createHash } from "node:crypto";
 import { migrate } from "./schema.ts";
 import { createAiBudget, type BudgetInfo } from "./budget.ts";
@@ -638,7 +639,8 @@ export interface DiscoveryEngine {
    * Reads one Job's posting now (the Job page asks when it opens an unread Job), within the budget.
    * Resolves with the Job once the read has finished, failed or been refused by the cap.
    */
-  readJob(jobId: string): Promise<JobDetail>;
+  readJob(jobId: string, refresh?: boolean): Promise<JobDetail>;
+  pasteJobText(jobId: string, text: string): Promise<JobDetail>;
   /**
    * Finds which job system a company uses, from its name or a careers link: one request per job
    * system, through the same polite fetch as Checks. Reports progress as each system answers. Adds
@@ -937,15 +939,17 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       now: clock.now(),
     };
     const base = computeFit(input);
-    if (active.length === 0) return base;
+    const explainLevel=(fit:Fit):Fit => (searchSettings().preferJunior??true) && seniorTitle(`${job.title} ${facts?.titleTranslation??""}`)
+      ? {...fit,why:`Senior-level title: ranked below junior/entry roles · ${fit.why}`} : fit;
+    if (active.length === 0) return explainLevel(base);
     const target: AdjustableJob = {
       company: job.company, angle: base.angle, place: base.place.label,
       required: (read?.requirements ?? []).filter((r) => r.kind === "required").map((r) => r.text),
     };
     const applying = active.filter((a) => matches(a.matcher, target));
-    if (applying.length === 0) return base;
+    if (applying.length === 0) return explainLevel(base);
     const adjusted = computeFit({ ...input, adjustments: applying.map((a) => ({ id: a.id, text: a.text, points: a.points })) });
-    return adjusted.value === base.value ? base : adjusted;
+    return explainLevel(adjusted.value === base.value ? base : adjusted);
   }
 
   interface StoredAdjustment { id: string; matcher: AdjustmentMatcher; text: string; points: number }
@@ -1244,38 +1248,64 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
 
   /** The posting a Job is read from (see readingPostingId), with what the extractor is given. */
   function postingToRead(jobId: string): Record<string, unknown> | undefined {
-    return db.prepare("SELECT id, title, company, location, description_html FROM posting WHERE id = ?").get(readingPostingId(jobId));
+    return db.prepare("SELECT p.id, p.title, p.company, p.location, p.description_html, p.url, p.external_id, s.kind AS source_kind, s.config AS source_config FROM posting p JOIN source s ON s.id=p.source_id WHERE p.id = ?").get(readingPostingId(jobId));
   }
 
   async function readAllPending(): Promise<ReadResult> {
     const result: ReadResult = { read: 0, failed: 0, unscreened: 0 };
-    const jobIds = db.prepare(
-      `SELECT j.id FROM job j JOIN posting p ON p.id = ${targetPostingSql("j.id")}
-       WHERE j.merged_into IS NULL AND j.state IN ('new', 'saved') ORDER BY p.posted_at IS NULL, p.posted_at DESC, j.id`,
-    ).all().map((r) => String(r.id));
+    // Queue summaries need no full descriptions or nested target selection. Resolve the actual target only when reading.
+    const queue = db.prepare(
+      `SELECT j.id, j.title, MIN(p.location) AS location, MAX(p.posted_at) AS posted_at
+       FROM job j JOIN posting p ON p.job_id=j.id WHERE j.merged_into IS NULL AND j.state IN ('new','saved') GROUP BY j.id`,
+    ).all().map(row=>({row,fit:computeFit({title:String(row.title),titleTranslation:null,location:sqlText(row.location),postedAt:sqlText(row.posted_at),read:false,requirements:[],screening:null,needsYou:0,settings:searchSettings(),now:clock.now()})}));
+    const junior=(title:string)=>/\b(junior|entry[ -]level|graduate|intern|trainee)\b|младши|стажант/iu.test(title);
+    const level=(title:string)=>(searchSettings().preferJunior??true)?seniorTitle(title)?2:junior(title)?0:1:0;
+    queue.sort((a,b)=>Number(b.fit.place.tier!=="other")-Number(a.fit.place.tier!=="other") || Number(!!b.fit.angle)-Number(!!a.fit.angle) || level(String(a.row.title))-level(String(b.row.title)) || b.fit.value-a.fit.value || String(b.row.posted_at??"").localeCompare(String(a.row.posted_at??"")));
+    const jobIds=queue.map(item=>String(item.row.id));
     for (const jobId of jobIds) {
       const row = postingToRead(jobId);
       if (!row) continue;
       const state = readingOf(String(row.id), false).state;
       if (state === "read" || state === "reading") continue;
+      if (budget().reached) { result.unscreened++; continue; }
       const outcome = await readPosting(row);
       result[outcome]++;
     }
     return result;
   }
 
-  function readPosting(row: Record<string, unknown>): Promise<keyof ReadResult> {
+  function readPosting(row: Record<string, unknown>, refresh=false): Promise<keyof ReadResult> {
     const postingId = String(row.id);
     const running = inFlight.get(postingId);
     if (running) return running;
-    const run = readPostingNow(row).finally(() => inFlight.delete(postingId));
+    const run = readPostingNow(row,refresh).finally(() => inFlight.delete(postingId));
     inFlight.set(postingId, run);
     return run;
   }
 
-  async function readPostingNow(row: Record<string, unknown>): Promise<keyof ReadResult> {
+  async function readPostingNow(row: Record<string, unknown>, refresh=false): Promise<keyof ReadResult> {
     const postingId = String(row.id);
-    const text = postingText(row.description_html);
+    let text = postingText(row.description_html);
+    let fetchError: string | null = null;
+    // shortcut: fetched detail text stays cached until explicit refresh; add TTL revalidation if scheduled detail refresh is needed.
+    if (!text || refresh) {
+      try {
+        const adapter=adapterFor(String(row.source_kind));
+        let html: string | null = null;
+        if(adapter.fetchDescription) html=await adapter.fetchDescription(JSON.parse(String(row.source_config)),{url:String(row.url),externalId:String(row.external_id)},{fetch:fetchFor(String(row.source_kind)),setting});
+        else {
+          const link=jobLinkFrom(String(row.url));
+          if(!link) throw new Error("The posting has no usable web link. Paste its text instead.");
+          const page=await fetchJobPage(link);
+          if("problem" in page) throw new Error(page.message);
+          html=readJobPage(page.html,page.url).posting?.descriptionHtml??null;
+        }
+        const current=db.prepare("SELECT description_html FROM posting WHERE id = ?").get(postingId);
+        if(current?.description_html!==row.description_html && postingText(current?.description_html)) html=String(current!.description_html);
+        text=postingText(html);
+        if(text) db.prepare("UPDATE posting SET description_html = ? WHERE id = ?").run(html,postingId);
+      } catch(err) { fetchError=err instanceof Error?err.message:String(err); }
+    }
     const hash = hashText(text);
     const now = () => clock.now().toISOString();
     const store = (status: "read" | "failed", facts: PostingFacts | null, model: string | null, error: string | null) => {
@@ -1289,8 +1319,8 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
            attempts = extraction.attempts + 1, read_at = excluded.read_at`,
       ).run(postingId, hash, status, facts ? JSON.stringify(facts) : null, model, error, now());
     };
-    if (text === "") {
-      store("failed", null, null, "The posting has no text to read");
+    if (text === "" || fetchError) {
+      store("failed", null, null, fetchError ?? "The source did not supply a full description. Open the posting and paste its text to read its requirements.");
       return "failed";
     }
     const input: ExtractionInput = {
@@ -2077,7 +2107,7 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
           .map(({ job }) => job);
       } else {
         const listed = all.map(({ job }) => job).filter((j) => inView(query.view, j));
-        const byFit = (a: FeedJob, b: FeedJob) => b.fit.value - a.fit.value;
+        const byFit = (a: FeedJob, b: FeedJob) => compareJobFit(a,b,searchSettings().preferJunior??true);
         if ((query.sort ?? "fit") === "fit") listed.sort(byFit);
         const main = listed.filter((j) => !relocating(j));
         jobs = query.view === "hidden" || query.relocation ? [...main, ...listed.filter(relocating)] : main;
@@ -2180,11 +2210,21 @@ export function createEngine(deps: EngineDeps): DiscoveryEngine {
       return (await getJob(jobId))!;
     },
 
-    async readJob(jobId) {
+    async pasteJobText(jobId,text) {
+      if(typeof text!=="string" || !text.trim() || text.length>100_000) throw new Error("Paste the posting text, up to 100,000 characters.");
+      const live=liveJobId(db,jobId), row=live&&postingToRead(live);
+      if(!row) throw new Error("No such job");
+      db.prepare("UPDATE posting SET description_html = ? WHERE id = ?").run(textToHtml(text.trim()),String(row.id));
+      await readPosting({...row,description_html:textToHtml(text.trim())});
+      if(readingOf(String(row.id),false).state==="unread") await readPosting({...row,description_html:textToHtml(text.trim())});
+      return (await getJob(jobId))!;
+    },
+
+    async readJob(jobId,refresh=false) {
       const live = liveJobId(db, jobId);
       const row = live && postingToRead(live);
       if (!row) throw new Error(`No job with id "${jobId}"`);
-      if (readingOf(String(row.id), false).state !== "read") await readPosting(row);
+      if (refresh || readingOf(String(row.id), false).state !== "read") await readPosting(row,refresh);
       return (await getJob(jobId))!;
     },
 
@@ -2645,8 +2685,8 @@ function storePosting(db: SqlDatabase, sourceId: string, p: FoundPosting, now: s
   if (existing) {
     db.prepare(
       `UPDATE posting SET url = ?, title = ?, company = ?, location = ?, salary = ?, posted_at = ?,
-              description_html = ?, last_seen_at = ?, gone_at = NULL, gone_decision_id = NULL WHERE id = ?`,
-    ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, p.descriptionHtml, now, id);
+              description_html = COALESCE(?, description_html), last_seen_at = ?, gone_at = NULL, gone_decision_id = NULL WHERE id = ?`,
+    ).run(p.url, p.title, p.company, p.location, p.salary, p.postedAt, postingText(p.descriptionHtml)?p.descriptionHtml:null, now, id);
     refreshMatchKey(db, id, p);
     refreshLinkKey(db, id, p.url);
     reconcile(db, id);

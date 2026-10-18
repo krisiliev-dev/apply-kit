@@ -1,6 +1,5 @@
 // Reads a PDF's text the way a parser does, with pdf.js, on this laptop: pages of lines in the order
 // the text is stored (the tagged reading order). Used by the ATS check and to count pages.
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import type { TextItem } from "pdfjs-dist/types/src/display/api";
 import type { PdfText, PdfTextReader } from "@apply-kit/core";
 
@@ -29,6 +28,8 @@ function linesOf(items: TextItem[]): string[] {
 }
 
 export async function readPdfText(pdf: Uint8Array): Promise<PdfText> {
+  // Load native PDF/font support only for PDF work; it can stall service startup on macOS.
+  const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
   // pdf.js takes ownership of the buffer it's given, so it gets a copy.
   const task = getDocument({ data: new Uint8Array(pdf), useSystemFonts: false });
   try {

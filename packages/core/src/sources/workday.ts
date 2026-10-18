@@ -62,6 +62,14 @@ export const workday: SourceAdapter<WorkdayConfig> = {
   },
   defaultName: (c) => c.company ?? parseCareersUrl(c.url).tenant,
 
+  async fetchDescription(config, posting, {fetch}) {
+    const site=parseCareersUrl(config.url), link=new URL(posting.url), root=new URL(config.url);
+    if(link.origin!==site.origin || !link.pathname.startsWith(root.pathname+"/job/")) throw new Error("The Workday posting link does not match its source");
+    const path=link.pathname.slice(root.pathname.length);
+    const body=await readJson<{jobPostingInfo?:{jobDescription?:unknown}}>(await fetch(`${site.origin}/wday/cxs/${site.tenant}/${site.site}${path}`),"Workday job detail");
+    return typeof body.jobPostingInfo?.jobDescription==="string"?body.jobPostingInfo.jobDescription.trim()||null:null;
+  },
+
   async fetchPostings(config, { fetch }) {
     const site = parseCareersUrl(config.url);
     const endpoint = `${site.origin}/wday/cxs/${site.tenant}/${site.site}/jobs`;

@@ -144,7 +144,7 @@ export function FeedPage({ onHealth }: { onHealth: (h: FeedResult["health"]) => 
         <CheckHead
           check={check}
           title={viewTitle(view, rows.shown.length)}
-          subtitle={`${feed.counts.open} open across ${feed.health.sources} ${feed.health.sources === 1 ? "source" : "sources"} · ${view === "passed" ? "latest decision first" : options.sort === "fit" ? "sorted by fit" : "newest first"}`}
+          subtitle={`${feed.counts.open} open across ${feed.health.sources} ${feed.health.sources === 1 ? "source" : "sources"} · ${view === "passed" ? "latest decision first" : options.sort === "fit" ? "requirements and experience first" : "newest first"}`}
           waiting={rows.queued.length}
         />
         <Toolbar feed={feed} view={view} onView={setView} options={options} onOptions={setOptions} />

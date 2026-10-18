@@ -174,3 +174,11 @@ Expand a period and choose **Compare these versions**, or select entries from di
 Combining periods creates a new unconfirmed entry, moves their facts underneath it, preserves descriptions and original versions, and combines identical unflagged facts with all source citations. Different claims and incompatible classifications stay separate. Original entries remain inspectable in **Original imported versions**. Verified Bulgarian titles remain with their original versions and can be verified again for the combined title. Use **Undo latest merge** before any further profile change, import or analysis to restore the originals.
 
 Review facts inside each resolved period, individually or with **Confirm unflagged facts in this period**. Disputes and scanned-text flags retain their existing review controls. The AI comparison for differently worded achievements and skills remains available in a collapsed panel.
+
+### Posting text, requirements and ranking
+
+Workday and SmartRecruiters listings are expanded from their public detail APIs when read; other missing descriptions use the guarded page reader. Downloaded text is retained between listing checks. If a posting cannot be fetched, open its job page and use **Posting text → Save text and read requirements**. **Refresh posting and requirements** explicitly refreshes a cached description. Reading uses the existing monthly AI budget; a job with no published salary correctly shows **Not stated**.
+
+Best-fit order now puts attainable roles ahead of senior-title or required-experience stretches, then compares assessed requirement coverage before the overall Fit. Unread jobs stay provisional. **Profile → Search and dealbreakers → Ranking** includes **Prioritise junior and entry-level roles**, enabled by default for older saved preferences. Actual required-experience shortfalls still affect ordering when the title preference is turned off.
+
+The automatic reading queue prioritises relevant locations and career angles, then junior/entry-level postings, rather than spending first on whichever company posted most recently. Reading stops at the shared monthly cap. Matching extracted requirements against confirmed profile evidence and reranking are local operations, with no second AI charge.

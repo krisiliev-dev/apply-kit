@@ -141,3 +141,28 @@ describe("Fit from the master profile", () => {
     expect(after.fit).toEqual(before.fit);
   });
 });
+
+it("ranks attainable junior jobs ahead of senior jobs even when most senior skills match",async()=>{
+ const titles=["Senior Software Engineer","Junior Software Engineer","Graduate Software Engineer"];
+ const board={jobs:titles.map((title,i)=>({id:i,title,absolute_url:`https://example.test/rank/${i}`,location:{name:"Sofia"},content:"<p>Python. SQL. 6+ years in software engineering.</p>"}))};
+ const facts={
+  [titles[0]!]:cannedFacts({requirements:[requirement("Python","required","skill"),requirement("SQL","required","skill"),requirement("6+ years in software engineering","required","experience")]}),
+  [titles[1]!]:cannedFacts({requirements:[requirement("Python","required","skill"),requirement("Kubernetes","required","skill")]}),
+ };
+ const t=createTestPreparation({fetch:async()=>Response.json(board),extractor:fakeExtractor(facts)});
+ const r=t.preparation.savePiece({kind:"role",text:"Software engineering",entry:{title:"Software Engineer",organisation:"Kestrel",city:"Sofia",start:"2022-09",end:"2023-09"}});if(!r.saved)throw new Error("Fixture rejected");
+ for(const text of ["Python","SQL"])t.preparation.savePiece({kind:"skill",text});
+ await t.discovery.addSource({kind:"greenhouse",config:"ranking"});await t.discovery.checkAll();
+ const initial=await t.discovery.queryFeed({view:"new"});
+ for(const job of initial.jobs.filter(j=>j.title!==titles[2]))await t.discovery.readJob(job.id);
+ const feed=await t.discovery.queryFeed({view:"new"});
+ expect(feed.jobs.map(j=>j.title)).toEqual(["Junior Software Engineer","Graduate Software Engineer","Senior Software Engineer"]);
+ expect(feed.jobs[2]!.fit.why).toMatch(/senior|experience/i);
+});
+
+it("persists an explicit choice to turn off junior-title prioritisation",async()=>{
+ const t=createTestPreparation();
+ await t.discovery.saveSearchSettings({...defaultSearchSettings,preferJunior:false});
+ expect((await t.discovery.getSearchSettings()).preferJunior).toBe(false);
+ await expect(t.discovery.saveSearchSettings({...defaultSearchSettings,preferJunior:"yes"})).rejects.toThrow();
+});

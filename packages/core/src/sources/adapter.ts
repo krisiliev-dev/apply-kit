@@ -82,6 +82,8 @@ export interface SourceAdapter<Config = unknown> {
    * error, non-2xx, unparseable body). Returning [] means "the Source really lists nothing".
    */
   fetchPostings(config: Config, ctx: AdapterContext): Promise<FoundPosting[]>;
+  /** Full description when the list endpoint supplies only a summary; fetched on the first read. */
+  fetchDescription?(config: Config, posting: Pick<FoundPosting,"url"|"externalId">, ctx: AdapterContext): Promise<string | null>;
 }
 
 /**

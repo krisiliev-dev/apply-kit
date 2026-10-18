@@ -6,7 +6,7 @@
 // starts the Job's package, or shows "Continue package · step N of 5" or "Package ready".
 import type { FactAnswer, FeedJob, Fit, FitBand, HealthSummary, JobDetail, JobMarker, JobRequirement, KeyFact, NeedsYouItem, FactSource, PrepareStatus, RequirementEvidence } from "@apply-kit/core";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { boostJob, confirmFact, fetchJob, fetchPrepareStatus, fetchSources, markPackageSubmitted, readJob, reopenJobs, setPackageLanguage, startPackage, undoAdjustment, undoApplicationEvent, undoDecision, undoMarkSubmitted } from "../api.ts";
+import { boostJob, confirmFact, fetchJob, pasteJobText, fetchPrepareStatus, fetchSources, markPackageSubmitted, readJob, reopenJobs, setPackageLanguage, startPackage, undoAdjustment, undoApplicationEvent, undoDecision, undoMarkSubmitted } from "../api.ts";
 import { useToaster, type Toaster } from "../feed/toast.tsx";
 import { Chevron, Icon } from "../icons.tsx";
 import { AskChip, StatusChip, statusLabel as requirementLabel } from "../requirements.tsx";
@@ -94,7 +94,7 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
   const tryAgain = () => {
     say("Reading the posting again…");
     setLoad({ state: "ready", job: { ...job, reading: { state: "reading", error: null } } });
-    readJob(id).then((j) => { setLoad({ state: "ready", job: j }); say(doneText(j)); }).catch((err: unknown) => say(`Couldn't read the posting: ${message(err)}`));
+    readJob(id,true).then((j) => { setLoad({ state: "ready", job: j }); say(doneText(j)); }).catch((err: unknown) => say(`Couldn't read the posting: ${message(err)}`));
   };
   const answered = (j: JobDetail, text: string) => { setLoad({ state: "ready", job: j }); say(text); };
   const refresh = () => fetchJob(job.id).then((j) => { setLoad({ state: "ready", job: j }); setTrack(j.track); });
@@ -168,10 +168,10 @@ export function JobPage({ id, onHealth }: { id: string; onHealth: (h: HealthSumm
               <FitCheck job={job} />
               <Requirements job={job} />
               <KeyFacts facts={job.keyFacts} />
-              <FullPosting job={job} open={false} />
+              <FullPosting job={job} open={false} onRead={j=>answered(j,doneText(j))} />
             </>
           )}
-          {(state === "failed" || state === "unscreened") && <FullPosting job={job} open />}
+          {(state === "failed" || state === "unscreened") && <FullPosting job={job} open onRead={j=>answered(j,doneText(j))} />}
           {state !== "read" && <FitCheck job={job} />}
         </div>
         <div className="col side">
@@ -521,13 +521,21 @@ function AskPanel({ jobId, item, onAnswered }: { jobId: string; item: NeedsYouIt
   );
 }
 
-function FullPosting({ job, open }: { job: JobDetail; open: boolean }) {
+function FullPosting({ job, open, onRead }: { job: JobDetail; open: boolean; onRead:(j:JobDetail)=>void }) {
+  const [pasted,setPasted]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const submit=async(e:FormEvent)=>{
+    e.preventDefault();setBusy(true);setError("");
+    try{onRead(await pasteJobText(job.id,pasted));}catch(err){setError(message(err));}finally{setBusy(false);}
+  };
   const [shown, setShown] = useState(open);
+  const refresh=async()=>{setBusy(true);setError("");try{onRead(await readJob(job.id,true));}catch(err){setError(message(err));}finally{setBusy(false);}};
   const id = useId();
   const lines = job.postingText.split("\n").filter(Boolean);
   const host = (() => { try { return new URL(job.url).host; } catch { return job.url; } })();
   const body = lines.length === 0
-    ? <p className="meta">This posting has no text. Open it on {host} to read it.</p>
+    ? <form className="stack" onSubmit={e=>void submit(e)}><p className="meta">The full description is missing. <a href={job.url} target="_blank" rel="noreferrer">Open the original posting</a>, copy its description and requirements, then paste them here. Reading uses your existing AI budget.</p><label className="field"><span>Posting text</span><textarea className="input" rows={10} maxLength={100_000} required value={pasted} onChange={e=>setPasted(e.target.value)}/></label>{error&&<p role="alert" className="err-line">{error}</p>}<div className="row"><button className="btn primary" type="submit" disabled={busy||!pasted.trim()}>{busy?"Reading posting…":"Save text and read requirements"}</button></div></form>
     : <div id={id} className="posting-text" hidden={!shown}>{lines.map((l, i) => l.startsWith("• ") ? <p key={i} className="li">{l.slice(2)}</p> : <p key={i}>{l}</p>)}</div>;
   if (open) {
     return (
@@ -543,6 +551,8 @@ function FullPosting({ job, open }: { job: JobDetail; open: boolean }) {
         <Chevron />Full posting <span className="meta">{host} · {lines.length} lines</span>
       </button>
       {body}
+      {lines.length>0&&<div className="row"><button className="btn ghost sm" type="button" disabled={busy} onClick={()=>void refresh()}>{busy?"Refreshing posting…":"Refresh posting and requirements"}</button><span className="meta">Fetches the latest description and reads it within your AI budget.</span></div>}
+      {error&&lines.length>0&&<p role="alert" className="err-line">{error}</p>}
     </div>
   );
 }
